@@ -11,7 +11,7 @@
     "test": "pnpm test:ts && pnpm test:rust",
     "test:ts": "pnpm -r --if-present test",
     "test:rust": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --workspace",
-    "test:hook": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --test hook_integration -- --ignored --nocapture",
+    "test:hook": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --test hook_integration --test input_flow_integration -- --ignored --nocapture",
     "test:task": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml -p jantama-helper --test task_scheduler -- --ignored --nocapture",
     "lint": "pnpm lint:eslint && pnpm lint:style && pnpm lint:types && pnpm lint:clippy && pnpm lint:fmt",
     "lint:eslint": "eslint .",
