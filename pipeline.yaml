@@ -1,0 +1,65 @@
+# Declarative source of truth. Humans and Claude read this;
+# scripts/run.sh executes the same stages. Keep the two in sync.
+project: ""            # filled per project (also set in CLAUDE.md)
+has_ui: false          # true -> enables the design gate (touch state/has_ui to activate at runtime)
+models:
+  intake: opus         # spec Q&A
+  criteria: opus       # write failing tests + lint config
+  design: sonnet       # reference screen / tokens
+  plan: opus           # decomposition (opus-plan is an INTERACTIVE mode, not a headless model string)
+  build: sonnet        # implementation
+  escalate: fable      # MANUAL ONLY: hard architecture/debug. Never auto-invoked.
+stages:
+  - id: intake
+    owner: human+claude
+    mode: interactive
+    gate: human            # one-time; spend real time here
+    # After the spec is agreed, intake also PROPOSES per-project tools (MCP/plugins/
+    # skills) tailored to what you build. Claude proposes; you approve; you run
+    # init-tools.sh yourself. Tools are NEVER auto-installed.
+    outputs: [SPEC.md, ACCEPTANCE.md, "design_brief.md (if UI)",
+              "TOOLING.md (per-project tool proposal)",
+              "init-tools.sh (you review + run; nothing auto-installed)"]
+  - id: criteria
+    owner: claude
+    gate: human
+    outputs: [failing_tests, lint_config]
+  - id: design_gate
+    when: has_ui
+    owner: claude
+    gate: human            # one-time; approve aesthetic direction, then machine-enforce tokens
+    outputs: [design_tokens, reference_screen]
+  - id: plan
+    owner: claude
+    gate: none             # quick human skim only
+    outputs: [PLAN.md, "features.txt (one INDEPENDENT feature per line)"]
+  - id: build
+    owner: claude
+    parallel: true         # per feature, isolated git worktree = safety boundary
+    gate: machine          # tests + lint(no-emoji/tokens/a11y) + ui(responsive)
+    loop: repair           # on gate failure, feed the error to an agent to FIX it (menu:
+                           # auto/hybrid/stop, default hybrid); not blind retry. Bounded by
+                           # REPAIR_ITERS / REPAIR_HARD_CAP; stops on no-progress.
+  - id: feature_accept
+    owner: human+ci
+    gate: machine+human    # green gates + diff + quick GUI look -> LOCAL merge (no push)
+  - id: integration_accept
+    owner: human+ci
+    gate: machine+human    # e2e + final smoke, once per project
+
+# `run.sh auto` -- UNATTENDED variant of `all`. Stage 0 intake still runs as a conversation
+# and keeps its human approval (the spec is a real judgment point). EVERY gate after it is
+# answered for you: no y/N, no Enter on plan, the repair menu always takes 2) hybrid, and a
+# feature whose gates stay red is SKIPPED + recorded in state/BLOCKED.txt instead of halting
+# the run. Green features still auto-merge LOCALLY (never pushed). Permissions are unchanged
+# (PERMISSION_MODE, settings.json deny-list) and tools are still never auto-installed.
+# Exit: 0 = all merged + accepted, 2 = finished with skipped features, 1 = a stage aborted.
+# Equivalent to `AUTO=1` in front of any stage, e.g. `AUTO=1 sh scripts/run.sh from build`.
+#
+# Optional utility (NOT in `all`): `run.sh survey` -- prior-art survey before committing
+# to build-from-scratch. Requires WebSearch enabled; must cite real repos (no memory).
+# Records the choice to state/BASE.md. An adopted base still passes ACCEPTANCE.md gates
+# + a license check -- it is not trusted just for existing.
+#
+# `run.sh readme` regenerates README.md + README.en.md from SPEC.md (reproducible, NOT
+# hand-authored). It also runs automatically right after intake in `all` / `from intake`.

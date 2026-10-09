@@ -1,0 +1,14 @@
+state/
+*.log
+# per-machine permission overrides (e.g. re-denying git push). build does `git add -A`,
+# so without this an untracked local settings file WOULD be committed.
+.claude/settings.local.json
+.DS_Store
+node_modules/
+__pycache__/
+dist/
+coverage/
+# secrets -- never commit. build does `git add -A`, so an untracked .env WOULD be committed.
+.env
+.env.*
+!.env.example
