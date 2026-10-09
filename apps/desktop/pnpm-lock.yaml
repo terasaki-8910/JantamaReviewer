@@ -1,0 +1,5 @@
+# 実体はリポジトリ直下の pnpm-lock.yaml。
+# tauri-cli はアプリ自身のフォルダでロックファイルを探してパッケージマネージャを判定し、
+# 無いと pnpm のワークスペースでも npm に落ちる（docs/recipes/tauri-desktop-app.md の注意点 3）。
+# そのための空の置き物で、pnpm はワークスペースでは読み書きしない。
+lockfileVersion: '9.0'

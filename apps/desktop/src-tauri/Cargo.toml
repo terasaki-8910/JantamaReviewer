@@ -1,0 +1,67 @@
+[package]
+name = "jantama-reviewer"
+version = "0.1.0"
+description = "雀魂の半荘を、AIの答えを見る前に自分の考えを確定させて検討するための個人用ツール"
+edition = "2021"
+# tauri-plugin-opener が 1.90 以上を要る。
+rust-version = "1.90"
+publish = false
+
+[lib]
+name = "jantama_reviewer_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "protocol-asset"] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# PNG の書き出し専用（画像の解析には使わない。S-3）
+png = "0.18"
+# 既定のブラウザで URL を開く（N-5）。プラグインとして登録はせず、external.rs の 1 か所からだけ呼ぶ。
+# 開く前に http / https の外部ページだけに絞る。通信はしない（tests/safety.rs の許可の一覧に理由つきで載せている）。
+tauri-plugin-opener = "2"
+# 画面の遷移先の判定（navigation.rs）。URL の文字列を調べるだけ。
+url = "2"
+
+[target.'cfg(windows)'.dependencies]
+# WebView2 の設定を変える（webview_win.rs）。Tauri（wry 0.57）が使う版にそろえる。
+webview2-com = "0.39"
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_Media_Audio",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+# フックの結合試験（tests/hook_integration.rs）が、マウスとキーの入力を注入するのに使う。
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.dev]
+opt-level = 1
+
+# 依存クレートは最適化する（PNG の圧縮がデバッグビルドで遅いと、迷いマークの記録が遅れる）
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

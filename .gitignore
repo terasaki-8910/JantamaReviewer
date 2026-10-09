@@ -16,3 +16,24 @@ coverage/
 .claude/rules/ui.md
 # 確認シートの確認用の一時ファイル（スクショ・プレビュー）
 docs/sheet/_*
+
+# --- ビルド成果物（F0 ウィジェットのスキャフォールドで追加） ---
+# Rust / Tauri（src-tauri/target は数 GB になる）
+target/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+# フロントエンドのビルド出力
+apps/desktop/dist/
+packages/*/dist/
+*.tsbuildinfo
+.vite/
+# テスト・解析の出力
+playwright-report/
+test-results/
+coverage/
+# パッケージマネージャのキャッシュ
+.pnpm-store/
+# Tauri のビルド成果物（インストーラ）
+*.msi
+*.exe
+*.nsis

@@ -1,0 +1,100 @@
+/*
+  tokens.css: the only place literal colors live.
+  Palette = the one already on the decision sheet: pure greys + one felt-green accent.
+  --you (red) is semantic only: "your move" against the AI.
+  Added on top of the sheet palette: --on-accent (text on a filled accent button),
+  plus non-color scale tokens and --hover, which is derived from --ink so it follows the theme.
+*/
+:root {
+  --bg: #F4F4F4;
+  --surface: #FFFFFF;
+  --ink: #161616;
+  --muted: #5A5A5A;
+  --line: rgba(0, 0, 0, 0.12);
+  --line-strong: rgba(0, 0, 0, 0.30);
+  --accent: #1B6A49;
+  --accent-fill: rgba(27, 106, 73, 0.10);
+  --accent-bar: #1B6A49;
+  --you: #B3261E;
+  --you-fill: rgba(179, 38, 30, 0.10);
+  --focus: #1B6A49;
+  --on-accent: #FFFFFF;
+
+  --font-body: 'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  --font-head: 'Zen Old Mincho', 'Yu Mincho', serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --r1: 4px;
+  --r2: 6px;
+  --r3: 8px;
+
+  --hover: color-mix(in srgb, var(--ink) 7%, transparent);
+  --accent-strong: color-mix(in srgb, var(--accent) 86%, var(--ink));
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121212;
+    --surface: #1C1C1C;
+    --ink: #ECECEC;
+    --muted: #A4A4A4;
+    --line: rgba(255, 255, 255, 0.12);
+    --line-strong: rgba(255, 255, 255, 0.30);
+    --accent: #6CC79A;
+    --accent-fill: rgba(108, 199, 154, 0.14);
+    --accent-bar: #4FA87C;
+    --you: #F2A49E;
+    --you-fill: rgba(242, 164, 158, 0.14);
+    --focus: #6CC79A;
+    --on-accent: #121212;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121212;
+  --surface: #1C1C1C;
+  --ink: #ECECEC;
+  --muted: #A4A4A4;
+  --line: rgba(255, 255, 255, 0.12);
+  --line-strong: rgba(255, 255, 255, 0.30);
+  --accent: #6CC79A;
+  --accent-fill: rgba(108, 199, 154, 0.14);
+  --accent-bar: #4FA87C;
+  --you: #F2A49E;
+  --you-fill: rgba(242, 164, 158, 0.14);
+  --focus: #6CC79A;
+  --on-accent: #121212;
+  color-scheme: dark;
+}
+
+/* base */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+img { display: block; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
