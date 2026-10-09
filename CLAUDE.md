@@ -13,8 +13,8 @@ Intake proposes per-project tools (MCP/plugins/skills): Claude proposes, I appro
 run state/init-tools.sh myself. Never auto-install or enable tools.
 
 ## Language
-Generated artifacts (code, comments, docs, commit messages, UI copy) default to English.
-Change here to override per project. The language I chat in is separate and unaffected.
+このプロジェクトでは、生成物（コメント・ドキュメント・コミットメッセージ・画面の文言）はすべて日本語で書く（決定記録 R1-10、2026-10-09）。
+コードの識別子（変数名・関数名など）だけは英語のままにする。会話の言語とは別。
 
 ## Commands
 - Tests: <e.g. npm test / pytest>
@@ -37,3 +37,25 @@ state/ (runtime), design tokens (change only via the design gate), auto-generate
 
 ## Git
 Local only by default; do NOT push unless asked. Feature branches merge to main with --no-ff.
+
+## Decisions record
+決定記録は docs/decisions.md。確認シートの URL もそこにある。元の会話（仕様の出どころ）は docs/chatcontext.txt。
+
+## Confirm before building
+- Choices that are mine -- which reading of an ambiguous request is meant,
+  anything I will see (layout, visuals, wording), scope, tradeoffs with no
+  clear default, conflicts between my instructions -- are not yours to
+  settle. Show me your understanding as something I can look at (a decision
+  sheet with real samples, or a local test page) and build only after I say
+  GO. A task doc that looks complete is not a GO.
+- One sheet per human gate (see Process), with every open question on it:
+  results waiting for acceptance, samples for the next task, wording with
+  drafts, things found outside the task, and what happens after the build
+  ("merge if checks pass?"). Questions must work in any combination of
+  answers; save a question for a later round only if it can't be answered
+  before something is built.
+- Don't ask what a test can decide, what has a conventional default, or what
+  is cheap to undo -- decide it and say so in one line.
+- A project's decisions record outranks task docs and memory, and what isn't
+  in it is undecided. Append my answers to it as I wrote them.
+- How to build and read the sheet: the `decision-sheet` skill.

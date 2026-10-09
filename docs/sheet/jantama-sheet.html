@@ -1,0 +1,820 @@
+<title>JantamaReviewer 確認シート</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Old+Mincho:wght@700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column; option groups become side-by-side sample panels on wide screens.
+     Color: pure greys plus one accent, the green of a mahjong table's felt. Semantic red only marks "your move" against the AI. */
+  :root {
+    --bg: #F4F4F4;
+    --surface: #FFFFFF;
+    --ink: #161616;
+    --muted: #5A5A5A;
+    --line: rgba(0, 0, 0, 0.12);
+    --line-strong: rgba(0, 0, 0, 0.30);
+    --accent: #1B6A49;
+    --accent-fill: rgba(27, 106, 73, 0.10);
+    --accent-bar: #1B6A49;
+    --you: #B3261E;
+    --you-fill: rgba(179, 38, 30, 0.10);
+    --focus: #1B6A49;
+    --scrim: rgba(0, 0, 0, 0.62);
+    --font-body: 'BIZ UDPGothic', 'Yu Gothic UI', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+    --font-head: 'Zen Old Mincho', 'Yu Mincho', 'Hiragino Mincho ProN', serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121212;
+      --surface: #1C1C1C;
+      --ink: #ECECEC;
+      --muted: #A4A4A4;
+      --line: rgba(255, 255, 255, 0.12);
+      --line-strong: rgba(255, 255, 255, 0.30);
+      --accent: #6CC79A;
+      --accent-fill: rgba(108, 199, 154, 0.14);
+      --accent-bar: #4FA87C;
+      --you: #F2A49E;
+      --you-fill: rgba(242, 164, 158, 0.14);
+      --focus: #6CC79A;
+      --scrim: rgba(0, 0, 0, 0.74);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121212;
+    --surface: #1C1C1C;
+    --ink: #ECECEC;
+    --muted: #A4A4A4;
+    --line: rgba(255, 255, 255, 0.12);
+    --line-strong: rgba(255, 255, 255, 0.30);
+    --accent: #6CC79A;
+    --accent-fill: rgba(108, 199, 154, 0.14);
+    --accent-bar: #4FA87C;
+    --you: #F2A49E;
+    --you-fill: rgba(242, 164, 158, 0.14);
+    --focus: #6CC79A;
+    --scrim: rgba(0, 0, 0, 0.74);
+    color-scheme: dark;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15.5px;
+    line-height: 1.8;
+    padding-inline: 20px;
+    padding-block: 36px 120px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 52px; }
+  h1, h2, h3 { font-family: var(--font-head); font-weight: 700; text-wrap: balance; margin: 0; line-height: 1.45; }
+  h1 { font-size: clamp(26px, 4.6vw, 36px); }
+  h2 { font-size: 22px; }
+  h3 { font-size: 18px; }
+  p { margin: 0; }
+  a { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .muted { color: var(--muted); }
+  code, .mono { font-family: var(--font-mono); font-size: 0.9em; overflow-wrap: anywhere; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12.5px; letter-spacing: 0.06em; color: var(--muted); }
+
+  header { display: grid; gap: 14px; }
+  .lead { max-width: 68ch; }
+  .meta { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 14px; }
+  .status { font-family: var(--font-mono); font-size: 12.5px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px 12px; }
+
+  section { display: grid; gap: 20px; }
+  .sec-head { display: grid; gap: 6px; border-top: 2px solid var(--ink); padding-top: 16px; }
+
+  /* received answers */
+  .table-wrap { overflow-x: auto; max-width: 100%; }
+  table.grid { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  .grid th, .grid td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .grid thead th { font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; white-space: nowrap; }
+  .grid tbody tr:last-child th, .grid tbody tr:last-child td { border-bottom: 0; }
+  .grid .src-col { color: var(--muted); width: 38%; }
+  .grid td.num, .grid th.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+  .grid td.sym { font-size: 17px; text-align: center; width: 4.5em; }
+  .grid td.sym.strong { font-weight: 700; }
+  .grid .empty { color: var(--muted); text-align: center; }
+  .grid tr.flag td { background: var(--you-fill); }
+
+  /* questions */
+  .q { display: grid; gap: 14px; padding-top: 26px; border-top: 1px solid var(--line-strong); }
+  .q-head { display: grid; gap: 6px; }
+  .q-id { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); letter-spacing: 0.04em; }
+  .context { max-width: 76ch; display: grid; gap: 8px; }
+  .src { font-size: 13px; color: var(--muted); }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .opts { display: grid; gap: 10px; }
+  .opts.side { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+  .opt {
+    position: relative; display: grid; gap: 10px; align-content: start; min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--line-strong); border-radius: 8px; padding: 12px 14px;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+  .opt:hover { border-color: var(--ink); }
+  .opt-label { display: grid; gap: 4px; cursor: pointer; }
+  .opt input { position: absolute; opacity: 0; pointer-events: none; }
+  .opt .row { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+  .dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line-strong); margin-top: 4px; display: grid; place-items: center; }
+  .dot::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
+  .opt:has(input:checked) { background: var(--accent-fill); border-color: var(--accent); }
+  .opt:has(input:checked) .dot { border-color: var(--accent); }
+  .opt:has(input:checked) .dot::after { background: var(--accent); }
+  .opt:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .opt .title { font-size: 15.5px; line-height: 1.6; font-weight: 700; }
+  .opt .note { font-size: 14px; color: var(--muted); line-height: 1.7; padding-left: 32px; }
+  .tag { display: inline-block; font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.04em; border-radius: 4px; padding: 0 6px; margin-left: 8px; vertical-align: 2px; border: 1px solid currentColor; }
+  .tag.rec { color: var(--accent); }
+  .sample { border-top: 1px dashed var(--line-strong); padding-top: 10px; display: grid; gap: 10px; min-width: 0; }
+  .sample-cap { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); letter-spacing: 0.04em; }
+  .block-sample { display: grid; gap: 10px; min-width: 0; }
+  .other { display: grid; gap: 6px; }
+  .other label { font-size: 13.5px; color: var(--muted); }
+  textarea, input[type="url"] {
+    font: inherit; font-size: 15px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line-strong); border-radius: 6px; padding: 9px 12px;
+    width: 100%; box-sizing: border-box;
+  }
+  textarea { min-height: 3.2em; resize: vertical; }
+  textarea:focus-visible, input[type="url"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .btn {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px 14px; cursor: pointer; justify-self: start;
+  }
+  .btn:hover { border-color: var(--ink); }
+  .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .btn.primary { background: var(--accent-fill); border-color: var(--accent); }
+  .cmd { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .cmd code { display: block; flex: 1 1 320px; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 13px; line-height: 1.6; }
+
+  /* screenshots */
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .shots.main { grid-template-columns: 1fr; }
+  .shot { display: grid; gap: 4px; margin: 0; min-width: 0; }
+  .shot button { all: unset; cursor: zoom-in; display: block; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; background: var(--bg); }
+  .shot button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot figcaption { font-size: 12px; color: var(--muted); }
+  .shots.crop img { aspect-ratio: 4 / 3; object-fit: cover; object-position: top center; }
+  .shot.missing button { cursor: default; padding: 18px 10px; font-size: 12.5px; color: var(--muted); text-align: center; }
+  dialog.viewer { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1400px); max-height: 94vh; }
+  dialog.viewer::backdrop { background: var(--scrim); }
+  dialog.viewer .frame { display: grid; gap: 8px; justify-items: end; }
+  dialog.viewer img { display: block; max-width: min(96vw, 1400px); max-height: 86vh; height: auto; border-radius: 6px; background: var(--surface); }
+  dialog.viewer .close { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+  dialog.viewer .close:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  /* embedded docs */
+  details.doc { border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
+  details.doc > summary { cursor: pointer; padding: 10px 14px; font-weight: 700; }
+  details.doc > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  details.doc .doc-body { padding: 4px 18px 18px; display: grid; gap: 10px; max-width: 80ch; font-size: 14.5px; }
+  .doc-body h3 { font-size: 20px; }
+  .doc-body h4 { font-size: 16.5px; margin-top: 10px; }
+  .doc-body h5 { font-size: 15px; font-family: var(--font-body); }
+  .doc-body ul, .doc-body ol { margin: 0; padding-left: 1.5em; display: grid; gap: 4px; }
+  .doc-body table { border-collapse: collapse; font-size: 13.5px; }
+  .doc-body th, .doc-body td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+
+  /* decided list, send */
+  .decided { margin: 0; padding-left: 1.5em; display: grid; gap: 10px; max-width: 80ch; }
+  .decided li::marker { font-family: var(--font-mono); color: var(--muted); font-size: 13px; }
+  .send { display: grid; gap: 12px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  #copyFallback { display: none; }
+  #copyFallback.show { display: block; min-height: 12em; }
+  @media (max-width: 560px) {
+    body { padding-inline: 16px; font-size: 15px; }
+    .opt .note { padding-left: 0; }
+    .grid .src-col { width: auto; }
+    details.doc .doc-body { padding: 4px 12px 14px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .opt { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">JantamaReviewer · 確認シート 2回目 · 2026-10-09</div>
+    <h1>雀魂の検討システム 確認シート</h1>
+    <p class="lead">1回目の答えとチャットでの追加をもとに、仕様書と受け入れ基準の下書きを書き、画面のサンプルを作りました。新しく出てきた質問と一緒に確認してください。製品のコードはまだ書いていません。1回目の答えは、このシートのデータベースに残っています。</p>
+    <div class="meta">
+      <span>質問 12 と自由記入 1</span>
+      <span class="muted">選ぶと自動で保存されます</span>
+      <span class="status" id="status" role="status">保存の準備中…</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-recv">
+    <div class="sec-head">
+      <h2 id="h-recv">1回目の答えをこう受け取りました</h2>
+      <p class="muted">左があなたの言葉（音声入力の誤変換はそのまま）、右がそれを受けてこうする、という内容です。全文は決定記録（docs/decisions.md）に写しました。</p>
+    </div>
+    <div class="table-wrap">
+      <table class="grid">
+        <thead><tr><th>言われたこと</th><th>こうする</th></tr></thead>
+        <tbody>
+          <tr><td class="src-col">「キーは変更できるようにしたい。例えばマウスのサイドボタン」「マウスで完結させるようにしたい」</td><td>迷いマークの既定はマウスのサイドボタン。設定でほかのボタンやキーに変えられる。ウィジェットの操作もマウスだけで済むようにする（R2-3、R2-4）。</td></tr>
+          <tr><td class="src-col">チャット：「打つタイミングだけじゃなくて、打ったタイミングと、チーするかどうか分からなかったけどスルーしたタイミング、チーしようとしたタイミング、ポン・チーのタイミング」</td><td>迷いマークは、打牌の前・直後、鳴くかスルーかの判断、リーチの判断のどれにも結びつけられるようにする。Mortal の結果には打牌のほか鳴き・スルー・リーチの判断も入っている（デモ半荘では判断205回のうち、スルー35、ポン6、チー2、リーチ2）。</td></tr>
+          <tr><td class="src-col">「「ここ迷ったよ」っていうのをメモするのが、まず大きな目的」</td><td>R1-6 で「スクショの一覧と紐づけ」は選ばれていなかったが、迷いマークを局面に結びつける機能として v1 に入れる（仕様書の F9）。</td></tr>
+          <tr><td class="src-col">「隠したまま答える。そうやねん。それができたら最高。理想はじゃんたま上でできることだけど、アプリ上でできたらそれが最高」</td><td>雀魂の中では何も動かさない（規約の線引き）。同じ体験をアプリの中で作る。</td></tr>
+          <tr><td class="src-col">「局ごとの評価を自分でつけれると嬉しい」「○△×」「上がれなかった先入観から来てそうだから、公平に判断できるようにしたい」</td><td>新しい機能として受け取った（仕様書の F10）。「1局が終わったところであなたが自動で判定して」の部分は、対局中に判定するとゲームを読むことになるので、終局後に取り込んだ結果で判定して並べる形にした（R2-2）。</td></tr>
+          <tr><td class="src-col">R1-10「すべて日本語」</td><td>画面・仕様書・コメント・コミットは日本語。コードの名前（変数名など）だけは英語のまま。</td></tr>
+          <tr><td class="src-col">R1-7「種類を問わず差の大きい順」</td><td>1日に出す数は5（元の会話の目安3〜5の上限）。残りは畳んで出す。設定で変えられる。</td></tr>
+          <tr><td class="src-col">R1-15「ジャン豪2です」</td><td>元の会話の道筋では、玉の間は押し引きと鳴きの判断に重心を移す時期。出題の順は R1-7 のとおり種類で寄せず、週の集計で押し引き・鳴きの件数が見えるようにする。</td></tr>
+          <tr><td class="src-col">R1-11「public で作る」</td><td>作成が自動判定で止められた（R2-10）。</td></tr>
+          <tr><td class="src-col">R1-14「使う」</td><td>URL の欄が空だった（R2-11）。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-q">
+    <div class="sec-head">
+      <h2 id="h-q">質問</h2>
+      <p class="muted">「おすすめ」は私の判断です。違う答えでも構いません。補足欄だけ書いた場合は「その他」として扱います。画像は押すと大きく表示します。</p>
+    </div>
+    <div id="questions"></div>
+  </section>
+
+  <section aria-labelledby="h-decided">
+    <div class="sec-head">
+      <h2 id="h-decided">聞かずに決めたこと（2回目）</h2>
+      <p class="muted">どれも後から変えられるものです。違うと思うものがあれば、番号を最後の自由記入に書いてください。</p>
+    </div>
+    <ol class="decided">
+      <li>解き直しの正解は、AIがその行動に付けた確率が5%以上のもの（不一致の基準と同じ）。</li>
+      <li>ウィジェットは、クリックしても雀魂からフォーカスを奪わない。置いた位置を覚える。</li>
+      <li>割り当てたマウスのボタンの押下は横取りして、ほかのアプリに渡さない。Chrome 版の雀魂でサイドボタンが「戻る」になってページを離れるのを防ぐため。</li>
+      <li>局の評価は押した順に局へ割り当て、ずれは対局後に直す。ウィジェットはゲームを読まないので、どの局かは分からないため。</li>
+      <li>迷いマークと判断の結びつけは、v1 では手で選ぶ。スクショから自動で突き合わせる（牌の認識）のは v2 の候補。対局後の処理なので規約上は問題ない。</li>
+      <li>Mortal の結果の取得はアプリ側から1回だけ行い、取得した写しを正とする（サイト側の結果は消える）。</li>
+      <li>受け入れ枚数は、別の実装（Python の mahjong ライブラリ）で作った正解表と照合する。サンプル局面では、打1s 24枚、打6p 28枚、打4p 38枚で一致を確認した。</li>
+      <li>色と文字はこのシートと同じにする（純粋なグレーに卓の緑を1色、本文 BIZ UDPゴシック、見出し Zen Old Mincho、数字 IBM Plex Mono）。画面のサンプルもこれで作った。</li>
+      <li>CLAUDE.md の「プロジェクト名と一行の目的」は、テンプレートの決まりどおりあなたが手で書く欄なので空けておく。案：「JantamaReviewer：雀魂の半荘を、AIの答えを隠したまま検討して解き直すための個人用ツール」。</li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="h-next">
+    <div class="sec-head"><h2 id="h-next">このあと</h2></div>
+    <p class="lead">答えをもらったら、仕様書と受け入れ基準を確定し、リポジトリを用意します（R2-10）。R2-12 で GO をもらえたら、R2-7 の順で作り始めます。作った機能はテストと lint が通ったら手元の main に取り込み、次のシートで見てもらいます（R1-13）。</p>
+  </section>
+
+  <section class="send" aria-labelledby="h-send">
+    <div class="sec-head"><h2 id="h-send">送り方</h2></div>
+    <p>選んだ内容はこのシートに自動で保存され、私が直接読みます。答え終わったら、チャットで「回答した」とだけ送ってください。</p>
+    <p class="muted">上の表示が「保存できません」のときは、「回答をコピー」で文章にしてチャットに貼ってください。</p>
+    <div class="actions">
+      <button type="button" class="btn primary" id="copyBtn">回答をコピー</button>
+      <span class="muted" id="copyMsg" role="status"></span>
+    </div>
+    <textarea id="copyFallback" readonly aria-label="回答の文章"></textarea>
+  </section>
+</div>
+
+<dialog class="viewer" id="viewer" aria-label="画像の拡大表示">
+  <div class="frame">
+    <button type="button" class="close" id="viewerClose">閉じる</button>
+    <img id="viewerImg" alt="">
+  </div>
+</dialog>
+
+<template id="doc-spec"><h3>JantamaReviewer 仕様書</h3>
+<p>状態: 下書き（2026-10-09）。2回目の確認シートで確認する。「R2-n」と書いた箇所は、そのシートの答えで決まる。
+決定の出どころ: docs/decisions.md（こちらが優先）。元の会話: docs/chatcontext.txt。</p>
+<h4>1. 目的</h4>
+<p>雀魂の四麻半荘について、AI（Mortal）の答えを見る前に自分の打牌と理由を確定させてから検討し、AIと大きく違った局面と自分が迷った局面を、間隔を空けて解き直す。原因の分類を週ごとに集計し、次の週に重点的に直すところを決める。</p>
+<p>元の会話で根拠とした考え方を、そのまま仕様の柱にする。</p>
+<ul>
+<li>答えを見る前に自分で答える。AIの答えは、自分の打牌と理由を書くまで出さない。</li>
+<li>全局面は見ない。評価差の大きい局面に絞る。</li>
+<li>結果（和了・放銃）で局面を選ばない。局の自己評価が結果に引っぱられていないかも確かめる。</li>
+<li>解き直しは間隔を空ける。</li>
+<li>「なぜ違ったか」は受け入れ枚数・形の質・打点・守備に分けて記録し、週ごとに数える。</li>
+</ul>
+<h4>2. 守ること（雀魂の規約に対する線引き）</h4>
+<p>元の会話の結論を、作るものすべてに課す。受け入れ基準（ACCEPTANCE.md の安全の項）で機械的に確かめる。</p>
+<ul>
+<li>対局中に、ゲームの画面やデータを機械で読み取らない。スクショは保存するだけで、牌の認識や集計は対局後に行う。</li>
+<li>ゲームの中でスクリプトや拡張機能を動かさない。ゲームの通信を中継しない。ゲームのプロセスに触れない。</li>
+<li>対局中に、画面や情報を外部（人・AI）に送らない。</li>
+<li>対局中に動くのはウィジェットだけ。ウィジェットはユーザーの操作（マウスのボタン、クリック）を受けたときに、画面の保存と記録の追記だけを行う。</li>
+<li>牌譜URLを Mortal のサイト（mjai.ekyu.moe）に渡すのは、対局後にユーザー自身が行う。サイトには Cloudflare Turnstile があり、アプリから自動で送ることはしない。</li>
+</ul>
+<h4>3. 使う流れ</h4>
+<ol>
+<li>対局中: 迷ったらマウスのサイドボタン（R2-3）を押す。押すタイミングは、打牌の前、打牌の直後、チー・ポンをするかスルーするか迷ったとき、チー・ポンをしたときなど、判断に迷った瞬間すべて。局が終わったら、ウィジェットで○△×を付ける（R2-2）。</li>
+<li>終局直後（2〜3分）: AIを見る前に、迷った局面のメモ（局・巡目・候補・理由を1行）を書く。迷いマークのスクショを見ながら書ける。</li>
+<li>検討（1日1半荘、15〜20分）: mjai.ekyu.moe で検討し、結果のURLをアプリに貼る。アプリは、AIと大きく違った局面と迷いマークの局面を、AIの答えを隠したまま2〜3巡前から見せる。自分の答えと理由を書いたら答え合わせ。原因分類と学んだ原則を1行。最後に、局ごとの自己評価とAI基準を並べて見る。</li>
+<li>解き直し（打たない日に10〜15分）: 保存した局面を、間隔を空けて出す。実戦の打牌もAIの答えも隠す。</li>
+<li>週1回: 原因分類と局面の種類の件数、局の自己評価とAI基準のずれ、成績（手入力）を見て、翌週の重点を決める。</li>
+</ol>
+<h4>4. 機能（v1）</h4>
+<h5>F0 ウィジェット（対局中）</h5>
+<ul>
+<li>雀魂のウィンドウの横に置く小さな窓。常に手前に表示し、クリックしても雀魂からフォーカスを奪わない。位置は覚えておく。</li>
+<li>迷いマーク: 割り当てたボタン（既定はマウスのサイドボタン「戻る」。設定でサイドボタン2つ・中ボタン・キーボードのキーから選べる）を押すと、その時刻（ミリ秒）と雀魂のウィンドウのスクショを保存する。雀魂のウィンドウが見つからないときは全画面を保存する。割り当てたマウスのボタンの押下は横取りし、ほかのアプリに届けない（Chrome 版の雀魂でサイドボタンが「戻る」として働き、ページを離れるのを防ぐ）。</li>
+<li>局の評価: ○△× のボタン（R2-2、R2-3）。押した順に「何局目」の評価として記録する。どの局に当たるかはウィジェットには分からない（ゲームを読まないため）ので、対局後に取り込んだ牌譜の局の順と突き合わせ、ずれはアプリで直せる。</li>
+<li>取り消し: 最後の記録（迷いマークか評価）を1つ取り消す。</li>
+<li>表示: 記録中かどうか、この半荘の迷いマークの数、次の評価が何局目に入るか。</li>
+<li>半荘の区切り: ウィジェットの操作で「新しい半荘」を始める。前の半荘の記録は閉じる。</li>
+<li>形は R2-4。</li>
+</ul>
+<h5>F1 取り込み</h5>
+<ul>
+<li>mjai.ekyu.moe の結果URL（<code>https://mjai.ekyu.moe/killerducky/?data=/report/&lt;id&gt;.json</code> の形）を貼ると、<code>/report/&lt;id&gt;.json</code> を1回だけ取得して、生のまま保存する。JSON ファイルを直接読み込むこともできる。サイト側の結果は消えるため、取り込んだ時点の写しを正とする。</li>
+<li>中身: 判断ごとの候補と確率（<code>review</code> の <code>details[{action, q_value, prob}]</code>、<code>actual_index</code>、<code>is_equal</code>）と、局ごとの牌譜（<code>split_logs</code>、tenhou.net/6 形式）。</li>
+<li>牌譜を再生して、各判断の時点の盤面（手牌・ツモ・全員の河・鳴き・リーチ・ドラ表示牌・点数・残り枚数）を組み立てる。組み立てた手牌が <code>review</code> の記録と1つでも合わなければ、取り込みを失敗として理由を出す。</li>
+<li>対象は四麻の半荘だけ（Mortal の制約）。</li>
+<li>取り込んだ半荘に、その半荘の迷いマークと局の評価を結びつける（F9、F10）。</li>
+<li>Mortal の設定は毎回同じにする（サイトの既定、4.1b balanced、温度も既定）。設定は取り込み画面に書いておく。</li>
+</ul>
+<h5>F2 大きな不一致の一覧</h5>
+<ul>
+<li>Mortal が実戦の行動に付けた確率が5%未満の判断を拾う。打牌のほか、チー・ポン・スルー・リーチ・和了の判断も対象。</li>
+<li>並べ方は差の大きい順（実戦の行動の確率が低い順、R1-7）。1日に出す数の既定は5（設定で変えられる）。残りは畳んで表示する。</li>
+<li>基準の5%は設定で変えられる。</li>
+</ul>
+<h5>F3 AIを隠したまま答える</h5>
+<ul>
+<li>対象: F2 の局面と、迷いマークを結びつけた局面。</li>
+<li>2〜3巡前から再生できる。</li>
+<li>答え: 打牌の判断なら手牌から1枚を選ぶ。鳴きの判断ならチー（組み合わせ）・ポン・スルー、リーチの判断ならリーチする・しない。理由（1行）は必須。</li>
+<li>答えと理由がそろうまで、AIの候補・確率・順位は画面にも DOM にも出さない。</li>
+<li>答え合わせ: AIの候補と確率（実戦の行動と自分の答えに印）、打牌の判断なら受け入れ枚数の比較（F6）、原因分類（受け入れ枚数・形の質・打点・守備・その他）、学んだ原則（1行）。</li>
+<li>答えた時刻と答え合わせをした時刻を記録する。</li>
+<li>局面の種類は自動で付け、直せる: シャンテン数（2シャンテンなど）、鳴き（チー・ポン・スルーの判断）、押し引き（他家にリーチがある）、序盤（6巡目まで）。</li>
+<li>画面の並べ方は R2-5。</li>
+</ul>
+<h5>F4 終局直後メモ</h5>
+<ul>
+<li>取り込みの前に書ける。項目は局・巡目・候補・理由（1行）。迷いマークのスクショを横に出す。</li>
+<li>取り込んだら、局と巡目でメモを判断に結びつける（合わないものは手で直す）。</li>
+</ul>
+<h5>F5 検討ログ</h5>
+<ul>
+<li>答え合わせをした局面を一覧にする。日付・局面の種類・原因分類で絞り込める。</li>
+<li>盤面と答えは別の欄に持ち、答えを隠して解き直せる形で残す。</li>
+</ul>
+<h5>F6 受け入れ枚数の比較</h5>
+<ul>
+<li>打牌の判断について、自分の答え・実戦・AIの1位・最大の受け入れ枚数を出す（数えるのは自分の手牌だけ。天鳳牌理と同じ数え方）。</li>
+<li>天鳳牌理（<code>https://tenhou.net/2/?q=&lt;牌記号&gt;</code>）へのリンクを付ける。</li>
+</ul>
+<h5>F7 解き直し</h5>
+<ul>
+<li>間隔は 1 → 3 → 7 → 14 → 30 → 60日。間違えたら1日に戻す。</li>
+<li>出題では、実戦の行動もAIの答えも隠す。</li>
+<li>正解は、AIがその行動に付けた確率が5%以上のもの（F2 と同じ基準）。</li>
+</ul>
+<h5>F8 週ごとの集計</h5>
+<ul>
+<li>週ごとの、原因分類と局面の種類の件数と推移。</li>
+<li>局の自己評価とAI基準の一致率と、結果（和了・放銃・流局・他家の和了）ごとのずれ（F10）。</li>
+<li>成績（4位率・放銃率・平均順位・和了率・副露率・立直率）は、雀魂の成績画面を見て手で入れる。</li>
+</ul>
+<h5>F9 迷いマークの紐づけ</h5>
+<ul>
+<li>取り込んだ半荘の迷いマークを、時刻順にスクショ付きで並べる。</li>
+<li>ユーザーが再生画面で該当する判断（打牌の前、打牌の後、鳴きの判断など）を選んで結びつける。マークも判断も時刻順なので、直前に結びつけた判断より後の候補から出す。</li>
+<li>スクショからの自動の突き合わせ（牌の認識）は v1 では作らない（対局後の処理なので規約上は可。v2 の候補）。</li>
+</ul>
+<h5>F10 局の評価の比較（R2-2 の答えで決まる）</h5>
+<ul>
+<li>AI基準: その局で Mortal が5%未満を付けた実戦の判断の数が 0 なら○、1 なら△、2以上なら×。数え方と区切りは設定で変えられる。</li>
+<li>局ごとに、結果（自分の和了・放銃・流局・他家のツモ・他家どうしのロン）、点の増減、自己評価、AI基準を並べる。</li>
+<li>自己評価とAI基準が食い違う局に印を付ける。和了できなかった局を低く付けているかどうかを、週の集計で数える。</li>
+</ul>
+<h4>5. v1 で作らないもの</h4>
+<ul>
+<li>MAKA の答えの手入力、東風戦、三麻（R1-2、R1-3）</li>
+<li>スマホ対応、claude.ai への書き出し（R1-5）</li>
+<li>2シャンテンの先読み表示（R1-6 で選ばれていない）</li>
+<li>打牌の理由を LLM に説明させる機能（1回目のシートで決定）</li>
+<li>スクショからの牌の自動認識、Mortal への自動送信、成績の自動取得</li>
+<li>対局中の自動判定（ゲームを読む必要があり、2章に反する）</li>
+</ul>
+<h4>6. データ</h4>
+<ul>
+<li>保存先はリポジトリの外。既定は <code>%USERPROFILE%\JantamaReviewerData</code>（設定で変えられる）。</li>
+<li>半荘ごとのフォルダに、Mortal の結果（生の JSON）、迷いマークのスクショ、ウィジェットの記録（追記式）を置く。</li>
+<li>答え・ログ・解き直しの予定・週の成績は、1つのデータベースファイル（SQLite）に置く。</li>
+<li>まとめて JSON に書き出せる。書き出したものを読み込むと元に戻る。</li>
+</ul>
+<p>主な記録: 半荘、局、判断（種類・実戦の行動・候補と確率・盤面）、迷いマーク（時刻・スクショ・結びつけた判断・メモ）、局の評価（順番・評価・時刻・結びつけた局）、答え（自分の答え・理由・時刻・原因分類・原則）、解き直しの札（間隔・期限・履歴）、週の成績。</p>
+<h4>7. 画面</h4>
+<ul>
+<li>左のサイドバー（幅固定。640px 未満ではアイコンだけの細い列に縮む）: 検討、解き直し、ログ、週の集計。下に設定とテーマの切り替え。上に「検討結果を取り込む」。</li>
+<li>検討: 半荘の一覧 → 半荘ごとに、メモと迷いマークの紐づけ → 出題 → 答え合わせ → 局の評価の比較。</li>
+<li>解き直し、ログ、週の集計、設定（データの保存先、ボタンの割り当て、1日に出す数、基準の5%、Mortal の設定メモ）。</li>
+<li>ウィジェット（別の窓）。</li>
+<li>色・文字・余白は ~/.claude/rules/ui.md に従う。色はトークンだけで指定する。牌の画像は FluffyStuff/riichi-mahjong-tiles（パブリックドメイン）。</li>
+</ul>
+<h4>8. 技術（R2-6 で決まる）</h4>
+<ul>
+<li>案A（おすすめ）: Tauri v2 のデスクトップアプリ1つ。ウィジェットと検討画面は同じアプリの別の窓。Rust 側がマウスのフック・スクショ・ファイル・通信を受け持ち、画面と計算（牌譜の再生、受け入れ枚数、解き直しの予定）は TypeScript。docs/recipes/tauri-desktop-app.md の注意点に従う。</li>
+<li>案B: Python のローカルサーバーと Chrome のタブ、ウィジェットは Python の小さな窓。</li>
+</ul>
+<h4>9. 未決（2回目のシート）</h4>
+<p>R2-1 1回目の答えの受け取り方、R2-2 局の評価の意味、R2-3 ボタンの割り当て、R2-4 ウィジェットの形、R2-5 出題画面の並べ方、R2-6 技術、R2-7 作る順番、R2-8 この仕様書と受け入れ基準、R2-9 人が確認する段階、R2-10 リポジトリ、R2-11 今日の半荘のURL、R2-12 いつ作り始めるか。</p></template>
+<template id="doc-acceptance"><h3>JantamaReviewer 受け入れ基準</h3>
+<p>状態: 下書き（2026-10-09）。2回目の確認シートで確認する。各項目は、テストか lint で合否が決まる形で書く。テストとlintのコマンドは技術（R2-6）が決まってから CLAUDE.md に書く。</p>
+<h4>テストに使う固定データ</h4>
+<ul>
+<li>FX-1: mjai.ekyu.moe の結果 JSON（KillerDucky 形式）を最低1半荘分。ユーザーの半荘（R2-11）が手に入ればそれを使う。結果はサイト側で消えるので、取り込んだ写しをリポジトリの外に置き、テストでは個人情報（プレイヤー名）を伏せた写しを使う。</li>
+<li>FX-2: Mortal 公式デモページ（classic 形式、天鳳の半荘、13局・判断205回）から取り出した値。確率5%未満は10判断、局ごとの数は 東3局2・東3局1本場1・東4局1・南1局1・南2局1本場1・南3局1本場3・南4局1、ほかの局は0。製品は classic 形式を読まないので、テスト用に一度だけ内部の形に変換して置く。</li>
+<li>FX-3: 受け入れ枚数の正解表。独立した実装（Python の <code>mahjong</code> ライブラリ）で作った、200手以上の手牌ごとのシャンテン数と受け入れ枚数。例: <code>56m46688p1145888s</code> で 打4p 38枚、打5m・6m・4s・5s 34枚、打6p・8p 28枚、打1s 24枚、打8s 15枚（いずれも2シャンテン）。</li>
+</ul>
+<h4>計算（エンジン）</h4>
+<ul>
+<li>E-1 取り込み: FX-1 を読み込むと、<code>review</code> の判断の数と同じ数の判断が作られる。</li>
+<li>E-2 牌譜の再生: FX-1 と FX-2 の全判断で、再生して組み立てた手牌とツモが、記録と完全に一致する（一致率100%）。一致しない判断が1つでもあれば取り込みは失敗し、理由を返す。</li>
+<li>E-3 受け入れ枚数: FX-3 の全件で、シャンテン数と受け入れ枚数が正解表と一致する。</li>
+<li>E-4 不一致の一覧: 実戦の行動の確率が5%未満の判断だけが、確率の低い順に返る。FX-2 では10件で、1件目は東3局8巡目の打6p（0.07%）。1日に出す数の既定は5。</li>
+<li>E-5 解き直しの予定: 正解が続くと間隔が 1 → 3 → 7 → 14 → 30 → 60日と進み、間違えると1日に戻る。正解は、AIがその行動に付けた確率が5%以上のとき。</li>
+<li>E-6 局のAI基準: 5%未満の判断の数が 0 なら○、1 なら△、2以上なら×。FX-2 では 東3局×・南3局1本場×・東3局1本場△ など、上の数と一致する。局の結果の分類（自分の和了・放銃・流局・他家のツモ・他家どうしのロン）が、FX-2 の13局すべてで期待値と一致する（例: 南3局1本場は自分のロン和了 +6200 で AI基準×）。</li>
+<li>E-7 評価の突き合わせ: ウィジェットの評価が押した順に局へ割り当てられる。評価の数が局の数より多い・少ないときは、その旨を返す。</li>
+<li>E-8 局面の種類: シャンテン数・鳴きの判断・他家のリーチ・6巡目までの条件で、FX-1 の各判断に種類が付く（条件ごとの単体テスト）。</li>
+</ul>
+<h4>画面</h4>
+<ul>
+<li>U-1 隠す: 出題画面で、答えと理由がそろう前は、AIの候補・確率・順位が DOM に存在しない（テストで <code>data-ai</code> 属性と確率の文字列が無いことを確かめる）。</li>
+<li>U-2 答え合わせのボタン: 打牌（または鳴き・リーチの選択）と、空でない理由がそろうまで押せない。</li>
+<li>U-3 答え合わせ: AIの候補と確率が出て、実戦の行動と自分の答えに印が付く。打牌の判断では受け入れ枚数の比較が出る。</li>
+<li>U-4 幅: すべての画面で、幅 390・768・1280px のとき横スクロールが出ない。</li>
+<li>U-5 アクセシビリティ: すべての画面で axe-core の重大（serious・critical）な違反が0件。すべての操作がキーボードで届く。</li>
+<li>U-6 テーマ: ライトとダークの両方で、本文と背景のコントラストが WCAG AA を満たす。</li>
+</ul>
+<h4>lint</h4>
+<ul>
+<li>L-1 色: トークンの定義以外に色の値を直接書かない（stylelint の規則）。</li>
+<li>L-2 絵文字: ソースと画面の文言に絵文字を入れない。</li>
+<li>L-3 アクセシビリティの静的検査（eslint の a11y 規則など、技術に合わせて決める）。</li>
+</ul>
+<h4>安全（2章の線引き）</h4>
+<ul>
+<li>S-1 ゲームに触れない: ソースに、他のプロセスのメモリを読む・書く、DLL を注入する、別プロセスにスレッドを作るといった API の呼び出しが無い（静的検査）。</li>
+<li>S-2 ゲームと通信しない: ソースに雀魂のドメインへの通信が無い。外部への通信は <code>mjai.ekyu.moe/report/</code> の取得だけ（静的検査と、通信先を差し替えられる層の単体テスト）。</li>
+<li>S-3 対局中に画面を読まない: ウィジェットのコードは、画像の解析・文字認識のライブラリを読み込まない（静的検査）。スクショは保存するだけ。</li>
+<li>S-4 外に送らない: ウィジェットの操作で起きる処理は、ファイルへの保存と記録の追記だけ（単体テストで、通信の層が呼ばれないことを確かめる）。</li>
+</ul>
+<h4>ウィジェット</h4>
+<ul>
+<li>W-1 迷いマーク: 割り当てたボタンの押下で、ミリ秒までの時刻つきの記録1件と画像ファイル1枚ができる（スクショの取得を差し替えた単体テスト）。</li>
+<li>W-2 横取り: 割り当てたマウスのボタンの押下は「ほかのアプリに渡さない」と判定され、ほかのボタンは渡される（フックの判定関数の単体テスト）。</li>
+<li>W-3 取り消し: 最後の記録だけが消える。</li>
+<li>W-4 フォーカス: ウィジェットの窓は、クリックしても前面のアプリからフォーカスを奪わない設定で作られる（窓の生成設定のテスト）。</li>
+</ul>
+<h4>データ</h4>
+<ul>
+<li>D-1 保存先: データはリポジトリの外のフォルダに書かれる。リポジトリの中に書こうとするとエラーになる。</li>
+<li>D-2 書き出し: 書き出した JSON に全種類の記録が入り、それを読み込むと元と同じになる（往復のテスト）。</li>
+</ul></template>
+
+<script>
+(function () {
+  'use strict';
+  var ROUND = 'round2';
+
+  /* ---------- real data: Mortal demo report, per hand (not the user's game) ---------- */
+  var KYOKU = [
+    { k: '東1局', res: '他家のツモ', d: -3000, n: 0 },
+    { k: '東2局', res: '他家どうしのロン', d: 0, n: 0 },
+    { k: '東3局', res: '流局', d: 0, n: 2 },
+    { k: '東3局1本場', res: '流局', d: -3000, n: 1 },
+    { k: '東3局2本場', res: '他家のツモ', d: -2200, n: 0 },
+    { k: '東4局', res: '他家のツモ', d: -1600, n: 1 },
+    { k: '南1局', res: '放銃', d: -2000, n: 1 },
+    { k: '南2局', res: '和了（ツモ）', d: 19000, n: 0 },
+    { k: '南2局1本場', res: '放銃', d: -4200, n: 1 },
+    { k: '南3局', res: '他家どうしのロン', d: 0, n: 0 },
+    { k: '南3局1本場', res: '和了（ロン）', d: 6200, n: 3 },
+    { k: '南4局', res: '他家どうしのロン', d: 0, n: 1 },
+    { k: '南4局1本場', res: '他家どうしのロン', d: 0, n: 0 }
+  ];
+  function aiMark(n) { return n === 0 ? '〇' : (n === 1 ? '△' : '✕'); }
+  function signed(v) { return v === 0 ? '0' : (v > 0 ? '+' : '−') + Math.abs(v).toLocaleString('ja-JP'); }
+  function kyokuTable() {
+    var rows = KYOKU.map(function (r) {
+      return '<tr' + (r.res.indexOf('和了') === 0 && r.n >= 2 ? ' class="flag"' : '') + '><td>' + r.k + '</td><td>' + r.res + '</td><td class="num">' + signed(r.d) +
+        '</td><td class="empty">―</td><td class="sym strong">' + aiMark(r.n) + '</td><td class="num">' + r.n + '</td></tr>';
+    }).join('');
+    return '<div class="table-wrap"><table class="grid"><thead><tr><th>局</th><th>結果（自分から見て）</th><th class="num">点</th><th>あなたの評価</th><th>AI基準</th><th class="num">5%未満の判断</th></tr></thead><tbody>' +
+      rows + '</tbody></table></div><p class="src">「あなたの評価」は対局中にウィジェットで付ける欄（デモ半荘なので空）。色の付いた行は、和了したのに AI 基準が ✕ の局。</p>';
+  }
+
+  /* ---------- screenshots ---------- */
+  function shotsHTML(list, main, crop) {
+    return '<div class="shots' + (main ? ' main' : '') + (crop ? ' crop' : '') + '">' + list.map(function (s) {
+      return '<figure class="shot" data-src="' + s.src + '"><button type="button" data-zoom="' + s.src + '" aria-label="' + s.cap + 'を拡大"><img src="' + s.src + '" alt="' + s.cap + '" loading="lazy"></button><figcaption>' + s.cap + '</figcaption></figure>';
+    }).join('') + '</div>';
+  }
+  function quizShots(v) {
+    return '<div class="sample"><span class="sample-cap">サンプル · デモ半荘の東3局8巡目（実データ）で作った画面</span>' +
+      shotsHTML([{ src: 'samples/quiz-' + v + '-1280-light.png', cap: 'PC・ライト（答える前）' }], true) +
+      shotsHTML([
+        { src: 'samples/quiz-' + v + '-1280-light-revealed.png', cap: '答え合わせのあと（理由は入力例）' },
+        { src: 'samples/quiz-' + v + '-1280-dark.png', cap: 'PC・ダーク' },
+        { src: 'samples/quiz-' + v + '-390-light.png', cap: 'スマホ幅' }
+      ], false, true) + '</div>';
+  }
+  function widgetShots(v) {
+    return '<div class="sample"><span class="sample-cap">サンプル · 実寸で描いたもの</span>' +
+      shotsHTML([
+        { src: 'samples/widget-' + v + '-dark.png', cap: 'ダーク' },
+        { src: 'samples/widget-' + v + '-light.png', cap: 'ライト' }
+      ]) + '</div>';
+  }
+
+  /* ---------- questions ---------- */
+  var Q = [
+    { id: 'r1', no: 'R2-1', title: '1回目の答えの受け取り方は合っていますか',
+      context: '<p>上の「1回目の答えをこう受け取りました」の表についてです。</p>',
+      opts: [
+        { v: 'ok', t: '合っている', rec: true },
+        { v: 'partly', t: '違うところがある（補足に書く）' }
+      ] },
+    { id: 'r2', no: 'R2-2', title: '局の評価（〇△✕）を「公平に判断」するには',
+      context: '<p>1回目の補足の「局ごとの評価を自分でつけれると嬉しい」「上がれなかった先入観から来てそうだから、公平に判断できるようにしたい」を受けた新しい機能です。対局中にAIが判定することはできないので（ゲームを読む必要があり、規約の線引きに反する）、終局後に取り込んだ結果から AI 基準を出して並べます。</p>' +
+        '<p>AI 基準は、その局で Mortal が5%未満を付けた実戦の判断の数です（0なら〇、1なら△、2以上なら✕。区切りは設定で変えられる）。下はデモ半荘で計算した実データです。和了した南3局1本場が ✕ で、和了していない東2局が 〇 のように、結果と判断の良し悪しは一致しません。</p>',
+      blockSample: kyokuTable,
+      opts: [
+        { v: 'self-vs-ai', t: '自分で〇△✕を付け、終局後に AI 基準と並べる', rec: true,
+          note: 'ずれた局に印を付ける。週の集計で、和了できなかった局を低く付けがちかどうかを数える。' },
+        { v: 'ai-only', t: '自分では付けず、AI 基準だけ見る',
+          note: '対局中の操作が減る。自分の感覚とのずれは分からない。' },
+        { v: 'self-only', t: '自分の評価だけ記録する（AIとは比べない）' }
+      ] },
+    { id: 'r3', no: 'R2-3', title: 'ボタンの割り当て',
+      context: '<p>チャットでの追加（打牌の前後、鳴くかスルーかの判断でも押す）を受けて、鳴きの判断のように数秒しかない場面でも押せることを優先しました。</p>',
+      opts: [
+        { v: 'side-button', t: '迷い＝マウスのサイドボタン、局の評価＝ウィジェットの〇△✕', rec: true,
+          note: 'どちらもマウスで完結する。サイドボタンはカーソルがどこにあっても効く。割り当ては設定で変えられる（サイドボタン2つ・中ボタン・キーボード）。対局中は、マウスの入力をすべて受け取る小さな仕組み（フック）が動く。反応するのは割り当てたボタンだけで、ほかの入力はそのまま通す。' },
+        { v: 'widget-only', t: 'どちらもウィジェットのクリックだけ',
+          note: 'マウス全体の入力を見張らない。鳴きの判断の数秒のあいだに、ウィジェットまでカーソルを動かす必要がある。' }
+      ] },
+    { id: 'r4', no: 'R2-4', title: 'ウィジェットの形', side: true,
+      context: '<p>雀魂のウィンドウの横に置く小さな窓です。記録中の表示、迷いの数、〇△✕、取り消し、次の評価が何局目に入るかを出します。</p>',
+      opts: [
+        { v: 'vertical', t: '縦長（雀魂の右か左に置く）', rec: true, note: '補足の「雀魂のウィンドウの横に」に合わせた形。幅76px。', sample: function () { return widgetShots('v'); } },
+        { v: 'horizontal', t: '横長（雀魂の上か下に置く）', note: '高さ64pxに収まる。雀魂の上か下に空きがあるとき向き。', sample: function () { return widgetShots('h'); } }
+      ] },
+    { id: 'r5', no: 'R2-5', title: '出題画面の並べ方', side: true,
+      context: '<p>AIの答えを隠したまま答える画面です。デモ半荘の東3局8巡目（Mortal が実戦の打6pに0.07%を付けた局面）で作りました。答える前は、AIの候補も確率も画面に出ません。打牌と理由がそろうまで「答え合わせ」は押せません。</p>',
+      opts: [
+        { v: 'table', t: '卓の配置（雀魂と同じ並び。河を四方に置く）', rec: true, note: '対局中と同じ見方で河を読める。補足の「理想は雀魂の上でできること」に近い。盤面と手牌で縦に約640pxを使う。', sample: function () { return quizShots('a'); } },
+        { v: 'rows', t: '行で並べる（河を1人1行。右に答えの欄）', note: '河を1人ずつ見比べやすい。縦に約480pxで収まる。', sample: function () { return quizShots('b'); } }
+      ] },
+    { id: 'r6', no: 'R2-6', title: '作り（技術）',
+      context: '<p>1回目は「このPCで動かして Chrome で開く」でしたが、対局中に手前に出しておくウィジェットと、マウスのボタンを拾う仕組みが必要になりました。この2つは Chrome のページだけでは作れません。</p>',
+      opts: [
+        { v: 'tauri', t: 'Tauri のデスクトップアプリ1つにまとめる', rec: true,
+          note: 'ウィジェットと検討画面が、同じアプリの別の窓になる。検討画面は Chrome のタブではなく、アプリの窓で開く。前のプロジェクトで書いた Tauri の注意書きがテンプレートに入っている（docs/recipes/tauri-desktop-app.md）。最初のビルドに時間がかかる。' },
+        { v: 'python', t: 'Python で作り、検討画面は Chrome で開く',
+          note: '1回目の答えどおり Chrome のタブで開ける。ウィジェットは Python の小さな窓で、検討画面とは作りが分かれる。起動は1つのコマンドにまとめる。' }
+      ] },
+    { id: 'r7', no: 'R2-7', title: '作る順番',
+      opts: [
+        { v: 'widget-first', t: 'ウィジェットから作る', rec: true,
+          note: '次の対局から、迷いマークと局の評価を貯め始められる。そのあと取り込みと出題、最後にログ・解き直し・週の集計。' },
+        { v: 'all-at-once', t: '全部そろえてから使い始める' }
+      ] },
+    { id: 'r8', no: 'R2-8', title: '仕様書と受け入れ基準',
+      context: '<p>元の会話とあなたの答えから書いた下書きです。「R2-n」の箇所は、このシートの答えで決まります。受け入れ基準は、どれもテストか lint で合否が決まる形にしました。</p>',
+      blockSample: function () {
+        return '<div class="block-sample">' +
+          '<details class="doc"><summary>仕様書（SPEC.md）を開く</summary><div class="doc-body" data-doc="doc-spec"></div></details>' +
+          '<details class="doc"><summary>受け入れ基準（ACCEPTANCE.md）を開く</summary><div class="doc-body" data-doc="doc-acceptance"></div></details></div>';
+      },
+      opts: [
+        { v: 'ok', t: 'この内容で進めてよい（このシートの答えを反映したうえで）' },
+        { v: 'fix', t: '直すところがある（補足に書く）' }
+      ] },
+    { id: 'r9', no: 'R2-9', title: '人が確認する段階',
+      context: '<p>テンプレート（pipeline.yaml）では、受け入れ基準をテストと lint の形にした段階にも人の確認があります。一方、グローバル設定の CLAUDE.md では、人の確認は「仕様の確認」「画面の方向性の確認（一度だけ）」「機能ごとの軽い受け入れ」「最後の結合の受け入れ」の4つだけで、ほかは機械のゲートにする、となっています。食い違っているので、どちらに合わせるか決めてください。</p>',
+      opts: [
+        { v: 'global', t: 'グローバル設定に合わせる', rec: true,
+          note: 'テストと lint は機械のゲートにして、人の確認はこのシート（仕様と受け入れ基準）で済ませる。' },
+        { v: 'template', t: 'テンプレートどおり、テストと lint を書いたら一度見せる' }
+      ] },
+    { id: 'r10', no: 'R2-10', title: 'リポジトリ',
+      context: '<p>R1-11 で public を選んでもらいましたが、私が GitHub にリポジトリを作る操作は、Claude Code の自動判定（公開される場所を作る操作）で止められました。手元での git の初期化も、同じ目的の操作として止められています。いまは決定記録・仕様書・受け入れ基準を普通のファイルとして置いていて、まだ git に入っていません。</p>',
+      opts: [
+        { v: 'self', t: '自分でコマンドを実行する', rec: true,
+          note: 'チャットの入力欄に下の1行を貼って送る（先頭の ! で、この会話の中で実行される）。できたら、手元への取り込みは私がやる。',
+          sample: function () {
+            return '<div class="sample"><div class="cmd"><code id="repoCmd">! gh repo create terasaki-8910/JantamaReviewer --public --template terasaki-8910/claude-pipeline-template</code><button type="button" class="btn" id="repoCmdCopy">コピー</button></div><span class="src" id="repoCmdMsg" role="status"></span></div>';
+          } },
+        { v: 'allow', t: 'Claude が実行できるように許可を足す',
+          note: '/permissions で gh repo create を許可する。以後、同じ種類の操作で止まらなくなる。' },
+        { v: 'change', t: '作り方を変える（補足に書く）', note: 'private にする、GitHub には作らない、など。' }
+      ] },
+    { id: 'r11', no: 'R2-11', title: '今日の半荘の結果URL', url: true,
+      context: '<p>R1-14 は「使う」でしたが、URL の欄が空でした。結果のURLがあれば下に貼ってください。テスト用の固定データ（受け入れ基準の FX-1）と、次のサンプルに使います。サイト側の結果は消えるので、早めのほうが確実です。</p>',
+      opts: [
+        { v: 'pasted', t: '下に貼った' },
+        { v: 'later', t: 'まだ。次に打った半荘で貼る' },
+        { v: 'skip', t: '使わない（デモ半荘で作る）' }
+      ] },
+    { id: 'r12', no: 'R2-12', title: 'いつ作り始めるか',
+      opts: [
+        { v: 'go', t: '「回答した」の時点で作り始めてよい', rec: true,
+          note: 'このシートの答えを仕様書に反映し、R2-7 の順で作る。R2-9 がテンプレートどおりなら、テストを書いたところで一度見せる。' },
+        { v: 'review-again', t: '答えを反映した仕様書を、もう一度見てから' }
+      ] },
+    { id: 'r13', no: 'R2-13', title: 'ほかに気になることがあれば', free: true,
+      context: '<p>「聞かずに決めたこと」で違うと思うものの番号、仕様書への指摘、何でも。</p>' }
+  ];
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  function renderQuestions() {
+    var host = document.getElementById('questions');
+    var html = '';
+    Q.forEach(function (q) {
+      html += '<div class="q" id="q-' + q.id + '"><div class="q-head"><div class="q-id">' + q.no + '</div><h3>' + q.title + '</h3>' +
+        (q.context ? '<div class="context">' + q.context + '</div>' : '') + '</div>';
+      if (q.blockSample) html += q.blockSample();
+      if (!q.free) {
+        html += '<fieldset><legend>' + q.no + ' の答え</legend><div class="opts' + (q.side ? ' side' : '') + '">';
+        q.opts.forEach(function (o) {
+          var iid = q.id + '-' + o.v;
+          html += '<div class="opt"><label class="opt-label" for="' + iid + '">' +
+            '<input type="radio" name="' + q.id + '" value="' + o.v + '" id="' + iid + '">' +
+            '<span class="row"><span class="dot" aria-hidden="true"></span><span class="title">' + esc(o.t) + (o.rec ? '<span class="tag rec">おすすめ</span>' : '') + '</span></span>' +
+            (o.note ? '<span class="note">' + esc(o.note) + '</span>' : '') + '</label>' +
+            (o.sample ? o.sample() : '') + '</div>';
+        });
+        html += '</div></fieldset>';
+      }
+      if (q.url) {
+        html += '<div class="other"><label for="' + q.id + '-url">結果のURL（https://mjai.ekyu.moe/killerducky/?data=/report/… の形）</label>' +
+          '<input type="url" id="' + q.id + '-url" inputmode="url" autocomplete="off" spellcheck="false"></div>';
+      }
+      html += '<div class="other"><label for="' + q.id + '-note">' + (q.free ? '自由記入' : 'その他・補足') + '</label><textarea id="' + q.id + '-note"' + (q.free ? ' rows="5"' : '') + '></textarea></div></div>';
+    });
+    host.innerHTML = html;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-doc]'), function (el) {
+      var t = document.getElementById(el.getAttribute('data-doc'));
+      if (t) el.appendChild(t.content.cloneNode(true));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.shot img'), function (img) {
+      img.addEventListener('error', function () {
+        var fig = img.closest('.shot');
+        fig.classList.add('missing');
+        var b = fig.querySelector('button');
+        b.removeAttribute('data-zoom');
+        b.textContent = '画像を読み込めませんでした';
+      });
+    });
+  }
+
+  /* ---------- image viewer: light dismiss (backdrop click + Escape) and a close button ---------- */
+  var viewer = document.getElementById('viewer');
+  var viewerImg = document.getElementById('viewerImg');
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-zoom]');
+    if (!b) return;
+    viewerImg.src = b.getAttribute('data-zoom');
+    viewerImg.alt = b.querySelector('img') ? b.querySelector('img').alt : '';
+    if (typeof viewer.showModal === 'function') viewer.showModal();
+  });
+  viewer.addEventListener('click', function (e) { if (e.target === viewer) viewer.close(); });
+  document.getElementById('viewerClose').addEventListener('click', function () { viewer.close(); });
+
+  /* ---------- answers: autosave to db answers/round2, restore, copy ---------- */
+  var statusEl = document.getElementById('status');
+  var state = {};
+  var docRef = null;
+  var pending = null;
+  var writing = Promise.resolve();
+  var dirty = false;
+  function setStatus(t) { statusEl.textContent = t; }
+
+  function readForm() {
+    Q.forEach(function (q) {
+      var note = document.getElementById(q.id + '-note').value;
+      var choice = null;
+      if (!q.free) {
+        var c = document.querySelector('input[name="' + q.id + '"]:checked');
+        choice = c ? c.value : null;
+      }
+      if (!choice && note.trim()) choice = 'other';
+      var entry = { choice: choice, note: note };
+      if (q.url) entry.url = document.getElementById(q.id + '-url').value.trim();
+      state[q.id] = entry;
+    });
+  }
+
+  function applyState(saved) {
+    Q.forEach(function (q) {
+      var s = saved && saved[q.id];
+      if (!s) return;
+      if (s.choice && s.choice !== 'other') {
+        var input = document.getElementById(q.id + '-' + s.choice);
+        if (input) input.checked = true;
+      }
+      if (typeof s.note === 'string') document.getElementById(q.id + '-note').value = s.note;
+      if (q.url && typeof s.url === 'string') document.getElementById(q.id + '-url').value = s.url;
+    });
+    readForm();
+  }
+
+  function answerText() {
+    readForm();
+    var lines = ['【確認シートの回答（JantamaReviewer・2回目）】'];
+    Q.forEach(function (q) {
+      var s = state[q.id];
+      var c;
+      if (q.free) c = s.note.trim() ? '' : '（なし）';
+      else if (s.choice === 'other') c = 'その他';
+      else if (!s.choice) c = '未回答';
+      else { var o = q.opts.filter(function (x) { return x.v === s.choice; })[0]; c = o ? o.t : s.choice; }
+      lines.push(q.no + ' ' + q.title + '：' + c);
+      if (s.url) lines.push('　URL：' + s.url);
+      if (s.note.trim()) lines.push('　補足：' + s.note.trim().replace(/\n/g, ' / '));
+    });
+    return lines.join('\n');
+  }
+
+  function schedule() {
+    dirty = true;
+    if (!docRef) return;
+    if (pending) clearTimeout(pending);
+    setStatus('保存中…');
+    pending = setTimeout(flush, 700);
+  }
+
+  function flush() {
+    pending = null;
+    if (!docRef || !dirty) return;
+    dirty = false;
+    readForm();
+    var body = JSON.parse(JSON.stringify(state));
+    body.updatedAt = new Date().toISOString();
+    writing = writing.then(function () {
+      return docRef.set(body).then(function () {
+        var t = new Date();
+        setStatus('保存しました ' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0'));
+      }, function (e) {
+        if (e && e.code === 'unavailable') {
+          dirty = true;
+          setTimeout(flush, 1500 + Math.random() * 1000);
+          return;
+        }
+        setStatus('保存できません。「回答をコピー」を使ってください');
+      });
+    });
+  }
+
+  renderQuestions();
+  var questionsEl = document.getElementById('questions');
+  questionsEl.addEventListener('input', schedule);
+  questionsEl.addEventListener('change', schedule);
+
+  var cmdBtn = document.getElementById('repoCmdCopy');
+  if (cmdBtn) cmdBtn.addEventListener('click', function () {
+    var txt = document.getElementById('repoCmd').textContent;
+    var msg = document.getElementById('repoCmdMsg');
+    function sel() {
+      var r = document.createRange(); r.selectNodeContents(document.getElementById('repoCmd'));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      msg.textContent = 'コピーできなかったので、コマンドを選択しました';
+    }
+    try { navigator.clipboard.writeText(txt).then(function () { msg.textContent = 'コピーしました'; }, sel); } catch (e) { sel(); }
+  });
+
+  var api = window.claude && typeof window.claude.use === 'function' ? window.claude.use('db') : Promise.resolve(null);
+  Promise.resolve(api).then(function (db) {
+    if (!db) { setStatus('保存できません。「回答をコピー」を使ってください'); return; }
+    docRef = db.doc('answers/' + ROUND);
+    return docRef.get().then(function (snap) {
+      if (snap.exists) { applyState(snap.data()); setStatus('前回の回答を読み込みました'); }
+      else setStatus('選ぶと自動で保存します');
+      if (dirty) schedule();
+    });
+  }).catch(function () {
+    setStatus('保存できません。「回答をコピー」を使ってください');
+  });
+
+  var copyBtn = document.getElementById('copyBtn');
+  var copyMsg = document.getElementById('copyMsg');
+  var fallback = document.getElementById('copyFallback');
+  copyBtn.addEventListener('click', function () {
+    var text = answerText();
+    function showFallback() {
+      fallback.value = text;
+      fallback.classList.add('show');
+      fallback.focus();
+      fallback.select();
+      copyMsg.textContent = 'コピーできなかったので、下の文章を選択しました';
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { copyMsg.textContent = 'コピーしました'; }, showFallback);
+    } catch (e) { showFallback(); }
+  });
+})();
+</script>
