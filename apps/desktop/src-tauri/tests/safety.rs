@@ -178,6 +178,20 @@ const VISION_RUST: &[&str] = &["Media_Ocr", "OcrEngine", "Windows.Media.Ocr"];
 /// 通信してよい場所（ファイル名とその理由）。今は無い。F1 が足すときは、必ず理由を書く。
 const ALLOWED_NETWORK_FILES: &[(&str, &str)] = &[];
 
+/// 既定のブラウザで URL を開く部品（tauri-plugin-opener）を使ってよい場所（ファイル名とその理由）。
+/// この部品は通信しない（OS に URL を渡して、既定のブラウザを起動させるだけ）。それでも通信の部品の一覧に載せているのは、
+/// 名前が似ていて紛らわしいため。使えるのはここだけで、開く前に外部の Web ページ（http / https）に絞る（N-5）。
+/// 画面側（webview）からは呼べない（プラグインとして登録せず、権限も与えない）。
+const ALLOWED_OPENER_FILES: &[(&str, &str)] = &[(
+    "src/external.rs",
+    "N-5: リンクのクリックと新しい窓の要求を、既定のブラウザに回す。外部の Web ページだけを開く",
+)];
+
+/// 開く部品の名前（Rust のソースでの書き方）。
+const OPENER_RUST: &str = "tauri_plugin_opener";
+/// 開く部品のクレート名（Cargo.toml での書き方）。
+const OPENER_CRATE: &str = "tauri-plugin-opener";
+
 /// ウィジェットの画面のコードが読み込んでよいもの。ウィジェットはファイル保存と記録の追記しかしない（S-4）ので、
 /// プラグインは一切読まない。`@tauri-apps/api` も、記録のコマンドとイベントの窓口に限る。
 const WIDGET_ALLOWED_IMPORTS: &[&str] = &[
@@ -401,6 +415,13 @@ fn allowed_network_file(path: &Path) -> bool {
         .any(|(file, _reason)| name.ends_with(file))
 }
 
+fn allowed_opener_file(path: &Path) -> bool {
+    let name = path.to_string_lossy().replace('\\', "/");
+    ALLOWED_OPENER_FILES
+        .iter()
+        .any(|(file, _reason)| name.ends_with(file))
+}
+
 fn report(rule: &str, file: &Path, hits: &[(usize, String)]) -> String {
     hits.iter()
         .map(|(line, what)| format!("[{rule}] {}:{line}: {what}", file.display()))
@@ -567,6 +588,9 @@ fn s2_no_rust_source_uses_a_network_client() {
         }
         let text = read(&file);
         let mut hits = scan_lines(&text, NETWORK_RUST, false);
+        if allowed_opener_file(&file) {
+            hits.retain(|(_, what)| what != OPENER_RUST);
+        }
         hits.extend(scan_lines(&text, URL_SCHEMES, false));
         if !hits.is_empty() {
             violations.push(report("S-2 Rust", &file, &hits));
@@ -625,13 +649,78 @@ fn s2_cargo_toml_declares_no_network_dependency() {
         "tauri-plugin-websocket",
         "tauri-plugin-updater",
         "tauri-plugin-shell",
-        "tauri-plugin-opener",
     ];
     let hits = forbidden_crates_in_manifest(&toml, &network);
     assert_no_violations(
         hits.iter()
             .map(|(line, name)| format!("[S-2] Cargo.toml:{line}: 通信の部品 {name}"))
             .collect(),
+    );
+}
+
+/// 既定のブラウザで URL を開く部品（tauri-plugin-opener）は、許した 1 か所からだけ、開く関数だけを使う。
+/// プラグインとして登録せず、権限も与えないので、画面側（webview）からは呼べない。
+#[test]
+fn s2_the_opener_is_only_called_from_its_one_file_and_not_reachable_from_the_webview() {
+    // どのソースがこの部品の名前を持つか。
+    let mut users: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        if read(&file).contains(OPENER_RUST) {
+            users.push(file.to_string_lossy().replace('\\', "/"));
+        }
+    }
+    assert_eq!(users.len(), ALLOWED_OPENER_FILES.len(), "{users:?}");
+    for user in &users {
+        assert!(
+            ALLOWED_OPENER_FILES
+                .iter()
+                .any(|(file, reason)| user.ends_with(file) && !reason.is_empty()),
+            "許していない場所が開く部品を使っている: {user}"
+        );
+    }
+
+    // 許した場所では、開く関数だけを、外部の Web ページの確認のあとに呼ぶ。
+    for (file, _) in ALLOWED_OPENER_FILES {
+        let text = read(&crate_dir().join(file));
+        let calls: Vec<&str> = text
+            .match_indices(&format!("{OPENER_RUST}::"))
+            .map(|(at, _)| text[at..].split('(').next().unwrap_or(""))
+            .collect();
+        assert!(!calls.is_empty(), "{file}: 開く部品を使っていない");
+        for call in &calls {
+            assert_eq!(
+                *call,
+                &format!("{OPENER_RUST}::open_url"),
+                "{file}: 開く関数以外を使っている"
+            );
+        }
+        let guard = text
+            .find("is_external_web_page(url)")
+            .expect("外部の Web ページの確認がある");
+        let open = text
+            .find(&format!("{OPENER_RUST}::open_url"))
+            .expect("開く関数を呼ぶ");
+        assert!(guard < open, "{file}: 開く前に外部の Web ページか確かめる");
+    }
+
+    // プラグインとして登録していない（画面からの呼び出しの口が無い）。
+    assert!(
+        !read(&crate_dir().join("src").join("lib.rs")).contains(&format!("{OPENER_RUST}::init"))
+    );
+    // どの窓の権限にも、開く部品の権限が無い。
+    let capabilities = files_under(&crate_dir().join("capabilities"), &|p| {
+        has_ext(p, &["json"])
+    });
+    assert!(!capabilities.is_empty());
+    for file in capabilities {
+        assert!(!read(&file).contains("opener"), "{}", file.display());
+    }
+    // Cargo.toml が、この部品を宣言している（使っているのに宣言が無い、という食い違いを防ぐ）。
+    let toml = read(&crate_dir().join("Cargo.toml"));
+    assert_eq!(
+        forbidden_crates_in_manifest(&toml, &[OPENER_CRATE]).len(),
+        1,
+        "Cargo.toml に {OPENER_CRATE} が 1 つだけある"
     );
 }
 

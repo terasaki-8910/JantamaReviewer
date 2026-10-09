@@ -11,13 +11,16 @@ use std::thread;
 use std::time::Duration;
 
 use tauri::menu::Menu;
+use tauri::window::Color;
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, WebviewWindow, Wry,
 };
 
 use crate::app_core::{AppState, Core, SettingsChange};
+use crate::appearance::{parse_css_color, Rgb};
 use crate::clock::now_ms;
 use crate::hook::{ActiveTrigger, TriggerEvent};
+use crate::ready::ShowGate;
 use crate::settings::{Orientation, Settings, WidgetPosition};
 use crate::store::{Rating, SessionRecord};
 use crate::widget_window::{
@@ -39,6 +42,28 @@ impl SharedCore {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
+
+/// 窓を見せる時機の管理（N-7）。ウィジェットは画面が最初の絵を描き終えたら見せる。検討画面は、見せる要求もそろったら見せる。
+pub struct SharedShowGate(pub Mutex<ShowGate>);
+
+impl SharedShowGate {
+    pub fn new() -> SharedShowGate {
+        SharedShowGate(Mutex::new(ShowGate::new(&[WIDGET_LABEL])))
+    }
+
+    pub fn lock(&self) -> MutexGuard<'_, ShowGate> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl Default for SharedShowGate {
+    fn default() -> Self {
+        SharedShowGate::new()
+    }
+}
+
+/// 画面からの知らせが無いときに、窓を見せるまで待つ時間（N-7）。
+pub const SHOW_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// フックのスレッドへの窓口。フックを入れられなかったときは `None`（ウィジェットのボタンだけで動く）。
 #[cfg(windows)]
@@ -85,11 +110,64 @@ pub fn new_session_now<R: Runtime>(app: &AppHandle<R>) -> Result<AppState, Strin
     Ok(state)
 }
 
+/// 検討画面を開く。画面がまだ最初の絵を描き終えていなければ、描き終えてから見せる（N-7）。
 pub fn open_main_window_now<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(window) = app.get_webview_window(MAIN_LABEL) {
+    let show_now = app
+        .state::<SharedShowGate>()
+        .lock()
+        .request_show(MAIN_LABEL);
+    if show_now {
+        present_window(app, MAIN_LABEL);
+    }
+}
+
+/// 窓を実際に見せる。検討画面は前面に出す。ウィジェットは、前面のアプリからフォーカスを奪わない。
+fn present_window<R: Runtime>(app: &AppHandle<R>, label: &str) {
+    let Some(window) = app.get_webview_window(label) else {
+        return;
+    };
+    if label == MAIN_LABEL {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+    } else {
+        let _ = window.show();
+    }
+}
+
+/// 窓と webview の背景色を、画面が知らせてきた色にそろえる（N-7）。読めない色なら変えない。
+fn apply_background<R: Runtime>(window: &WebviewWindow<R>, css_color: &str) {
+    match parse_css_color(css_color) {
+        Some(Rgb(r, g, b)) => {
+            if let Err(e) = window.set_background_color(Some(Color(r, g, b, 255))) {
+                eprintln!("[{}] 背景色を変えられませんでした: {e}", window.label());
+            }
+        }
+        None => eprintln!(
+            "[{}] 背景色を読めませんでした: {css_color:?}",
+            window.label()
+        ),
+    }
+}
+
+/// 窓を隠したまま作ったあと、画面からの知らせが一定の時間来なくても、窓が見えないままにならないようにする（N-7）。
+pub fn spawn_show_watchdog<R: Runtime>(app: AppHandle<R>, after: Duration) {
+    let spawned = thread::Builder::new()
+        .name("show-watchdog".to_string())
+        .spawn(move || {
+            thread::sleep(after);
+            for label in [WIDGET_LABEL, MAIN_LABEL] {
+                let show = app.state::<SharedShowGate>().lock().timeout(label);
+                if show {
+                    eprintln!(
+                        "画面からの知らせが無いまま {after:?} たったので、{label} を見せます"
+                    );
+                    present_window(&app, label);
+                }
+            }
+        });
+    if let Err(e) = spawned {
+        eprintln!("窓を見せる見張りのスレッドを起こせませんでした: {e}");
     }
 }
 
@@ -335,6 +413,35 @@ pub async fn list_sessions(core: State<'_, SharedCore>) -> Result<Vec<SessionRec
 #[tauri::command]
 pub async fn get_startup_note(core: State<'_, SharedCore>) -> Result<Option<String>, String> {
     Ok(core.lock().startup_note().map(str::to_string))
+}
+
+/// 画面が最初の絵を描き終えたときに呼ぶ（N-7）。窓と webview の背景色を、画面が描いている背景の色にそろえてから、窓を見せる。
+/// 画面が描き終える前に窓を見せると、白い面が一瞬見えてしまう。
+#[tauri::command]
+pub async fn window_ready(
+    app: AppHandle,
+    window: WebviewWindow,
+    background: String,
+) -> Result<(), String> {
+    apply_background(&window, &background);
+    let show = app
+        .state::<SharedShowGate>()
+        .lock()
+        .mark_ready(window.label());
+    if show {
+        present_window(&app, window.label());
+    }
+    Ok(())
+}
+
+/// テーマが変わったときに呼ぶ。窓と webview の背景色を、画面が描いている背景の色にそろえる（N-7）。
+#[tauri::command]
+pub async fn set_window_background(
+    window: WebviewWindow,
+    background: String,
+) -> Result<(), String> {
+    apply_background(&window, &background);
+    Ok(())
 }
 
 /// ウィジェットの右クリックで、ネイティブのメニューを出す。

@@ -8,19 +8,26 @@
 compile_error!("JantamaReviewer は Windows 専用です。");
 
 pub mod app_core;
+pub mod appearance;
 pub mod capture;
 #[cfg(windows)]
 pub mod capture_win;
 pub mod clock;
 pub mod commands;
+pub mod external;
 pub mod hook;
 #[cfg(windows)]
 pub mod hook_win;
 pub mod menu;
+pub mod navigation;
+pub mod ready;
 pub mod recorder;
 pub mod settings;
 pub mod sound;
 pub mod store;
+pub mod webview_policy;
+#[cfg(windows)]
+pub mod webview_win;
 pub mod widget_window;
 
 use std::error::Error;
@@ -33,7 +40,9 @@ use tauri::{Manager, WindowEvent};
 
 use crate::app_core::Core;
 use crate::capture_win::WindowsCapturer;
-use crate::commands::{HookState, PositionSaver, SharedCore, WidgetMenu};
+use crate::commands::{
+    HookState, PositionSaver, SharedCore, SharedShowGate, WidgetMenu, SHOW_TIMEOUT,
+};
 use crate::hook::ActiveTrigger;
 use crate::sound::WindowsSound;
 use crate::widget_window::{
@@ -63,6 +72,8 @@ pub fn run() {
             commands::list_sessions,
             commands::get_startup_note,
             commands::show_widget_menu,
+            commands::window_ready,
+            commands::set_window_background,
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)
@@ -122,23 +133,26 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         handle.clone(),
     ))));
 
-    // ウィジェットの窓。位置を決めてから見せる。
+    // 窓は、どちらも隠したまま作る。画面が最初の絵を描き終えて知らせて（window_ready）から見せるので、
+    // 描き終える前の白い面が見えない（N-7）。ウィジェットは位置を決めておき、知らせが来たら見せる。
+    app.manage(SharedShowGate::new());
     let widget_spec = widget_window_spec(settings.orientation);
     let widget = build_window(app, &widget_spec)?;
     apply_native_style(&widget, &widget_spec);
     if let Some(position) = commands::initial_widget_position(&widget, settings.widget_position) {
         move_window(&widget, position);
     }
-    widget.show()?;
 
     // 検討画面の窓。起動時は隠しておく。
     let main_spec = main_window_spec();
     let main_window = build_window(app, &main_spec)?;
     apply_native_style(&main_window, &main_spec);
-    // 開発と確認用: 引数に --show-main があれば、起動と同時に検討画面を開く。
+    // 開発と確認用: 引数に --show-main があれば、起動と同時に検討画面を開く（画面が描き終えたら見せる）。
     if std::env::args().any(|arg| arg == SHOW_MAIN_ARG) {
         commands::open_main_window_now(&handle);
     }
+    // 画面からの知らせが来なくても、窓が見えないままにならないようにする。
+    commands::spawn_show_watchdog(handle.clone(), SHOW_TIMEOUT);
 
     // 右クリックのメニューとタスクトレイ。
     app.manage(WidgetMenu(menu::build_menu(app)?));

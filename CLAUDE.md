@@ -17,8 +17,13 @@ run state/init-tools.sh myself. Never auto-install or enable tools.
 コードの識別子（変数名・関数名など）だけは英語のままにする。会話の言語とは別。
 
 ## Commands
-- Tests: <e.g. npm test / pytest>
-- Lint:  <e.g. npm run lint>   (MUST include: no-emoji, design-tokens-only, a11y)
+どれもリポジトリのルートで実行する（Windows 専用。pnpm 11・Node・Rust が要る）。
+- Install: `pnpm install`
+- Tests: `pnpm test`（= `pnpm test:ts`（全 vitest）+ `pnpm test:rust`（cargo test））。実ブラウザの検査（tests/browser）は、インストール済みの Chrome か Edge を使う。フックの結合試験（src-tauri/tests/hook_integration.rs）は、実際にマウスとキーの入力を注入するので、対話できるデスクトップが要る。
+- Lint:  `pnpm lint`（= eslint（絵文字禁止・色はトークンのみ・jsx-a11y）+ stylelint（色はトークンのみ）+ tsc --noEmit + cargo clippy -D warnings + cargo fmt --check）
+- Debug build: `pnpm build:debug`（`tauri build --debug --no-bundle`。画面を埋め込んだ実行ファイルが `apps/desktop/src-tauri/target/debug/jantama-reviewer.exe` にできる）
+- Dev: `pnpm dev`（`tauri dev`。開発者ツールが使えるのはこのときだけ）
+- 試しに動かすときは、環境変数 `JANTAMA_CONFIG_DIR` に一時フォルダを指定し、そこの `settings.json` で `data_dir` も一時フォルダにする。本物のデータ（`%USERPROFILE%\JantamaReviewerData`）には触れない。`--show-main` を付けると検討画面も開く。
 
 ## UI rules
 IMPORTANT: colors ONLY via design tokens; never hardcode hex. No emoji in UI or source.

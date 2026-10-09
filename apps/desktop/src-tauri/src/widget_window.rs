@@ -4,15 +4,24 @@
 //! 「クリックしても前面のアプリからフォーカスを奪わない」設定（W-4）などをテストで確かめる。
 //! 窓の位置を画面の中に収める計算も、ここの純粋な関数。
 
+use tauri::webview::NewWindowResponse;
 use tauri::{
     LogicalSize, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
 
+use crate::external::{download_hook, navigation_hook, new_window_hook, open_in_default_browser};
+use crate::navigation::AppOrigins;
 use crate::settings::Orientation;
+use crate::webview_policy::WebviewFlags;
 
 pub const WIDGET_LABEL: &str = "widget";
 pub const MAIN_LABEL: &str = "main";
+
+/// ウィジェットの窓の題名（N-13）。アプリの日本語の名前。URL や localhost は入れない。
+pub const WIDGET_TITLE: &str = "JantamaReviewer ウィジェット";
+/// 検討画面の窓の題名（N-13）。
+pub const MAIN_TITLE: &str = "JantamaReviewer 検討画面";
 
 /// 縦長のウィジェットの大きさ（論理ピクセル）。幅 76px、高さは約 336px。
 pub const WIDGET_VERTICAL_SIZE: (f64, f64) = (76.0, 336.0);
@@ -60,7 +69,7 @@ pub fn widget_window_spec(orientation: Orientation) -> WindowSpec {
     WindowSpec {
         label: WIDGET_LABEL,
         url: "widget.html",
-        title: "JantamaReviewer ウィジェット",
+        title: WIDGET_TITLE,
         width,
         height,
         // どちらの形にも収まる小さな下限にして、Windows の既定の下限（幅 136px）を外す。
@@ -86,7 +95,7 @@ pub fn main_window_spec() -> WindowSpec {
     WindowSpec {
         label: MAIN_LABEL,
         url: "index.html",
-        title: "JantamaReviewer",
+        title: MAIN_TITLE,
         width: 1120.0,
         height: 760.0,
         min_size: None,
@@ -104,10 +113,19 @@ pub fn main_window_spec() -> WindowSpec {
 }
 
 /// 設定どおりに窓を作る。窓の作り方はすべて `WindowSpec` から来る。
+/// ブラウザの名残を出さないための設定（N-1〜N-12）は、`WebviewFlags` から来る。
+/// - Tauri が出している設定は、窓を作るときに渡す。
+/// - 画面の遷移・新しい窓・ダウンロードの要求は、`navigation.rs` の決まりで扱う（アプリ自身の画面だけを読み込む）。
+/// - WebView2 の残りの設定は、作った直後に書き込んで読み戻す（`webview_win.rs`）。
 pub fn build_window<R: Runtime, M: Manager<R>>(
     manager: &M,
     spec: &WindowSpec,
 ) -> tauri::Result<WebviewWindow<R>> {
+    let dev = tauri::is_dev();
+    let flags = WebviewFlags::strict(dev);
+    let options = flags.builder_options();
+    let origins = AppOrigins::for_run(dev, manager.config().build.dev_url.as_ref());
+    let navigation_origins = origins.clone();
     let mut builder =
         WebviewWindowBuilder::new(manager, spec.label, WebviewUrl::App(spec.url.into()))
             .title(spec.title)
@@ -121,7 +139,22 @@ pub fn build_window<R: Runtime, M: Manager<R>>(
             .visible(spec.visible)
             .shadow(spec.shadow)
             .maximizable(spec.maximizable)
-            .minimizable(spec.minimizable);
+            .minimizable(spec.minimizable)
+            .zoom_hotkeys_enabled(options.zoom_hotkeys_enabled)
+            .general_autofill_enabled(options.general_autofill_enabled)
+            .devtools(options.devtools)
+            .on_navigation(move |url| {
+                navigation_hook(url, &navigation_origins, &open_in_default_browser)
+            })
+            .on_new_window(move |url, _features| {
+                new_window_hook(&url, &origins, &open_in_default_browser);
+                // 新しい窓は、どの場合も作らない。
+                NewWindowResponse::Deny
+            })
+            .on_download(|_webview, event| download_hook(&event));
+    if !options.drag_drop_handler {
+        builder = builder.disable_drag_drop_handler();
+    }
     if let Some((min_width, min_height)) = spec.min_size {
         builder = builder.min_inner_size(min_width, min_height);
     }
@@ -131,6 +164,8 @@ pub fn build_window<R: Runtime, M: Manager<R>>(
         // 下限を外した状態で、もう一度大きさを指定し直す。
         window.set_size(LogicalSize::new(spec.width, spec.height))?;
     }
+    #[cfg(windows)]
+    crate::webview_win::harden(&window, flags);
     Ok(window)
 }
 
@@ -306,6 +341,44 @@ mod tests {
         }
         // Windows の既定の下限（幅 136px）より小さい。
         assert!(min_w < 136.0);
+    }
+
+    #[test]
+    fn n7_both_windows_are_created_hidden_so_they_can_be_shown_after_the_first_paint() {
+        for spec in [
+            widget_window_spec(Orientation::Vertical),
+            widget_window_spec(Orientation::Horizontal),
+            main_window_spec(),
+        ] {
+            assert!(!spec.visible, "{}: 隠したまま作る", spec.label);
+        }
+    }
+
+    #[test]
+    fn n13_window_titles_are_japanese_app_names_and_never_a_url() {
+        let specs = [
+            widget_window_spec(Orientation::Vertical),
+            main_window_spec(),
+        ];
+        assert_eq!(specs[0].title, WIDGET_TITLE);
+        assert_eq!(specs[1].title, MAIN_TITLE);
+        assert_ne!(WIDGET_TITLE, MAIN_TITLE, "2 つの窓の題名は区別できる");
+        for spec in specs {
+            let title = spec.title;
+            assert!(title.starts_with("JantamaReviewer"), "{title}");
+            assert!(
+                title
+                    .chars()
+                    .any(|c| matches!(c, '\u{3040}'..='\u{30FF}' | '\u{4E00}'..='\u{9FFF}')),
+                "日本語の名前を含む: {title}"
+            );
+            for forbidden in ["localhost", "://", "http", "tauri", ".html", "127.0.0.1"] {
+                assert!(
+                    !title.to_lowercase().contains(forbidden),
+                    "題名に {forbidden} を入れない: {title}"
+                );
+            }
+        }
     }
 
     #[test]
