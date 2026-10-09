@@ -175,8 +175,21 @@ const VISION_TS: &[&str] = &[
 /// S-3: Rust の画像の解析の窓口。
 const VISION_RUST: &[&str] = &["Media_Ocr", "OcrEngine", "Windows.Media.Ocr"];
 
-/// 通信してよい場所（ファイル名とその理由）。今は無い。F1 が足すときは、必ず理由を書く。
-const ALLOWED_NETWORK_FILES: &[(&str, &str)] = &[];
+/// 通信してよい場所（ファイル名とその理由）。F1 などが足すときは、必ず理由を書く。
+/// ここに載せたファイルは S-2 の走査（雀魂のドメイン・通信の部品・URL の書き方）から外れる。
+/// 下の 2 つは、URL やドメインの「文字列」を扱うだけで通信しない、エンジンの小さなファイル。
+/// 外れる範囲を広げないため、packages/engine のテスト（purity.test.ts）が、この 2 ファイル以外に URL や
+/// 雀魂のドメインが無いことと、エンジン全体が通信・ファイル・時計に触れないことを確かめている。
+const ALLOWED_NETWORK_FILES: &[(&str, &str)] = &[
+    (
+        "packages/engine/src/paipu-link.ts",
+        "E-9: 雀魂の牌譜リンク（ドメインと URL の書き方）を読んで、mjai.ekyu.moe の入力欄に入れる文字列に整える。文字列を扱うだけで通信しない",
+    ),
+    (
+        "packages/engine/src/tenhou-url.ts",
+        "E-3: 天鳳牌理へのリンクの文字列を作る。文字列を扱うだけで通信しない（リンクは既定のブラウザで開く。N-5）",
+    ),
+];
 
 /// 既定のブラウザで URL を開く部品（tauri-plugin-opener）を使ってよい場所（ファイル名とその理由）。
 /// この部品は通信しない（OS に URL を渡して、既定のブラウザを起動させるだけ）。それでも通信の部品の一覧に載せているのは、
