@@ -32,6 +32,8 @@ export const api = {
    * 窓の背景色を `background`（いま描いている背景の色。CSS の色の文字列）にそろえてから見せる。
    */
   windowReady: (background: string) => invoke<void>('window_ready', { background }),
+  /** 開発者ツールを開く。`tauri dev` のときだけ開く（N-12）。 */
+  openDevtools: () => invoke<void>('open_devtools'),
   /** テーマが変わったときに、窓の背景色を画面の色にそろえさせる（N-7）。 */
   setWindowBackground: (background: string) =>
     invoke<void>('set_window_background', { background }),

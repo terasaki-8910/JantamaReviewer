@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   hardenElement,
@@ -8,6 +9,8 @@ import {
   installNativeBehavior,
   isEditableTarget,
 } from './nativeBehavior';
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async () => undefined), convertFileSrc: (p: string) => p }));
 
 /** イベントを送り、既定の動作が止められなかったか（止められていなければ true）を返す。 */
 function fire(target: EventTarget, type: string, init: MouseEventInit = {}): boolean {
@@ -36,6 +39,7 @@ let dispose: (() => void) | null = null;
 
 beforeEach(() => {
   document.body.innerHTML = '';
+  vi.mocked(invoke).mockClear();
 });
 
 afterEach(() => {
@@ -222,6 +226,42 @@ describe('N-10: 入力欄の属性と、N-8: 画像の属性', () => {
     const button = element('button');
     hardenElement(button);
     expect(button.hasAttribute('draggable')).toBe(false);
+  });
+});
+
+describe('N-12: 開発者ツールは、開発（tauri dev）のときだけ F12 と Ctrl+Shift+I で開く', () => {
+  function press(target: EventTarget, init: KeyboardEventInit): boolean {
+    return target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+  }
+
+  it('devtools が有効なとき: F12 でも Ctrl+Shift+I でも open_devtools を呼び、ブラウザの既定の動作は止める', () => {
+    dispose = installBrowserGuards(document, { devtools: true });
+    expect(press(document.body, { key: 'F12', code: 'F12' })).toBe(false);
+    expect(press(document.body, { key: 'I', code: 'KeyI', ctrlKey: true, shiftKey: true })).toBe(false);
+    const calls = vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === 'open_devtools');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('devtools が有効でも、ほかのキーでは呼ばない（Ctrl+I・Shift+I・F11 など）', () => {
+    dispose = installBrowserGuards(document, { devtools: true });
+    expect(press(document.body, { key: 'i', code: 'KeyI', ctrlKey: true })).toBe(true);
+    expect(press(document.body, { key: 'I', code: 'KeyI', shiftKey: true })).toBe(true);
+    expect(press(document.body, { key: 'F11', code: 'F11' })).toBe(true);
+    expect(vi.mocked(invoke)).not.toHaveBeenCalled();
+  });
+
+  it('devtools が無効なとき（製品）: 何もしない（呼ばず、止めもしない）', () => {
+    dispose = installBrowserGuards(document, { devtools: false });
+    expect(press(document.body, { key: 'F12', code: 'F12' })).toBe(true);
+    expect(press(document.body, { key: 'I', code: 'KeyI', ctrlKey: true, shiftKey: true })).toBe(true);
+    expect(vi.mocked(invoke)).not.toHaveBeenCalled();
+  });
+
+  it('既定は、開発のとき（Vite の開発サーバー）だけ有効: import.meta.env.DEV に従う', () => {
+    dispose = installBrowserGuards(document);
+    press(document.body, { key: 'F12', code: 'F12' });
+    const called = vi.mocked(invoke).mock.calls.some(([cmd]) => cmd === 'open_devtools');
+    expect(called).toBe(import.meta.env.DEV);
   });
 });
 

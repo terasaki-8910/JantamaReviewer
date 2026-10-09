@@ -116,6 +116,27 @@ fn n1_to_n12_build_window_applies_every_option_and_hook() {
 }
 
 #[test]
+fn n12_the_devtools_command_does_nothing_outside_tauri_dev() {
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    assert!(
+        lib.contains("commands::open_devtools"),
+        "コマンドを登録していない"
+    );
+    let commands = read(crate_dir().join("src").join("commands.rs"));
+    let body = commands
+        .split("pub async fn open_devtools(")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("open_devtools がある");
+    // 開くのは、デバッグ用のビルドで、かつ tauri dev のときだけ。
+    assert!(body.contains("#[cfg(debug_assertions)]"));
+    assert!(body.contains("if tauri::is_dev()"));
+    assert!(body.contains("window.open_devtools()"));
+    // 製品のビルドでは、窓を使わずに何もしない（open_devtools は製品のビルドには存在しない）。
+    assert!(body.contains("#[cfg(not(debug_assertions))]"));
+}
+
+#[test]
 fn n7_windows_are_shown_only_through_the_ready_gate() {
     let lib = read(crate_dir().join("src").join("lib.rs"));
     for command in ["commands::window_ready", "commands::set_window_background"] {

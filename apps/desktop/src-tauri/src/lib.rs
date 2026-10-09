@@ -74,6 +74,7 @@ pub fn run() {
             commands::show_widget_menu,
             commands::window_ready,
             commands::set_window_background,
+            commands::open_devtools,
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)

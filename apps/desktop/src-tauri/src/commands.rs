@@ -444,6 +444,19 @@ pub async fn set_window_background(
     Ok(())
 }
 
+/// 開発者ツールを開く（N-12）。`tauri dev` のときだけ。製品のビルドでは何もしない。
+/// ブラウザのショートカット（F12 など）は切っているので、開発のときだけ、画面側の F12 のキー処理がこれを呼ぶ。
+#[tauri::command]
+pub async fn open_devtools(window: WebviewWindow) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    if tauri::is_dev() {
+        window.open_devtools();
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = window;
+    Ok(())
+}
+
 /// ウィジェットの右クリックで、ネイティブのメニューを出す。
 #[tauri::command]
 pub async fn show_widget_menu(

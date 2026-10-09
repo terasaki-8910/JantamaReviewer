@@ -23,7 +23,7 @@ run state/init-tools.sh myself. Never auto-install or enable tools.
 - Hook test（手動）: `pnpm test:hook`。実際にマウスとキーの入力を注入して、本物のフックを通す（src-tauri/tests/hook_integration.rs。`pnpm test` には含めない）。前面の窓が昇格している（管理者として動く雀魂のクライアントなど）と、入力が届かず、理由を示して失敗する。
 - Lint:  `pnpm lint`（= eslint（絵文字禁止・色はトークンのみ・jsx-a11y）+ stylelint（色はトークンのみ）+ tsc --noEmit + cargo clippy -D warnings + cargo fmt --check）
 - Debug build: `pnpm build:debug`（`tauri build --debug --no-bundle`。画面を埋め込んだ実行ファイルが `apps/desktop/src-tauri/target/debug/jantama-reviewer.exe` にできる）
-- Dev: `pnpm dev`（`tauri dev`。開発者ツールが使えるのはこのときだけ）
+- Dev: `pnpm dev`（`tauri dev`。開発者ツールが使えるのはこのときだけ。ブラウザのショートカットは切ってあるので、F12 か Ctrl+Shift+I のアプリ自身のキー処理で開く）
 - 試しに動かすときは、環境変数 `JANTAMA_CONFIG_DIR` に一時フォルダを指定し、そこの `settings.json` で `data_dir` も一時フォルダにする。本物のデータ（`%USERPROFILE%\JantamaReviewerData`）には触れない。`--show-main` を付けると検討画面も開く。
 
 ## UI rules
