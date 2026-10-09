@@ -104,7 +104,7 @@ function SessionDetail({ session }: { session: SessionRecord }) {
         {session.marks.length === 0 ? (
           <p className="empty">迷いの記録はありません。</p>
         ) : (
-          <ul className="marks">
+          <ul className="marks" aria-label="迷いマークの一覧">
             {session.marks.map((mark, index) => (
               <li key={mark.id}>
                 <MarkItem mark={mark} number={index + 1} />
@@ -118,7 +118,7 @@ function SessionDetail({ session }: { session: SessionRecord }) {
         {session.ratings.length === 0 ? (
           <p className="empty">評価はまだありません。</p>
         ) : (
-          <ol className="rating-list">
+          <ol className="rating-list" aria-label="局の評価の一覧">
             {session.ratings.map((rating) => (
               <li key={rating.id}>
                 <RatingRow rating={rating} />

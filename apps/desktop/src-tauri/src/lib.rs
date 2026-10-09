@@ -44,6 +44,9 @@ use crate::widget_window::{
 /// 設定フォルダを置き換える環境変数。試しに動かすときに、本物の設定やデータに触れないために使う。
 pub const CONFIG_DIR_ENV: &str = "JANTAMA_CONFIG_DIR";
 
+/// 起動と同時に検討画面を開く引数（開発と確認用）。
+pub const SHOW_MAIN_ARG: &str = "--show-main";
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -132,6 +135,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let main_spec = main_window_spec();
     let main_window = build_window(app, &main_spec)?;
     apply_native_style(&main_window, &main_spec);
+    // 開発と確認用: 引数に --show-main があれば、起動と同時に検討画面を開く。
+    if std::env::args().any(|arg| arg == SHOW_MAIN_ARG) {
+        commands::open_main_window_now(&handle);
+    }
 
     // 右クリックのメニューとタスクトレイ。
     app.manage(WidgetMenu(menu::build_menu(app)?));

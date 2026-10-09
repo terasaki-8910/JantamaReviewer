@@ -310,10 +310,15 @@ fn disallowed_hook_ids(text: &str) -> Vec<(usize, String)> {
         let bytes = line.as_bytes();
         let mut i = 0;
         while i + 3 <= bytes.len() {
-            let boundary = i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let boundary =
+                i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
             if boundary && &bytes[i..i + 3] == b"WH_" {
                 let end = (i..bytes.len())
-                    .find(|&j| !(bytes[j].is_ascii_uppercase() || bytes[j].is_ascii_digit() || bytes[j] == b'_'))
+                    .find(|&j| {
+                        !(bytes[j].is_ascii_uppercase()
+                            || bytes[j].is_ascii_digit()
+                            || bytes[j] == b'_')
+                    })
                     .unwrap_or(bytes.len());
                 let id = &line[i..end];
                 if !ALLOWED_HOOK_IDS.contains(&id) {
@@ -367,7 +372,8 @@ fn import_specifiers(text: &str) -> Vec<String> {
     let mut specs = Vec::new();
     for line in text.lines() {
         let line = line.trim();
-        if !(line.starts_with("import ") || line.starts_with("export ") || line.contains("import(")) {
+        if !(line.starts_with("import ") || line.starts_with("export ") || line.contains("import("))
+        {
             continue;
         }
         for quote in ['\'', '"'] {
@@ -431,7 +437,10 @@ fn the_scanner_detects_every_forbidden_pattern() {
         }
     }
     // 大文字小文字を変えたドメインも見つける。
-    assert_eq!(scan_lines("GAME.MahjongSoul.COM", GAME_DOMAINS, true).len(), 1);
+    assert_eq!(
+        scan_lines("GAME.MahjongSoul.COM", GAME_DOMAINS, true).len(),
+        1
+    );
     assert_eq!(scan_lines("see maj-soul.net", GAME_DOMAINS, true).len(), 1);
 }
 
@@ -447,7 +456,14 @@ fn the_scanner_does_not_flag_the_window_title_keywords_or_plain_text() {
 fn the_hook_id_scan_allows_only_the_low_level_hooks() {
     assert!(disallowed_hook_ids("SetWindowsHookExW(WH_MOUSE_LL, p, h, 0)").is_empty());
     assert!(disallowed_hook_ids("use ...::{WH_KEYBOARD_LL, WH_MOUSE_LL};").is_empty());
-    for bad in ["WH_CBT", "WH_GETMESSAGE", "WH_CALLWNDPROC", "WH_MOUSE", "WH_KEYBOARD", "WH_SHELL"] {
+    for bad in [
+        "WH_CBT",
+        "WH_GETMESSAGE",
+        "WH_CALLWNDPROC",
+        "WH_MOUSE",
+        "WH_KEYBOARD",
+        "WH_SHELL",
+    ] {
         let hits = disallowed_hook_ids(&format!("SetWindowsHookExW({bad}, p, h, 0)"));
         assert_eq!(hits.len(), 1, "{bad}");
         assert_eq!(hits[0].1, bad);
@@ -458,7 +474,8 @@ fn the_hook_id_scan_allows_only_the_low_level_hooks() {
 
 #[test]
 fn the_manifest_scan_finds_forbidden_crates_by_name() {
-    let lock = "[[package]]\nname = \"tesseract-sys\"\nversion = \"1\"\n\n[[package]]\nname = \"serde\"\n";
+    let lock =
+        "[[package]]\nname = \"tesseract-sys\"\nversion = \"1\"\n\n[[package]]\nname = \"serde\"\n";
     assert_eq!(forbidden_crates_in_manifest(lock, VISION_CRATES).len(), 1);
     let toml = "[dependencies]\nopencv = \"0.9\"\nserde = \"1\"\nort = { version = \"2\" }\n";
     let hits = forbidden_crates_in_manifest(toml, VISION_CRATES);
@@ -466,7 +483,10 @@ fn the_manifest_scan_finds_forbidden_crates_by_name() {
     let ok = "[dependencies]\npng = \"0.18\"\nchrono = \"0.4\"\nimage = \"0.25\"\n";
     assert!(forbidden_crates_in_manifest(ok, VISION_CRATES).is_empty());
     // 前方一致は crate 名の区切りでだけ効く（"ort" が "port" に当たらない）。
-    assert!(forbidden_crates_in_manifest("name = \"portable\"\nname = \"sort\"", VISION_CRATES).is_empty());
+    assert!(
+        forbidden_crates_in_manifest("name = \"portable\"\nname = \"sort\"", VISION_CRATES)
+            .is_empty()
+    );
 }
 
 #[test]
@@ -494,7 +514,11 @@ fn s1_no_source_touches_another_process() {
     assert!(!files.is_empty(), "走査の対象が見つからない");
     for file in &files {
         let text = read(file);
-        violations.push(report("S-1", file, &scan_lines(&text, GAME_PROCESS_APIS, false)));
+        violations.push(report(
+            "S-1",
+            file,
+            &scan_lines(&text, GAME_PROCESS_APIS, false),
+        ));
         if has_ext(file, &["rs"]) {
             violations.push(report("S-1 フック", file, &disallowed_hook_ids(&text)));
         }
@@ -507,7 +531,9 @@ fn s1_windows_crate_features_exclude_cross_process_and_ocr_apis() {
     let toml = read(&crate_dir().join("Cargo.toml"));
     let mut violations = Vec::new();
     for (line, feature) in scan_lines(&toml, FORBIDDEN_WINDOWS_FEATURES, false) {
-        violations.push(format!("[S-1] Cargo.toml:{line}: windows の feature {feature}"));
+        violations.push(format!(
+            "[S-1] Cargo.toml:{line}: windows の feature {feature}"
+        ));
     }
     assert_no_violations(violations);
 }
@@ -639,7 +665,10 @@ fn s2_s3_the_runtime_dependency_graph_has_no_network_or_vision_crates() {
         .filter_map(|l| l.split_whitespace().next())
         .map(str::to_string)
         .collect();
-    assert!(crates.iter().any(|c| c == "tauri"), "依存の一覧を読めていない");
+    assert!(
+        crates.iter().any(|c| c == "tauri"),
+        "依存の一覧を読めていない"
+    );
 
     let network = [
         "reqwest",
@@ -676,7 +705,9 @@ fn s3_no_vision_or_ocr_crate_in_cargo_toml_or_cargo_lock() {
     for file in ["Cargo.toml", "Cargo.lock"] {
         let path = crate_dir().join(file);
         for (line, name) in forbidden_crates_in_manifest(&read(&path), VISION_CRATES) {
-            violations.push(format!("[S-3] {file}:{line}: 画像解析・文字認識の部品 {name}"));
+            violations.push(format!(
+                "[S-3] {file}:{line}: 画像解析・文字認識の部品 {name}"
+            ));
         }
     }
     assert_no_violations(violations);
@@ -733,7 +764,11 @@ fn s3_png_is_only_ever_encoded_never_decoded_in_product_code() {
         let text = read(&file);
         // テストのコードの中にある確認用のデコードは対象外。
         let product = text.split("#[cfg(test)]").next().unwrap_or("");
-        let hits = scan_lines(product, &["png::Decoder", "image::open", "load_from_memory"], false);
+        let hits = scan_lines(
+            product,
+            &["png::Decoder", "image::open", "load_from_memory"],
+            false,
+        );
         if !hits.is_empty() {
             violations.push(report("S-3 デコード", &file, &hits));
         }
@@ -750,7 +785,9 @@ fn s4_the_widget_code_imports_only_the_recording_api() {
         .join("desktop")
         .join("src")
         .join("widget");
-    let files = files_under(&widget_dir, &|p| has_ext(p, &["ts", "tsx"]) && !is_test_file(p));
+    let files = files_under(&widget_dir, &|p| {
+        has_ext(p, &["ts", "tsx"]) && !is_test_file(p)
+    });
     assert!(!files.is_empty(), "ウィジェットのソースが見つからない");
     let mut violations = Vec::new();
     for file in files {
@@ -783,7 +820,8 @@ fn s4_the_widget_window_has_no_file_dialog_or_plugin_permission() {
         .collect();
     for permission in &permissions {
         assert!(
-            permission.starts_with("core:event:") || *permission == "core:window:allow-start-dragging",
+            permission.starts_with("core:event:")
+                || *permission == "core:window:allow-start-dragging",
             "ウィジェットに許している操作が多すぎる: {permission}"
         );
     }

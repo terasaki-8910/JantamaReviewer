@@ -4,7 +4,10 @@
 //! 「クリックしても前面のアプリからフォーカスを奪わない」設定（W-4）などをテストで確かめる。
 //! 窓の位置を画面の中に収める計算も、ここの純粋な関数。
 
-use tauri::{Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    LogicalSize, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
 
 use crate::settings::Orientation;
 
@@ -34,6 +37,9 @@ pub struct WindowSpec {
     /// 内側の大きさ（論理ピクセル）。
     pub width: f64,
     pub height: f64,
+    /// 窓の大きさの下限（論理ピクセル）。`None` なら Windows の既定の下限（幅 136px など）になり、
+    /// 幅 76px のウィジェットがそれより広く作られてしまう。
+    pub min_size: Option<(f64, f64)>,
     pub decorations: bool,
     pub always_on_top: bool,
     pub resizable: bool,
@@ -57,6 +63,8 @@ pub fn widget_window_spec(orientation: Orientation) -> WindowSpec {
         title: "JantamaReviewer ウィジェット",
         width,
         height,
+        // どちらの形にも収まる小さな下限にして、Windows の既定の下限（幅 136px）を外す。
+        min_size: Some((40.0, 40.0)),
         decorations: false,
         always_on_top: true,
         resizable: false,
@@ -65,7 +73,9 @@ pub fn widget_window_spec(orientation: Orientation) -> WindowSpec {
         focused: false,
         // 位置を決めてから見せる。
         visible: false,
-        shadow: true,
+        // 影を付けると、窓の周りに見えない枠（左右・下に 8px ほど）が付いて、大きさが仕様とずれる。
+        // 承認済みの見た目にも影は無く、1px の枠線だけ。
+        shadow: false,
         maximizable: false,
         minimizable: false,
     }
@@ -79,6 +89,7 @@ pub fn main_window_spec() -> WindowSpec {
         title: "JantamaReviewer",
         width: 1120.0,
         height: 760.0,
+        min_size: None,
         decorations: true,
         always_on_top: false,
         resizable: true,
@@ -97,20 +108,30 @@ pub fn build_window<R: Runtime, M: Manager<R>>(
     manager: &M,
     spec: &WindowSpec,
 ) -> tauri::Result<WebviewWindow<R>> {
-    WebviewWindowBuilder::new(manager, spec.label, WebviewUrl::App(spec.url.into()))
-        .title(spec.title)
-        .inner_size(spec.width, spec.height)
-        .decorations(spec.decorations)
-        .always_on_top(spec.always_on_top)
-        .resizable(spec.resizable)
-        .skip_taskbar(spec.skip_taskbar)
-        .focusable(spec.focusable)
-        .focused(spec.focused)
-        .visible(spec.visible)
-        .shadow(spec.shadow)
-        .maximizable(spec.maximizable)
-        .minimizable(spec.minimizable)
-        .build()
+    let mut builder =
+        WebviewWindowBuilder::new(manager, spec.label, WebviewUrl::App(spec.url.into()))
+            .title(spec.title)
+            .inner_size(spec.width, spec.height)
+            .decorations(spec.decorations)
+            .always_on_top(spec.always_on_top)
+            .resizable(spec.resizable)
+            .skip_taskbar(spec.skip_taskbar)
+            .focusable(spec.focusable)
+            .focused(spec.focused)
+            .visible(spec.visible)
+            .shadow(spec.shadow)
+            .maximizable(spec.maximizable)
+            .minimizable(spec.minimizable);
+    if let Some((min_width, min_height)) = spec.min_size {
+        builder = builder.min_inner_size(min_width, min_height);
+    }
+    let window = builder.build()?;
+    if spec.min_size.is_some() {
+        // 作る最中は Windows の既定の下限（幅 136px）が先に効いて、小さい窓が広がってしまう。
+        // 下限を外した状態で、もう一度大きさを指定し直す。
+        window.set_size(LogicalSize::new(spec.width, spec.height))?;
+    }
+    Ok(window)
 }
 
 /// 窓を作ったあとの Windows 固有の仕上げ。
@@ -260,6 +281,7 @@ mod tests {
             assert!(!spec.decorations, "枠なし");
             assert!(!spec.resizable, "大きさ固定");
             assert!(spec.skip_taskbar, "タスクバーに出さない");
+            assert!(!spec.shadow, "影の分の見えない枠が付くと、大きさがずれる");
             assert_eq!(spec.label, WIDGET_LABEL);
             assert_eq!(spec.url, "widget.html");
         }
@@ -272,6 +294,18 @@ mod tests {
         let h = widget_window_spec(Orientation::Horizontal);
         assert_eq!((h.width, h.height), (340.0, 64.0));
         assert_eq!(widget_size(Orientation::default()), (76.0, 336.0));
+    }
+
+    #[test]
+    fn w5_the_widget_minimum_size_is_below_both_shapes_so_windows_does_not_widen_it() {
+        let spec = widget_window_spec(Orientation::Vertical);
+        let (min_w, min_h) = spec.min_size.expect("下限を明示する");
+        for orientation in [Orientation::Vertical, Orientation::Horizontal] {
+            let (w, h) = widget_size(orientation);
+            assert!(min_w <= w && min_h <= h, "{orientation:?}");
+        }
+        // Windows の既定の下限（幅 136px）より小さい。
+        assert!(min_w < 136.0);
     }
 
     #[test]
