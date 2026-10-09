@@ -49,6 +49,53 @@ describe('公開 API（src/index.ts）', () => {
     }
   });
 
+  it('E-15 クリップボードの牌譜リンクの入口が使える', () => {
+    for (const name of ['detectPaipuLink', 'detectNewPaipuLink', 'PaipuLinkAnnouncer'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+  });
+
+  it('E-16 画面中央の文字認識の読み取りの入口が使える', () => {
+    for (const name of ['parseCenterText', 'readingOf'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+  });
+
+  it('E-17 迷いマークの結びつけと、判断の呼び名・鍵の入口が使える', () => {
+    for (const name of [
+      'linkMarks',
+      'kyokuFactsOf',
+      'kyokuFits',
+      'locateKyokus',
+      'listDecisionRefs',
+      'findDecisionRef',
+      'decisionRefAt',
+      'decisionKey',
+      'parseDecisionKey',
+      'decisionKindLabel',
+      'tileLabel',
+      'actionLabel',
+    ] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+  });
+
+  it('E-18 評価の結びつけの入口が使える', () => {
+    expect(typeof engine.linkRatings).toBe('function');
+    expect(engine.HAND_START_TILES_LEFT).toBe(66);
+  });
+
+  it('E-19 結びつける半荘の入口が使える', () => {
+    expect(typeof engine.matchSessionForReport).toBe('function');
+  });
+
+  it('半荘のまとめ（F9・F10）と、既定の段階の当てはめの入口が使える', () => {
+    for (const name of ['summarizeHanchan', 'roomLabel', 'roomLabelOf', 'roomDispOf'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+    expect(engine.DEFAULT_GRADE_MODEL.recordCount).toBe(67);
+  });
+
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
   });
