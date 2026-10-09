@@ -5,7 +5,7 @@ import { fitGradeModel, gradeIndexOf, predictGrade } from '../src/grade';
 import { roomDispOf, roomLabel, roomLabelOf, summarizeHanchan } from '../src/hanchan-summary';
 import { linkMarks } from '../src/mark-link';
 import { summarizeKyokus } from '../src/outcome';
-import { formatRating } from '../src/rating';
+import { formatRating, gameRating, handRatings } from '../src/rating';
 import { parseReportText } from '../src/report';
 import type { MortalReport } from '../src/report-types';
 import { FX1_IDS, FX1_DECISION_COUNTS, FX4_ID, loadFx4Ocr, loadReportText } from './helpers/fixtures';
@@ -32,6 +32,11 @@ describe('半荘のまとめ（FX-4）', () => {
     expect(summary.kyokus.map((k) => k.label)).toEqual(['東1局', '東2局', '東2局1本場', '東3局', '東3局1本場']);
     expect(summary.kyokus.map((k) => k.ratingText)).toEqual(['100.0', '91.6', '86.5', '94.6', '91.6']);
     for (const k of summary.kyokus) expect(k.ratingText).toBe(formatRating(k.rating ?? NaN));
+  });
+
+  it('E-12 Rating の数値は gameRating・handRatings と同じ（局の順）', () => {
+    expect(summary.rating).toBe(gameRating(report));
+    expect(summary.kyokus.map((k) => k.rating)).toEqual(handRatings(report));
   });
 
   it('E-13 段階は、既定の当てはめで Rating（100 倍）から決まる。半荘全体は S-、局ごとは S+・S-・A・S・S-', () => {
