@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { vi } from 'vitest';
 
-import type { AppState, SessionRecord, Settings } from '../src/api/types';
+import type { AppState, InputStatus, SessionRecord, Settings } from '../src/api/types';
 
 export const baseState: AppState = {
   status: 'recording',
@@ -28,6 +28,15 @@ export const baseSettings: Settings = {
   sound: true,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\test\\JantamaReviewerData',
+};
+
+/** ボタンの登録・テスト・補助プログラムの、既定の状態（補助プログラムは未設定で、本体のフックだけで動いている）。 */
+export const baseInputStatus: InputStatus = {
+  registering: false,
+  probe_ms: null,
+  hook: 'in_process',
+  helper: { installed: false, running: false, busy: null, error: null },
+  message: null,
 };
 
 /**
@@ -54,6 +63,7 @@ export interface TauriMock {
 export interface TauriMockOptions {
   state?: AppState;
   settings?: Settings;
+  inputStatus?: InputStatus;
   sessions?: SessionRecord[];
   startupNote?: string | null;
   /** コマンドごとの返り値・エラーの上書き。関数なら引数を受けて返す（reject させたいときは throw）。 */
@@ -87,6 +97,8 @@ export function installTauriMock(options: TauriMockOptions = {}): TauriMock {
         return (args as { settings: Settings }).settings;
       case 'set_orientation':
         return { ...settings, orientation: (args as { orientation: Settings['orientation'] }).orientation };
+      case 'get_input_status':
+        return options.inputStatus ?? baseInputStatus;
       case 'list_sessions':
         return options.sessions ?? [];
       case 'get_startup_note':

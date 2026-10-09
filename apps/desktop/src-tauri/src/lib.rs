@@ -15,9 +15,12 @@ pub mod capture_win;
 pub mod clock;
 pub mod commands;
 pub mod external;
-pub mod hook;
 #[cfg(windows)]
-pub mod hook_win;
+pub mod helper_link;
+pub mod helper_setup;
+#[cfg(windows)]
+pub mod input_effects;
+pub mod input_flow;
 pub mod menu;
 pub mod navigation;
 pub mod ready;
@@ -32,7 +35,6 @@ pub mod widget_window;
 
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use tauri::tray::TrayIconBuilder;
@@ -41,9 +43,12 @@ use tauri::{Manager, WindowEvent};
 use crate::app_core::Core;
 use crate::capture_win::WindowsCapturer;
 use crate::commands::{
-    HookState, PositionSaver, SharedCore, SharedShowGate, WidgetMenu, SHOW_TIMEOUT,
+    InputHandle, PositionSaver, SharedCore, SharedShowGate, SoundMenuItems, WidgetMenu,
+    SHOW_TIMEOUT,
 };
-use crate::hook::ActiveTrigger;
+use crate::helper_link::HelperWriter;
+use crate::input_effects::TauriEffects;
+use crate::input_flow::{spawn_service, Input, InputState};
 use crate::sound::WindowsSound;
 use crate::widget_window::{
     apply_native_style, build_window, main_window_spec, move_window, widget_window_spec,
@@ -75,6 +80,14 @@ pub fn run() {
             commands::window_ready,
             commands::set_window_background,
             commands::open_devtools,
+            commands::get_input_status,
+            commands::start_registration,
+            commands::cancel_registration,
+            commands::set_probe_wanted,
+            commands::report_page_key,
+            commands::setup_helper,
+            commands::remove_helper,
+            commands::start_helper,
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)
@@ -89,11 +102,23 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
         (MAIN_LABEL, WindowEvent::CloseRequested { api, .. }) => {
             api.prevent_close();
             let _ = window.hide();
+            tell_main_window_focus(window.app_handle(), false);
+        }
+        // 検討画面が操作を受けている間だけ、設定のテストが効く（W-11）。
+        (MAIN_LABEL, WindowEvent::Focused(focused)) => {
+            tell_main_window_focus(window.app_handle(), *focused);
         }
         (WIDGET_LABEL, WindowEvent::Moved(position)) => {
             commands::widget_moved(window.app_handle(), *position);
         }
         _ => {}
+    }
+}
+
+/// 検討画面の窓が操作を受けているかを、入力の流れに知らせる。
+fn tell_main_window_focus(app: &tauri::AppHandle, focused: bool) {
+    if let Some(input) = app.try_state::<InputHandle>() {
+        input.service.send(Input::WindowFocus(focused));
     }
 }
 
@@ -119,17 +144,22 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     app.manage(SharedCore(Arc::new(Mutex::new(core))));
     commands::allow_asset_dir(&handle, &settings.data_dir);
 
-    // 割り当てたボタンのフック。入れられなくても、ウィジェットのボタンだけで動かせる。
-    let (tx, rx) = mpsc::channel();
-    let hook = match hook_win::start(ActiveTrigger::from_trigger(&settings.trigger), tx) {
-        Ok(hook) => Some(hook),
+    // 入力の流れ: 本体の中のフック・補助プログラム・ボタンの登録とテスト（W-9、W-10、W-11）。
+    // フックを入れられなくても、ウィジェットのボタンだけで動かせる。
+    let helper_writer = HelperWriter::default();
+    let (service, _worker) = spawn_service(InputState::new(settings.trigger.to_active()), {
+        let handle = handle.clone();
+        let writer = helper_writer.clone();
+        move |feedback| TauriEffects::start(handle, writer, feedback)
+    });
+    // 補助プログラムは、パイプを開いてから起動する（起動した補助プログラムが、すぐにつなぎにくる）。
+    match helper_link::spawn_server(service.sender(), helper_writer) {
+        Ok(()) => commands::start_helper_at_launch(&service.sender()),
         Err(e) => {
-            eprintln!("ボタンのフックを入れられませんでした: {e}");
-            None
+            eprintln!("補助プログラムのパイプを開けませんでした（本体のフックで動かします）: {e}")
         }
-    };
-    app.manage(HookState(hook));
-    commands::spawn_trigger_worker(handle.clone(), rx);
+    }
+    app.manage(InputHandle::new(service));
     app.manage(PositionSaver(Mutex::new(commands::spawn_position_saver(
         handle.clone(),
     ))));
@@ -155,12 +185,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // 画面からの知らせが来なくても、窓が見えないままにならないようにする。
     commands::spawn_show_watchdog(handle.clone(), SHOW_TIMEOUT);
 
-    // 右クリックのメニューとタスクトレイ。
-    app.manage(WidgetMenu(menu::build_menu(app)?));
-    let tray_menu = menu::build_menu(app)?;
+    // 右クリックのメニューとタスクトレイ。「音を鳴らす」の印は、設定が変わるたびに両方で合わせる（W-12）。
+    let widget_menu = menu::build_menu(app, settings.sound)?;
+    let tray_menu = menu::build_menu(app, settings.sound)?;
+    app.manage(SoundMenuItems(vec![
+        widget_menu.sound.clone(),
+        tray_menu.sound.clone(),
+    ]));
+    app.manage(WidgetMenu(widget_menu.menu));
     let mut tray = TrayIconBuilder::new()
         .tooltip("JantamaReviewer")
-        .menu(&tray_menu);
+        .menu(&tray_menu.menu);
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }

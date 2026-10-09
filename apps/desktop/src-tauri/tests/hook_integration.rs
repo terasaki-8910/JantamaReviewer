@@ -2,7 +2,7 @@
 //! 本物の WH_MOUSE_LL / WH_KEYBOARD_LL の手続きまで通す。`pnpm test:hook` で動かす。
 //!
 //! 判定と、Windows のメッセージの読み取り、割り当てを変えたあとの動きは、OS に依存しない部品
-//! （`hook::HookCore`）の単体テストが確かめている。ここで確かめるのは、OS との配線だけ:
+//! （`jantama_input::logic::InputCore`）の単体テストが確かめている。ここで確かめるのは、OS との配線だけ:
 //! - 低レベルフックの手続きが、本当に呼ばれ、割り当てたボタンを横取りして、ほかのアプリへ届けないこと
 //! - 割り当てを変えたあとに、キーボードのフックが入り、外れること
 //! - 押された時刻が、記録の担当へ渡ること
@@ -32,8 +32,9 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use jantama_reviewer_lib::hook::{ActiveTrigger, MouseButton, TriggerEvent};
-use jantama_reviewer_lib::hook_win;
+use jantama_input::hook_win;
+use jantama_input::keys::Modifiers;
+use jantama_input::logic::{ActiveTrigger, Config, Mode, MouseButton, Report};
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
@@ -59,6 +60,11 @@ const XBUTTON2: u32 = 2;
 const VK_F13: u32 = 0x7C;
 const VK_F14: u32 = 0x7D;
 const VK_F15: u32 = 0x7E;
+const VK_A: u32 = 0x41;
+const VK_M: u32 = 0x4D;
+const VK_TAB: u32 = 0x09;
+const VK_ESCAPE: u32 = 0x1B;
+const VK_LSHIFT: u32 = 0xA0;
 
 /// 見張りのフックが見た入力（本物のフックが通したもの）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -140,6 +146,12 @@ unsafe extern "system" fn witness_keyboard(code: i32, wparam: WPARAM, lparam: LP
                     down: false,
                 }),
                 _ => {}
+            }
+            // Shift だけは通す。押している間の修飾キーの状態は、通した入力で OS が更新するため、止めると、
+            // 本物のフックが修飾キーを読めない。Shift だけを押して離しても、ほかのアプリには何も起こらない
+            // （Ctrl・Alt・Windows は、メニューや開始画面を開くので、注入しない）。
+            if info.vkCode == VK_LSHIFT {
+                return unsafe { CallNextHookEx(None, code, wparam, lparam) };
             }
             return LRESULT(1);
         }
@@ -355,8 +367,60 @@ fn key(vk: u32, down: bool) -> Seen {
     Seen::Key { vk, down }
 }
 
-fn triggers(rx: &Receiver<TriggerEvent>) -> Vec<TriggerEvent> {
+/// フックが知らせた「割り当てたボタンが押された」時刻（ミリ秒）。ほかの知らせは捨てる。
+fn triggers(rx: &Receiver<Report>) -> Vec<i64> {
+    rx.try_iter()
+        .filter_map(|report| match report {
+            Report::Trigger { t_ms } => Some(t_ms),
+            _ => None,
+        })
+        .collect()
+}
+
+/// フックが知らせたことのすべて（押下・登録の候補・取り消し）。
+fn reports(rx: &Receiver<Report>) -> Vec<Report> {
     rx.try_iter().collect()
+}
+
+/// 修飾キーを押したまま、キーを 1 回押す。1 回の注入にまとめる（途中で止まって、修飾キーが押されたままにならない）。
+fn chord(modifiers: &[u32], vk: u32) {
+    let mut inputs: Vec<INPUT> = modifiers
+        .iter()
+        .map(|m| key_input(*m, KEYBD_EVENT_FLAGS(0)))
+        .collect();
+    inputs.push(key_input(vk, KEYBD_EVENT_FLAGS(0)));
+    inputs.push(key_input(vk, KEYEVENTF_KEYUP));
+    inputs.extend(
+        modifiers
+            .iter()
+            .rev()
+            .map(|m| key_input(*m, KEYEVENTF_KEYUP)),
+    );
+    send(&inputs);
+}
+
+/// 登録の待機中の、キー版の目印（A）。待機中は、F キーなども候補として止まるので、文字のキーを使う。
+fn flush_keys_registering() {
+    press_key(VK_A);
+    wait_for(Seen::Key {
+        vk: VK_A,
+        down: false,
+    });
+}
+
+fn passed_keys_registering() -> Vec<Seen> {
+    take_seen()
+        .into_iter()
+        .filter(|s| !matches!(s, Seen::Key { vk: VK_A, .. }))
+        .collect()
+}
+
+/// 割り当てを変える（通常の動き）。
+fn assign(trigger: Option<ActiveTrigger>) -> Config {
+    Config {
+        trigger,
+        mode: Mode::Normal,
+    }
 }
 
 fn now_ms() -> i64 {
@@ -394,9 +458,18 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     );
     let _ = take_seen();
 
-    let (tx, rx) = mpsc::channel();
-    let hook = hook_win::start(Some(ActiveTrigger::Mouse(MouseButton::X1)), tx)
-        .expect("フックを入れられる（対話できるデスクトップが要る）");
+    let (tx, rx) = mpsc::channel::<Report>();
+    let (hook, status) = hook_win::start(
+        assign(Some(ActiveTrigger::Mouse(MouseButton::X1))),
+        move |report| {
+            let _ = tx.send(report);
+        },
+    )
+    .expect("フックを入れられる（対話できるデスクトップが要る）");
+    assert!(
+        status.mouse && !status.keyboard && status.error.is_none(),
+        "マウスの割り当てでは、マウスのフックだけが入る: {status:?}"
+    );
 
     // ---- 既定の割り当て（サイドボタンの「戻る」= X1）----
     let before = now_ms();
@@ -410,9 +483,9 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     let events = triggers(&rx);
     assert_eq!(events.len(), 1, "押下の 1 回だけが記録の担当に渡る");
     assert!(
-        (before..=now_ms()).contains(&events[0].t_ms),
+        (before..=now_ms()).contains(&events[0]),
         "押された時刻が渡る: {} （{before} から {}）",
-        events[0].t_ms,
+        events[0],
         now_ms()
     );
 
@@ -442,7 +515,7 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     assert_eq!(triggers(&rx).len(), 3);
 
     // ---- 割り当てを X2 に変える（実行中に反映される）----
-    hook.set_trigger(Some(ActiveTrigger::Mouse(MouseButton::X2)));
+    hook.apply(assign(Some(ActiveTrigger::Mouse(MouseButton::X2))));
     click(MouseButton::X2, 1);
     click(MouseButton::X1, 1);
     flush_mouse();
@@ -454,7 +527,7 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     assert_eq!(triggers(&rx).len(), 1);
 
     // ---- 割り当てを中ボタンに変える ----
-    hook.set_trigger(Some(ActiveTrigger::Mouse(MouseButton::Middle)));
+    hook.apply(assign(Some(ActiveTrigger::Mouse(MouseButton::Middle))));
     click(MouseButton::Middle, 1);
     click(MouseButton::X1, 1);
     click(MouseButton::X2, 1);
@@ -474,9 +547,13 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     assert_eq!(triggers(&rx).len(), 1);
 
     // ---- 割り当てをキー（F13）に変える。キーボードのフックは、このときに入る ----
-    hook.set_trigger(Some(ActiveTrigger::Key(VK_F13)));
-    // キーボードのフックは別のスレッドが入れるので、F13 が横取りされるようになるまで待つ。
-    thread::sleep(Duration::from_millis(200));
+    let status = hook.apply(assign(Some(ActiveTrigger::key(VK_F13, Modifiers::NONE))));
+    assert!(
+        !status.mouse && status.keyboard,
+        "キーの割り当てでは、キーボードのフックだけが入る: {status:?}"
+    );
+    // フックの入れ直しは終わっている（apply は待つ）が、念のため少し待ってから確かめる。
+    thread::sleep(Duration::from_millis(50));
     let mut installed = false;
     for _ in 0..40 {
         press_key(VK_F13);
@@ -552,7 +629,11 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     let _ = take_seen();
 
     // ---- 割り当てなし: すべて通る ----
-    hook.set_trigger(None);
+    let status = hook.apply(Config::OFF);
+    assert!(
+        !status.mouse && !status.keyboard,
+        "割り当てが無ければ、フックは 1 つも入れない: {status:?}"
+    );
     click(MouseButton::X1, 1);
     click(MouseButton::X2, 1);
     flush_mouse();
@@ -580,6 +661,104 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
         thread::sleep(Duration::from_millis(25));
     }
     assert!(released, "割り当てを外すと、F13 も通る");
+
+    // ---- 修飾キー付きのキー（Shift+F13。W-10）----
+    let shift = Modifiers::new(false, false, true, false);
+    hook.apply(assign(Some(ActiveTrigger::key(VK_F13, shift))));
+    thread::sleep(Duration::from_millis(50));
+    let _ = (take_seen(), reports(&rx));
+    // Shift が無ければ当たらない（F13 は通る。記録されない）。
+    press_key(VK_F13);
+    flush_keys();
+    assert_eq!(
+        passed_keys(),
+        vec![key(VK_F13, true), key(VK_F13, false)],
+        "修飾キーが違えば、F13 は通る"
+    );
+    assert_eq!(reports(&rx), vec![], "修飾キーが違えば、記録されない");
+    // Shift+F13: F13 は止まり、1 回だけ記録される。Shift は、そのまま通る。
+    chord(&[VK_LSHIFT], VK_F13);
+    flush_keys();
+    let passed = passed_keys();
+    assert!(
+        !passed.contains(&key(VK_F13, true)) && !passed.contains(&key(VK_F13, false)),
+        "割り当てた組み合わせの F13 は止まる: {passed:?}"
+    );
+    assert!(
+        passed.contains(&key(VK_LSHIFT, true)),
+        "修飾キー自体は通る: {passed:?}"
+    );
+    let got = reports(&rx);
+    assert!(
+        matches!(got.as_slice(), [Report::Trigger { .. }]),
+        "1 回だけ記録される: {got:?}"
+    );
+
+    // ---- 登録の待機（W-10）----
+    hook.apply(Config {
+        trigger: None,
+        mode: Mode::Register,
+    });
+    let _ = (take_seen(), reports(&rx));
+    // 左右のボタンは通る（「キャンセル」を押せる）。拾わない。
+    click(MouseButton::Left, 1);
+    flush_mouse();
+    assert_eq!(
+        passed_mouse(),
+        vec![
+            mouse(MouseButton::Left, true),
+            mouse(MouseButton::Left, false)
+        ]
+    );
+    assert_eq!(reports(&rx), vec![]);
+    // 「進む」ボタン: 止まって、候補として知らせる（押すのも離すのも）。
+    click(MouseButton::X2, 1);
+    flush_mouse();
+    assert_eq!(passed_mouse(), vec![], "候補にしたボタンは止まる");
+    assert_eq!(
+        reports(&rx),
+        vec![Report::Captured(ActiveTrigger::Mouse(MouseButton::X2))]
+    );
+    // F13: 候補（止まる）。
+    press_key(VK_F13);
+    flush_keys_registering();
+    assert_eq!(passed_keys_registering(), vec![]);
+    assert_eq!(
+        reports(&rx),
+        vec![Report::Captured(ActiveTrigger::key(
+            VK_F13,
+            Modifiers::NONE
+        ))]
+    );
+    // 文字のキー（M）は、そのままでは候補にならない（通る）。
+    press_key(VK_M);
+    flush_keys_registering();
+    assert_eq!(
+        passed_keys_registering(),
+        vec![key(VK_M, true), key(VK_M, false)]
+    );
+    assert_eq!(reports(&rx), vec![]);
+    // Shift+F13 は、修飾キーつきの候補（F13 は止まる）。
+    chord(&[VK_LSHIFT], VK_F13);
+    flush_keys_registering();
+    let passed = passed_keys_registering();
+    assert!(!passed.contains(&key(VK_F13, true)), "{passed:?}");
+    assert_eq!(
+        reports(&rx),
+        vec![Report::Captured(ActiveTrigger::key(VK_F13, shift))]
+    );
+    // Tab は通る（拾わない）。Esc は通したうえで、やめる合図を知らせる。
+    press_key(VK_TAB);
+    press_key(VK_ESCAPE);
+    flush_keys_registering();
+    let passed = passed_keys_registering();
+    assert!(
+        passed.contains(&key(VK_TAB, true)) && passed.contains(&key(VK_ESCAPE, true)),
+        "{passed:?}"
+    );
+    assert_eq!(reports(&rx), vec![Report::Cancel]);
+    hook.apply(Config::OFF);
+    let _ = (take_seen(), reports(&rx));
 
     // ---- 終わり ----
     hook.stop();

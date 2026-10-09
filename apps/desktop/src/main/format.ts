@@ -1,3 +1,5 @@
+import type { Trigger } from '../api/types';
+
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'] as const;
 
 function two(n: number): string {
@@ -33,4 +35,26 @@ export function formatKeyCode(code: string): string {
   const mapped = numpad[code];
   if (mapped) return `テンキー ${mapped}`;
   return code;
+}
+
+const MOUSE_TRIGGER_NAMES = {
+  mouse_x1: 'マウスの戻るボタン（XButton1）',
+  mouse_x2: 'マウスの進むボタン（XButton2）',
+  mouse_middle: 'マウスの中ボタン（MButton）',
+} as const;
+
+/**
+ * 割り当てを、設定に出す文にする（W-10）。マウスのボタンは名前、キーは修飾キーつきの「Ctrl+Alt+M」、
+ * 修飾キーが無いキーは「キー：F13」。承認済みの見本（round7-samples）の書き方。
+ */
+export function describeTrigger(trigger: Trigger): string {
+  if (trigger.kind !== 'key') return MOUSE_TRIGGER_NAMES[trigger.kind];
+  const key = formatKeyCode(trigger.code);
+  const modifiers = [
+    trigger.ctrl && 'Ctrl',
+    trigger.alt && 'Alt',
+    trigger.shift && 'Shift',
+    trigger.win && 'Win',
+  ].filter((name): name is string => typeof name === 'string');
+  return modifiers.length > 0 ? [...modifiers, key].join('+') : `キー：${key}`;
 }

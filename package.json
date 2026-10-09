@@ -7,16 +7,18 @@
   "scripts": {
     "dev": "pnpm --filter @jantama/desktop tauri dev",
     "build:debug": "pnpm --filter @jantama/desktop tauri build --debug --no-bundle",
+    "build:helper": "cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml -p jantama-helper",
     "test": "pnpm test:ts && pnpm test:rust",
     "test:ts": "pnpm -r --if-present test",
-    "test:rust": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
-    "test:hook": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --test hook_integration -- --ignored --nocapture",
+    "test:rust": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --workspace",
+    "test:hook": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --test hook_integration --test input_flow_integration -- --ignored --nocapture",
+    "test:task": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml -p jantama-helper --test task_scheduler -- --ignored --nocapture",
     "lint": "pnpm lint:eslint && pnpm lint:style && pnpm lint:types && pnpm lint:clippy && pnpm lint:fmt",
     "lint:eslint": "eslint .",
     "lint:style": "stylelint \"apps/*/src/**/*.css\" --allow-empty-input",
     "lint:types": "pnpm -r --if-present lint:types",
-    "lint:clippy": "cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings",
-    "lint:fmt": "cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check"
+    "lint:clippy": "cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --workspace --all-targets -- -D warnings",
+    "lint:fmt": "cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --all --check"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

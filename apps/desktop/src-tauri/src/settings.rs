@@ -1,16 +1,17 @@
 //! 設定。JSON で保存し、欠けた項目は既定値で補う（W-5）。
 //!
-//! 保存する項目: 迷いマークのボタン、ウィジェットの形と位置、音、雀魂の窓を探す語、データの保存先。
+//! 保存する項目: 迷いマークのボタン（マウスのボタン、または修飾キー付きのキー）、ウィジェットの形と位置、音、
+//! 雀魂の窓を探す語、データの保存先。
 
 use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use jantama_input::keys::{code_from_vk, vk_from_code, Modifiers};
+use jantama_input::logic::{ActiveTrigger, MouseButton};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-
-use crate::hook;
 
 /// 雀魂の窓を探す語の既定値（W-7）。
 pub const DEFAULT_CAPTURE_KEYWORDS: [&str; 2] = ["雀魂", "Mahjong Soul"];
@@ -21,7 +22,8 @@ pub const SETTINGS_FILE_NAME: &str = "settings.json";
 /// データの保存先の既定のフォルダ名（ユーザーのフォルダの直下）。
 pub const DEFAULT_DATA_DIR_NAME: &str = "JantamaReviewerData";
 
-/// 迷いマークを付けるボタン。マウスの横ボタン2つ・中ボタン・キーボードのキーから選ぶ。
+/// 迷いマークを付けるボタン。設定の「ボタンを登録」で、押したマウスのボタン（戻る・進む・中ボタン）か、
+/// 修飾キー付きのキーをそのまま覚える（W-10）。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Trigger {
@@ -32,8 +34,71 @@ pub enum Trigger {
     MouseX2,
     /// 中ボタン。
     MouseMiddle,
-    /// キーボードのキー。`code` は DOM の `KeyboardEvent.code`（例: "F8"、"KeyM"）。
-    Key { code: String },
+    /// キーボードのキー。`code` は DOM の `KeyboardEvent.code`（例: "F13"、"KeyM"）。
+    /// 修飾キーの印は、付いているものだけ保存する（昔の設定ファイルの `{"kind":"key","code":"F8"}` もそのまま読める）。
+    Key {
+        code: String,
+        #[serde(default, skip_serializing_if = "is_false")]
+        ctrl: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        alt: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        shift: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        win: bool,
+    },
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+impl Trigger {
+    /// 修飾キー無しのキー。
+    pub fn key(code: &str) -> Trigger {
+        Trigger::key_with(code, Modifiers::NONE)
+    }
+
+    /// 修飾キー付きのキー。
+    pub fn key_with(code: &str, mods: Modifiers) -> Trigger {
+        Trigger::Key {
+            code: code.to_string(),
+            ctrl: mods.ctrl,
+            alt: mods.alt,
+            shift: mods.shift,
+            win: mods.win,
+        }
+    }
+
+    /// フックの中で使う形（キーは仮想キーコード）にする。割り当てられないキーなら `None`。
+    pub fn to_active(&self) -> Option<ActiveTrigger> {
+        match self {
+            Trigger::MouseX1 => Some(ActiveTrigger::Mouse(MouseButton::X1)),
+            Trigger::MouseX2 => Some(ActiveTrigger::Mouse(MouseButton::X2)),
+            Trigger::MouseMiddle => Some(ActiveTrigger::Mouse(MouseButton::Middle)),
+            Trigger::Key {
+                code,
+                ctrl,
+                alt,
+                shift,
+                win,
+            } => vk_from_code(code)
+                .map(|vk| ActiveTrigger::key(vk, Modifiers::new(*ctrl, *alt, *shift, *win))),
+        }
+    }
+
+    /// 登録で拾った入力から設定を作る。設定に保存できない入力（左右のボタン・割り当てられないキー）は `None`。
+    pub fn from_active(active: ActiveTrigger) -> Option<Trigger> {
+        match active {
+            ActiveTrigger::Mouse(MouseButton::X1) => Some(Trigger::MouseX1),
+            ActiveTrigger::Mouse(MouseButton::X2) => Some(Trigger::MouseX2),
+            ActiveTrigger::Mouse(MouseButton::Middle) => Some(Trigger::MouseMiddle),
+            ActiveTrigger::Mouse(_) => None,
+            ActiveTrigger::Key(chord) => {
+                code_from_vk(chord.vk).map(|code| Trigger::key_with(&code, chord.mods))
+            }
+        }
+    }
 }
 
 /// ウィジェットの形。
@@ -164,8 +229,8 @@ impl Settings {
 
     /// 使えない値が入っていないかを確かめる。
     pub fn validate(&self) -> Result<(), SettingsError> {
-        if let Trigger::Key { code } = &self.trigger {
-            if hook::vk_from_code(code).is_none() {
+        if let Trigger::Key { code, .. } = &self.trigger {
+            if vk_from_code(code).is_none() {
                 return Err(SettingsError::UnsupportedKey(code.clone()));
             }
         }
@@ -261,7 +326,7 @@ mod tests {
         let saved = Settings {
             orientation: Orientation::Horizontal,
             widget_position: Some(WidgetPosition { x: -1800, y: 240 }),
-            trigger: Trigger::Key { code: "F8".into() },
+            trigger: Trigger::key("F8"),
             sound: false,
             ..Settings::default()
         };
@@ -361,9 +426,7 @@ mod tests {
     #[test]
     fn unsupported_key_is_rejected_and_supported_key_is_accepted() {
         let bad = Settings {
-            trigger: Trigger::Key {
-                code: "NoSuchKey".into(),
-            },
+            trigger: Trigger::key("NoSuchKey"),
             ..Settings::default()
         };
         assert_eq!(
@@ -371,7 +434,7 @@ mod tests {
             Err(SettingsError::UnsupportedKey("NoSuchKey".into()))
         );
         let good = Settings {
-            trigger: Trigger::Key { code: "F8".into() },
+            trigger: Trigger::key("F8"),
             ..Settings::default()
         };
         assert_eq!(good.validate(), Ok(()));
@@ -398,8 +461,87 @@ mod tests {
             r#"{"kind":"mouse_x1"}"#
         );
         assert_eq!(
-            serde_json::to_string(&Trigger::Key { code: "F8".into() }).unwrap(),
+            serde_json::to_string(&Trigger::key("F8")).unwrap(),
             r#"{"kind":"key","code":"F8"}"#
         );
+    }
+
+    #[test]
+    fn w10_a_key_with_modifiers_is_saved_with_only_the_flags_that_are_set() {
+        let trigger = Trigger::key_with("KeyM", Modifiers::new(true, true, false, false));
+        let json = serde_json::to_string(&trigger).unwrap();
+        assert_eq!(
+            json,
+            r#"{"kind":"key","code":"KeyM","ctrl":true,"alt":true}"#
+        );
+        assert_eq!(serde_json::from_str::<Trigger>(&json).unwrap(), trigger);
+    }
+
+    #[test]
+    fn w10_settings_files_from_before_modifiers_still_load() {
+        // 昔の形（修飾キーの印が無い）は、修飾キー無しのキーとして読む。
+        let s =
+            Settings::from_json_str(r#"{ "trigger": { "kind": "key", "code": "F8" } }"#).unwrap();
+        assert_eq!(s.trigger, Trigger::key("F8"));
+        for old in [
+            r#"{ "trigger": { "kind": "mouse_x1" } }"#,
+            r#"{ "trigger": { "kind": "mouse_x2" } }"#,
+            r#"{ "trigger": { "kind": "mouse_middle" } }"#,
+        ] {
+            let loaded = Settings::from_json_str(old).unwrap();
+            assert!(loaded.trigger.to_active().is_some(), "{old}");
+        }
+    }
+
+    #[test]
+    fn w10_a_registered_input_becomes_a_setting_and_back() {
+        let ctrl_alt_m = ActiveTrigger::key(0x4D, Modifiers::new(true, true, false, false));
+        let trigger = Trigger::from_active(ctrl_alt_m).unwrap();
+        assert_eq!(
+            trigger,
+            Trigger::key_with("KeyM", Modifiers::new(true, true, false, false))
+        );
+        assert_eq!(trigger.to_active(), Some(ctrl_alt_m));
+        assert_eq!(
+            Trigger::from_active(ActiveTrigger::key(0x7C, Modifiers::NONE)),
+            Some(Trigger::key("F13"))
+        );
+        for (button, expected) in [
+            (MouseButton::X1, Trigger::MouseX1),
+            (MouseButton::X2, Trigger::MouseX2),
+            (MouseButton::Middle, Trigger::MouseMiddle),
+        ] {
+            let trigger = Trigger::from_active(ActiveTrigger::Mouse(button)).unwrap();
+            assert_eq!(trigger, expected);
+            assert_eq!(trigger.to_active(), Some(ActiveTrigger::Mouse(button)));
+        }
+        // 左右のボタン・割り当てられないキーは、設定にしない。
+        assert_eq!(
+            Trigger::from_active(ActiveTrigger::Mouse(MouseButton::Left)),
+            None
+        );
+        assert_eq!(
+            Trigger::from_active(ActiveTrigger::Mouse(MouseButton::Right)),
+            None
+        );
+        assert_eq!(
+            Trigger::from_active(ActiveTrigger::key(0x1B, Modifiers::NONE)),
+            None
+        );
+        assert_eq!(Trigger::key("NoSuchKey").to_active(), None);
+    }
+
+    #[test]
+    fn w10_a_key_with_modifiers_in_the_settings_is_validated_by_its_key() {
+        let ok = Settings {
+            trigger: Trigger::key_with("KeyM", Modifiers::new(true, true, false, false)),
+            ..Settings::default()
+        };
+        assert_eq!(ok.validate(), Ok(()));
+        let bad = Settings {
+            trigger: Trigger::key_with("Enter", Modifiers::new(true, false, false, false)),
+            ..Settings::default()
+        };
+        assert!(bad.validate().is_err());
     }
 }

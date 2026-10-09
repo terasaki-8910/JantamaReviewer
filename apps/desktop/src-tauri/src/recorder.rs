@@ -88,9 +88,11 @@ impl Recorder {
         Ok(self.state())
     }
 
-    /// 局の評価（〇△✕）を記録する。
+    /// 局の評価（〇△✕）を記録する。画面も迷いマークと同じ方法で撮って保存し、記録にそのパスを入れる（W-13）。
+    /// 評価はあとで、画像から「どの局の評価か」を読んで合わせるために使う（F11）。音は鳴らさない。
     pub fn rate(&mut self, t_ms: i64, rating: Rating) -> Result<SessionState, StoreError> {
-        self.store.add_rating(t_ms, rating)?;
+        let shot = self.capturer.capture(&self.options.capture_keywords);
+        self.store.add_rating(t_ms, rating, shot)?;
         Ok(self.state())
     }
 
@@ -100,9 +102,10 @@ impl Recorder {
         Ok(self.state())
     }
 
-    /// 新しい半荘を始める。
+    /// 今の半荘を閉じる（W-14）。フォルダは作らない。次の記録が、新しい半荘を始める。
+    /// 「閉じた」記録を書けなかったときもエラーを返すが、半荘は閉じている。
     pub fn new_session(&mut self, t_ms: i64) -> Result<SessionState, StoreError> {
-        self.store.start_session(t_ms)?;
+        self.store.close_session(t_ms)?;
         Ok(self.state())
     }
 
@@ -189,10 +192,11 @@ mod tests {
 
     use super::test_support::{CountingSound, FakeCapturer};
     use super::*;
-    use crate::hook::{
-        process_event, ActiveTrigger, InputEvent, MouseButton, RepeatGate, TriggerEvent,
+    use crate::store::{Event, EventKind, EVENTS_FILE, GAMES_DIR, MARKS_DIR, RATINGS_DIR};
+    use jantama_input::keys::Modifiers;
+    use jantama_input::logic::{
+        ActiveTrigger, Config, InputCore, InputEvent, Mode, MouseButton, Report,
     };
-    use crate::store::{Event, EventKind, EVENTS_FILE, GAMES_DIR, MARKS_DIR};
 
     const T0: i64 = 1_760_000_000_123;
     const FAKE_PNG: &[u8] = &[0x89, b'P', b'N', b'G', 1, 2, 3];
@@ -332,10 +336,13 @@ mod tests {
 
     #[test]
     fn w1_w2_the_hook_pipeline_records_one_mark_per_assigned_button_press_only() {
-        // フックの判定（process_event）が返した合図だけを記録に回す、実機と同じつなぎ方。
+        // フックの判定（InputCore）が返した合図だけを記録に回す、実機と同じつなぎ方。
         let mut f = fixture();
-        let gate = RepeatGate::new();
-        let trigger = Some(ActiveTrigger::Mouse(MouseButton::X1));
+        let core = InputCore::new();
+        core.set_config(Config {
+            trigger: Some(ActiveTrigger::Mouse(MouseButton::X1)),
+            mode: Mode::Normal,
+        });
         let inputs = [
             (InputEvent::MouseDown(MouseButton::Left), 1_000),
             (InputEvent::MouseUp(MouseButton::Left), 1_050),
@@ -348,9 +355,9 @@ mod tests {
         ];
         let mut swallowed = Vec::new();
         for (event, offset) in inputs {
-            let (swallow, signal) = process_event(event, trigger, &gate, T0 + offset);
-            swallowed.push(swallow);
-            if let Some(TriggerEvent { t_ms }) = signal {
+            let outcome = core.process(event, || Modifiers::NONE, T0 + offset);
+            swallowed.push(outcome.swallow);
+            if let Some(Report::Trigger { t_ms }) = outcome.report {
                 f.recorder.mark(t_ms).unwrap();
             }
         }
@@ -379,13 +386,75 @@ mod tests {
     }
 
     #[test]
-    fn ratings_and_undo_do_not_play_the_tick_or_capture_the_screen() {
+    fn ratings_play_no_tick_and_undo_and_new_session_do_not_capture_the_screen() {
         let mut f = fixture();
         f.recorder.rate(T0, Rating::Good).unwrap();
+        assert_eq!(f.capturer.call_count(), 1, "評価は画面を 1 回撮る（W-13）");
         f.recorder.undo(T0 + 1).unwrap();
         f.recorder.new_session(T0 + 2).unwrap();
-        assert_eq!(f.sound.count(), 0);
-        assert_eq!(f.capturer.call_count(), 0);
+        assert_eq!(
+            f.sound.count(),
+            0,
+            "評価・取り消し・新しい半荘では音を鳴らさない"
+        );
+        assert_eq!(f.capturer.call_count(), 1, "取り消しと新しい半荘は撮らない");
+    }
+
+    #[test]
+    fn w13_a_rating_also_saves_a_screenshot_with_the_same_capture_path_as_a_mark() {
+        let mut f = fixture();
+        f.recorder.rate(T0, Rating::Fair).unwrap();
+        f.recorder.mark(T0 + 1).unwrap();
+        // 撮るのは、迷いマークと同じ取得元・同じ窓を探す語。
+        let calls = f.capturer.calls.lock().unwrap().clone();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0], calls[1]);
+        assert_eq!(
+            calls[0],
+            vec!["雀魂".to_string(), "Mahjong Soul".to_string()]
+        );
+
+        let events = read_events(&f);
+        let rating = events
+            .iter()
+            .find_map(|e| match &e.kind {
+                EventKind::Rating {
+                    screenshot,
+                    capture,
+                    capture_error,
+                    ..
+                } => Some((screenshot.clone(), *capture, capture_error.clone(), e.t_ms)),
+                _ => None,
+            })
+            .expect("評価の記録がある");
+        let (screenshot, capture, capture_error, t_ms) = rating;
+        assert_eq!(t_ms, T0);
+        assert_eq!(capture_error, None);
+        assert!(capture.is_some());
+        let relative = screenshot.expect("評価の記録に画像のパスが入る");
+        assert!(
+            relative.starts_with("ratings/") && relative.ends_with(".png"),
+            "{relative}"
+        );
+        assert_eq!(fs::read(session_dir(&f).join(&relative)).unwrap(), FAKE_PNG);
+    }
+
+    #[test]
+    fn w13_a_rating_is_kept_even_when_the_screen_cannot_be_captured() {
+        let mut f = fixture_with(FakeCapturer::failing("撮れません"), true);
+        let state = f.recorder.rate(T0, Rating::Bad).unwrap();
+        assert_eq!(state.ratings, vec![Rating::Bad]);
+        let events = read_events(&f);
+        let EventKind::Rating {
+            screenshot,
+            capture_error,
+            ..
+        } = &events.last().unwrap().kind
+        else {
+            panic!("最後は評価のはず");
+        };
+        assert_eq!(*screenshot, None);
+        assert_eq!(capture_error.as_deref(), Some("撮れません"));
     }
 
     #[test]
@@ -411,12 +480,57 @@ mod tests {
         let mut f = fixture();
         f.recorder.rate(T0, Rating::Good).unwrap();
         f.recorder.mark(T0 + 1).unwrap();
-        let before = f.recorder.state().session_id.unwrap();
-        let state = f.recorder.new_session(T0 + 5_000).unwrap();
-        assert_ne!(state.session_id.unwrap(), before);
+        let state = f.recorder.new_session(T0 + 2).unwrap();
+        assert_eq!(
+            state.session_id, None,
+            "閉じたあとは、次の記録まで半荘が無い"
+        );
         assert_eq!(state.mark_count, 0);
         assert_eq!(state.next_hand, 1);
         assert!(!state.can_undo);
+        // 次の記録が、新しい半荘を始める。
+        let before = f.recorder.state();
+        assert_eq!(before.session_id, None);
+        let state = f.recorder.mark(T0 + 5_000).unwrap();
+        assert_eq!(state.mark_count, 1);
+        assert!(state.session_id.is_some());
+    }
+
+    #[test]
+    fn w14_a_new_session_creates_no_folder_until_something_is_recorded() {
+        let mut f = fixture();
+        let games = f.recorder.data_dir().join(GAMES_DIR);
+        f.recorder.new_session(T0).unwrap();
+        f.recorder.new_session(T0).unwrap();
+        assert_eq!(fs::read_dir(&games).unwrap().count(), 0);
+        f.recorder.rate(T0, Rating::Good).unwrap();
+        assert_eq!(fs::read_dir(&games).unwrap().count(), 1);
+        f.recorder.new_session(T0 + 1).unwrap();
+        f.recorder.new_session(T0 + 1).unwrap();
+        assert_eq!(
+            fs::read_dir(&games).unwrap().count(),
+            1,
+            "空の半荘は残らない"
+        );
+        assert_eq!(f.recorder.list_sessions().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn w14_a_record_more_than_30_minutes_after_the_previous_one_goes_to_a_new_session() {
+        let mut f = fixture();
+        f.recorder.mark(T0).unwrap();
+        let first = f.recorder.state().session_id.unwrap();
+        let within = f.recorder.mark(T0 + 29 * 60 * 1000).unwrap();
+        assert_eq!(within.session_id.as_deref(), Some(first.as_str()));
+        let after = f
+            .recorder
+            .rate(T0 + 29 * 60 * 1000 + 30 * 60 * 1000 + 1, Rating::Good)
+            .unwrap();
+        assert_ne!(after.session_id.unwrap(), first);
+        assert_eq!(after.mark_count, 0, "新しい半荘の数字は 0 から");
+        assert_eq!(after.ratings, vec![Rating::Good]);
+        let sessions = f.recorder.list_sessions().unwrap();
+        assert_eq!(sessions.len(), 2);
     }
 
     #[test]
@@ -425,7 +539,7 @@ mod tests {
         f.recorder.mark(T0).unwrap();
         f.recorder.rate(T0 + 1, Rating::Fair).unwrap();
         f.recorder.undo(T0 + 2).unwrap();
-        f.recorder.new_session(T0 + 3_000).unwrap();
+        f.recorder.new_session(T0 + 3).unwrap();
         f.recorder.mark(T0 + 3_001).unwrap();
 
         let root = f.recorder.data_dir().to_path_buf();
@@ -441,7 +555,7 @@ mod tests {
             let is_log = parts.len() == 3 && parts[0] == GAMES_DIR && parts[2] == EVENTS_FILE;
             let is_image = parts.len() == 4
                 && parts[0] == GAMES_DIR
-                && parts[2] == MARKS_DIR
+                && (parts[2] == MARKS_DIR || parts[2] == RATINGS_DIR)
                 && parts[3].ends_with(".png");
             assert!(is_log || is_image, "想定外のファイル: {}", rel.display());
         }

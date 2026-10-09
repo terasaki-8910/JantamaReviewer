@@ -1,45 +1,69 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { api, errorMessage, onSettingsChanged, onStateChanged } from '../api/tauri';
-import type { Orientation, Settings, Trigger } from '../api/types';
-import { formatKeyCode } from './format';
-
-type TriggerMode = Trigger['kind'];
-
-const TRIGGER_CHOICES: ReadonlyArray<{ mode: TriggerMode; label: string }> = [
-  { mode: 'mouse_x1', label: 'マウスの「戻る」ボタン' },
-  { mode: 'mouse_x2', label: 'マウスの「進む」ボタン' },
-  { mode: 'mouse_middle', label: 'マウスの中ボタン' },
-  { mode: 'key', label: 'キーボードのキー' },
-];
+import {
+  api,
+  errorMessage,
+  onInputStatus,
+  onSettingsChanged,
+  onStateChanged,
+} from '../api/tauri';
+import type { HelperStatus, InputStatus, Orientation, Settings } from '../api/types';
+import { describeTrigger, formatClock } from './format';
 
 const ORIENTATION_CHOICES: ReadonlyArray<{ value: Orientation; label: string }> = [
   { value: 'vertical', label: '縦長' },
   { value: 'horizontal', label: '横長' },
 ];
 
+const PROBE_IDLE = 'ボタンを押すと、ここに表示されます。迷いマークは記録しません';
+
+/** 修飾キーそのものの `KeyboardEvent.code`（単独では、割り当てにも登録にも使わない）。 */
+const MODIFIER_CODE = /^(Control|Shift|Alt|Meta|OS)(Left|Right)$|^AltGraph$/;
+
+/** 窓の中のキーとして本体に知らせない `KeyboardEvent.key`（画面の操作に使うキー）。 */
+const PASS_THROUGH_KEYS: ReadonlySet<string> = new Set(['Tab', 'Enter', ' ', 'Escape']);
+
+/** 補助プログラムの状態の行に出す文（承認済みの見本に無い部分は、同じ静かな書き方で足している）。 */
+function helperStateText(helper: HelperStatus): string {
+  switch (helper.busy) {
+    case 'installing':
+      return '設定しています。Windows の確認が出たら、許可してください';
+    case 'removing':
+      return '解除しています。Windows の確認が出たら、許可してください';
+    case 'starting':
+      return '起動しています';
+    default:
+      return helper.running ? '動いています' : '動いていません（雀魂の上ではボタンが効きません）';
+  }
+}
+
 /**
  * 設定ページ。変えたらその場で反映して保存する（保存ボタンは無い）。
- * 使えない値（リポジトリの中の保存先、割り当てられないキー）は、理由を出して元のままにする。
+ * 使えない値（リポジトリの中の保存先）は、理由を出して元のままにする。
+ * 迷いマークのボタンは、「ボタンを登録」で、次に押したマウスのボタンかキーをそのまま覚える（W-10）。
+ * 押した入力は、本体の側（補助プログラムか本体のフック）が拾うので、ここでは待機の表示と結果だけを持つ。
  */
 export function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [input, setInput] = useState<InputStatus | null>(null);
   const [startupNote, setStartupNote] = useState<string | null>(null);
   // 保存先を開けないとき（リポジトリの中を指しているなど）の理由。
   const [storeError, setStoreError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState('');
-  // 「キーボードのキー」を選んだが、まだキーを押していない間。
-  const [choosingKey, setChoosingKey] = useState(false);
   // 窓を探す語の編集中の文字（確定するまで設定は変えない）。
   const [keywordsDraft, setKeywordsDraft] = useState<string | null>(null);
+  const startButton = useRef<HTMLButtonElement>(null);
+  const listening = useRef<HTMLParagraphElement>(null);
+  const wasRegistering = useRef(false);
 
   useEffect(() => {
     let alive = true;
     void api.getSettings().then((s) => alive && setSettings(s));
     void api.getStartupNote().then((note) => alive && setStartupNote(note));
     void api.getState().then((s) => alive && setStoreError(s.error));
+    void api.getInputStatus().then((s) => alive && setInput(s));
     const disposers: Array<() => void> = [];
     const track = (listening: Promise<() => void>) => {
       void listening.then((fn) => {
@@ -49,11 +73,64 @@ export function SettingsPage() {
     };
     track(onSettingsChanged((s) => setSettings(s)));
     track(onStateChanged((s) => setStoreError(s.error)));
+    track(onInputStatus((s) => setInput(s)));
+    // テストの欄を見せている間だけ、割り当てたボタンを押しても記録しない（W-11）。
+    // 窓が操作を受けていない間（雀魂を打っている間）は、本体の側が通常の動きに戻す。
+    void api.setProbeWanted(true).catch(() => undefined);
     return () => {
       alive = false;
       disposers.forEach((fn) => fn());
+      void api.setProbeWanted(false).catch(() => undefined);
     };
   }, []);
+
+  const registering = input?.registering ?? false;
+
+  // 待機に入ったら待機の表示へ、終わったら「ボタンを登録」へ、キーボードの位置を移す。
+  useEffect(() => {
+    if (registering) listening.current?.focus();
+    else if (wasRegistering.current) startButton.current?.focus();
+    wasRegistering.current = registering;
+  }, [registering]);
+
+  // 待機中に Esc で取りやめる（本体の側のフックも Esc を見るが、窓の中の Esc でも取りやめられるように）。
+  useEffect(() => {
+    if (!registering) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      void api.cancelRegistration().catch(() => undefined);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [registering]);
+
+  // この窓が前面にある間は、本体のキーボードのフックには入力が届かない（Windows の側の事情。フックは外してある）。
+  // 窓の中のキーは、ここで拾って本体に知らせる。登録の待機中は登録の候補に、キーを割り当てているときは
+  // テストの押下になる（W-10、W-11）。マウスのボタンは、前面が自分の窓でもフックに届くので、ここでは扱わない。
+  const keyTrigger = settings?.trigger.kind === 'key';
+  useEffect(() => {
+    if (!registering && !keyTrigger) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      // 押しっぱなしの繰り返し・日本語入力の途中・修飾キー単独（組み合わせの途中）は、知らせない。
+      if (event.repeat || event.isComposing || MODIFIER_CODE.test(event.code)) return;
+      // Tab（移動）・Enter・Space（ボタンの操作）・Esc（上で取りやめる）は、登録にも割り当てにも使わない。
+      if (PASS_THROUGH_KEYS.has(event.key)) return;
+      // 待機中は、押したキーを窓に渡さない（フォーカスのあるものを動かしてしまわないように）。
+      if (registering) event.preventDefault();
+      void api
+        .reportPageKey({
+          code: event.code,
+          ctrl: event.ctrlKey,
+          alt: event.altKey,
+          shift: event.shiftKey,
+          meta: event.metaKey,
+        })
+        .catch(() => undefined);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [registering, keyTrigger]);
 
   const update = useCallback(
     async (patch: Partial<Settings>) => {
@@ -86,6 +163,13 @@ export function SettingsPage() {
     }
   }, [settings, update]);
 
+  const run = useCallback((action: () => Promise<void>) => {
+    action().then(
+      () => setError(null),
+      (e: unknown) => setError(errorMessage(e)),
+    );
+  }, []);
+
   if (!settings) {
     return (
       <>
@@ -96,18 +180,9 @@ export function SettingsPage() {
     );
   }
 
-  const mode: TriggerMode = choosingKey ? 'key' : settings.trigger.kind;
   const keywordsText = keywordsDraft ?? settings.capture_keywords.join('\n');
-
-  const chooseMode = (next: TriggerMode) => {
-    if (next === 'key') {
-      // キーを押すまでは、割り当ては変えない。
-      setChoosingKey(settings.trigger.kind !== 'key');
-      return;
-    }
-    setChoosingKey(false);
-    if (settings.trigger.kind !== next) void update({ trigger: { kind: next } });
-  };
+  const probeMs = input?.probe_ms ?? null;
+  const helper = input?.helper ?? null;
 
   const commitKeywords = () => {
     if (keywordsDraft === null) return;
@@ -133,31 +208,68 @@ export function SettingsPage() {
           </p>
         )}
         <div className="settings">
-          <fieldset className="setting pills-set">
-            <legend className="lbl">迷いマークを付けるボタン</legend>
-            <div className="pills">
-              {TRIGGER_CHOICES.map((choice) => (
-                <label className="pill" key={choice.mode}>
-                  <input
-                    type="radio"
-                    name="trigger"
-                    value={choice.mode}
-                    checked={mode === choice.mode}
-                    onChange={() => chooseMode(choice.mode)}
-                  />
-                  <span>{choice.label}</span>
-                </label>
-              ))}
-            </div>
-            {mode === 'key' && (
-              <KeyPicker
-                current={settings.trigger.kind === 'key' ? settings.trigger.code : null}
-                onPick={(code) => {
-                  setChoosingKey(false);
-                  void update({ trigger: { kind: 'key', code } });
-                }}
-              />
+          <fieldset className="setting pills-set capture">
+            <legend className="lbl">迷いマークのボタン</legend>
+            {registering ? (
+              <>
+                <div className="setting-row">
+                  <p
+                    className="listening"
+                    role="status"
+                    tabIndex={-1}
+                    ref={listening}
+                    aria-describedby="capture-hint"
+                  >
+                    <span className="dotc" aria-hidden="true" />
+                    登録したいボタンを押してください（マウスのボタンでもキーでも）
+                  </p>
+                  <button type="button" className="btn" onClick={() => run(api.cancelRegistration)}>
+                    キャンセル
+                  </button>
+                </div>
+                <p className="quiet" id="capture-hint">
+                  Esc でやめます。英字・数字・記号のキーは、Ctrl か Alt と組み合わせて押してください。左右のボタンは登録できません。
+                </p>
+              </>
+            ) : (
+              <div className="setting-row">
+                <p className="keycap">{describeTrigger(settings.trigger)}</p>
+                <button
+                  type="button"
+                  className="btn"
+                  ref={startButton}
+                  onClick={() => run(api.startRegistration)}
+                >
+                  ボタンを登録
+                </button>
+              </div>
             )}
+            {input?.message && (
+              <p className="error selectable" role="alert">
+                {input.message}
+              </p>
+            )}
+            <div className="probe-box">
+              <span className="lbl-sm" id="probe-lbl">
+                テスト
+              </span>
+              <p
+                className="probe"
+                role="status"
+                aria-labelledby="probe-lbl"
+                data-got={probeMs !== null}
+              >
+                {probeMs !== null ? (
+                  // 1 つの要素に包む（.probe は flex なので、文字と時刻が別の項目になると、間の空白が消える）。
+                  <span>
+                    受け取りました <span className="mono">{formatClock(probeMs)}</span>
+                  </span>
+                ) : (
+                  PROBE_IDLE
+                )}
+              </p>
+            </div>
+            {helper && <HelperRow helper={helper} run={run} />}
           </fieldset>
 
           <fieldset className="setting pills-set">
@@ -237,36 +349,64 @@ export function SettingsPage() {
   );
 }
 
-interface KeyPickerProps {
-  /** いま割り当てているキー（無ければ null）。 */
-  current: string | null;
-  onPick: (code: string) => void;
+interface HelperRowProps {
+  helper: HelperStatus;
+  run: (action: () => Promise<void>) => void;
 }
 
-/** 「キーを押して決める」ボタン。押したあと、次に押したキーを割り当てる。Esc でやめる。 */
-function KeyPicker({ current, onPick }: KeyPickerProps) {
-  const [listening, setListening] = useState(current === null);
-
-  useEffect(() => {
-    if (!listening) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setListening(false);
-      if (event.code !== 'Escape') onPick(event.code);
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [listening, onPick]);
-
+/**
+ * 管理者の補助プログラムの 1 行（W-9）。雀魂は管理者の権限で動くので、その窓が前面にあるとき、
+ * 普通の権限の本体はボタンを拾えない。補助プログラムは、最初の 1 回だけ Windows の確認で設定すれば、
+ * 以後は確認なしで、アプリと一緒に起動する。
+ */
+function HelperRow({ helper, run }: HelperRowProps) {
+  const busy = helper.busy !== null;
+  const installed = helper.installed === true;
   return (
-    <div className="setting-row">
-      <button type="button" className="btn" onClick={() => setListening(true)}>
-        {current ? `いまのキー: ${formatKeyCode(current)}（変える）` : 'キーを押して決める'}
-      </button>
-      <span className="quiet" role="status">
-        {listening ? 'キーを押してください（Esc でやめる）' : ''}
-      </span>
-    </div>
+    <>
+      <div className="helper-row">
+        <span className="lbl-sm" id="helper-lbl">
+          補助プログラム
+        </span>
+        <p className="quiet helper-state" role="status" aria-labelledby="helper-lbl">
+          {helperStateText(helper)}
+        </p>
+        {!helper.running && helper.installed === false && (
+          <button
+            type="button"
+            className="btn sm"
+            disabled={busy}
+            onClick={() => run(api.setupHelper)}
+          >
+            管理者の補助プログラムを設定する
+          </button>
+        )}
+        {!helper.running && installed && (
+          <button
+            type="button"
+            className="btn sm"
+            disabled={busy}
+            onClick={() => run(api.startHelper)}
+          >
+            起動する
+          </button>
+        )}
+        {installed && (
+          <button
+            type="button"
+            className="btn sm"
+            disabled={busy}
+            onClick={() => run(api.removeHelper)}
+          >
+            設定を解除する
+          </button>
+        )}
+      </div>
+      {helper.error && (
+        <p className="error selectable" role="alert">
+          {helper.error}
+        </p>
+      )}
+    </>
   );
 }

@@ -1,0 +1,26 @@
+[package]
+name = "jantama-input"
+version = "0.1.0"
+description = "ボタンを拾う部品（本体と補助プログラムが共有する）: 判定・本体との連絡の決まり・Windows のフックと名前付きパイプ"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+# 管理者で動く補助プログラムにも入る部品なので、依存は最小にする（tests/safety.rs が一覧を確かめる）。
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Pipes",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+] }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatClock, formatKeyCode, formatSessionTitle } from './format';
+import type { Trigger } from '../api/types';
+import { describeTrigger, formatClock, formatKeyCode, formatSessionTitle } from './format';
 
 const local = (y: number, mo: number, d: number, h = 0, mi = 0, s = 0) =>
   new Date(y, mo - 1, d, h, mi, s).getTime();
@@ -34,5 +35,31 @@ describe('formatKeyCode', () => {
     expect(formatKeyCode('Numpad3')).toBe('テンキー 3');
     expect(formatKeyCode('NumpadAdd')).toBe('テンキー +');
     expect(formatKeyCode('Insert')).toBe('Insert');
+  });
+});
+
+describe('describeTrigger', () => {
+  it('W-10 マウスのボタンは、名前（見本のとおり）', () => {
+    expect(describeTrigger({ kind: 'mouse_x1' })).toBe('マウスの戻るボタン（XButton1）');
+    expect(describeTrigger({ kind: 'mouse_x2' })).toBe('マウスの進むボタン（XButton2）');
+    expect(describeTrigger({ kind: 'mouse_middle' })).toBe('マウスの中ボタン（MButton）');
+  });
+
+  it('W-10 修飾キーの無いキーは「キー：F13」', () => {
+    expect(describeTrigger({ kind: 'key', code: 'F13' })).toBe('キー：F13');
+    expect(describeTrigger({ kind: 'key', code: 'Insert' })).toBe('キー：Insert');
+    expect(describeTrigger({ kind: 'key', code: 'Numpad3' })).toBe('キー：テンキー 3');
+  });
+
+  it('W-10 修飾キーつきのキーは、Ctrl・Alt・Shift・Win の順に「+」でつなぐ', () => {
+    const chord = (extra: Partial<Extract<Trigger, { kind: 'key' }>>): Trigger => ({
+      kind: 'key',
+      code: 'KeyM',
+      ...extra,
+    });
+    expect(describeTrigger(chord({ ctrl: true, alt: true }))).toBe('Ctrl+Alt+M');
+    expect(describeTrigger(chord({ alt: true }))).toBe('Alt+M');
+    expect(describeTrigger(chord({ win: true, shift: true, ctrl: true }))).toBe('Ctrl+Shift+Win+M');
+    expect(describeTrigger(chord({ ctrl: false, alt: false }))).toBe('キー：M');
   });
 });
