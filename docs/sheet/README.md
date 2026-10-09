@@ -6,4 +6,4 @@
 - `jantama-sheet.src.html`: ページの元。回ごとに質問を書き換える。
 - `build.py`: SPEC.md と ACCEPTANCE.md を差し込んで `jantama-sheet.html` を作る（`uv run --with markdown python docs/sheet/build.py`）。
 - `tiles/`: 牌の画像（FluffyStuff/riichi-mahjong-tiles、パブリックドメイン）。
-- `samples/`: 2回目のシートに載せた画面サンプルのスクショ。サンプル本体は `samples/round2` ブランチ。
+- `samples/`: 2回目のシートに載せた画面サンプルのスクショ（サンプル本体は作業用フォルダにあり、リポジトリには入れていない）。

@@ -87,7 +87,7 @@
   .sec-head { display: grid; gap: 6px; border-top: 2px solid var(--ink); padding-top: 16px; }
 
   /* received answers */
-  .table-wrap { overflow-x: auto; max-width: 100%; }
+  .table-wrap { overflow-x: auto; max-width: 100%; position: relative; }
   table.grid { border-collapse: collapse; width: 100%; font-size: 14.5px; }
   .grid th, .grid td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .grid thead th { font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; white-space: nowrap; }
@@ -194,74 +194,72 @@
     details.doc .doc-body { padding: 4px 12px 14px; }
   }
   @media (prefers-reduced-motion: reduce) { .opt { transition: none; } }
+
+  /* round 3 additions */
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  select { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; padding: 3px 8px; min-width: 7.5em; }
+  select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .grid tr.total th, .grid tr.total td { font-weight: 700; border-top: 2px solid var(--line-strong); }
+  .steps { margin: 0; padding-left: 1.5em; display: grid; gap: 6px; font-size: 14px; max-width: 72ch; }
+  .steps li::marker { font-family: var(--font-mono); color: var(--muted); }
+  details.doc + details.doc { margin-top: -40px; }
 </style>
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">JantamaReviewer · 確認シート 2回目 · 2026-10-09</div>
+    <div class="eyebrow">JantamaReviewer · 確認シート 3回目 · 2026-10-09</div>
     <h1>雀魂の検討システム 確認シート</h1>
-    <p class="lead">1回目の答えとチャットでの追加をもとに、仕様書と受け入れ基準の下書きを書き、画面のサンプルを作りました。新しく出てきた質問と一緒に確認してください。製品のコードはまだ書いていません。1回目の答えは、このシートのデータベースに残っています。</p>
+    <p class="lead">ウィジェットはいま作っています。できあがったら4回目のシートで見てもらいます。その前に、いま答えられることを先に聞きます。チャットでの「Webページの残骸」の依頼を具体化したものと、S+〜D の当てはめ方と、mjai への送り方です。</p>
     <div class="meta">
-      <span>質問 12 と自由記入 1</span>
+      <span>質問 3 と自由記入 1</span>
       <span class="muted">選ぶと自動で保存されます</span>
       <span class="status" id="status" role="status">保存の準備中…</span>
     </div>
   </header>
 
-  <section aria-labelledby="h-recv">
-    <div class="sec-head">
-      <h2 id="h-recv">1回目の答えをこう受け取りました</h2>
-      <p class="muted">左があなたの言葉（音声入力の誤変換はそのまま）、右がそれを受けてこうする、という内容です。全文は決定記録（docs/decisions.md）に写しました。</p>
-    </div>
-    <div class="table-wrap">
-      <table class="grid">
-        <thead><tr><th>言われたこと</th><th>こうする</th></tr></thead>
-        <tbody>
-          <tr><td class="src-col">「キーは変更できるようにしたい。例えばマウスのサイドボタン」「マウスで完結させるようにしたい」</td><td>迷いマークの既定はマウスのサイドボタン。設定でほかのボタンやキーに変えられる。ウィジェットの操作もマウスだけで済むようにする（R2-3、R2-4）。</td></tr>
-          <tr><td class="src-col">チャット：「打つタイミングだけじゃなくて、打ったタイミングと、チーするかどうか分からなかったけどスルーしたタイミング、チーしようとしたタイミング、ポン・チーのタイミング」</td><td>迷いマークは、打牌の前・直後、鳴くかスルーかの判断、リーチの判断のどれにも結びつけられるようにする。Mortal の結果には打牌のほか鳴き・スルー・リーチの判断も入っている（デモ半荘では判断205回のうち、スルー35、ポン6、チー2、リーチ2）。</td></tr>
-          <tr><td class="src-col">「「ここ迷ったよ」っていうのをメモするのが、まず大きな目的」</td><td>R1-6 で「スクショの一覧と紐づけ」は選ばれていなかったが、迷いマークを局面に結びつける機能として v1 に入れる（仕様書の F9）。</td></tr>
-          <tr><td class="src-col">「隠したまま答える。そうやねん。それができたら最高。理想はじゃんたま上でできることだけど、アプリ上でできたらそれが最高」</td><td>雀魂の中では何も動かさない（規約の線引き）。同じ体験をアプリの中で作る。</td></tr>
-          <tr><td class="src-col">「局ごとの評価を自分でつけれると嬉しい」「○△×」「上がれなかった先入観から来てそうだから、公平に判断できるようにしたい」</td><td>新しい機能として受け取った（仕様書の F10）。「1局が終わったところであなたが自動で判定して」の部分は、対局中に判定するとゲームを読むことになるので、終局後に取り込んだ結果で判定して並べる形にした（R2-2）。</td></tr>
-          <tr><td class="src-col">R1-10「すべて日本語」</td><td>画面・仕様書・コメント・コミットは日本語。コードの名前（変数名など）だけは英語のまま。</td></tr>
-          <tr><td class="src-col">R1-7「種類を問わず差の大きい順」</td><td>1日に出す数は5（元の会話の目安3〜5の上限）。残りは畳んで出す。設定で変えられる。</td></tr>
-          <tr><td class="src-col">R1-15「ジャン豪2です」</td><td>元の会話の道筋では、玉の間は押し引きと鳴きの判断に重心を移す時期。出題の順は R1-7 のとおり種類で寄せず、週の集計で押し引き・鳴きの件数が見えるようにする。</td></tr>
-          <tr><td class="src-col">R1-11「public で作る」</td><td>作成が自動判定で止められた（R2-10）。</td></tr>
-          <tr><td class="src-col">R1-14「使う」</td><td>URL の欄が空だった（R2-11）。</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <section aria-labelledby="h-now">
+    <div class="sec-head"><h2 id="h-now">いまの状況</h2></div>
+    <ul class="decided">
+      <li>リポジトリ（public）を手元に取り込み、決定記録・仕様書・受け入れ基準をコミットしました。push はしていません。</li>
+      <li>ウィジェットは、別のブランチ（feature/widget）で Sonnet が作っています。止まったところから再開しました。</li>
+      <li>今日の半荘の検討結果は保存済みです。判断178回のうち AI の1位と同じだったのが135回、確率5%未満が19回で、そのうち10回が2シャンテンでした。</li>
+    </ul>
   </section>
 
   <section aria-labelledby="h-q">
     <div class="sec-head">
       <h2 id="h-q">質問</h2>
-      <p class="muted">「おすすめ」は私の判断です。違う答えでも構いません。補足欄だけ書いた場合は「その他」として扱います。画像は押すと大きく表示します。</p>
+      <p class="muted">「おすすめ」は私の判断です。違う答えでも構いません。補足欄だけ書いた場合は「その他」として扱います。</p>
     </div>
     <div id="questions"></div>
   </section>
 
   <section aria-labelledby="h-decided">
     <div class="sec-head">
-      <h2 id="h-decided">聞かずに決めたこと（2回目）</h2>
-      <p class="muted">どれも後から変えられるものです。違うと思うものがあれば、番号を最後の自由記入に書いてください。</p>
+      <h2 id="h-decided">聞かずに決めたこと（3回目）</h2>
+      <p class="muted">違うと思うものがあれば、番号を最後の自由記入に書いてください。</p>
     </div>
     <ol class="decided">
-      <li>解き直しの正解は、AIがその行動に付けた確率が5%以上のもの（不一致の基準と同じ）。</li>
-      <li>ウィジェットは、クリックしても雀魂からフォーカスを奪わない。置いた位置を覚える。</li>
-      <li>割り当てたマウスのボタンの押下は横取りして、ほかのアプリに渡さない。Chrome 版の雀魂でサイドボタンが「戻る」になってページを離れるのを防ぐため。</li>
-      <li>局の評価は押した順に局へ割り当て、ずれは対局後に直す。ウィジェットはゲームを読まないので、どの局かは分からないため。</li>
-      <li>迷いマークと判断の結びつけは、v1 では手で選ぶ。スクショから自動で突き合わせる（牌の認識）のは v2 の候補。対局後の処理なので規約上は問題ない。</li>
-      <li>Mortal の結果の取得はアプリ側から1回だけ行い、取得した写しを正とする（サイト側の結果は消える）。</li>
-      <li>受け入れ枚数は、別の実装（Python の mahjong ライブラリ）で作った正解表と照合する。サンプル局面では、打1s 24枚、打6p 28枚、打4p 38枚で一致を確認した。</li>
-      <li>色と文字はこのシートと同じにする（純粋なグレーに卓の緑を1色、本文 BIZ UDPゴシック、見出し Zen Old Mincho、数字 IBM Plex Mono）。画面のサンプルもこれで作った。</li>
-      <li>CLAUDE.md の「プロジェクト名と一行の目的」は、テンプレートの決まりどおりあなたが手で書く欄なので空けておく。案：「JantamaReviewer：雀魂の半荘を、AIの答えを隠したまま検討して解き直すための個人用ツール」。</li>
+      <li>今日の半荘の検討結果を、テスト用の固定データとしてリポジトリに入れる。名前はサイト側で「Aさん」などに置き換わっていて、牌譜の ID やアカウントの番号は入っていないことを確認した。</li>
+      <li>「残骸」の対策は、このシートの確認を待たずにウィジェットと一緒に実装している。後から変えやすいため。</li>
+      <li>今日の半荘の5%未満の局面を MAKA と見比べるのは、アプリでこの半荘を検討したあとにする。先に MAKA の打牌を見ると、答えを知った状態で検討することになるため。</li>
+      <li>ウィジェットの受け入れは、できあがってから4回目のシートで聞く。</li>
     </ol>
   </section>
 
   <section aria-labelledby="h-next">
     <div class="sec-head"><h2 id="h-next">このあと</h2></div>
-    <p class="lead">答えをもらったら、仕様書と受け入れ基準を確定し、リポジトリを用意します（R2-10）。R2-12 で GO をもらえたら、R2-7 の順で作り始めます。作った機能はテストと lint が通ったら手元の main に取り込み、次のシートで見てもらいます（R1-13）。</p>
+    <p class="lead">ウィジェットができたら、テストと見た目を確かめて main に取り込み、4回目のシートで受け入れを聞きます。取り込んだら続けて、検討結果の取り込みと出題（F1〜F4、F9）を作り始めます。</p>
   </section>
+
+  <details class="doc">
+    <summary>参考：仕様書（SPEC.md）の最新版</summary>
+    <div class="doc-body" data-doc="doc-spec"></div>
+  </details>
+  <details class="doc">
+    <summary>参考：受け入れ基準（ACCEPTANCE.md）の最新版</summary>
+    <div class="doc-body" data-doc="doc-acceptance"></div>
+  </details>
 
   <section class="send" aria-labelledby="h-send">
     <div class="sec-head"><h2 id="h-send">送り方</h2></div>
@@ -275,168 +273,114 @@
   </section>
 </div>
 
-<dialog class="viewer" id="viewer" aria-label="画像の拡大表示">
-  <div class="frame">
-    <button type="button" class="close" id="viewerClose">閉じる</button>
-    <img id="viewerImg" alt="">
-  </div>
-</dialog>
-
 <template id="doc-spec">{{SPEC}}</template>
 <template id="doc-acceptance">{{ACCEPTANCE}}</template>
 
 <script>
 (function () {
   'use strict';
-  var ROUND = 'round2';
+  var ROUND = 'round3';
 
-  /* ---------- real data: Mortal demo report, per hand (not the user's game) ---------- */
-  var KYOKU = [
-    { k: '東1局', res: '他家のツモ', d: -3000, n: 0 },
-    { k: '東2局', res: '他家どうしのロン', d: 0, n: 0 },
-    { k: '東3局', res: '流局', d: 0, n: 2 },
-    { k: '東3局1本場', res: '流局', d: -3000, n: 1 },
-    { k: '東3局2本場', res: '他家のツモ', d: -2200, n: 0 },
-    { k: '東4局', res: '他家のツモ', d: -1600, n: 1 },
-    { k: '南1局', res: '放銃', d: -2000, n: 1 },
-    { k: '南2局', res: '和了（ツモ）', d: 19000, n: 0 },
-    { k: '南2局1本場', res: '放銃', d: -4200, n: 1 },
-    { k: '南3局', res: '他家どうしのロン', d: 0, n: 0 },
-    { k: '南3局1本場', res: '和了（ロン）', d: 6200, n: 3 },
-    { k: '南4局', res: '他家どうしのロン', d: 0, n: 1 },
-    { k: '南4局1本場', res: '他家どうしのロン', d: 0, n: 0 }
+  /* ---------- R3-1: what counts as a leftover of a web browser ---------- */
+  var REMNANTS = [
+    ['ブラウザのショートカット', 'Ctrl+J（ダウンロード）、Ctrl+P（印刷）、Ctrl+F（ページ内検索）、F5・Ctrl+R（再読み込み）、F7（カーソルで読むモードの確認）、Alt+←→（戻る・進む）、F12（開発者ツール）', 'まとめて無効にする。アプリ自身のキー操作は使える'],
+    ['拡大・縮小', 'Ctrl+ホイール、Ctrl+＋／−、タッチパッドのピンチ', '無効にする'],
+    ['右クリックのメニュー', '「戻る」「最新の情報に更新」「名前を付けて保存」「印刷」「検査」', '出さない。文字の入力欄だけは切り取り・コピー・貼り付けを残す。ウィジェットの右クリックはアプリのメニュー'],
+    ['エラーページ', '「このページに到達できません」「申し訳ありません…」', '出さない。アプリの外のページには移らず、天鳳牌理などの外部リンクはいつものブラウザで開く。画面の切り替えはアプリの中だけで行い、存在しない画面には行かない。不具合で描けないときは、アプリの見た目のエラー画面にする'],
+    ['新しい窓', 'リンクから開く、ブラウザ風の枠の窓', '開かない。いつものブラウザで開く'],
+    ['ダウンロードの表示', '画面の端に出るダウンロードの通知', '出さない。ファイルの取得はアプリの裏側で行う'],
+    ['リンクの URL', 'リンクの上で左下に出る URL', '出さない'],
+    ['起動時の白い画面', '窓を開いた瞬間の白いちらつき', 'テーマの背景色で窓を作り、描き終わってから表示する'],
+    ['選択とドラッグ', 'ボタンや見出しの文字が青く選択される、画像を引きずれる', '操作部分は選択できない。入力欄とコピーしたい文章だけ選択できる。画像は引きずれない'],
+    ['カーソル', '押せない文字の上で I 字のカーソル', '普通の矢印。押せる所だけ指の形'],
+    ['マウスの中ボタン・戻るボタン', '中ボタンで出る自動スクロール、戻るボタンで前の画面に戻る', '無効にする'],
+    ['入力欄', '過去の入力の候補一覧、つづりの赤い波線', '出さない'],
+    ['スクロールバー', 'ダークでも白っぽいスクロールバー', 'テーマの色に合わせる'],
+    ['開発者ツール', 'F12 などで開く開発用の画面', '普段使うビルドでは開けない'],
+    ['窓の題名', 'localhost や URL', 'アプリの名前だけ']
   ];
-  function aiMark(n) { return n === 0 ? '〇' : (n === 1 ? '△' : '✕'); }
-  function signed(v) { return v === 0 ? '0' : (v > 0 ? '+' : '−') + Math.abs(v).toLocaleString('ja-JP'); }
-  function kyokuTable() {
-    var rows = KYOKU.map(function (r) {
-      return '<tr' + (r.res.indexOf('和了') === 0 && r.n >= 2 ? ' class="flag"' : '') + '><td>' + r.k + '</td><td>' + r.res + '</td><td class="num">' + signed(r.d) +
-        '</td><td class="empty">―</td><td class="sym strong">' + aiMark(r.n) + '</td><td class="num">' + r.n + '</td></tr>';
-    }).join('');
-    return '<div class="table-wrap"><table class="grid"><thead><tr><th>局</th><th>結果（自分から見て）</th><th class="num">点</th><th>あなたの評価</th><th>AI基準</th><th class="num">5%未満の判断</th></tr></thead><tbody>' +
-      rows + '</tbody></table></div><p class="src">「あなたの評価」は対局中にウィジェットで付ける欄（デモ半荘なので空）。色の付いた行は、和了したのに AI 基準が ✕ の局。</p>';
+  function remnantsTable() {
+    return '<div class="table-wrap"><table class="grid"><thead><tr><th>出るもの</th><th>例</th><th>こうする</th></tr></thead><tbody>' +
+      REMNANTS.map(function (r) { return '<tr><th scope="row">' + r[0] + '</th><td class="src-col">' + r[1] + '</td><td>' + r[2] + '</td></tr>'; }).join('') +
+      '</tbody></table></div>';
   }
 
-  /* ---------- screenshots ---------- */
-  function shotsHTML(list, main, crop) {
-    return '<div class="shots' + (main ? ' main' : '') + (crop ? ' crop' : '') + '">' + list.map(function (s) {
-      return '<figure class="shot" data-src="' + s.src + '"><button type="button" data-zoom="' + s.src + '" aria-label="' + s.cap + 'を拡大"><img src="' + s.src + '" alt="' + s.cap + '" loading="lazy"></button><figcaption>' + s.cap + '</figcaption></figure>';
-    }).join('') + '</div>';
+  /* ---------- R3-2: real data from the user's game (2026-10-09, 玉の間・南喰赤) ---------- */
+  var GRADES = ['S+', 'S', 'S-', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D'];
+  var BANDS = [0.97, 0.94, 0.91, 0.88, 0.85, 0.82, 0.79, 0.76, 0.73, 0.70, 0.65, 0.60];
+  function provisional(score) {
+    for (var i = 0; i < BANDS.length; i++) if (score >= BANDS[i]) return GRADES[i];
+    return 'D';
   }
-  function quizShots(v) {
-    return '<div class="sample"><span class="sample-cap">サンプル · デモ半荘の東3局8巡目（実データ）で作った画面</span>' +
-      shotsHTML([{ src: 'samples/quiz-' + v + '-1280-light.png', cap: 'PC・ライト（答える前）' }], true) +
-      shotsHTML([
-        { src: 'samples/quiz-' + v + '-1280-light-revealed.png', cap: '答え合わせのあと（理由は入力例）' },
-        { src: 'samples/quiz-' + v + '-1280-dark.png', cap: 'PC・ダーク' },
-        { src: 'samples/quiz-' + v + '-390-light.png', cap: 'スマホ幅' }
-      ], false, true) + '</div>';
+  var KYOKU = [
+    { id: 'e1', k: '東1局', n: 6, m: 0.50, bad: 3, s: 0.503 },
+    { id: 'e2', k: '東2局', n: 12, m: 0.75, bad: 0, s: 0.858 },
+    { id: 'e2h1', k: '東2局1本場', n: 15, m: 0.73, bad: 1, s: 0.783 },
+    { id: 'e3', k: '東3局', n: 16, m: 0.75, bad: 1, s: 0.833 },
+    { id: 'e3h1', k: '東3局1本場', n: 11, m: 0.73, bad: 1, s: 0.808 },
+    { id: 'e4', k: '東4局', n: 23, m: 0.61, bad: 7, s: 0.665 },
+    { id: 'e4h1', k: '東4局1本場', n: 14, m: 0.86, bad: 1, s: 0.863 },
+    { id: 's1', k: '南1局', n: 24, m: 0.83, bad: 1, s: 0.899 },
+    { id: 's2h1', k: '南2局1本場', n: 12, m: 0.83, bad: 0, s: 0.897 },
+    { id: 's3', k: '南3局', n: 8, m: 0.50, bad: 2, s: 0.551 },
+    { id: 's4', k: '南4局', n: 13, m: 0.92, bad: 1, s: 0.923 },
+    { id: 'w1', k: '西1局', n: 24, m: 0.83, bad: 1, s: 0.899 },
+    { id: 'hanchan', k: '半荘全体', n: 178, m: 0.76, bad: 19, s: 0.815, total: true }
+  ];
+  function gradeSelect(q, row) {
+    var sid = q.id + '-g-' + row.id;
+    return '<label class="sr-only" for="' + sid + '">' + row.k + ' の MAKA の評価</label><select id="' + sid + '" data-grade="' + row.id + '">' +
+      '<option value="">未入力</option>' + GRADES.map(function (g) { return '<option value="' + g + '">' + g + '</option>'; }).join('') +
+      '<option value="?">分からない</option></select>';
   }
-  function widgetShots(v) {
-    return '<div class="sample"><span class="sample-cap">サンプル · 実寸で描いたもの</span>' +
-      shotsHTML([
-        { src: 'samples/widget-' + v + '-dark.png', cap: 'ダーク' },
-        { src: 'samples/widget-' + v + '-light.png', cap: 'ライト' }
-      ]) + '</div>';
+  function gradesTable(q) {
+    return '<div class="table-wrap"><table class="grid"><thead><tr><th>局</th><th class="num">判断</th><th class="num">AIの1位と同じ</th><th class="num">5%未満</th><th class="num">一致の度合い</th><th>仮の区切り</th><th>MAKA の評価</th></tr></thead><tbody>' +
+      KYOKU.map(function (r) {
+        return '<tr' + (r.total ? ' class="total"' : '') + '><th scope="row">' + r.k + '</th><td class="num">' + r.n + '</td><td class="num">' + Math.round(r.m * 100) + '%</td><td class="num">' + r.bad +
+          '</td><td class="num">' + r.s.toFixed(2) + '</td><td class="sym strong">' + provisional(r.s) + '</td><td>' + gradeSelect(q, r) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<p class="src">一致の度合い＝自分の行動に AI が付けた確率を、AI の1位の確率で割った値の平均（いつも1位と同じなら 1.00）。仮の区切りは 0.97 以上で S+、そこから 0.03 ずつ下げて B-（0.73）まで、C+ 0.70・C 0.65・C- 0.60、それ未満は D。</p>';
   }
 
-  /* ---------- questions ---------- */
+  /* ---------- R3-3: flow of the in-app window ---------- */
+  function flowSteps() {
+    return '<div class="sample"><span class="sample-cap">流れ（A のとき）</span><ol class="steps">' +
+      '<li>雀魂で牌譜のリンクをコピーする（「雀魂牌譜:https://…」の形のままでよい）</li>' +
+      '<li>アプリの「検討結果を取り込む」を押す。アプリがコピーしたリンクを読み、mjai.ekyu.moe を小さな窓で開いて、リンクを入れておく</li>' +
+      '<li>あなたは Submit を押すだけ（Cloudflare の確認が出たら、それもあなたが通す）</li>' +
+      '<li>結果のページに移った瞬間に、アプリが窓を閉じて結果を取り込む。AI の答えは画面に出ない</li>' +
+      '</ol></div>';
+  }
+
   var Q = [
-    { id: 'r1', no: 'R2-1', title: '1回目の答えの受け取り方は合っていますか',
-      context: '<p>上の「1回目の答えをこう受け取りました」の表についてです。</p>',
+    { id: 'r1', no: 'R3-1', title: '「Webページの残骸」をこう具体化しました',
+      context: '<p>アプリの窓の中身は Web の技術で作るので、何もしないと次のようなブラウザの名残が出ます。全部こうして消します。足りないもの、残してほしいものがあれば補足に書いてください。</p>',
+      blockSample: remnantsTable,
       opts: [
-        { v: 'ok', t: '合っている', rec: true },
-        { v: 'partly', t: '違うところがある（補足に書く）' }
+        { v: 'ok', t: 'この理解で合っている', rec: true },
+        { v: 'partly', t: '足りない・違うところがある（補足に書く）' }
       ] },
-    { id: 'r2', no: 'R2-2', title: '局の評価（〇△✕）を「公平に判断」するには',
-      context: '<p>1回目の補足の「局ごとの評価を自分でつけれると嬉しい」「上がれなかった先入観から来てそうだから、公平に判断できるようにしたい」を受けた新しい機能です。対局中にAIが判定することはできないので（ゲームを読む必要があり、規約の線引きに反する）、終局後に取り込んだ結果から AI 基準を出して並べます。</p>' +
-        '<p>AI 基準は、その局で Mortal が5%未満を付けた実戦の判断の数です（0なら〇、1なら△、2以上なら✕。区切りは設定で変えられる）。下はデモ半荘で計算した実データです。和了した南3局1本場が ✕ で、和了していない東2局が 〇 のように、結果と判断の良し悪しは一致しません。</p>',
-      blockSample: kyokuTable,
+    { id: 'r2', no: 'R3-2', title: 'AI 基準を S+〜D にする方法', grades: true,
+      context: '<p>MAKA の S+〜D の決め方は公開されていません（探した範囲では見つかりませんでした）。なので Mortal の値から同じ13段階を作ります。区切りを決める材料として、今日の半荘を MAKA でも分析して、局ごとと半荘全体の評価を下の表に入れてもらえると、それに近くなるように区切りを合わせられます。</p>' +
+        '<p>MAKA の分析画面では評価の一覧だけを見てください。局面ごとの打牌まで見ると、この半荘をアプリで検討するときに答えを知った状態になります。MAKA の結果は7日で消えます（10月16日ごろまで）。</p>',
+      blockSample: null,
       opts: [
-        { v: 'self-vs-ai', t: '自分で〇△✕を付け、終局後に AI 基準と並べる', rec: true,
-          note: 'ずれた局に印を付ける。週の集計で、和了できなかった局を低く付けがちかどうかを数える。' },
-        { v: 'ai-only', t: '自分では付けず、AI 基準だけ見る',
-          note: '対局中の操作が減る。自分の感覚とのずれは分からない。' },
-        { v: 'self-only', t: '自分の評価だけ記録する（AIとは比べない）' }
+        { v: 'fit-maka', t: 'MAKA の評価に近くなるように区切りを合わせる', rec: true,
+          note: '下の表に MAKA の評価を入れる。半荘が増えたら、ときどき MAKA の評価を入れて合わせ直せるようにする。' },
+        { v: 'provisional', t: '区切りは仮のまま（表の「仮の区切り」）でよい' },
+        { v: 'count', t: 'S+〜D にせず、5%未満の数で 〇△✕ を出すままにする' }
       ] },
-    { id: 'r3', no: 'R2-3', title: 'ボタンの割り当て',
-      context: '<p>チャットでの追加（打牌の前後、鳴くかスルーかの判断でも押す）を受けて、鳴きの判断のように数秒しかない場面でも押せることを優先しました。</p>',
+    { id: 'r3', no: 'R3-3', title: 'mjai.ekyu.moe への送り方',
+      context: '<p>2回目の補足「mjai の呼び出しは僕がやらないとダメなの！？もうちょっとうまいことしたい」への案です。サイトには Cloudflare の人間の確認（Turnstile）があるので、アプリが勝手に送ることはできません（できても、サイトの意図に反します）。そのうえで、手間をできるだけ減らします。</p>',
       opts: [
-        { v: 'side-button', t: '迷い＝マウスのサイドボタン、局の評価＝ウィジェットの〇△✕', rec: true,
-          note: 'どちらもマウスで完結する。サイドボタンはカーソルがどこにあっても効く。割り当ては設定で変えられる（サイドボタン2つ・中ボタン・キーボード）。対局中は、マウスの入力をすべて受け取る小さな仕組み（フック）が動く。反応するのは割り当てたボタンだけで、ほかの入力はそのまま通す。' },
-        { v: 'widget-only', t: 'どちらもウィジェットのクリックだけ',
-          note: 'マウス全体の入力を見張らない。鳴きの判断の数秒のあいだに、ウィジェットまでカーソルを動かす必要がある。' }
+        { v: 'in-app', t: 'アプリの中の小さな窓で送る（Submit を押すだけ）', rec: true,
+          note: '貼る・開く・URL をコピーする手間がなくなり、AI の答えも目に入らない。サイトの作りが変わってリンクを入れられなくなったら、B の形で動くようにしておく。',
+          sample: flowSteps },
+        { v: 'clipboard', t: 'サイトには自分で送り、結果の URL をコピーしたらアプリが自動で取り込む',
+          note: 'いまの手順のまま、URL をアプリに貼る手間だけなくなる。結果のページが一瞬見える。' },
+        { v: 'manual', t: 'いまのまま（結果の URL をアプリに貼る）' }
       ] },
-    { id: 'r4', no: 'R2-4', title: 'ウィジェットの形', side: true,
-      context: '<p>雀魂のウィンドウの横に置く小さな窓です。記録中の表示、迷いの数、〇△✕、取り消し、次の評価が何局目に入るかを出します。</p>',
-      opts: [
-        { v: 'vertical', t: '縦長（雀魂の右か左に置く）', rec: true, note: '補足の「雀魂のウィンドウの横に」に合わせた形。幅76px。', sample: function () { return widgetShots('v'); } },
-        { v: 'horizontal', t: '横長（雀魂の上か下に置く）', note: '高さ64pxに収まる。雀魂の上か下に空きがあるとき向き。', sample: function () { return widgetShots('h'); } }
-      ] },
-    { id: 'r5', no: 'R2-5', title: '出題画面の並べ方', side: true,
-      context: '<p>AIの答えを隠したまま答える画面です。デモ半荘の東3局8巡目（Mortal が実戦の打6pに0.07%を付けた局面）で作りました。答える前は、AIの候補も確率も画面に出ません。打牌と理由がそろうまで「答え合わせ」は押せません。</p>',
-      opts: [
-        { v: 'table', t: '卓の配置（雀魂と同じ並び。河を四方に置く）', rec: true, note: '対局中と同じ見方で河を読める。補足の「理想は雀魂の上でできること」に近い。盤面と手牌で縦に約640pxを使う。', sample: function () { return quizShots('a'); } },
-        { v: 'rows', t: '行で並べる（河を1人1行。右に答えの欄）', note: '河を1人ずつ見比べやすい。縦に約480pxで収まる。', sample: function () { return quizShots('b'); } }
-      ] },
-    { id: 'r6', no: 'R2-6', title: '作り（技術）',
-      context: '<p>1回目は「このPCで動かして Chrome で開く」でしたが、対局中に手前に出しておくウィジェットと、マウスのボタンを拾う仕組みが必要になりました。この2つは Chrome のページだけでは作れません。</p>',
-      opts: [
-        { v: 'tauri', t: 'Tauri のデスクトップアプリ1つにまとめる', rec: true,
-          note: 'ウィジェットと検討画面が、同じアプリの別の窓になる。検討画面は Chrome のタブではなく、アプリの窓で開く。前のプロジェクトで書いた Tauri の注意書きがテンプレートに入っている（docs/recipes/tauri-desktop-app.md）。最初のビルドに時間がかかる。' },
-        { v: 'python', t: 'Python で作り、検討画面は Chrome で開く',
-          note: '1回目の答えどおり Chrome のタブで開ける。ウィジェットは Python の小さな窓で、検討画面とは作りが分かれる。起動は1つのコマンドにまとめる。' }
-      ] },
-    { id: 'r7', no: 'R2-7', title: '作る順番',
-      opts: [
-        { v: 'widget-first', t: 'ウィジェットから作る', rec: true,
-          note: '次の対局から、迷いマークと局の評価を貯め始められる。そのあと取り込みと出題、最後にログ・解き直し・週の集計。' },
-        { v: 'all-at-once', t: '全部そろえてから使い始める' }
-      ] },
-    { id: 'r8', no: 'R2-8', title: '仕様書と受け入れ基準',
-      context: '<p>元の会話とあなたの答えから書いた下書きです。「R2-n」の箇所は、このシートの答えで決まります。受け入れ基準は、どれもテストか lint で合否が決まる形にしました。</p>',
-      blockSample: function () {
-        return '<div class="block-sample">' +
-          '<details class="doc"><summary>仕様書（SPEC.md）を開く</summary><div class="doc-body" data-doc="doc-spec"></div></details>' +
-          '<details class="doc"><summary>受け入れ基準（ACCEPTANCE.md）を開く</summary><div class="doc-body" data-doc="doc-acceptance"></div></details></div>';
-      },
-      opts: [
-        { v: 'ok', t: 'この内容で進めてよい（このシートの答えを反映したうえで）' },
-        { v: 'fix', t: '直すところがある（補足に書く）' }
-      ] },
-    { id: 'r9', no: 'R2-9', title: '人が確認する段階',
-      context: '<p>テンプレート（pipeline.yaml）では、受け入れ基準をテストと lint の形にした段階にも人の確認があります。一方、グローバル設定の CLAUDE.md では、人の確認は「仕様の確認」「画面の方向性の確認（一度だけ）」「機能ごとの軽い受け入れ」「最後の結合の受け入れ」の4つだけで、ほかは機械のゲートにする、となっています。食い違っているので、どちらに合わせるか決めてください。</p>',
-      opts: [
-        { v: 'global', t: 'グローバル設定に合わせる', rec: true,
-          note: 'テストと lint は機械のゲートにして、人の確認はこのシート（仕様と受け入れ基準）で済ませる。' },
-        { v: 'template', t: 'テンプレートどおり、テストと lint を書いたら一度見せる' }
-      ] },
-    { id: 'r10', no: 'R2-10', title: 'リポジトリ',
-      context: '<p>R1-11 で public を選んでもらいましたが、私が GitHub にリポジトリを作る操作は、Claude Code の自動判定（公開される場所を作る操作）で止められました。手元での git の初期化も、同じ目的の操作として止められています。いまは決定記録・仕様書・受け入れ基準を普通のファイルとして置いていて、まだ git に入っていません。</p>',
-      opts: [
-        { v: 'self', t: '自分でコマンドを実行する', rec: true,
-          note: 'チャットの入力欄に下の1行を貼って送る（先頭の ! で、この会話の中で実行される）。できたら、手元への取り込みは私がやる。',
-          sample: function () {
-            return '<div class="sample"><div class="cmd"><code id="repoCmd">! gh repo create terasaki-8910/JantamaReviewer --public --template terasaki-8910/claude-pipeline-template</code><button type="button" class="btn" id="repoCmdCopy">コピー</button></div><span class="src" id="repoCmdMsg" role="status"></span></div>';
-          } },
-        { v: 'allow', t: 'Claude が実行できるように許可を足す',
-          note: '/permissions で gh repo create を許可する。以後、同じ種類の操作で止まらなくなる。' },
-        { v: 'change', t: '作り方を変える（補足に書く）', note: 'private にする、GitHub には作らない、など。' }
-      ] },
-    { id: 'r11', no: 'R2-11', title: '今日の半荘の結果URL', url: true,
-      context: '<p>R1-14 は「使う」でしたが、URL の欄が空でした。結果のURLがあれば下に貼ってください。テスト用の固定データ（受け入れ基準の FX-1）と、次のサンプルに使います。サイト側の結果は消えるので、早めのほうが確実です。</p>',
-      opts: [
-        { v: 'pasted', t: '下に貼った' },
-        { v: 'later', t: 'まだ。次に打った半荘で貼る' },
-        { v: 'skip', t: '使わない（デモ半荘で作る）' }
-      ] },
-    { id: 'r12', no: 'R2-12', title: 'いつ作り始めるか',
-      opts: [
-        { v: 'go', t: '「回答した」の時点で作り始めてよい', rec: true,
-          note: 'このシートの答えを仕様書に反映し、R2-7 の順で作る。R2-9 がテンプレートどおりなら、テストを書いたところで一度見せる。' },
-        { v: 'review-again', t: '答えを反映した仕様書を、もう一度見てから' }
-      ] },
-    { id: 'r13', no: 'R2-13', title: 'ほかに気になることがあれば', free: true,
+    { id: 'r4', no: 'R3-4', title: 'ほかに気になることがあれば', free: true,
       context: '<p>「聞かずに決めたこと」で違うと思うものの番号、仕様書への指摘、何でも。</p>' }
   ];
 
@@ -449,6 +393,7 @@
       html += '<div class="q" id="q-' + q.id + '"><div class="q-head"><div class="q-id">' + q.no + '</div><h3>' + q.title + '</h3>' +
         (q.context ? '<div class="context">' + q.context + '</div>' : '') + '</div>';
       if (q.blockSample) html += q.blockSample();
+      if (q.grades) html += gradesTable(q);
       if (!q.free) {
         html += '<fieldset><legend>' + q.no + ' の答え</legend><div class="opts' + (q.side ? ' side' : '') + '">';
         q.opts.forEach(function (o) {
@@ -461,10 +406,6 @@
         });
         html += '</div></fieldset>';
       }
-      if (q.url) {
-        html += '<div class="other"><label for="' + q.id + '-url">結果のURL（https://mjai.ekyu.moe/killerducky/?data=/report/… の形）</label>' +
-          '<input type="url" id="' + q.id + '-url" inputmode="url" autocomplete="off" spellcheck="false"></div>';
-      }
       html += '<div class="other"><label for="' + q.id + '-note">' + (q.free ? '自由記入' : 'その他・補足') + '</label><textarea id="' + q.id + '-note"' + (q.free ? ' rows="5"' : '') + '></textarea></div></div>';
     });
     host.innerHTML = html;
@@ -472,31 +413,9 @@
       var t = document.getElementById(el.getAttribute('data-doc'));
       if (t) el.appendChild(t.content.cloneNode(true));
     });
-    Array.prototype.forEach.call(document.querySelectorAll('.shot img'), function (img) {
-      img.addEventListener('error', function () {
-        var fig = img.closest('.shot');
-        fig.classList.add('missing');
-        var b = fig.querySelector('button');
-        b.removeAttribute('data-zoom');
-        b.textContent = '画像を読み込めませんでした';
-      });
-    });
   }
 
-  /* ---------- image viewer: light dismiss (backdrop click + Escape) and a close button ---------- */
-  var viewer = document.getElementById('viewer');
-  var viewerImg = document.getElementById('viewerImg');
-  document.addEventListener('click', function (e) {
-    var b = e.target.closest && e.target.closest('[data-zoom]');
-    if (!b) return;
-    viewerImg.src = b.getAttribute('data-zoom');
-    viewerImg.alt = b.querySelector('img') ? b.querySelector('img').alt : '';
-    if (typeof viewer.showModal === 'function') viewer.showModal();
-  });
-  viewer.addEventListener('click', function (e) { if (e.target === viewer) viewer.close(); });
-  document.getElementById('viewerClose').addEventListener('click', function () { viewer.close(); });
-
-  /* ---------- answers: autosave to db answers/round2, restore, copy ---------- */
+  /* ---------- answers: autosave to db answers/round3, restore, copy ---------- */
   var statusEl = document.getElementById('status');
   var state = {};
   var docRef = null;
@@ -515,7 +434,12 @@
       }
       if (!choice && note.trim()) choice = 'other';
       var entry = { choice: choice, note: note };
-      if (q.url) entry.url = document.getElementById(q.id + '-url').value.trim();
+      if (q.grades) {
+        entry.grades = {};
+        Array.prototype.forEach.call(document.querySelectorAll('#q-' + q.id + ' select[data-grade]'), function (sel) {
+          if (sel.value) entry.grades[sel.getAttribute('data-grade')] = sel.value;
+        });
+      }
       state[q.id] = entry;
     });
   }
@@ -529,14 +453,19 @@
         if (input) input.checked = true;
       }
       if (typeof s.note === 'string') document.getElementById(q.id + '-note').value = s.note;
-      if (q.url && typeof s.url === 'string') document.getElementById(q.id + '-url').value = s.url;
+      if (q.grades && s.grades) {
+        Object.keys(s.grades).forEach(function (rid) {
+          var sel = document.getElementById(q.id + '-g-' + rid);
+          if (sel) sel.value = s.grades[rid];
+        });
+      }
     });
     readForm();
   }
 
   function answerText() {
     readForm();
-    var lines = ['【確認シートの回答（JantamaReviewer・2回目）】'];
+    var lines = ['【確認シートの回答（JantamaReviewer・3回目）】'];
     Q.forEach(function (q) {
       var s = state[q.id];
       var c;
@@ -545,7 +474,9 @@
       else if (!s.choice) c = '未回答';
       else { var o = q.opts.filter(function (x) { return x.v === s.choice; })[0]; c = o ? o.t : s.choice; }
       lines.push(q.no + ' ' + q.title + '：' + c);
-      if (s.url) lines.push('　URL：' + s.url);
+      if (s.grades && Object.keys(s.grades).length) {
+        lines.push('　MAKA の評価：' + KYOKU.filter(function (r) { return s.grades[r.id]; }).map(function (r) { return r.k + ' ' + s.grades[r.id]; }).join('、'));
+      }
       if (s.note.trim()) lines.push('　補足：' + s.note.trim().replace(/\n/g, ' / '));
     });
     return lines.join('\n');
@@ -585,18 +516,6 @@
   var questionsEl = document.getElementById('questions');
   questionsEl.addEventListener('input', schedule);
   questionsEl.addEventListener('change', schedule);
-
-  var cmdBtn = document.getElementById('repoCmdCopy');
-  if (cmdBtn) cmdBtn.addEventListener('click', function () {
-    var txt = document.getElementById('repoCmd').textContent;
-    var msg = document.getElementById('repoCmdMsg');
-    function sel() {
-      var r = document.createRange(); r.selectNodeContents(document.getElementById('repoCmd'));
-      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
-      msg.textContent = 'コピーできなかったので、コマンドを選択しました';
-    }
-    try { navigator.clipboard.writeText(txt).then(function () { msg.textContent = 'コピーしました'; }, sel); } catch (e) { sel(); }
-  });
 
   var api = window.claude && typeof window.claude.use === 'function' ? window.claude.use('db') : Promise.resolve(null);
   Promise.resolve(api).then(function (db) {
