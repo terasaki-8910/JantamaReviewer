@@ -5,7 +5,15 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
-import type { AppState, InputStatus, Orientation, Rating, SessionRecord, Settings } from './types';
+import type {
+  AppState,
+  InputStatus,
+  Orientation,
+  PageKeyEvent,
+  Rating,
+  SessionRecord,
+  Settings,
+} from './types';
 
 /** 記録の状態が変わったときのイベント名（Rust の `EVENT_STATE_CHANGED`）。 */
 export const EVENT_STATE_CHANGED = 'state-changed';
@@ -50,6 +58,11 @@ export const api = {
    * 記録せず、受け取ったことだけを知らせる（W-11）。
    */
   setProbeWanted: (wanted: boolean) => invoke<void>('set_probe_wanted', { wanted }),
+  /**
+   * 窓の中で拾ったキー入力を、本体に知らせる。検討画面が前面にある間は、本体のキーボードのフックを外しているので、
+   * 登録の待機中は登録の候補に、テストの間は割り当てたキーの押下になる（W-10、W-11）。
+   */
+  reportPageKey: (key: PageKeyEvent) => invoke<void>('report_page_key', { key }),
   /** 「管理者の補助プログラムを設定する」。Windows の確認が出る（最初の 1 回だけ）。進み具合は状態で知らせる。 */
   setupHelper: () => invoke<void>('setup_helper'),
   /** 補助プログラムの設定を解除する。Windows の確認が出る。 */

@@ -3,13 +3,13 @@
 //!
 //! 専用のスレッドでメッセージループを回し、フックの手続きでは判定（`logic::InputCore`）だけを行う。
 //! 低レベルフックは手続きが遅いと Windows に外されるので、保存などの重い処理は、本体への知らせ（`sink`）の先で行う。
-//! フックは、いまの設定が要る種類だけを入れる（`Config::needs_mouse_hook` / `needs_keyboard_hook`）。
+//! フックは、いまの設定が要る種類だけを入れる（`Config::needs_mouse_hook` / `wants_keyboard_hook`）。
 //! 設定が何も要らなければ、フックは 1 つも入れない（補助プログラムがつながっている間の本体のフック）。
 //!
 //! 割り当てたボタンの押下・離しは横取りして、ほかのアプリに届けない（Chrome 版の雀魂で
 //! サイドボタンが「戻る」として働くのを防ぐ）。ほかの入力は何も変えずに次へ渡す。
 
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::thread;
@@ -48,6 +48,9 @@ static ACK: Mutex<Option<Sender<HookStatus>>> = Mutex::new(None);
 
 /// 設定を変える呼び出しを、1 つずつにする。
 static APPLY_LOCK: Mutex<()> = Mutex::new(());
+
+/// キーボードのフックを入れてよいか（`Config::wants_keyboard_hook`）。本体は、自分の窓が前面にある間は `false` にする。
+static KEYBOARD_ALLOWED: AtomicBool = AtomicBool::new(true);
 
 /// フックの手続きが受け取った入力の数（原因調べのため。ボタンが効かないとき、フックまで入力が届いているかが分かる）。
 static KEY_EVENTS: AtomicU64 = AtomicU64::new(0);
@@ -140,10 +143,20 @@ impl HookHandle {
     /// 設定を変えて、フックのスレッドが入れ直し終えるのを待つ（最長 3 秒）。
     /// 返事が来なければ、フックを入れていない状態を返す。
     pub fn apply(&self, config: Config) -> HookStatus {
+        self.reconfigure(|| CORE.set_config(config))
+    }
+
+    /// キーボードのフックを入れてよいかを変えて、入れ直し終えるのを待つ（最長 3 秒）。
+    /// `false` の間は、設定がキーボードのフックを要るときも、入れない（`Config::wants_keyboard_hook`）。
+    pub fn set_keyboard_allowed(&self, allowed: bool) -> HookStatus {
+        self.reconfigure(|| KEYBOARD_ALLOWED.store(allowed, Ordering::SeqCst))
+    }
+
+    fn reconfigure(&self, change: impl FnOnce()) -> HookStatus {
         let _turn = APPLY_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         let (tx, rx) = mpsc::channel();
         *ACK.lock().unwrap_or_else(PoisonError::into_inner) = Some(tx);
-        CORE.set_config(config);
+        change();
         // SAFETY: スレッド ID はフックのスレッドのもの。失敗しても設定自体は反映済み（返事が来ずに時間切れになる）。
         unsafe {
             let _ = PostThreadMessageW(self.thread_id, WM_RECONFIGURE, WPARAM(0), LPARAM(0));
@@ -268,7 +281,11 @@ unsafe fn sync_hooks(hooks: &mut Hooks) -> HookStatus {
         _ => {}
     }
 
-    match (config.needs_keyboard_hook(), hooks.keyboard.is_some()) {
+    let keyboard_allowed = KEYBOARD_ALLOWED.load(Ordering::SeqCst);
+    match (
+        config.wants_keyboard_hook(keyboard_allowed),
+        hooks.keyboard.is_some(),
+    ) {
         (true, false) => {
             match unsafe {
                 SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), Some(hooks.module), 0)

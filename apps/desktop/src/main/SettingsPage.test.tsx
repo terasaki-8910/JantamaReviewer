@@ -10,7 +10,7 @@ import {
   installTauriMock,
   type TauriMock,
 } from '../../tests/tauri-mock';
-import type { HelperStatus, InputStatus, Settings } from '../api/types';
+import type { HelperStatus, InputStatus, PageKeyEvent, Settings } from '../api/types';
 import { formatClock } from './format';
 import { SettingsPage } from './SettingsPage';
 
@@ -49,6 +49,23 @@ function emitStatus(mock: TauriMock, next: InputStatus) {
   act(() => {
     mock.emit('input-status-changed', next);
   });
+}
+
+/** 窓の中のキーとして本体に知らせた入力（`report_page_key` の引数）。 */
+function reportedKeys(mock: TauriMock): PageKeyEvent[] {
+  return mock
+    .calls()
+    .filter((c) => c.cmd === 'report_page_key')
+    .map((c) => (c.args as { key: PageKeyEvent }).key);
+}
+
+/** 窓にキーを押した知らせを送る。`false` なら、窓のものを動かさないよう止められた。 */
+function pressInWindow(init: KeyboardEventInit): boolean {
+  let notPrevented = true;
+  act(() => {
+    notPrevented = fireEvent.keyDown(window, init);
+  });
+  return notPrevented;
 }
 
 describe('設定ページ', () => {
@@ -239,6 +256,61 @@ describe('設定ページ: 迷いマークのボタンの登録（W-10）', () =
     expect(mock.count('cancel_registration')).toBe(1);
   });
 
+  it('W-10 待機中に窓の中で押したキーを、修飾キーつきで本体に知らせ、窓のものは動かさない', async () => {
+    const mock = await renderPage();
+    emitStatus(mock, status({ registering: true }));
+    await screen.findByRole('button', { name: 'キャンセル' });
+    const passedOn = pressInWindow({ code: 'KeyM', key: 'm', ctrlKey: true, altKey: true });
+    expect(reportedKeys(mock)).toEqual([
+      { code: 'KeyM', ctrl: true, alt: true, shift: false, meta: false },
+    ]);
+    expect(passedOn).toBe(false);
+    pressInWindow({ code: 'F13', key: 'F13' });
+    pressInWindow({ code: 'F8', key: 'F8', shiftKey: true, metaKey: true });
+    expect(reportedKeys(mock).slice(1)).toEqual([
+      { code: 'F13', ctrl: false, alt: false, shift: false, meta: false },
+      { code: 'F8', ctrl: false, alt: false, shift: true, meta: true },
+    ]);
+  });
+
+  it('W-10 待機中でも、Tab・Enter・Space・Esc・修飾キー単独・繰り返し・日本語入力の途中は、キーとして知らせない', async () => {
+    const mock = await renderPage();
+    emitStatus(mock, status({ registering: true }));
+    await screen.findByRole('button', { name: 'キャンセル' });
+    // 画面の操作に使うキーは、窓のものも動かす（Tab で移動、Enter・Space でボタンを押せる）。
+    expect(pressInWindow({ code: 'Tab', key: 'Tab' })).toBe(true);
+    expect(pressInWindow({ code: 'Enter', key: 'Enter' })).toBe(true);
+    expect(pressInWindow({ code: 'Space', key: ' ' })).toBe(true);
+    for (const code of ['ControlLeft', 'ShiftRight', 'AltLeft', 'MetaRight', 'AltGraph']) {
+      expect(pressInWindow({ code, key: code })).toBe(true);
+    }
+    expect(pressInWindow({ code: 'F13', key: 'F13', repeat: true })).toBe(true);
+    expect(pressInWindow({ code: 'KeyM', key: 'm', isComposing: true, ctrlKey: true })).toBe(true);
+    pressInWindow({ code: 'Escape', key: 'Escape' });
+    expect(reportedKeys(mock)).toEqual([]);
+    // Esc は取りやめになる。
+    expect(mock.count('cancel_registration')).toBe(1);
+  });
+
+  it('W-10 待機中でなく、キーも割り当てていないとき（マウスのボタン）は、窓の中のキーを本体に知らせない', async () => {
+    const mock = await renderPage();
+    pressInWindow({ code: 'F13', key: 'F13' });
+    pressInWindow({ code: 'KeyM', key: 'm', ctrlKey: true, altKey: true });
+    expect(reportedKeys(mock)).toEqual([]);
+  });
+
+  it('W-10 登録の待機が終われば、窓の中のキーを知らせなくなる', async () => {
+    const mock = await renderPage();
+    emitStatus(mock, status({ registering: true }));
+    await screen.findByRole('button', { name: 'キャンセル' });
+    pressInWindow({ code: 'F13', key: 'F13' });
+    expect(reportedKeys(mock)).toHaveLength(1);
+    emitStatus(mock, status({ registering: false }));
+    await screen.findByRole('button', { name: 'ボタンを登録' });
+    pressInWindow({ code: 'F13', key: 'F13' });
+    expect(reportedKeys(mock)).toHaveLength(1);
+  });
+
   it('W-10 登録できたら、新しい割り当てが出る（キーは修飾キーつきで）', async () => {
     const mock = await renderPage();
     emitStatus(mock, status({ registering: true }));
@@ -323,6 +395,47 @@ describe('設定ページ: テスト（W-11）', () => {
     emitStatus(mock, status({ registering: true, probe_ms: null }));
     await screen.findByRole('button', { name: 'キャンセル' });
     expect(screen.getByRole('status', { name: 'テスト' })).toHaveAttribute('data-got', 'false');
+  });
+
+  it('W-11 キーを割り当てているとき、窓の中で押したキーを本体に知らせる（受け取りの表示は、本体の状態のとおり）', async () => {
+    const mock = await renderPage({
+      settings: { ...baseSettings, trigger: { kind: 'key', code: 'F13' } },
+    });
+    // 待機中ではないので、押したキーは窓のものも動かす（文字の入力などを邪魔しない）。
+    const passedOn = pressInWindow({ code: 'F13', key: 'F13' });
+    expect(passedOn).toBe(true);
+    expect(reportedKeys(mock)).toEqual([
+      { code: 'F13', ctrl: false, alt: false, shift: false, meta: false },
+    ]);
+    // 知らせるだけで、記録のコマンドは呼ばない（記録するかどうかは、本体がテストの状態で決める）。
+    expect(mock.count('add_mark')).toBe(0);
+    emitStatus(mock, status({ probe_ms: new Date(2026, 9, 9, 19, 42, 5).getTime() }));
+    expect(await screen.findByText(/受け取りました/)).toHaveTextContent('受け取りました 19:42:05');
+  });
+
+  it('W-11 修飾キーつきの割り当て（Ctrl+Alt+M）も、押した修飾キーごと知らせる', async () => {
+    const mock = await renderPage({
+      settings: {
+        ...baseSettings,
+        trigger: { kind: 'key', code: 'KeyM', ctrl: true, alt: true },
+      },
+    });
+    pressInWindow({ code: 'KeyM', key: 'm', ctrlKey: true, altKey: true });
+    expect(reportedKeys(mock)).toEqual([
+      { code: 'KeyM', ctrl: true, alt: true, shift: false, meta: false },
+    ]);
+  });
+
+  it('W-11 割り当てが変わって、キーでなくなれば、窓の中のキーを知らせなくなる', async () => {
+    const mock = await renderPage({
+      settings: { ...baseSettings, trigger: { kind: 'key', code: 'F13' } },
+    });
+    act(() => {
+      mock.emit('settings-changed', { ...baseSettings, trigger: { kind: 'mouse_x2' } } satisfies Settings);
+    });
+    await screen.findByText('マウスの進むボタン（XButton2）');
+    pressInWindow({ code: 'F13', key: 'F13' });
+    expect(reportedKeys(mock)).toEqual([]);
   });
 });
 

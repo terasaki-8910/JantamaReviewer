@@ -18,6 +18,12 @@ const ORIENTATION_CHOICES: ReadonlyArray<{ value: Orientation; label: string }> 
 
 const PROBE_IDLE = 'ボタンを押すと、ここに表示されます。迷いマークは記録しません';
 
+/** 修飾キーそのものの `KeyboardEvent.code`（単独では、割り当てにも登録にも使わない）。 */
+const MODIFIER_CODE = /^(Control|Shift|Alt|Meta|OS)(Left|Right)$|^AltGraph$/;
+
+/** 窓の中のキーとして本体に知らせない `KeyboardEvent.key`（画面の操作に使うキー）。 */
+const PASS_THROUGH_KEYS: ReadonlySet<string> = new Set(['Tab', 'Enter', ' ', 'Escape']);
+
 /** 補助プログラムの状態の行に出す文（承認済みの見本に無い部分は、同じ静かな書き方で足している）。 */
 function helperStateText(helper: HelperStatus): string {
   switch (helper.busy) {
@@ -98,6 +104,33 @@ export function SettingsPage() {
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [registering]);
+
+  // この窓が前面にある間は、本体のキーボードのフックには入力が届かない（Windows の側の事情。フックは外してある）。
+  // 窓の中のキーは、ここで拾って本体に知らせる。登録の待機中は登録の候補に、キーを割り当てているときは
+  // テストの押下になる（W-10、W-11）。マウスのボタンは、前面が自分の窓でもフックに届くので、ここでは扱わない。
+  const keyTrigger = settings?.trigger.kind === 'key';
+  useEffect(() => {
+    if (!registering && !keyTrigger) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      // 押しっぱなしの繰り返し・日本語入力の途中・修飾キー単独（組み合わせの途中）は、知らせない。
+      if (event.repeat || event.isComposing || MODIFIER_CODE.test(event.code)) return;
+      // Tab（移動）・Enter・Space（ボタンの操作）・Esc（上で取りやめる）は、登録にも割り当てにも使わない。
+      if (PASS_THROUGH_KEYS.has(event.key)) return;
+      // 待機中は、押したキーを窓に渡さない（フォーカスのあるものを動かしてしまわないように）。
+      if (registering) event.preventDefault();
+      void api
+        .reportPageKey({
+          code: event.code,
+          ctrl: event.ctrlKey,
+          alt: event.altKey,
+          shift: event.shiftKey,
+          meta: event.metaKey,
+        })
+        .catch(() => undefined);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [registering, keyTrigger]);
 
   const update = useCallback(
     async (patch: Partial<Settings>) => {

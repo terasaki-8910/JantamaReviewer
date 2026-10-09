@@ -108,6 +108,18 @@ export interface HelperStatus {
   error: string | null;
 }
 
+/**
+ * 設定ページが拾ったキー入力（`KeyboardEvent` の `code` と、そのとき押していた修飾キー）。
+ * 検討画面が前面にある間、本体のキーボードのフックには入力が届かないので、画面から本体へ知らせる（W-10、W-11）。
+ */
+export interface PageKeyEvent {
+  code: string;
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+  meta: boolean;
+}
+
 /** ボタンの登録とテスト、補助プログラムの状態（設定ページに出す。W-9、W-10、W-11）。 */
 export interface InputStatus {
   /** ボタンの登録の待機中か。 */

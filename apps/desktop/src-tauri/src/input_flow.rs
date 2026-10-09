@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use jantama_input::keys::{vk_from_code, Modifiers};
 use jantama_input::logic::{ActiveTrigger, Config, Mode, Report};
 use serde::Serialize;
 
@@ -80,6 +81,9 @@ pub struct Plan {
     pub in_process: Option<Config>,
     /// 補助プログラム。`None` なら、送る相手が居ない。
     pub helper: Option<Config>,
+    /// 本体のキーボードのフックを入れてよいか。検討画面が前面にある間は `false`
+    /// （その間、本体のキーボードのフックには入力が届かない。キーは、窓の中の画面が拾う）。
+    pub in_process_keyboard: bool,
 }
 
 /// 状態を進める入力。
@@ -103,6 +107,13 @@ pub enum Input {
     Captured(ActiveTrigger),
     /// 登録の待機中に Esc が押された。
     CancelKey,
+    /// 検討画面の中で、画面が拾ったキー入力（`page_key_input`）。本体のキーボードのフックは、検討画面が前面にある間は
+    /// 入力が届かず外すので、その間のキーは画面から届く。登録の待機中は登録の候補になり、テストの間は、
+    /// 割り当てたキーなら押下になる（W-10、W-11）。
+    PageKey {
+        trigger: ActiveTrigger,
+        t_ms: i64,
+    },
     // ---- 画面の操作 ----
     StartRegistration,
     CancelRegistration,
@@ -130,6 +141,17 @@ pub enum Input {
     InProcessHook(bool),
 }
 
+/// 検討画面が知らせてきたキー入力（DOM の `KeyboardEvent.code` と、そのとき押していた修飾キー）を、入力にする。
+/// 割り当てられないキー（修飾キー単独・Enter・Tab・矢印など）は `None`。Esc も `None` で、
+/// 登録の取りやめは、画面が直接 `cancel_registration` で行う。
+pub fn page_key_input(code: &str, mods: Modifiers, t_ms: i64) -> Option<Input> {
+    let vk = vk_from_code(code)?;
+    Some(Input::PageKey {
+        trigger: ActiveTrigger::key(vk, mods),
+        t_ms,
+    })
+}
+
 impl From<Report> for Input {
     fn from(report: Report) -> Input {
         match report {
@@ -145,6 +167,8 @@ impl From<Report> for Input {
 pub enum Effect {
     /// 本体のフックの設定を変える。`None` は、フックを外す。
     ConfigureInProcess(Option<Config>),
+    /// 本体のキーボードのフックを入れてよいかを変える（`false` の間は、設定が要っても入れない）。
+    InProcessKeyboard(bool),
     /// 補助プログラムに設定を送る。
     ConfigureHelper(Config),
     /// 迷いマークを記録する（W-1）。
@@ -235,6 +259,7 @@ impl InputState {
             applied: Plan {
                 in_process: None,
                 helper: None,
+                in_process_keyboard: true,
             },
             emitted: None,
         }
@@ -260,6 +285,11 @@ impl InputState {
     }
 
     /// 2 つの口それぞれに渡す設定。
+    ///
+    /// 検討画面（自分の窓）が前面にある間は、本体のキーボードのフックを入れない。そのとき、フックには入力が
+    /// 届かず、先に入っているほかのアプリのキーボードのフックにも届かなくなる（実機で確かめた Windows の挙動。
+    /// 前面が自分の窓でなければ届く）。窓の中のキーは、画面が拾って知らせる（`Input::PageKey`）。
+    /// マウスのフックは、前面が自分の窓でも届くので、そのまま。補助プログラムは別のプロセスなので、この制限は無い。
     pub fn plan(&self) -> Plan {
         let config = Config {
             trigger: self.trigger,
@@ -270,6 +300,7 @@ impl InputState {
                 && choose_hook(self.link) == HookChoice::InProcess)
                 .then_some(config),
             helper: (self.link != HelperLink::Absent).then_some(config),
+            in_process_keyboard: !self.window_focused,
         }
     }
 
@@ -323,30 +354,18 @@ impl InputState {
             Input::HelperLost => {
                 self.link = HelperLink::Absent;
             }
-            Input::Trigger { t_ms } => {
-                let repeated = self
-                    .last_trigger_ms
-                    .is_some_and(|prev| (0..TRIGGER_DEBOUNCE_MS).contains(&(t_ms - prev)));
-                if !repeated {
-                    self.last_trigger_ms = Some(t_ms);
-                    match self.mode() {
-                        Mode::Normal => effects.push(Effect::Record { t_ms }),
-                        // テストの間は、記録しない。受け取ったことだけを画面に知らせる（W-11）。
-                        Mode::Test => self.probe_ms = Some(t_ms),
-                        Mode::Register => {}
+            Input::Trigger { t_ms } => self.press(t_ms, &mut effects),
+            Input::Captured(candidate) => self.capture(candidate, &mut effects),
+            Input::PageKey { trigger, t_ms } => match self.registration {
+                Registration::Waiting { .. } => self.capture(trigger, &mut effects),
+                // テストの間だけ、割り当てたキー（修飾キーも同じ）の押下として扱う。通常のときは、窓の中のキーでは記録しない
+                // （迷いマークは、雀魂を打っている間のもの。検討画面を見ている間は、押しても記録しない）。
+                Registration::Idle => {
+                    if self.mode() == Mode::Test && self.trigger == Some(trigger) {
+                        self.press(t_ms, &mut effects);
                     }
                 }
-            }
-            Input::Captured(candidate) => {
-                if matches!(self.registration, Registration::Waiting { .. })
-                    && candidate.registrable()
-                {
-                    self.registration = Registration::Idle;
-                    self.probe_ms = None;
-                    self.message = None;
-                    effects.push(Effect::SaveTrigger(candidate));
-                }
-            }
+            },
             Input::CancelKey | Input::CancelRegistration => {
                 self.registration = Registration::Idle;
             }
@@ -410,11 +429,43 @@ impl InputState {
         effects
     }
 
+    /// 割り当てたボタンが押された（フックからも、補助プログラムからも、窓の中の画面からも）。
+    /// 50 ミリ秒以内の続けての押下は、1 回に数える（`TRIGGER_DEBOUNCE_MS`）。
+    fn press(&mut self, t_ms: i64, effects: &mut Vec<Effect>) {
+        let repeated = self
+            .last_trigger_ms
+            .is_some_and(|prev| (0..TRIGGER_DEBOUNCE_MS).contains(&(t_ms - prev)));
+        if repeated {
+            return;
+        }
+        self.last_trigger_ms = Some(t_ms);
+        match self.mode() {
+            Mode::Normal => effects.push(Effect::Record { t_ms }),
+            // テストの間は、記録しない。受け取ったことだけを画面に知らせる（W-11）。
+            Mode::Test => self.probe_ms = Some(t_ms),
+            Mode::Register => {}
+        }
+    }
+
+    /// 登録の待機中に、候補の入力が押された。登録できる入力なら、割り当てとして保存する（W-10）。
+    fn capture(&mut self, candidate: ActiveTrigger, effects: &mut Vec<Effect>) {
+        if matches!(self.registration, Registration::Waiting { .. }) && candidate.registrable() {
+            self.registration = Registration::Idle;
+            self.probe_ms = None;
+            self.message = None;
+            effects.push(Effect::SaveTrigger(candidate));
+        }
+    }
+
     /// 入力を処理したあとに、2 つの口の設定を合わせ、画面に知らせる状態が変わっていれば知らせる。
     fn settle(&mut self, effects: &mut Vec<Effect>) {
         let plan = self.plan();
         if plan.in_process != self.applied.in_process {
             effects.push(Effect::ConfigureInProcess(plan.in_process));
+        }
+        // 設定を合わせたあとに、キーボードのフックの許可を合わせる（許可を戻すときに、古い設定のまま入らないように）。
+        if plan.in_process_keyboard != self.applied.in_process_keyboard {
+            effects.push(Effect::InProcessKeyboard(plan.in_process_keyboard));
         }
         if plan.helper != self.applied.helper {
             if let Some(config) = plan.helper {
@@ -765,12 +816,18 @@ mod tests {
         let effects = state.reduce(Input::WindowFocus(true));
         assert_eq!(
             without_status(effects),
-            vec![Effect::ConfigureHelper(cfg(Some(X1), Mode::Test))]
+            vec![
+                Effect::InProcessKeyboard(false),
+                Effect::ConfigureHelper(cfg(Some(X1), Mode::Test))
+            ]
         );
         let effects = state.reduce(Input::WindowFocus(false));
         assert_eq!(
             without_status(effects),
-            vec![Effect::ConfigureHelper(cfg(Some(X1), Mode::Normal))]
+            vec![
+                Effect::InProcessKeyboard(true),
+                Effect::ConfigureHelper(cfg(Some(X1), Mode::Normal))
+            ]
         );
     }
 
@@ -1101,6 +1158,234 @@ mod tests {
                 &Effect::SaveTrigger(f13()),
             ]
         );
+    }
+
+    // ---- 窓の中のキー入力（検討画面が前面にあるとき。W-10、W-11） ----
+
+    fn key_started() -> InputState {
+        let mut state = InputState::new(Some(f13()));
+        state.reduce(Input::InProcessHook(true));
+        state
+    }
+
+    fn page_key(trigger: ActiveTrigger, t_ms: i64) -> Input {
+        Input::PageKey { trigger, t_ms }
+    }
+
+    #[test]
+    fn w10_the_keyboard_hook_is_allowed_only_while_the_window_is_not_in_front() {
+        let mut state = key_started();
+        // 起動時は、許可（初期値と同じなので、知らせない）。
+        assert!(state.plan().in_process_keyboard);
+        let effects = state.reduce(Input::WindowFocus(true));
+        assert!(effects.contains(&Effect::InProcessKeyboard(false)));
+        assert!(!state.plan().in_process_keyboard);
+        // 同じ状態の知らせは、やり直さない。
+        let again = state.reduce(Input::WindowFocus(true));
+        assert!(!again
+            .iter()
+            .any(|e| matches!(e, Effect::InProcessKeyboard(_))));
+        let effects = state.reduce(Input::WindowFocus(false));
+        assert!(effects.contains(&Effect::InProcessKeyboard(true)));
+        assert!(state.plan().in_process_keyboard);
+        // もう一度前面に来て、また離れても同じ。
+        state.reduce(Input::WindowFocus(true));
+        let effects = state.reduce(Input::WindowFocus(false));
+        assert!(effects.contains(&Effect::InProcessKeyboard(true)));
+    }
+
+    #[test]
+    fn w10_the_hook_settings_do_not_change_when_only_the_keyboard_allowance_changes() {
+        let mut state = started();
+        let effects = state.reduce(Input::WindowFocus(true));
+        // 割り当てがマウスなら、マウスのフックの設定は同じまま（前面が自分の窓でも、マウスのフックには入力が届く）。
+        assert_eq!(state.plan().in_process, Some(cfg(Some(X1), Mode::Normal)));
+        assert!(!effects
+            .iter()
+            .any(|e| matches!(e, Effect::ConfigureInProcess(_))));
+        assert!(effects.contains(&Effect::InProcessKeyboard(false)));
+    }
+
+    #[test]
+    fn w10_the_allowance_stays_down_when_the_helper_leaves_while_the_window_is_in_front() {
+        let mut state = key_started();
+        state.reduce(Input::HelperConnected);
+        state.reduce(Input::HelperReady);
+        state.reduce(Input::WindowFocus(true));
+        let lost = state.reduce(Input::HelperLost);
+        // 戻った本体のフックは、窓が前面にある間は、キーボードのフックを入れない（許可は下げたまま）。
+        assert!(lost.contains(&Effect::ConfigureInProcess(Some(cfg(
+            Some(f13()),
+            Mode::Normal
+        )))));
+        assert!(!state.plan().in_process_keyboard);
+        assert!(!lost
+            .iter()
+            .any(|e| matches!(e, Effect::InProcessKeyboard(true))));
+    }
+
+    #[test]
+    fn w10_a_key_from_the_page_registers_like_a_key_from_the_hook() {
+        let mut state = started();
+        state.reduce(Input::WindowFocus(true));
+        state.reduce(Input::StartRegistration);
+        assert_eq!(state.mode(), Mode::Register);
+        let effects = state.reduce(page_key(f13(), T0));
+        assert!(effects.contains(&Effect::SaveTrigger(f13())));
+        assert!(!state.status().registering);
+        assert_eq!(state.mode(), Mode::Normal);
+    }
+
+    #[test]
+    fn w10_a_chord_from_the_page_registers_with_its_modifiers() {
+        let mut state = started();
+        state.reduce(Input::WindowFocus(true));
+        state.reduce(Input::StartRegistration);
+        let effects = state.reduce(page_key(ctrl_alt_m(), T0));
+        assert!(effects.contains(&Effect::SaveTrigger(ctrl_alt_m())));
+    }
+
+    #[test]
+    fn w10_a_page_key_that_cannot_be_an_assignment_does_not_end_the_wait() {
+        let mut state = started();
+        state.reduce(Input::WindowFocus(true));
+        state.reduce(Input::StartRegistration);
+        // 文字のキーを、修飾キー無しで押しただけ・Shift だけ。
+        for bad in [
+            ActiveTrigger::key(0x4D, Modifiers::NONE),
+            ActiveTrigger::key(0x4D, Modifiers::new(false, false, true, false)),
+        ] {
+            let effects = state.reduce(page_key(bad, T0));
+            assert!(
+                !effects.iter().any(|e| matches!(e, Effect::SaveTrigger(_))),
+                "{bad:?}"
+            );
+            assert!(state.status().registering, "待機は続く");
+        }
+    }
+
+    #[test]
+    fn w10_a_key_caught_by_the_helper_and_by_the_page_is_saved_once() {
+        let mut state = started();
+        state.reduce(Input::HelperConnected);
+        state.reduce(Input::HelperReady);
+        state.reduce(Input::WindowFocus(true));
+        state.reduce(Input::StartRegistration);
+        // 補助プログラムが先に拾って、画面からも同じキーが届いても、保存は 1 回。
+        let first = state.reduce(Input::Captured(f13()));
+        assert!(first.contains(&Effect::SaveTrigger(f13())));
+        let second = state.reduce(page_key(f13(), T0));
+        assert!(!second.iter().any(|e| matches!(e, Effect::SaveTrigger(_))));
+    }
+
+    #[test]
+    fn w11_in_the_test_a_page_key_equal_to_the_assigned_key_shows_the_received_time() {
+        let mut state = key_started();
+        state.reduce(Input::ProbeWanted(true));
+        state.reduce(Input::WindowFocus(true));
+        assert_eq!(state.mode(), Mode::Test);
+        let effects = state.reduce(page_key(f13(), T0));
+        assert_eq!(state.status().probe_ms, Some(T0));
+        // テストは記録しない。
+        assert!(!effects.iter().any(|e| matches!(e, Effect::Record { .. })));
+    }
+
+    #[test]
+    fn w11_in_the_test_a_page_key_that_is_not_the_assigned_key_shows_nothing() {
+        let mut state = key_started();
+        state.reduce(Input::ProbeWanted(true));
+        state.reduce(Input::WindowFocus(true));
+        for other in [
+            ActiveTrigger::key(0x7D, Modifiers::NONE),
+            // 修飾キーが違う（割り当ては修飾キー無しの F13）。
+            ActiveTrigger::key(0x7C, Modifiers::new(true, false, false, false)),
+        ] {
+            state.reduce(page_key(other, T0));
+            assert_eq!(state.status().probe_ms, None, "{other:?}");
+        }
+    }
+
+    #[test]
+    fn w11_a_chord_assignment_is_matched_with_its_modifiers_in_the_test() {
+        let mut state = InputState::new(Some(ctrl_alt_m()));
+        state.reduce(Input::InProcessHook(true));
+        state.reduce(Input::ProbeWanted(true));
+        state.reduce(Input::WindowFocus(true));
+        state.reduce(page_key(ActiveTrigger::key(0x4D, Modifiers::NONE), T0));
+        assert_eq!(state.status().probe_ms, None);
+        state.reduce(page_key(ctrl_alt_m(), T0 + 1000));
+        assert_eq!(state.status().probe_ms, Some(T0 + 1000));
+    }
+
+    #[test]
+    fn w11_a_page_key_outside_the_test_is_not_recorded_as_a_mark() {
+        // 設定ページを見ていない（テストの欄が無い）とき。
+        let mut state = key_started();
+        state.reduce(Input::WindowFocus(true));
+        let effects = state.reduce(page_key(f13(), T0));
+        assert!(!effects.iter().any(|e| matches!(e, Effect::Record { .. })));
+        assert_eq!(state.status().probe_ms, None);
+        // 窓が前面でないとき（テストにならない）。
+        let mut state = key_started();
+        state.reduce(Input::ProbeWanted(true));
+        let effects = state.reduce(page_key(f13(), T0));
+        assert!(!effects.iter().any(|e| matches!(e, Effect::Record { .. })));
+        assert_eq!(state.status().probe_ms, None);
+    }
+
+    #[test]
+    fn w11_the_hook_and_the_page_reporting_the_same_press_count_once() {
+        let mut state = key_started();
+        state.reduce(Input::ProbeWanted(true));
+        state.reduce(Input::WindowFocus(true));
+        state.reduce(Input::Trigger { t_ms: T0 });
+        state.reduce(page_key(f13(), T0 + 20));
+        // 後の知らせ（50 ミリ秒以内）は数えない。受け取った時刻は、最初のまま。
+        assert_eq!(state.status().probe_ms, Some(T0));
+        state.reduce(page_key(f13(), T0 + 500));
+        assert_eq!(state.status().probe_ms, Some(T0 + 500));
+    }
+
+    #[test]
+    fn w10_page_key_input_turns_a_dom_code_and_modifiers_into_a_chord() {
+        assert_eq!(
+            page_key_input("F13", Modifiers::NONE, T0),
+            Some(Input::PageKey {
+                trigger: f13(),
+                t_ms: T0
+            })
+        );
+        assert_eq!(
+            page_key_input("KeyM", Modifiers::new(true, true, false, false), T0),
+            Some(Input::PageKey {
+                trigger: ctrl_alt_m(),
+                t_ms: T0
+            })
+        );
+    }
+
+    #[test]
+    fn w10_page_key_input_ignores_keys_that_cannot_be_assigned() {
+        for code in [
+            "ControlLeft",
+            "ShiftRight",
+            "AltLeft",
+            "MetaLeft",
+            "Tab",
+            "Enter",
+            "Escape",
+            "Space",
+            "Backspace",
+            "ArrowLeft",
+            "Unidentified",
+            "",
+        ] {
+            assert_eq!(
+                page_key_input(code, Modifiers::NONE, T0),
+                None,
+                "{code:?} は割り当てられない"
+            );
+        }
     }
 
     #[test]

@@ -135,6 +135,14 @@ impl Config {
         }
     }
 
+    /// キーボードのフックを入れるか。`keyboard_allowed` が `false` のときは、設定が要るものでも入れない。
+    /// 本体は、自分の窓（検討画面）が前面にある間は `false` にする。その間、本体のキーボードのフックには
+    /// 入力が届かず（Windows の側の事情）、先に入っているほかのアプリのフックにも届かなくなるため。
+    /// そのときのキー入力は、窓の中の画面が拾う（W-10、W-11）。
+    pub fn wants_keyboard_hook(self, keyboard_allowed: bool) -> bool {
+        keyboard_allowed && self.needs_keyboard_hook()
+    }
+
     /// 1 つの整数に詰める。フックの手続きがロックを取らずに読めるようにするため。
     pub fn pack(self) -> u64 {
         let mode = match self.mode {
@@ -813,6 +821,42 @@ mod tests {
         }
         // 割り当てが無ければ、フックは要らない。
         assert!(!Config::OFF.needs_mouse_hook() && !Config::OFF.needs_keyboard_hook());
+    }
+
+    #[test]
+    fn w10_the_keyboard_hook_is_left_out_while_it_is_not_allowed_whatever_the_configuration() {
+        let configs = [
+            Config::OFF,
+            Config {
+                trigger: Some(mouse(MouseButton::X1)),
+                mode: Mode::Normal,
+            },
+            Config {
+                trigger: Some(ActiveTrigger::key(F13, NONE)),
+                mode: Mode::Normal,
+            },
+            Config {
+                trigger: Some(ActiveTrigger::key(F13, NONE)),
+                mode: Mode::Test,
+            },
+            Config {
+                trigger: None,
+                mode: Mode::Register,
+            },
+        ];
+        for config in configs {
+            assert!(
+                !config.wants_keyboard_hook(false),
+                "許可されていない間は、{config:?} でも入れない"
+            );
+            assert_eq!(
+                config.wants_keyboard_hook(true),
+                config.needs_keyboard_hook(),
+                "許可されていれば、設定が要るとおり: {config:?}"
+            );
+            // マウスのフックは、キーボードの許可に関わらず、設定が要るとおり。
+            let _ = config.needs_mouse_hook();
+        }
     }
 
     // ---- 登録の待機中の判定（W-10） ----

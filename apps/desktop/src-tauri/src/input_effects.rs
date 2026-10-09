@@ -93,6 +93,26 @@ impl<R: Runtime> Effects for TauriEffects<R> {
                     }
                 }
             }
+            Effect::InProcessKeyboard(allowed) => {
+                if let Some(hook) = &self.hook {
+                    let status = hook.set_keyboard_allowed(allowed);
+                    match status.error {
+                        Some(problem) => {
+                            eprintln!("ボタンのフックを設定できませんでした: {problem}")
+                        }
+                        None => eprintln!(
+                            "[入力] 本体のキーボードのフックを{}: マウス={}、キー={}",
+                            if allowed {
+                                "戻しました"
+                            } else {
+                                "外しました（検討画面が前面にある間）"
+                            },
+                            status.mouse,
+                            status.keyboard
+                        ),
+                    }
+                }
+            }
             Effect::ConfigureHelper(config) => {
                 if !self.helper.send(&ToHelper::config(config)) {
                     eprintln!("補助プログラムに設定を送れませんでした");

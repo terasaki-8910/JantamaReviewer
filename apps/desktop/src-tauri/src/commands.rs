@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
+use jantama_input::keys::Modifiers;
 use tauri::menu::{CheckMenuItem, Menu};
 use tauri::window::Color;
 use tauri::{
@@ -21,7 +22,7 @@ use crate::app_core::{AppState, Core, SettingsChange};
 use crate::appearance::{parse_css_color, Rgb};
 use crate::clock::now_ms;
 use crate::helper_setup;
-use crate::input_flow::{HelperOp, Input, InputService, InputStatus};
+use crate::input_flow::{page_key_input, HelperOp, Input, InputService, InputStatus};
 use crate::ready::ShowGate;
 use crate::settings::{Orientation, Settings, WidgetPosition};
 use crate::store::{Rating, SessionRecord};
@@ -513,9 +514,50 @@ pub async fn cancel_registration(input: State<'_, InputHandle>) -> Result<(), St
 
 /// 設定ページが、テストの欄を見せているか。見せている間（かつ窓が操作を受けている間）、
 /// 割り当てたボタンを押しても記録せず、受け取ったことだけを知らせる（W-11）。
+/// 窓が操作を受けているかは、窓の知らせ（`Focused`）で追っているが、取りこぼしても合うよう、ここでも確かめ直す。
 #[tauri::command]
-pub async fn set_probe_wanted(input: State<'_, InputHandle>, wanted: bool) -> Result<(), String> {
+pub async fn set_probe_wanted(
+    app: AppHandle,
+    input: State<'_, InputHandle>,
+    wanted: bool,
+) -> Result<(), String> {
     input.service.send(Input::ProbeWanted(wanted));
+    if wanted {
+        if let Some(window) = app.get_webview_window(MAIN_LABEL) {
+            input
+                .service
+                .send(Input::WindowFocus(window.is_focused().unwrap_or(false)));
+        }
+    }
+    Ok(())
+}
+
+/// 検討画面が拾ったキー入力（DOM の `KeyboardEvent` の `code` と修飾キー）。
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct PageKeyEvent {
+    pub code: String,
+    #[serde(default)]
+    pub ctrl: bool,
+    #[serde(default)]
+    pub alt: bool,
+    #[serde(default)]
+    pub shift: bool,
+    #[serde(default)]
+    pub meta: bool,
+}
+
+/// 検討画面が前面にある間、本体のキーボードのフックには入力が届かない（Windows の側の事情。フックは外してある）。
+/// その間のキー入力を、設定ページがここへ知らせる。登録の待機中は登録の候補になり、テストの間は、
+/// 割り当てたキーなら押下になる（W-10、W-11）。それ以外のときは何もしない。
+#[tauri::command]
+pub async fn report_page_key(
+    input: State<'_, InputHandle>,
+    key: PageKeyEvent,
+) -> Result<(), String> {
+    let mods = Modifiers::new(key.ctrl, key.alt, key.shift, key.meta);
+    if let Some(event) = page_key_input(&key.code, mods, now_ms()) {
+        input.service.send(event);
+    }
     Ok(())
 }
 

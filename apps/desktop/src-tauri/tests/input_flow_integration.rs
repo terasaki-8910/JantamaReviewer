@@ -1,6 +1,7 @@
 //! 入力の流れ（`input_flow`）と本物のフックをつないで、押した入力が、記録・テスト・登録に届くことを確かめる（手動の試験）。
 //!
 //! アプリの中のつなぎ方（本体のフックの知らせ → 入力の流れ → フックの設定を変える）と同じものを、Tauri 抜きで動かす。
+//! 検討画面が前面にある間は、本体のキーボードのフックを外し、キーは画面が知らせる（`Input::PageKey`）ので、その流れも確かめる。
 //! 注入するのは、F23・F24 のキーだけ（ほとんどのアプリでは何も起こさない）。割り当てた間は、フックが止める。
 //! 前面の窓が昇格していると、入力が届かず、理由を示して失敗する（`pnpm test:hook` と同じ）。
 
@@ -34,9 +35,16 @@ struct HookEffects {
 
 impl Effects for HookEffects {
     fn run(&mut self, effect: Effect) {
-        if let Effect::ConfigureInProcess(config) = &effect {
-            let status = self.hook.apply(config.unwrap_or(Config::OFF));
-            assert!(status.error.is_none(), "{status:?}");
+        match &effect {
+            Effect::ConfigureInProcess(config) => {
+                let status = self.hook.apply(config.unwrap_or(Config::OFF));
+                assert!(status.error.is_none(), "{status:?}");
+            }
+            Effect::InProcessKeyboard(allowed) => {
+                let status = self.hook.set_keyboard_allowed(*allowed);
+                assert!(status.error.is_none(), "{status:?}");
+            }
+            _ => {}
         }
         self.seen.lock().unwrap().push(effect);
     }
@@ -59,6 +67,13 @@ fn press(vk: u32) {
     // SAFETY: 初期化済みの配列。
     let sent = unsafe { SendInput(&inputs, size_of::<INPUT>() as i32) };
     assert_eq!(sent as usize, inputs.len(), "入力を注入できない");
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 fn wait_for(what: &str, condition: impl Fn() -> bool) {
@@ -117,21 +132,39 @@ fn w9_w10_w11_a_press_reaches_recording_testing_and_registration_through_the_rea
     });
 
     // テスト: 設定ページを見せていて窓が操作を受けている間は、記録せず、受け取ったことだけを知らせる。
+    // その間は、本体のキーボードのフックを外す（前面が自分の窓だと、フックに入力が届かないため）。
     thread::sleep(Duration::from_millis(100));
     service.send(Input::ProbeWanted(true));
     service.send(Input::WindowFocus(true));
-    wait_for("テストへの切り替え", || {
-        count(&seen, |e| {
-            matches!(
-                e,
-                Effect::ConfigureInProcess(Some(Config {
-                    mode: Mode::Test,
-                    ..
-                }))
-            )
-        }) == 1
-    });
+    wait_for(
+        "テストへの切り替えとキーボードのフックの許可を下げること",
+        || {
+            count(&seen, |e| {
+                matches!(
+                    e,
+                    Effect::ConfigureInProcess(Some(Config {
+                        mode: Mode::Test,
+                        ..
+                    }))
+                )
+            }) == 1
+                && count(&seen, |e| matches!(e, Effect::InProcessKeyboard(false))) == 1
+        },
+    );
+    // 外したあとは、本物のキーを押しても拾わない（記録も、テストの受け取りも起きない）。
     press(VK_F24);
+    thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        service.status().probe_ms,
+        None,
+        "フックを外している間は拾わない"
+    );
+    assert_eq!(count(&seen, |e| matches!(e, Effect::Record { .. })), 1);
+    // 窓の中の画面が知らせたキー（割り当てと同じ）が、テストの受け取りになる。
+    service.send(Input::PageKey {
+        trigger: ActiveTrigger::key(VK_F24, Modifiers::NONE),
+        t_ms: now_ms(),
+    });
     wait_for("テストの受け取り", || {
         service.status().probe_ms.is_some()
     });
@@ -141,7 +174,19 @@ fn w9_w10_w11_a_press_reaches_recording_testing_and_registration_through_the_rea
         "テストの間は、記録が増えない"
     );
 
-    // 登録: 最初に押されたキー（F23）が、割り当てとして保存される合図になる。
+    // 窓が前面でなくなれば、フックが戻る。
+    service.send(Input::WindowFocus(false));
+    wait_for(
+        "キーボードのフックの許可を戻すこと",
+        || count(&seen, |e| matches!(e, Effect::InProcessKeyboard(true))) == 1,
+    );
+    assert_eq!(
+        service.status().probe_ms,
+        None,
+        "窓を離れたら、テストの結果は消える"
+    );
+
+    // 登録（窓が前面でないとき）: 最初に押されたキー（F23）が、割り当てとして保存される合図になる。
     service.send(Input::StartRegistration);
     wait_for("登録の待機", || service.status().registering);
     press(VK_F23);
@@ -150,6 +195,34 @@ fn w9_w10_w11_a_press_reaches_recording_testing_and_registration_through_the_rea
             &seen,
             |e| matches!(e, Effect::SaveTrigger(t) if *t == ActiveTrigger::key(VK_F23, Modifiers::NONE)),
         ) == 1
+    });
+    assert!(!service.status().registering);
+
+    // 登録（窓が前面のとき）: 本物のキーはフックに届かず、画面が知らせたキーが候補になる。
+    service.send(Input::WindowFocus(true));
+    wait_for(
+        "キーボードのフックの許可を下げること",
+        || count(&seen, |e| matches!(e, Effect::InProcessKeyboard(false))) == 2,
+    );
+    service.send(Input::StartRegistration);
+    wait_for("登録の待機（窓が前面）", || {
+        service.status().registering
+    });
+    press(VK_F23);
+    thread::sleep(Duration::from_millis(300));
+    assert!(
+        service.status().registering,
+        "フックを外している間は、本物のキーでは登録されない"
+    );
+    service.send(Input::PageKey {
+        trigger: ActiveTrigger::key(VK_F23, Modifiers::NONE),
+        t_ms: now_ms(),
+    });
+    wait_for("画面が知らせたキーでの登録", || {
+        count(
+            &seen,
+            |e| matches!(e, Effect::SaveTrigger(t) if *t == ActiveTrigger::key(VK_F23, Modifiers::NONE)),
+        ) == 2
     });
     assert!(!service.status().registering);
     assert!(

@@ -84,6 +84,7 @@ pub fn run() {
             commands::start_registration,
             commands::cancel_registration,
             commands::set_probe_wanted,
+            commands::report_page_key,
             commands::setup_helper,
             commands::remove_helper,
             commands::start_helper,
