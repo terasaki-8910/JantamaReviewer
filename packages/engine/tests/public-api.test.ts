@@ -55,6 +55,10 @@ describe('公開 API（src/index.ts）', () => {
     }
   });
 
+  it('E-16 画面中央の文字認識の読み取りの入口が使える', () => {
+    expect(typeof engine.parseCenterText).toBe('function');
+  });
+
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
   });
