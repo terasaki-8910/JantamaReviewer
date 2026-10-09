@@ -227,84 +227,92 @@
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">JantamaReviewer · 確認シート 6回目 · 2026-10-09</div>
+    <div class="eyebrow">JantamaReviewer · 確認シート 7回目 · 2026-10-09</div>
     <h1>雀魂の検討システム 確認シート</h1>
-    <p class="lead">ウィジェット（F0）ができて、main に取り込みました。見た目と動きを確かめて、受け入れるかどうかを決めてください。作っている途中で、雀魂が管理者権限で動くことが分かりました。その対処も選んでください。</p>
+    <p class="lead">6回目の要望を一つずつ具体化しました。調べて分かったこと（牌譜屋、スクショの文字の読み取り）と、本物のアプリの見た目で作った画面のサンプルを見て決めてください。急がず完成を目指すので、作る順番も聞きます。</p>
     <div class="meta">
-      <span>質問 2 と自由記入 1</span>
+      <span>質問 7 と自由記入 1</span>
       <span class="muted">選ぶと自動で保存されます</span>
       <span class="status" id="status" role="status">保存の準備中…</span>
     </div>
   </header>
 
-  <section aria-labelledby="h-done">
-    <div class="sec-head"><h2 id="h-done">できたもの</h2></div>
-    <ul class="decided">
-      <li>迷いマーク: 割り当てたボタン（既定はマウスの「戻る」）を押すと、その時刻と雀魂の窓のスクショを保存する。押したボタンはほかのアプリに渡さないので、Chrome 版で「戻る」にならない。音で知らせる（設定で切れる）。</li>
-      <li>局の評価: 〇△✕ を押すと「次：N局目」が進む。取り消しで最後の記録を1つ戻す。半荘が始まっていないときは、最初の記録で新しい半荘を始める。</li>
-      <li>ウィジェットは常に手前に出て、クリックしても前面のアプリからフォーカスを奪わない。右クリックで「新しい半荘」「縦長と横長を切り替える」「検討画面を開く」「終了」。タスクトレイからも同じ操作ができる。形と位置は次の起動でも保つ。</li>
-      <li>検討画面: 「記録」に半荘ごとの迷いマーク（スクショと時刻）と評価の一覧、「設定」にボタンの割り当て・形・音・データの保存先・雀魂の窓を探す語。</li>
-      <li>ブラウザの名残（3回目の15項目）は、テストと実際の操作の両方で消えていることを確かめた。</li>
-    </ul>
-    <div class="shots crop-none" id="shots-main"></div>
+  <section aria-labelledby="h-recv">
+    <div class="sec-head">
+      <h2 id="h-recv">要望をこう受け取りました</h2>
+      <p class="muted">左があなたの言葉（音声入力の「曲」は「局」と読みました）、右がそれを受けてこうする、または聞くことです。全文は決定記録に写しました。</p>
+    </div>
+    <div class="table-wrap">
+      <table class="grid">
+        <thead><tr><th>言われたこと</th><th>こうする・聞くこと</th></tr></thead>
+        <tbody>
+          <tr><td class="src-col">「サイドバーに記録以外のものは入る予定ですか？」</td><td>入ります。検討結果の取り込み、解き直し、ログ、週の集計です（これから作る）。そのうえで、半荘の一覧を日付ごとにサイドバーに並べる案を R7-1 で聞きます。</td></tr>
+          <tr><td class="src-col">「日付を分けるとか」「一致率をつけるとか」「Ratingでもいいかもしれない」</td><td>日付ごとに分け、各半荘に Rating と、そこから出した段階（S+〜E）を付けます。色の付け方は R7-2。</td></tr>
+          <tr><td class="src-col">「雀魂牌譜屋をうまく活用できませんか？」「自動でAI検討をさせる」</td><td>調べると、牌譜屋は作者のキーが無いとデータを渡してくれませんでした（下の「調べて分かったこと」）。mjai には人の確認（Cloudflare）があるので、AI 検討は完全には自動にできません。R7-5 で扱います。</td></tr>
+          <tr><td class="src-col">「雀魂アプリとChromeでの雀魂両方対応していますか？」</td><td>両方に対応しています。Chrome 版のページの題名も「雀魂-じゃんたま-」なので、同じように窓を見つけます。</td></tr>
+          <tr><td class="src-col">「マウスはできているかテストが送れるように」「戻ると進むを別のボタンにしているときもある」</td><td>押したボタンをそのまま覚える「ボタンを登録」と、記録しない「テスト」を付けます（R7-6）。</td></tr>
+          <tr><td class="src-col">「音が出ないような設定にする項目も追加する」</td><td>「設定」に「迷いを記録したら音を鳴らす」があります。すぐ切り替えられるよう、ウィジェットの右クリックのメニューにも足します。</td></tr>
+          <tr><td class="src-col">「ハンチャンが終わったっていうのをどうやって終了させればいいのかわからない」「評価を打つのを忘れちゃう」「ずれる」</td><td>対局後にスクショから局を読み取り、自動で合わせる案を R7-3 で聞きます。半荘の区切りも自動にします。</td></tr>
+          <tr><td class="src-col">「記録は取れたけど、ここからどうするの」「MJAIのレビューを行うところもない」</td><td>そこが次に作る部分です（取り込みと出題）。計算の部分（エンジン）はいま作っています。順番は R7-7。</td></tr>
+          <tr><td class="src-col">「ファイル名は示さなくて、迷いなんぼとか」「何番ちゃん目のなんぼぐらいに…迷ったみたいなのを自動で」「拡大して」</td><td>カードと拡大表示にし、取り込んだあとは何局の何巡目のどんな迷いかを自動で書きます（R7-4）。</td></tr>
+          <tr><td class="src-col">「UIに一貫性を持たせる」</td><td>すべて同じ部品とデザイントークンで作ります。下のサンプルも、いまのアプリの見た目で作りました。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
 
-    <h3>確かめたこと</h3>
+  <section aria-labelledby="h-found">
+    <div class="sec-head"><h2 id="h-found">調べて分かったこと</h2></div>
+    <h3>雀魂牌譜屋</h3>
+    <div class="context">
+      <p>プログラムからデータを取ろうとすると、「CAPTCHA required, please contact SAPikachu to obtain a key if you are crawling the data」（データを集めるなら作者に連絡してキーをもらってください）と返されました。作者の許可なく自動で取ることはしません。</p>
+      <p>チャットで指摘してもらった「ソース（github.com/SAPikachu/amae-koromo）を手元で動かせば同じことができないか」も調べました。公開されているのは画面の部分で、データは牌譜屋のサーバーから読んでいるだけなので、画面を手元で動かしてもデータは手に入りません。データを集めているのは別のリポジトリ（amae-koromo-scripts）で、雀魂のゲームサーバーに直接つなぎ、雀魂の内部の通信形式でアカウントにログインして（アクセストークン、またはメールアドレスとパスワード）、対局の一覧や牌譜を取り出しています。</p>
+      <p>手元で同じことをするには、雀魂のクライアントのふりをして、あなたのアカウントで雀魂のサーバーに自動でアクセスするプログラムを動かすことになります。前回の会話で「避けるべき側」とした使い方で、アカウント停止の対象になりえます。ソースのライセンス（MIT）で動かすこと自体は許されていても、危険は雀魂の規約の側にあります。</p>
+    </div>
+    <h3>スクショの文字の読み取り</h3>
+    <p class="context">あなたが記録した半荘の迷いマーク6枚を、Windows に入っている日本語の文字認識で読みました。画面中央の「東2局」「余47」（残りの牌の数）と自分の点数が、6枚中5枚で読めました。本場は点数との照合で区別でき、Mortal の検討結果の判断の位置から1〜2枚の差に収まりました。</p>
     <div class="table-wrap"><table class="grid">
-      <thead><tr><th>項目</th><th>結果</th></tr></thead>
+      <thead><tr><th>迷い</th><th class="num">時刻</th><th>読めた文字</th><th>特定した局</th><th>結びついた判断（Mortal の結果）</th></tr></thead>
       <tbody>
-        <tr><th scope="row">テスト（main に取り込んだあと）</th><td>TypeScript 192件（うち50件は実際の Chrome での画面の検査）と Rust 182件がすべて通過。実際の入力を注入する手動のテスト1件は対象外</td></tr>
-        <tr><th scope="row">lint（main に取り込んだあと）</th><td>eslint・stylelint・型検査・clippy・rustfmt がすべて通過</td></tr>
-        <tr><th scope="row">実行ファイルの起動</th><td>一時フォルダの設定で起動し、ウィジェットだけが表示され、検討画面は隠れていることを確かめた。このとき、先頭に BOM（Windows の一部の道具が付ける印）がある設定ファイルを「壊れている」と見なす不具合を見つけて直した</td></tr>
-        <tr><th scope="row">ブラウザのショートカット</th><td>実際のアプリで F5・Ctrl+R・Ctrl+P・Ctrl+F・Ctrl+J・Ctrl+S・F7・F12・Alt+←→・Ctrl+±・Ctrl+ホイールを押しても、再読み込み・拡大・新しい窓は起きない。アプリ自身のキーは使える</td></tr>
-        <tr><th scope="row">右クリック</th><td>普通の文字の上ではメニューが出ない。入力欄は「切り取り・コピー・貼り付け・すべて選択」だけ。ウィジェットはアプリのメニュー</td></tr>
-        <tr><th scope="row">存在しないページ・外部リンク</th><td>存在しないページに移ろうとしてもアプリの画面のまま（エラーページは出ない）。外部リンクはいつものブラウザで開く。新しい窓は開かない</td></tr>
-        <tr><th scope="row">起動時の白いちらつき</th><td>ダークで起動したときの明るさを約6ミリ秒ごとに測り、白いちらつきが無いことを確かめた（ウィジェットのみ）</td></tr>
-        <tr><th scope="row">フォーカス</th><td>Chrome が前面のときにウィジェットを押しても、Chrome が前面のまま</td></tr>
-        <tr><th scope="row">マウスのボタン</th><td>普通の権限のアプリの上では、合成した「戻る」の押下が迷いマークになることを確かめた。雀魂の上では、下の「管理者権限」の理由で効かない</td></tr>
+        <tr><th scope="row">1</th><td class="num">19:09:53</td><td>東1局・余59・25,000</td><td>東1局</td><td>4巡目の打牌（残り59、ぴったり）</td></tr>
+        <tr><th scope="row">2</th><td class="num">19:15:57</td><td>東2局・余23・19,000</td><td>東2局</td><td>候補2つ：11巡目の鳴かない判断（残り22）／打牌（残り25）</td></tr>
+        <tr><th scope="row">3</th><td class="num">19:17:37</td><td>東2局・余47・15,100</td><td>東2局1本場（点数で区別）</td><td>6巡目の打牌（残り46）</td></tr>
+        <tr><th scope="row">4</th><td class="num">19:18:24</td><td>東2局・余35・15,100</td><td>東2局1本場</td><td>8巡目の東をポンする判断（残り36）</td></tr>
+        <tr><th scope="row">5</th><td class="num">19:21:58</td><td>東3局・余46・4,400</td><td>東3局1本場（点数で区別）</td><td>候補2つ：6巡目の打牌（残り47）／7巡目の打牌（残り45）</td></tr>
+        <tr><th scope="row">6</th><td class="num">19:22:36</td><td>読めず</td><td>―</td><td>手で選ぶ</td></tr>
       </tbody>
     </table></div>
-  </section>
-
-  <section aria-labelledby="h-try">
-    <div class="sec-head"><h2 id="h-try">試し方</h2></div>
-    <ol class="steps">
-      <li>エクスプローラーで <code>C:\Users\e8910\Documents\project\JantamaReviewer\apps\desktop\src-tauri\target\release\jantama-reviewer.exe</code> を開く。雀魂の上でサイドボタンを試すときは、右クリックの「管理者として実行」で起動する（下の R6-2 が決まるまでの暫定）。</li>
-      <li>ウィジェットが出たら、好きな位置に置く。右クリックで縦長と横長を切り替えられる。</li>
-      <li>雀魂で1半荘打ち、迷ったらサイドボタン、局が終わったら 〇△✕ を押す。</li>
-      <li>ウィジェットを右クリックして「検討画面を開く」→「記録」で、スクショと評価が並んでいるかを見る。</li>
-    </ol>
-    <p class="src">データは <code>%USERPROFILE%\JantamaReviewerData</code> に保存されます（設定で変えられます）。</p>
-  </section>
-
-  <section aria-labelledby="h-admin">
-    <div class="sec-head"><h2 id="h-admin">分かったこと：雀魂は管理者権限で動く</h2></div>
-    <div class="context">
-      <p>雀魂の PC 版ランチャーは、実行ファイルの設定（マニフェスト）で「管理者として実行する」（requireAdministrator）を指定しています。ファイルを読んで確かめました。Windows には、管理者の窓が前面にあるあいだ、普通の権限のアプリがマウスやキーボードの入力を受け取れない仕組み（UIPI）があります。そのため、普通に起動した JantamaReviewer では、雀魂の上でサイドボタンを押しても何も起きません。</p>
-      <p>ウィジェットのボタンをクリックするのは問題なく動きます。スクショも撮れます。届かないのは、雀魂が前面にあるときのマウスのボタンとキーボードだけです。</p>
-    </div>
+    <p class="src">「余」の字は「个」と誤読されますが、数字は正しく読めています。読み取りは対局後のスクショに対してだけ行うので、規約の線引きの内側です。</p>
+    <h3>あなたの半荘の局の評価</h3>
+    <p class="context">記録された〇△✕は5つで、局の数と同じでした。押した順に当てはめると、放銃した東3局を ✕ にしていますが、AI 基準では S（Rating 94.6）でした。結果に引っぱられた自己評価の実例です。下のサンプル画面の「局の評価」の表に、そのまま載せています。</p>
   </section>
 
   <section aria-labelledby="h-q">
     <div class="sec-head">
       <h2 id="h-q">質問</h2>
-      <p class="muted">「おすすめ」は私の判断です。違う答えでも構いません。補足欄だけ書いた場合は「その他」として扱います。</p>
+      <p class="muted">「おすすめ」は私の判断です。違う答えでも構いません。補足欄だけ書いた場合は「その他」として扱います。画像は押すと大きく表示します。サンプルのスクショは、プレイヤー名をぼかしてあります。</p>
     </div>
     <div id="questions"></div>
   </section>
 
   <section aria-labelledby="h-decided">
     <div class="sec-head">
-      <h2 id="h-decided">聞かずに決めたこと（6回目）</h2>
+      <h2 id="h-decided">聞かずに決めたこと（7回目）</h2>
       <p class="muted">違うと思うものがあれば、番号を最後の自由記入に書いてください。</p>
     </div>
     <ol class="decided">
-      <li>設定の入力欄の右下に残っていた、サイズ変更のつまみ（ブラウザの名残）を消す。</li>
-      <li>ウィジェットを動かすときにつかむ場所は、普通の矢印のカーソルにした（押せる所だけ指の形、という3回目の項目に合わせた）。</li>
-      <li>窓の題名は「JantamaReviewer 検討画面」と「JantamaReviewer ウィジェット」。</li>
-      <li>開発者ツールは、開発用の起動（pnpm dev）のときだけ F12 で開ける。普段の実行ファイルでは開かない。</li>
-      <li>4回目のサンプル4半荘の結果も、名前が伏せられていて牌譜 ID やアカウントの番号が無いことを確かめたうえで、テスト用の固定データとしてリポジトリに入れる。</li>
-      <li>次は、検討結果の読み取りと再生、受け入れ枚数の計算（エンジン）を作り、そのあと取り込みの画面（アプリの中の mjai の窓）と出題の画面に進む（2回目の R2-7 の順）。R6-2 の答えはウィジェットに反映する。</li>
+      <li>雀魂の PC 版と Chrome 版の両方に対応する（窓の題名「雀魂-じゃんたま-」で見つける）。Chrome で雀魂のタブが前面にないときは画面全体を撮る。</li>
+      <li>音の切り替えを、ウィジェットの右クリックのメニューにも足す。「設定」の項目はそのまま残す。</li>
+      <li>管理者で動く補助プログラム（R6-2）は、マウスのボタンを拾って本体に知らせるだけにする。画面・ネット・ファイルは扱わない。最初の1回だけ Windows の確認が出て、以後はタスクスケジューラから確認なしで起動する。</li>
+      <li>スクショからの文字の読み取りは、取り込みのとき（対局後）だけ行う。ウィジェットとボタンを拾う部分には入れない。</li>
+      <li>すべての画面を同じ部品とデザイントークンで作る。</li>
+      <li>確認シートに載せるスクショは、プレイヤー名をぼかす。アプリの中ではぼかさない。</li>
     </ol>
+  </section>
+
+  <section aria-labelledby="h-next">
+    <div class="sec-head"><h2 id="h-next">このあと</h2></div>
+    <p class="lead">答えをもらったら、仕様書と受け入れ基準に入れて、R7-7 の順に作ります。計算の部分（エンジン）は今も作業中です。急がず、完成まで進めます。途中で判断が要ることが出たら、また同じようにシートで聞きます。</p>
   </section>
 
   <details class="doc">
@@ -318,7 +326,7 @@
 
   <section class="send" aria-labelledby="h-send">
     <div class="sec-head"><h2 id="h-send">送り方</h2></div>
-    <p>選んだ内容はこのシートに自動で保存され、私が直接読みます。答え終わったら、チャットで「回答した」とだけ送ってください。試すのはあとでも構いません。R6-1 は試してから答えてください。</p>
+    <p>選んだ内容はこのシートに自動で保存され、私が直接読みます。答え終わったら、チャットで「回答した」とだけ送ってください。</p>
     <p class="muted">上の表示が「保存できません」のときは、「回答をコピー」で文章にしてチャットに貼ってください。</p>
     <div class="actions">
       <button type="button" class="btn primary" id="copyBtn">回答をコピー</button>
@@ -341,23 +349,105 @@
 <script>
 (function () {
   'use strict';
-  var ROUND = 'round6';
+  var ROUND = 'round7';
 
-  /* ---------- screenshots of the real app (WebView2 content) ---------- */
-  var SHOTS = [
-    ['samples/round6/widget-v-dark.png', 'ウィジェット 縦長・ダーク'],
-    ['samples/round6/widget-v-light.png', 'ウィジェット 縦長・ライト'],
-    ['samples/round6/widget-h-dark.png', 'ウィジェット 横長・ダーク'],
-    ['samples/round6/widget-h-light.png', 'ウィジェット 横長・ライト'],
-    ['samples/round6/main-records-light.png', '検討画面「記録」・ライト'],
-    ['samples/round6/main-records-dark.png', '検討画面「記録」・ダーク'],
-    ['samples/round6/main-settings-light.png', '検討画面「設定」・ライト'],
-    ['samples/round6/main-settings-dark.png', '検討画面「設定」・ダーク'],
-    ['samples/round6/error-main-light.png', '不具合のときの画面（ブラウザのエラーページの代わり）']
+  function shotsHTML(list) {
+    return '<div class="sample"><div class="shots crop-none">' + list.map(function (s) {
+      return '<figure class="shot"><button type="button" data-zoom="samples/round7/' + s[0] + '" aria-label="' + s[1] + 'を拡大"><img src="samples/round7/' + s[0] + '" alt="' + s[1] + '" loading="lazy"></button><figcaption>' + s[1] + '</figcaption></figure>';
+    }).join('') + '</div></div>';
+  }
+
+  var Q = [
+    { id: 'r1', no: 'R7-1', title: 'サイドバーの形', blockSample: function () {
+        return shotsHTML([['side-a-light.png', '半荘の一覧を日付ごとに・ライト'], ['side-a-dark.png', '同じ・ダーク'], ['side-a-960-light.png', '幅960px（雀魂の横に並べたとき）']]);
+      },
+      context: '<p>Claude のアプリのように、半荘の一覧を日付ごとにサイドバーに並べた案です。上には、取り込み・解き直し・ログ・週の集計を固定で置きます。サンプルの日付は仮で、Rating と段階は5回目までにもらった半荘の実データです。</p>',
+      opts: [
+        { v: 'list', t: '半荘の一覧を日付ごとにサイドバーに並べる', rec: true, note: '半荘を選ぶと、その半荘の迷いマークと局の評価が右に出る。' },
+        { v: 'page', t: 'いまの形のまま（「記録」の画面の中に一覧）' }
+      ] },
+    { id: 'r2', no: 'R7-2', title: '段階（S+〜E）の色', side: true,
+      context: '<p>半荘の横に付ける段階の印の色です。段階は Rating から出したもので、5回目で決めたとおり MAKA の評価に合わせていきます。</p>',
+      opts: [
+        { v: 'one-hue', t: '卓の緑1色の濃さで表す', rec: true, note: 'S は濃く、A は中くらい、B は薄く、C 以下は線だけ。色の数を増やさず、ほかの画面と一貫する。',
+          sample: function () { return shotsHTML([['side-a-light.png', '1色の濃さ・ライト'], ['side-a-dark.png', '1色の濃さ・ダーク'], ['badges-a-light.png', '全14段階の見本・ライト'], ['badges-a-dark.png', '全14段階の見本・ダーク']]); } },
+        { v: 'gold', t: 'S は金、A は緑、B 以下は灰色', note: 'ひと目で分かりやすいが、アクセントの色が2つになる。',
+          sample: function () { return shotsHTML([['side-b-light.png', '金・緑・灰・ライト'], ['side-b-dark.png', '金・緑・灰・ダーク'], ['badges-b-light.png', '全14段階の見本・ライト'], ['badges-b-dark.png', '全14段階の見本・ダーク']]); } }
+      ] },
+    { id: 'r3', no: 'R7-3', title: '局の評価のずれと、半荘の区切り',
+      blockSample: function () { return shotsHTML([['side-a-full-light.png', '半荘の画面の全体（下に局の評価の表。結果が悪かった局を低く付けた行に印）']]); },
+      context: '<p>上の「スクショの文字の読み取り」を使う案です。〇△✕ を押したときにもスクショを撮っておけば、押し忘れや押す時機のずれがあっても、どの局の評価かを対局後に読み取れます。</p>',
+      opts: [
+        { v: 'auto', t: '評価のときもスクショを撮り、対局後に画像から局を読んで自動で合わせる', rec: true,
+          note: '押し忘れた局は空欄になり、検討画面であとから付けられる。半荘の区切りも、時間が空いたときや東1局に戻ったときに自動で付けるので、「新しい半荘」は押さなくてよい（押しても使える）。読み取りは対局後だけで、ウィジェットには入れない。' },
+        { v: 'manual', t: '押した順のまま当てはめ、取り込んだあとに手で直す' },
+        { v: 'drop', t: '局の評価はやめて、迷いマークだけにする' }
+      ] },
+    { id: 'r4', no: 'R7-4', title: '迷いマークの見せ方',
+      blockSample: function () { return shotsHTML([['side-a-light.png', 'カード（半荘の画面）'], ['lightbox-light.png', '押したときの拡大表示']]); },
+      context: '<p>Claude の画像のように、ファイル名を出さないカードにし、押すと大きく表示します。取り込む前は「迷い1」、取り込んだあとは「東2局1本場 6巡目 · 打牌の迷い」のように自動で書きます。候補が2つあるときと、読み取れなかったときは、カードの中で選べます。AI の答えはこの画面には出しません（出題のときまで隠す）。</p>',
+      opts: [
+        { v: 'cards', t: 'カードと拡大表示にする', rec: true },
+        { v: 'table', t: '表の形で一覧にする' }
+      ] },
+    { id: 'r5', no: 'R7-5', title: '牌譜屋の扱い',
+      blockSample: function () { return shotsHTML([['import-detected-light.png', '牌譜リンクを見つけたところ'], ['import-window-light.png', 'mjai の小さな窓（ここで Submit）'], ['import-done-light.png', '取り込み完了']]); },
+      context: '<p>上のとおり、牌譜屋はキーが無いとデータを渡してくれません。代わりに、雀魂の「牌譜を共有」でコピーしたリンクをアプリが見つけて、取り込みを始める流れを作れます。サンプルの数字は、あなたの半荘の実データです。</p>',
+      opts: [
+        { v: 'copy-link', t: '牌譜屋は使わず、コピーした牌譜リンクから取り込む', rec: true,
+          note: '雀魂で牌譜を共有（コピー）してアプリに戻ると「この半荘を取り込みますか」と出る。mjai の小さな窓で Submit を押すと、取り込みと局面への結びつけまで進む。' },
+        { v: 'ask-key', t: '作者（SAPikachu）にキーを頼み、もらえたら使う',
+          note: '連絡はあなたから。もらえれば、開始と終了の時刻で半荘を見つけられ、リンクのコピーも要らなくなる（約15分の遅れはある）。牌譜屋がすでに集めたデータを読むだけなので、あなたのアカウントは雀魂のサーバーに自動でアクセスしない。それまでは上の形で取り込む。' },
+        { v: 'self-host', t: '牌譜屋のデータを集める仕組みを手元で動かす',
+          note: 'おすすめしない。あなたのアカウントで雀魂のサーバーに自動でアクセスすることになり、アカウント停止の対象になりうる。どうしても使うなら、先に雀魂の公式のお問い合わせ（https://mahjongsoul.com/feedback）で書面で確認する。' }
+      ] },
+    { id: 'r6', no: 'R7-6', title: 'ボタンの登録とテスト', side: true,
+      context: '<p>「ボタンを登録」を押してから、使いたいボタンを押すと、それを覚えます。ゲーミングマウスで「戻る」「進む」を別のボタンやキーに割り当てていても、実際に届いたものを覚えます。「テスト」は、押すと表示するだけで、迷いマークは記録しません。</p>',
+      opts: [
+        { v: 'ok', t: 'この形で作る', rec: true,
+          sample: function () { return shotsHTML([['settings-waiting-light.png', '登録を待っているところ'], ['settings-registered-dark.png', '登録したあと・ダーク']]); } },
+        { v: 'fix', t: '直すところがある（補足に書く）',
+          sample: function () { return shotsHTML([['menu-light.png', '右クリックのメニュー（音の切り替えを追加、見た目は仮）']]); } }
+      ] },
+    { id: 'r7', no: 'R7-7', title: '作る順番',
+      opts: [
+        { v: 'widget-first', t: 'ウィジェットの直し → 取り込み → 出題 → ログ・解き直し・集計', rec: true,
+          note: '① 管理者の補助プログラム、ボタンの登録とテスト、音の切り替え、評価のときのスクショ。② 牌譜リンクの検出、mjai の窓、画像からの読み取りと結びつけ、サイドバー、迷いの表示。③ AI を隠して答える出題。④ ログ・解き直し・週の集計・局の評価の比較。いま使っているウィジェットを先に仕上げる。' },
+        { v: 'import-first', t: '取り込みと出題を先に、ウィジェットの直しはあとにする' }
+      ] },
+    { id: 'r8', no: 'R7-8', title: 'ほかに気になることがあれば', free: true,
+      context: '<p>「聞かずに決めたこと」で違うと思うものの番号、サンプルへの指摘、何でも。</p>' }
   ];
-  document.getElementById('shots-main').innerHTML = SHOTS.map(function (s) {
-    return '<figure class="shot"><button type="button" data-zoom="' + s[0] + '" aria-label="' + s[1] + 'を拡大"><img src="' + s[0] + '" alt="' + s[1] + '" loading="lazy"></button><figcaption>' + s[1] + '</figcaption></figure>';
-  }).join('');
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  function renderQuestions() {
+    var host = document.getElementById('questions');
+    var html = '';
+    Q.forEach(function (q) {
+      html += '<div class="q" id="q-' + q.id + '"><div class="q-head"><div class="q-id">' + q.no + '</div><h3>' + q.title + '</h3>' +
+        (q.context ? '<div class="context">' + q.context + '</div>' : '') + '</div>';
+      if (q.blockSample) html += q.blockSample();
+      if (!q.free) {
+        html += '<fieldset><legend>' + q.no + ' の答え</legend><div class="opts' + (q.side ? ' side' : '') + '">';
+        q.opts.forEach(function (o) {
+          var iid = q.id + '-' + o.v;
+          html += '<div class="opt"><label class="opt-label" for="' + iid + '">' +
+            '<input type="radio" name="' + q.id + '" value="' + o.v + '" id="' + iid + '">' +
+            '<span class="row"><span class="dot" aria-hidden="true"></span><span class="title">' + esc(o.t) + (o.rec ? '<span class="tag rec">おすすめ</span>' : '') + '</span></span>' +
+            (o.note ? '<span class="note">' + esc(o.note) + '</span>' : '') + '</label>' +
+            (o.sample ? o.sample() : '') + '</div>';
+        });
+        html += '</div></fieldset>';
+      }
+      html += '<div class="other"><label for="' + q.id + '-note">' + (q.free ? '自由記入' : 'その他・補足') + '</label><textarea id="' + q.id + '-note"' + (q.free ? ' rows="5"' : '') + '></textarea></div></div>';
+    });
+    host.innerHTML = html;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-doc]'), function (e) {
+      var t = document.getElementById(e.getAttribute('data-doc'));
+      if (t) e.appendChild(t.content.cloneNode(true));
+    });
+  }
 
   var viewer = document.getElementById('viewer');
   var viewerImg = document.getElementById('viewerImg');
@@ -371,60 +461,7 @@
   viewer.addEventListener('click', function (e) { if (e.target === viewer) viewer.close(); });
   document.getElementById('viewerClose').addEventListener('click', function () { viewer.close(); });
 
-  /* ---------- questions ---------- */
-  var Q = [
-    { id: 'r1', no: 'R6-1', title: 'ウィジェットを受け入れますか',
-      context: '<p>上の「試し方」で動かしてから答えてください。直してほしいところがあれば、補足に書いてください。</p>',
-      opts: [
-        { v: 'accept', t: '受け入れる' },
-        { v: 'fix', t: '直すところがある（補足に書く）' },
-        { v: 'later', t: 'まだ試していない（あとで答える）' }
-      ] },
-    { id: 'r2', no: 'R6-2', title: '雀魂の上でサイドボタンを効かせる方法',
-      context: '<p>上の「管理者権限」の件への対処です。雀魂を管理者なしで起動させる方法は、ランチャーの更新が動かなくなるおそれがあるので外しました。</p>',
-      opts: [
-        { v: 'helper', t: 'ボタンを拾う部分だけを、管理者で動く小さなプログラムに分ける', rec: true,
-          note: '管理者で動くのは、マウスのボタンを拾って本体に知らせるだけの小さなプログラム。画面・ネット・ファイルの大半は普通の権限のまま。最初の1回だけ Windows の確認が出て、以後はタスクスケジューラから確認なしで起動する。作る手間は少し増える。' },
-        { v: 'whole', t: 'アプリ全体を管理者で動かす',
-          note: 'いちばん簡単。起動のたびに Windows の確認が出る（タスクスケジューラを使えば出ない）。アプリの中の mjai の窓（外部のサイト）も管理者の権限で動く。リンクはエクスプローラー経由で開き、ブラウザが管理者で起動しないようにする。エクスプローラーからのファイルのドラッグ＆ドロップは使えなくなる（ファイルを選ぶ画面で代わりにする）。' },
-        { v: 'click', t: 'サイドボタンはあきらめ、ウィジェットの「迷い」をクリックする',
-          note: '権限は普通のまま。鳴きの判断の数秒のあいだに、ウィジェットまでカーソルを動かす必要がある。' },
-        { v: 'uiaccess', t: '署名した UIAccess のアプリにする',
-          note: '管理者にしないまま、雀魂の上の入力を受け取れる Windows の仕組み。自分用の証明書を作って信頼させ、アプリに署名して Program Files に入れる必要があり、作り直すたびに署名と入れ直しが要る。' }
-      ] },
-    { id: 'r3', no: 'R6-3', title: 'ほかに気になることがあれば', free: true,
-      context: '<p>「聞かずに決めたこと」で違うと思うものの番号、ウィジェットへの要望、何でも。</p>' }
-  ];
-
-  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-
-  function renderQuestions() {
-    var host = document.getElementById('questions');
-    var html = '';
-    Q.forEach(function (q) {
-      html += '<div class="q" id="q-' + q.id + '"><div class="q-head"><div class="q-id">' + q.no + '</div><h3>' + q.title + '</h3>' +
-        (q.context ? '<div class="context">' + q.context + '</div>' : '') + '</div>';
-      if (!q.free) {
-        html += '<fieldset><legend>' + q.no + ' の答え</legend><div class="opts">';
-        q.opts.forEach(function (o) {
-          var iid = q.id + '-' + o.v;
-          html += '<div class="opt"><label class="opt-label" for="' + iid + '">' +
-            '<input type="radio" name="' + q.id + '" value="' + o.v + '" id="' + iid + '">' +
-            '<span class="row"><span class="dot" aria-hidden="true"></span><span class="title">' + esc(o.t) + (o.rec ? '<span class="tag rec">おすすめ</span>' : '') + '</span></span>' +
-            (o.note ? '<span class="note">' + esc(o.note) + '</span>' : '') + '</label></div>';
-        });
-        html += '</div></fieldset>';
-      }
-      html += '<div class="other"><label for="' + q.id + '-note">' + (q.free ? '自由記入' : 'その他・補足') + '</label><textarea id="' + q.id + '-note"' + (q.free ? ' rows="5"' : '') + '></textarea></div></div>';
-    });
-    host.innerHTML = html;
-    Array.prototype.forEach.call(document.querySelectorAll('[data-doc]'), function (e) {
-      var t = document.getElementById(e.getAttribute('data-doc'));
-      if (t) e.appendChild(t.content.cloneNode(true));
-    });
-  }
-
-  /* ---------- answers: autosave to db answers/round6, restore, copy ---------- */
+  /* ---------- answers: autosave to db answers/round7, restore, copy ---------- */
   var statusEl = document.getElementById('status');
   var state = {};
   var docRef = null;
@@ -461,7 +498,7 @@
 
   function answerText() {
     readForm();
-    var lines = ['【確認シートの回答（JantamaReviewer・6回目）】'];
+    var lines = ['【確認シートの回答（JantamaReviewer・7回目）】'];
     Q.forEach(function (q) {
       var s = state[q.id];
       var c;
