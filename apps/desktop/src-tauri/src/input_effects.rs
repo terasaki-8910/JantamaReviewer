@@ -73,8 +73,14 @@ impl<R: Runtime> Effects for TauriEffects<R> {
             Effect::ConfigureInProcess(config) => {
                 if let Some(hook) = &self.hook {
                     let status = hook.apply(config.unwrap_or(Config::OFF));
-                    if let Some(problem) = status.error {
-                        eprintln!("ボタンのフックを設定できませんでした: {problem}");
+                    match status.error {
+                        Some(problem) => {
+                            eprintln!("ボタンのフックを設定できませんでした: {problem}")
+                        }
+                        None => eprintln!(
+                            "[入力] 本体のフックを設定しました: マウス={}、キー={}",
+                            status.mouse, status.keyboard
+                        ),
                     }
                 }
             }
