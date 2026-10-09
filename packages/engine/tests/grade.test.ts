@@ -240,7 +240,7 @@ describe('E-13 analysis/maka-fit/dataset.csv（5半荘・67局）での当ては
 
   it('E-13 外す半荘の記録だけで当てはめた値は使わない（外した半荘の評価を変えても、その半荘の予測は変わらない）', () => {
     const base = evaluateLeaveOneGameOut(records);
-    const changed = records.map((r) => (r.game === records[0]?.game ? { ...r, grade: 'E' } : r));
+    const changed: GradeRecord[] = records.map((r) => (r.game === records[0]?.game ? { ...r, grade: 'E' as const } : r));
     const after = evaluateLeaveOneGameOut(changed);
     const firstGame = records[0]?.game;
     records.forEach((r, i) => {
