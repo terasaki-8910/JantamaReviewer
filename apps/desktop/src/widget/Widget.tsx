@@ -6,7 +6,7 @@ const RATINGS: readonly Rating[] = ['good', 'fair', 'bad'];
 const STATUS_LABEL: Record<Status, string> = {
   recording: '記録中',
   idle: '待機中',
-  error: '保存先エラー',
+  error: 'エラー',
 };
 
 export interface WidgetProps {

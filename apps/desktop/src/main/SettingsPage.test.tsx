@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { baseSettings, installTauriMock, type TauriMock } from '../../tests/tauri-mock';
+import { baseSettings, baseState, installTauriMock, type TauriMock } from '../../tests/tauri-mock';
 import type { Settings } from '../api/types';
 import { SettingsPage } from './SettingsPage';
 
@@ -162,6 +162,18 @@ describe('設定ページ', () => {
     await user.click(screen.getByRole('button', { name: 'フォルダを選ぶ' }));
     await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
     expect(savedSettings(mock)).toHaveLength(0);
+  });
+
+  it('保存先を開けないときは、その理由を保存先の欄に出す', async () => {
+    await renderPage({
+      state: {
+        ...baseState,
+        status: 'error',
+        session_id: null,
+        error: String.raw`保存先がリポジトリの中です: C:\work\repo\data`,
+      },
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存先がリポジトリの中です');
   });
 
   it('起動時の知らせ（壊れた設定ファイルの退避）を出す', async () => {

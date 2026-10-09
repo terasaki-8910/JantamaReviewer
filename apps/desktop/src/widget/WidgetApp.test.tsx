@@ -67,7 +67,7 @@ describe('ウィジェット: 表示', () => {
     expect(mock.count('add_mark')).toBe(0);
   });
 
-  it('半荘が始まっていないときは「待機中」、保存先を開けないときは「保存先エラー」', async () => {
+  it('半荘が始まっていないときは「待機中」、保存先を開けないときは「エラー」', async () => {
     const idle: AppState = {
       ...baseState,
       status: 'idle',
@@ -87,7 +87,7 @@ describe('ウィジェット: 表示', () => {
         error: '保存先がリポジトリの中です',
       } satisfies AppState);
     });
-    expect(await screen.findByText('保存先エラー')).toBeInTheDocument();
+    expect(await screen.findByText('エラー')).toBeInTheDocument();
     // 記録できない間は、記録のボタンを押せない。
     expect(screen.getByRole('button', { name: `〇${RATE_LABEL}` })).toBeDisabled();
     expect(screen.getByRole('button', { name: /^迷い/ })).toBeDisabled();

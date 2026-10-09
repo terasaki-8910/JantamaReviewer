@@ -1,7 +1,7 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { useCallback, useEffect, useState } from 'react';
 
-import { api, errorMessage, onSettingsChanged } from '../api/tauri';
+import { api, errorMessage, onSettingsChanged, onStateChanged } from '../api/tauri';
 import type { Orientation, Settings, Trigger } from '../api/types';
 import { formatKeyCode } from './format';
 
@@ -26,6 +26,8 @@ const ORIENTATION_CHOICES: ReadonlyArray<{ value: Orientation; label: string }> 
 export function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [startupNote, setStartupNote] = useState<string | null>(null);
+  // 保存先を開けないとき（リポジトリの中を指しているなど）の理由。
+  const [storeError, setStoreError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState('');
   // 「キーボードのキー」を選んだが、まだキーを押していない間。
@@ -35,16 +37,21 @@ export function SettingsPage() {
 
   useEffect(() => {
     let alive = true;
-    let dispose: (() => void) | null = null;
     void api.getSettings().then((s) => alive && setSettings(s));
     void api.getStartupNote().then((note) => alive && setStartupNote(note));
-    void onSettingsChanged((s) => setSettings(s)).then((fn) => {
-      if (alive) dispose = fn;
-      else fn();
-    });
+    void api.getState().then((s) => alive && setStoreError(s.error));
+    const disposers: Array<() => void> = [];
+    const track = (listening: Promise<() => void>) => {
+      void listening.then((fn) => {
+        if (alive) disposers.push(fn);
+        else fn();
+      });
+    };
+    track(onSettingsChanged((s) => setSettings(s)));
+    track(onStateChanged((s) => setStoreError(s.error)));
     return () => {
       alive = false;
-      dispose?.();
+      disposers.forEach((fn) => fn());
     };
   }, []);
 
@@ -194,6 +201,11 @@ export function SettingsPage() {
                 フォルダを選ぶ
               </button>
             </div>
+            {storeError && (
+              <p className="error" role="alert">
+                {storeError}
+              </p>
+            )}
           </div>
 
           <div className="setting field">
