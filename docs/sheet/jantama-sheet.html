@@ -220,53 +220,68 @@
   .c-hit { fill: transparent; cursor: default; }
   .chart-tip { position: absolute; z-index: 2; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12.5px; padding: 4px 8px; border-radius: 4px; white-space: nowrap; }
   .grid tr.muted-row th, .grid tr.muted-row td { color: var(--muted); }
+  /* round 6 */
+  .shots.crop-none { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: start; }
+  .shots.crop-none .shot img { height: 220px; object-fit: contain; }
 </style>
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">JantamaReviewer · 確認シート 5回目 · 2026-10-09</div>
+    <div class="eyebrow">JantamaReviewer · 確認シート 6回目 · 2026-10-09</div>
     <h1>雀魂の検討システム 確認シート</h1>
-    <p class="lead">4回目の補足（MAKA の式に細かく合わせたい、ここはさぼらないで）を受けて、もらった5半荘・67局で、MAKA の評価を Mortal のデータからどこまで当てられるかを調べました。ウィジェットはまだ作っていて、できたら次のシートで受け入れを聞きます。</p>
+    <p class="lead">ウィジェット（F0）ができて、main に取り込みました。見た目と動きを確かめて、受け入れるかどうかを決めてください。作っている途中で、雀魂が管理者権限で動くことが分かりました。その対処も選んでください。</p>
     <div class="meta">
-      <span>質問 4 と自由記入 1</span>
+      <span>質問 2 と自由記入 1</span>
       <span class="muted">選ぶと自動で保存されます</span>
       <span class="status" id="status" role="status">保存の準備中…</span>
     </div>
   </header>
 
-  <section aria-labelledby="h-found">
-    <div class="sec-head"><h2 id="h-found">分かったこと</h2></div>
+  <section aria-labelledby="h-done">
+    <div class="sec-head"><h2 id="h-done">できたもの</h2></div>
     <ul class="decided">
-      <li>MAKA の評価は、自分の判断が AI の好みにどれだけ近いかと強く連動していました。調べたどの点数でも、順位の相関は 0.7〜0.8 で、偶然では説明できない強さです。</li>
-      <li>局の長さ（判断の数）とはほぼ無関係でした（−0.06）。和了・放銃などの結果とも、判断の質をそろえて比べると関係は弱く（0.1〜0.2）、はっきりしません。MAKA の評価は、主に判断の質で決まっているように見えます。</li>
-      <li>MAKA が中で何を計算しているかは、外からは見えません。MAKA と Mortal は局面ごとの判断が違うことがあるので、Mortal のデータから MAKA と完全に同じ評価は作れません。いまの67局での上限の目安は、ぴったり4割、±1段階以内で7割です。サンプルが増えるほど、点数の選び方と区切りが安定します。</li>
+      <li>迷いマーク: 割り当てたボタン（既定はマウスの「戻る」）を押すと、その時刻と雀魂の窓のスクショを保存する。押したボタンはほかのアプリに渡さないので、Chrome 版で「戻る」にならない。音で知らせる（設定で切れる）。</li>
+      <li>局の評価: 〇△✕ を押すと「次：N局目」が進む。取り消しで最後の記録を1つ戻す。半荘が始まっていないときは、最初の記録で新しい半荘を始める。</li>
+      <li>ウィジェットは常に手前に出て、クリックしても前面のアプリからフォーカスを奪わない。右クリックで「新しい半荘」「縦長と横長を切り替える」「検討画面を開く」「終了」。タスクトレイからも同じ操作ができる。形と位置は次の起動でも保つ。</li>
+      <li>検討画面: 「記録」に半荘ごとの迷いマーク（スクショと時刻）と評価の一覧、「設定」にボタンの割り当て・形・音・データの保存先・雀魂の窓を探す語。</li>
+      <li>ブラウザの名残（3回目の15項目）は、テストと実際の操作の両方で消えていることを確かめた。</li>
     </ul>
+    <div class="shots crop-none" id="shots-main"></div>
 
-    <h3>当てる精度</h3>
-    <p class="context">半荘を1つずつ外し、残りの4半荘で区切りを合わせてから、外した半荘の評価を当てる検証です。答えを知った状態で合わせると精度が高く見えてしまうので、この方法にしました。</p>
-    <div class="table-wrap"><table class="grid" id="acc-table">
-      <thead><tr><th>点数の出し方</th><th class="num">ぴったり</th><th class="num">±1段階以内</th><th class="num">±2段階以内</th><th class="num">平均のずれ（段階）</th></tr></thead>
-      <tbody></tbody>
+    <h3>確かめたこと</h3>
+    <div class="table-wrap"><table class="grid">
+      <thead><tr><th>項目</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">テスト（main に取り込んだあと）</th><td>TypeScript 192件（うち50件は実際の Chrome での画面の検査）と Rust 182件がすべて通過。実際の入力を注入する手動のテスト1件は対象外</td></tr>
+        <tr><th scope="row">lint（main に取り込んだあと）</th><td>eslint・stylelint・型検査・clippy・rustfmt がすべて通過</td></tr>
+        <tr><th scope="row">実行ファイルの起動</th><td>一時フォルダの設定で起動し、ウィジェットだけが表示され、検討画面は隠れていることを確かめた。このとき、先頭に BOM（Windows の一部の道具が付ける印）がある設定ファイルを「壊れている」と見なす不具合を見つけて直した</td></tr>
+        <tr><th scope="row">ブラウザのショートカット</th><td>実際のアプリで F5・Ctrl+R・Ctrl+P・Ctrl+F・Ctrl+J・Ctrl+S・F7・F12・Alt+←→・Ctrl+±・Ctrl+ホイールを押しても、再読み込み・拡大・新しい窓は起きない。アプリ自身のキーは使える</td></tr>
+        <tr><th scope="row">右クリック</th><td>普通の文字の上ではメニューが出ない。入力欄は「切り取り・コピー・貼り付け・すべて選択」だけ。ウィジェットはアプリのメニュー</td></tr>
+        <tr><th scope="row">存在しないページ・外部リンク</th><td>存在しないページに移ろうとしてもアプリの画面のまま（エラーページは出ない）。外部リンクはいつものブラウザで開く。新しい窓は開かない</td></tr>
+        <tr><th scope="row">起動時の白いちらつき</th><td>ダークで起動したときの明るさを約6ミリ秒ごとに測り、白いちらつきが無いことを確かめた（ウィジェットのみ）</td></tr>
+        <tr><th scope="row">フォーカス</th><td>Chrome が前面のときにウィジェットを押しても、Chrome が前面のまま</td></tr>
+        <tr><th scope="row">マウスのボタン</th><td>普通の権限のアプリの上では、合成した「戻る」の押下が迷いマークになることを確かめた。雀魂の上では、下の「管理者権限」の理由で効かない</td></tr>
+      </tbody>
     </table></div>
-    <p class="src">「候補から自動で選ぶ」は、11種類の点数とその2〜3個の組み合わせから、残りの4半荘の中でさらに1つずつ外す検証でいちばん当たるものを選び、それで外した半荘を当てたときの成績です。選び方まで含めて検証しているので、甘く見積もっていません。</p>
+  </section>
 
-    <h3>Mortal の Rating（局ごと）と MAKA の評価</h3>
-    <figure class="chart-fig">
-      <div class="chart-legend" aria-hidden="true">
-        <span class="lg-item"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4.5" class="c-dot"></circle></svg>局（67）</span>
-        <span class="lg-item"><svg width="22" height="14" viewBox="0 0 22 14"><line x1="1" y1="7" x2="21" y2="7" class="c-fit"></line></svg>当てはめ（点数が高いほど評価が下がらない形）</span>
-      </div>
-      <div class="chart-box" id="chart"></div>
-      <div class="chart-tip" id="chart-tip" role="status" hidden></div>
-      <figcaption class="src">横軸は Mortal の Rating を局ごとに計算した値、縦軸は MAKA の評価。同じ評価の点が重ならないよう、縦に少しずらしています。点に重ねると、その局の値が出ます。下の表に全67局の値があります。</figcaption>
-    </figure>
-    <details class="doc">
-      <summary>全67局の表を開く</summary>
-      <div class="doc-body"><div class="table-wrap"><table class="grid" id="hand-table">
-        <thead><tr><th>半荘</th><th>局</th><th>MAKA</th><th class="num">Rating</th><th class="num">確率の比</th><th>当てた評価</th></tr></thead>
-        <tbody></tbody>
-      </table></div><p class="src">当てた評価は、その半荘を外して Rating で合わせたときの評価。半荘1は 10月9日の半荘、2〜5は4回目のサンプル1〜4。</p></div>
-    </details>
+  <section aria-labelledby="h-try">
+    <div class="sec-head"><h2 id="h-try">試し方</h2></div>
+    <ol class="steps">
+      <li>エクスプローラーで <code>C:\Users\e8910\Documents\project\JantamaReviewer\apps\desktop\src-tauri\target\release\jantama-reviewer.exe</code> を開く。雀魂の上でサイドボタンを試すときは、右クリックの「管理者として実行」で起動する（下の R6-2 が決まるまでの暫定）。</li>
+      <li>ウィジェットが出たら、好きな位置に置く。右クリックで縦長と横長を切り替えられる。</li>
+      <li>雀魂で1半荘打ち、迷ったらサイドボタン、局が終わったら 〇△✕ を押す。</li>
+      <li>ウィジェットを右クリックして「検討画面を開く」→「記録」で、スクショと評価が並んでいるかを見る。</li>
+    </ol>
+    <p class="src">データは <code>%USERPROFILE%\JantamaReviewerData</code> に保存されます（設定で変えられます）。</p>
+  </section>
+
+  <section aria-labelledby="h-admin">
+    <div class="sec-head"><h2 id="h-admin">分かったこと：雀魂は管理者権限で動く</h2></div>
+    <div class="context">
+      <p>雀魂の PC 版ランチャーは、実行ファイルの設定（マニフェスト）で「管理者として実行する」（requireAdministrator）を指定しています。ファイルを読んで確かめました。Windows には、管理者の窓が前面にあるあいだ、普通の権限のアプリがマウスやキーボードの入力を受け取れない仕組み（UIPI）があります。そのため、普通に起動した JantamaReviewer では、雀魂の上でサイドボタンを押しても何も起きません。</p>
+      <p>ウィジェットのボタンをクリックするのは問題なく動きます。スクショも撮れます。届かないのは、雀魂が前面にあるときのマウスのボタンとキーボードだけです。</p>
+    </div>
   </section>
 
   <section aria-labelledby="h-q">
@@ -279,19 +294,17 @@
 
   <section aria-labelledby="h-decided">
     <div class="sec-head">
-      <h2 id="h-decided">聞かずに決めたこと（5回目）</h2>
+      <h2 id="h-decided">聞かずに決めたこと（6回目）</h2>
       <p class="muted">違うと思うものがあれば、番号を最後の自由記入に書いてください。</p>
     </div>
     <ol class="decided">
-      <li>アプリの中でも、この分析と同じ検証で当たり具合を計算して、いまの見込みとして画面に出す。</li>
-      <li>分析に使ったデータ（67局の点数と MAKA の評価）と計算のスクリプトはリポジトリに入れる（名前などは含まない）。アプリの計算がこの結果と同じになるかを、テストで確かめる。</li>
-      <li>4回目の補足の2点はどちらも仕様に入れた。MAKA の評価の入力欄は任意で使える形にする。Mortal の結果 JSON は、取り込んだ時点で手元に保存する（サイト側で消えるため）。</li>
+      <li>設定の入力欄の右下に残っていた、サイズ変更のつまみ（ブラウザの名残）を消す。</li>
+      <li>ウィジェットを動かすときにつかむ場所は、普通の矢印のカーソルにした（押せる所だけ指の形、という3回目の項目に合わせた）。</li>
+      <li>窓の題名は「JantamaReviewer 検討画面」と「JantamaReviewer ウィジェット」。</li>
+      <li>開発者ツールは、開発用の起動（pnpm dev）のときだけ F12 で開ける。普段の実行ファイルでは開かない。</li>
+      <li>4回目のサンプル4半荘の結果も、名前が伏せられていて牌譜 ID やアカウントの番号が無いことを確かめたうえで、テスト用の固定データとしてリポジトリに入れる。</li>
+      <li>次は、検討結果の読み取りと再生、受け入れ枚数の計算（エンジン）を作り、そのあと取り込みの画面（アプリの中の mjai の窓）と出題の画面に進む（2回目の R2-7 の順）。R6-2 の答えはウィジェットに反映する。</li>
     </ol>
-  </section>
-
-  <section aria-labelledby="h-next">
-    <div class="sec-head"><h2 id="h-next">このあと</h2></div>
-    <p class="lead">ウィジェットができたら、確かめて main に取り込み、次のシートで受け入れを聞きます。続けて、検討結果の取り込みと出題（F1〜F4、F9）を作ります。局の評価の比較（F10）は、この5回目の答えに沿って作ります。</p>
   </section>
 
   <details class="doc">
@@ -305,7 +318,7 @@
 
   <section class="send" aria-labelledby="h-send">
     <div class="sec-head"><h2 id="h-send">送り方</h2></div>
-    <p>選んだ内容はこのシートに自動で保存され、私が直接読みます。答え終わったら、チャットで「回答した」とだけ送ってください。サンプルや半荘全体の評価は、あとから足して保存しても読めます。</p>
+    <p>選んだ内容はこのシートに自動で保存され、私が直接読みます。答え終わったら、チャットで「回答した」とだけ送ってください。試すのはあとでも構いません。R6-1 は試してから答えてください。</p>
     <p class="muted">上の表示が「保存できません」のときは、「回答をコピー」で文章にしてチャットに貼ってください。</p>
     <div class="actions">
       <button type="button" class="btn primary" id="copyBtn">回答をコピー</button>
@@ -314,6 +327,13 @@
     <textarea id="copyFallback" readonly aria-label="回答の文章"></textarea>
   </section>
 </div>
+
+<dialog class="viewer" id="viewer" aria-label="画像の拡大表示">
+  <div class="frame">
+    <button type="button" class="close" id="viewerClose">閉じる</button>
+    <img id="viewerImg" alt="">
+  </div>
+</dialog>
 
 <template id="doc-spec"><h3>JantamaReviewer 仕様書</h3>
 <p>状態: 確定（2026-10-09。2回目の確認シートの答えを反映）。F10 の S+〜D の当てはめ方と、F1 の mjai.ekyu.moe への送り方の改善は、3回目のシートで決める。
@@ -400,6 +420,7 @@
 <li>答え: 打牌の判断なら手牌から1枚を選ぶ。鳴きの判断ならチー（組み合わせ）・ポン・スルー、リーチの判断ならリーチする・しない。理由（1行）は必須。</li>
 <li>答えと理由がそろうまで、AIの候補・確率・順位は画面にも DOM にも出さない。</li>
 <li>答え合わせ: AIの候補と確率（実戦の行動と自分の答えに印）、打牌の判断なら受け入れ枚数の比較（F6）、原因分類（受け入れ枚数・形の質・打点・守備・その他）、学んだ原則（1行）。</li>
+<li>MAKA が推した打牌を任意で入れられる（R5-2）。入れた局面は、Mortal と MAKA が食い違ったかどうかに印が付き、ログで数えられる。MAKA は自分の答えを出したあとに見る前提。</li>
 <li>答えた時刻と答え合わせをした時刻を記録する。</li>
 <li>局面の種類は自動で付け、直せる: シャンテン数（2シャンテンなど）、鳴き（チー・ポン・スルーの判断）、押し引き（他家にリーチがある）、序盤（6巡目まで）。</li>
 <li>画面は卓の配置にする（雀魂と同じ並び。河を四方に置く。R2-5）。</li>
@@ -440,7 +461,12 @@
 <h5>F10 局の評価の比較</h5>
 <ul>
 <li>対局中は自分で〇△✕を付け、終局後に AI 基準と並べる（R2-2）。</li>
-<li>AI 基準は、MAKA と同じ S+〜D の段階で、局ごとと半荘全体に出す（R2-2 の補足）。当てはめ方は3回目のシートで、実際の半荘のデータを使って決める。それまでの暫定は、その局で Mortal が5%未満を付けた実戦の判断の数（0なら〇、1なら△、2以上なら✕）。</li>
+<li>AI 基準は、MAKA と同じ S+〜D の段階で、局ごとと半荘全体に出す（R2-2 の補足）。MAKA の評価に近くなるように合わせる（R3-2、R4-2）。</li>
+<li>MAKA の評価は、局の評価の比較の画面で任意に入力できる。入力が増えるたびに当てはめを合わせ直し、いまの見込み（ぴったり何割、±1段階以内何割）を出す（R4-2、R4-4）。</li>
+<li>段階は MAKA と同じ14段階（S+、S、S-、A+、A、A-、B+、B、B-、C+、C、C-、D、E）。</li>
+<li>点数は Mortal の Rating を局ごとに計算したもの（mjai-reviewer と同じ式：判断ごとに、AI と同じなら1、違えば選んだ手の評価値を候補の最低〜最高で0〜1に直した値、その平均を2乗。R5-1）。半荘全体も同じ式で出し、mjai のサイトの値と一致させる。</li>
+<li>点数から段階への当てはめは、点数が高いほど段階が下がらない形で、入力された MAKA の評価に合わせる。最初は分析（analysis/maka-fit/、5半荘・67局）の当てはめを使う。半荘全体の段階も、入力が少ないうちは局と同じ当てはめを使う。</li>
+<li>画面では、自分の〇△✕、AI 基準の段階、MAKA の評価（入力があれば）を並べ、食い違った局に印を付ける。</li>
 <li>局ごとに、結果（自分の和了・放銃・流局・他家のツモ・他家どうしのロン）、点の増減、自己評価、AI基準を並べる。</li>
 <li>自己評価とAI基準が食い違う局に印を付ける。和了できなかった局を低く付けているかどうかを、週の集計で数える。</li>
 </ul>
@@ -475,30 +501,38 @@
 <li>作る順番: F0（ウィジェット）→ F1〜F4、F9（取り込みと出題）→ F5〜F8、F10（ログ・解き直し・集計）（R2-7）。</li>
 <li>人の確認は、テンプレートのゲートを使わず、グローバル設定の4つに合わせる（R2-9）。各機能はテストと lint が通ったら main に取り込み、次のシートで見てもらう（R1-13）。</li>
 </ul>
-<h4>9. 未決（4回目のシート）</h4>
+<h4>9. 未決</h4>
 <ul>
-<li>F10: 局の点数の出し方（Mortal の Rating など）と、S+〜D への当てはめ方。3回目の MAKA の評価（12局）と比べた結果をもとに決める。</li>
+<li>なし（2026-10-09 の5回目のシートまでで決まった）。</li>
 </ul></template>
 <template id="doc-acceptance"><h3>JantamaReviewer 受け入れ基準</h3>
-<p>状態: 確定（2026-10-09。2回目の確認シートの答えを反映）。各項目は、テストか lint で合否が決まる形で書く。技術は Tauri v2（R2-6）。テストと lint のコマンドは CLAUDE.md の Commands に書く。</p>
+<p>状態: 確定（2026-10-09。2回目の確認シートの答えを反映し、6回目までの決定で固定データと E-2・E-4・E-6 を手元の5半荘に合わせた）。各項目は、テストか lint で合否が決まる形で書く。技術は Tauri v2（R2-6）。テストと lint のコマンドは CLAUDE.md の Commands に書く。</p>
 <h4>テストに使う固定データ</h4>
 <ul>
-<li>FX-1: mjai.ekyu.moe の結果 JSON（KillerDucky 形式）。ユーザーの半荘（R2-11、玉の間・南喰赤、判断178回、確率5%未満19回）を取得済みで、リポジトリの外（<code>%USERPROFILE%\JantamaReviewerData\reports\f9da87cbcd7af5e9.json</code>）に置いてある。プレイヤー名はサイト側で「Aさん」などに置き換わっている。テストへの入れ方は3回目のシートで確認する。</li>
-<li>FX-2: Mortal 公式デモページ（classic 形式、天鳳の半荘、13局・判断205回）から取り出した値。確率5%未満は10判断、局ごとの数は 東3局2・東3局1本場1・東4局1・南1局1・南2局1本場1・南3局1本場3・南4局1、ほかの局は0。製品は classic 形式を読まないので、テスト用に一度だけ内部の形に変換して置く。</li>
+<li>FX-1: mjai.ekyu.moe の結果 JSON（KillerDucky 形式）5半荘。どれも玉の間・南喰赤。プレイヤー名はサイト側で「Aさん」などに置き換わっていて、牌譜 ID やアカウントの番号は入っていない。テスト用に packages/engine の fixtures に置く（3回目・6回目のシートで決定）。</li>
+<li>f9da87cbcd7af5e9（10月9日の半荘）: 判断178、確率5%未満19、いちばん低いのは東4局13巡目の打3m</li>
+<li>f738896995c33fed: 判断197、5%未満16</li>
+<li>be0a2a523fdd7758: 判断156、5%未満16</li>
+<li>002ca97adccc486d: 判断231、5%未満15</li>
+<li>3a36dac7c7fc18ce: 判断202、5%未満22</li>
+<li>FX-2: Mortal 公式デモページ（classic 形式、天鳳の半荘）。参考のみ。FX-1 が5半荘そろったので、テストには使わない。</li>
 <li>FX-3: 受け入れ枚数の正解表。独立した実装（Python の <code>mahjong</code> ライブラリ）で作った、200手以上の手牌ごとのシャンテン数と受け入れ枚数。例: <code>56m46688p1145888s</code> で 打4p 38枚、打5m・6m・4s・5s 34枚、打6p・8p 28枚、打1s 24枚、打8s 15枚（いずれも2シャンテン）。</li>
 </ul>
 <h4>計算（エンジン）</h4>
 <ul>
-<li>E-1 取り込み: FX-1 を読み込むと、<code>review</code> の判断の数と同じ数の判断が作られる。</li>
-<li>E-2 牌譜の再生: FX-1 と FX-2 の全判断で、再生して組み立てた手牌とツモが、記録と完全に一致する（一致率100%）。一致しない判断が1つでもあれば取り込みは失敗し、理由を返す。</li>
+<li>E-1 取り込み: FX-1 の5半荘それぞれで、<code>review</code> の判断の数（上の数）と同じ数の判断が作られる。</li>
+<li>E-2 牌譜の再生: FX-1 の5半荘・全964判断で、再生して組み立てた手牌（ツモを含む）と副露が、記録（各判断の state）と完全に一致する（一致率100%）。一致しない判断が1つでもあれば取り込みは失敗し、理由を返す。</li>
 <li>E-3 受け入れ枚数: FX-3 の全件で、シャンテン数と受け入れ枚数が正解表と一致する。</li>
-<li>E-4 不一致の一覧: 実戦の行動の確率が5%未満の判断だけが、確率の低い順に返る。FX-2 では10件で、1件目は東3局8巡目の打6p（0.07%）。1日に出す数の既定は5。</li>
+<li>E-4 不一致の一覧: 実戦の行動の確率が5%未満の判断だけが、確率の低い順に返る。FX-1 の5半荘で、件数が上の数と一致し、10月9日の半荘の1件目は東4局13巡目の打3m。1日に出す数の既定は5。</li>
 <li>E-5 解き直しの予定: 正解が続くと間隔が 1 → 3 → 7 → 14 → 30 → 60日と進み、間違えると1日に戻る。正解は、AIがその行動に付けた確率が5%以上のとき。</li>
-<li>E-6 局のAI基準: 5%未満の判断の数が 0 なら○、1 なら△、2以上なら×。FX-2 では 東3局×・南3局1本場×・東3局1本場△ など、上の数と一致する。局の結果の分類（自分の和了・放銃・流局・他家のツモ・他家どうしのロン）が、FX-2 の13局すべてで期待値と一致する（例: 南3局1本場は自分のロン和了 +6200 で AI基準×）。</li>
+<li>E-6 局のAI基準（暫定の〇△✕）: 5%未満の判断の数が 0 なら〇、1 なら△、2以上なら✕。10月9日の半荘の局ごとの数は 東1局3・東2局0・東2局1本場1・東3局1・東3局1本場1・東4局7・東4局1本場1・南1局1・南2局1本場0・南3局2・南4局1・西1局1。局の結果の分類が12局すべてで次と一致する: 東1局 他家どうしのロン、東2局 自分の和了 +8800、東2局1本場 他家のツモ −4000、東3局 放銃 −2900、東3局1本場 他家のツモ −1400、東4局 流局 −3000、東4局1本場 自分の和了 +5500、南1局 流局 −1000、南2局1本場 他家のツモ −2100、南3局 他家どうしのロン 0、南4局 他家のツモ −700、西1局 他家のツモ −500。</li>
 <li>E-7 評価の突き合わせ: ウィジェットの評価が押した順に局へ割り当てられる。評価の数が局の数より多い・少ないときは、その旨を返す。</li>
 <li>E-8 局面の種類: シャンテン数・鳴きの判断・他家のリーチ・6巡目までの条件で、FX-1 の各判断に種類が付く（条件ごとの単体テスト）。</li>
 <li>E-9 牌譜リンクの読み取り: 「雀魂牌譜:https://game.mahjongsoul.com/?paipu=…」の形でも、URL だけでも、同じ牌譜 ID を取り出す。前後の空白や改行は無視する。</li>
 <li>E-10 mjai の窓の移動: 移動先を判定する関数が、結果のページ（/killerducky/?data=/report/<id>.json）への移動を止めて結果の ID を返し、mjai.ekyu.moe と Cloudflare の確認の画面への移動は通し、ほかは止める（単体テスト）。</li>
+<li>E-12 Rating: 局ごとと半荘全体の Rating が mjai-reviewer の式で計算される。FX-1 の半荘全体は 86.7 になる。analysis/maka-fit/dataset.csv の67局の値と、小数第1位まで一致する。</li>
+<li>E-13 段階: 段階は E を含む14段階。点数から段階への当てはめは単調（点数が上がって段階が下がることはない）。analysis/maka-fit/dataset.csv で半荘を1つずつ外して検証すると、ぴったり 34%・±1段階以内 66% になる（分析と同じ値）。</li>
+<li>E-14 MAKA の打牌: MAKA の推した打牌を入れると、Mortal の1位と同じかどうかが記録され、ログで数えられる。入れなくても答え合わせは進められる。</li>
 <li>E-11 mjai の窓の入力: URL 欄（input[name="log-url"]）に牌譜リンクを入れるスクリプトが、保存した mjai.ekyu.moe のフォームの写しの上で、値を入れて change イベントを出す（画面のテスト）。送信ボタンは押さない。</li>
 </ul>
 <h4>画面</h4>
@@ -559,138 +593,59 @@
 <script>
 (function () {
   'use strict';
-  var ROUND = 'round5';
-  var GRADES = ['D', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S-', 'S', 'S+'];
+  var ROUND = 'round6';
 
-  /* ---------- analysis results (5 games, 67 hands; leave-one-game-out) ---------- */
-  var CD = {"points": [{"g": 1, "k": "東1局", "m": "C-", "y": 1, "r": 46.8, "q": 50.3, "p": "B"}, {"g": 1, "k": "東2局", "m": "S", "y": 11, "r": 97.2, "q": 85.8, "p": "S"}, {"g": 1, "k": "東2局1本場", "m": "A-", "y": 7, "r": 92.8, "q": 78.3, "p": "S"}, {"g": 1, "k": "東3局", "m": "S+", "y": 12, "r": 94.2, "q": 83.3, "p": "S"}, {"g": 1, "k": "東3局1本場", "m": "C+", "y": 3, "r": 88.0, "q": 80.8, "p": "A"}, {"g": 1, "k": "東4局", "m": "C+", "y": 3, "r": 65.9, "q": 66.5, "p": "B"}, {"g": 1, "k": "東4局1本場", "m": "S", "y": 11, "r": 81.9, "q": 86.3, "p": "A-"}, {"g": 1, "k": "南1局", "m": "S", "y": 11, "r": 95.2, "q": 89.9, "p": "S"}, {"g": 1, "k": "南2局1本場", "m": "S", "y": 11, "r": 97.1, "q": 89.7, "p": "S"}, {"g": 1, "k": "南3局", "m": "S", "y": 11, "r": 80.7, "q": 55.1, "p": "A-"}, {"g": 1, "k": "南4局", "m": "S", "y": 11, "r": 93.9, "q": 92.3, "p": "S"}, {"g": 1, "k": "西1局", "m": "S", "y": 11, "r": 93.2, "q": 89.9, "p": "S"}, {"g": 2, "k": "東1局", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 2, "k": "東2局", "m": "A", "y": 8, "r": 77.7, "q": 77.1, "p": "A-"}, {"g": 2, "k": "東3局", "m": "A+", "y": 9, "r": 86.9, "q": 72.7, "p": "A"}, {"g": 2, "k": "東3局1本場", "m": "C", "y": 2, "r": 75.9, "q": 74.5, "p": "B"}, {"g": 2, "k": "東3局2本場", "m": "S-", "y": 10, "r": 94.6, "q": 86.8, "p": "S"}, {"g": 2, "k": "東3局3本場", "m": "S", "y": 11, "r": 94.6, "q": 88.5, "p": "S"}, {"g": 2, "k": "東4局", "m": "A+", "y": 9, "r": 92.6, "q": 77.0, "p": "S-"}, {"g": 2, "k": "東4局1本場", "m": "S+", "y": 12, "r": 97.7, "q": 93.8, "p": "S+"}, {"g": 2, "k": "南1局", "m": "S", "y": 11, "r": 91.8, "q": 93.0, "p": "S-"}, {"g": 2, "k": "南1局1本場", "m": "S+", "y": 12, "r": 95.3, "q": 81.2, "p": "S"}, {"g": 2, "k": "南2局", "m": "S+", "y": 12, "r": 90.9, "q": 83.5, "p": "S-"}, {"g": 2, "k": "南3局", "m": "S+", "y": 12, "r": 98.4, "q": 92.6, "p": "S+"}, {"g": 2, "k": "南4局", "m": "S", "y": 11, "r": 94.8, "q": 84.3, "p": "S"}, {"g": 3, "k": "東1局", "m": "S+", "y": 12, "r": 98.5, "q": 93.8, "p": "S+"}, {"g": 3, "k": "東2局", "m": "B", "y": 5, "r": 67.7, "q": 77.2, "p": "B-"}, {"g": 3, "k": "東3局", "m": "B", "y": 5, "r": 87.3, "q": 80.3, "p": "A"}, {"g": 3, "k": "東4局", "m": "S", "y": 11, "r": 92.1, "q": 80.9, "p": "S-"}, {"g": 3, "k": "東4局1本場", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 3, "k": "東4局2本場", "m": "S", "y": 11, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 3, "k": "東4局3本場", "m": "A-", "y": 7, "r": 83.4, "q": 75.4, "p": "A"}, {"g": 3, "k": "南1局", "m": "A-", "y": 7, "r": 75.9, "q": 85.1, "p": "B-"}, {"g": 3, "k": "南2局", "m": "A+", "y": 9, "r": 62.4, "q": 71.3, "p": "C+"}, {"g": 3, "k": "南3局", "m": "S-", "y": 10, "r": 90.2, "q": 84.7, "p": "A"}, {"g": 3, "k": "南4局", "m": "S-", "y": 10, "r": 88.3, "q": 80.3, "p": "A"}, {"g": 4, "k": "東1局", "m": "C+", "y": 3, "r": 66.4, "q": 69.1, "p": "B"}, {"g": 4, "k": "東2局", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 4, "k": "東2局1本場", "m": "S-", "y": 10, "r": 97.2, "q": 91.0, "p": "S"}, {"g": 4, "k": "東2局2本場", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 4, "k": "東3局", "m": "S+", "y": 12, "r": 95.8, "q": 88.5, "p": "S"}, {"g": 4, "k": "東4局", "m": "A+", "y": 9, "r": 84.0, "q": 70.1, "p": "A"}, {"g": 4, "k": "東4局1本場", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 4, "k": "南1局", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 4, "k": "南2局", "m": "B-", "y": 4, "r": 89.0, "q": 62.5, "p": "A"}, {"g": 4, "k": "南3局", "m": "S+", "y": 12, "r": 92.0, "q": 90.5, "p": "S-"}, {"g": 4, "k": "南3局1本場", "m": "S", "y": 11, "r": 93.4, "q": 90.4, "p": "S-"}, {"g": 4, "k": "南3局2本場", "m": "S+", "y": 12, "r": 98.8, "q": 96.4, "p": "S+"}, {"g": 4, "k": "南3局3本場", "m": "A+", "y": 9, "r": 95.8, "q": 89.8, "p": "S"}, {"g": 4, "k": "南4局", "m": "S", "y": 11, "r": 95.4, "q": 85.8, "p": "S"}, {"g": 4, "k": "南4局1本場", "m": "A-", "y": 7, "r": 83.6, "q": 73.4, "p": "A"}, {"g": 4, "k": "南4局2本場", "m": "S-", "y": 10, "r": 95.3, "q": 85.7, "p": "S"}, {"g": 5, "k": "東1局", "m": "B-", "y": 4, "r": 76.6, "q": 66.1, "p": "A-"}, {"g": 5, "k": "東2局", "m": "S-", "y": 10, "r": 94.8, "q": 87.0, "p": "S"}, {"g": 5, "k": "東2局1本場", "m": "S", "y": 11, "r": 76.7, "q": 73.3, "p": "A-"}, {"g": 5, "k": "東2局2本場", "m": "A-", "y": 7, "r": 65.7, "q": 63.0, "p": "B-"}, {"g": 5, "k": "東3局3本場", "m": "S+", "y": 12, "r": 97.7, "q": 90.6, "p": "S+"}, {"g": 5, "k": "東3局4本場", "m": "C+", "y": 3, "r": 80.6, "q": 81.4, "p": "A"}, {"g": 5, "k": "東4局", "m": "A", "y": 8, "r": 83.0, "q": 80.1, "p": "A"}, {"g": 5, "k": "東4局1本場", "m": "A+", "y": 9, "r": 93.4, "q": 83.9, "p": "S"}, {"g": 5, "k": "南1局2本場", "m": "S", "y": 11, "r": 93.8, "q": 83.2, "p": "S"}, {"g": 5, "k": "南1局3本場", "m": "A-", "y": 7, "r": 88.8, "q": 75.5, "p": "A"}, {"g": 5, "k": "南2局", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 5, "k": "南2局1本場", "m": "A+", "y": 9, "r": 86.2, "q": 82.3, "p": "A"}, {"g": 5, "k": "南3局", "m": "A-", "y": 7, "r": 80.0, "q": 79.1, "p": "A"}, {"g": 5, "k": "南3局1本場", "m": "S+", "y": 12, "r": 98.2, "q": 95.5, "p": "S+"}, {"g": 5, "k": "南4局", "m": "A", "y": 8, "r": 90.1, "q": 79.9, "p": "S-"}], "curve": [[46.8, 1.0], [62.4, 5.0], [76.6, 5.0], [76.7, 7.25], [80.6, 7.25], [80.7, 7.69], [89.0, 7.69], [90.1, 8.0], [90.2, 10.0], [90.9, 10.33], [93.4, 10.33], [93.8, 10.81], [97.2, 10.81], [97.7, 11.93], [100.0, 11.93]], "results": {"baseline": {"exact": 0.104, "w1": 0.463, "w2": 0.716, "mae": 2.4}, "match": {"exact": 0.358, "w1": 0.612, "w2": 0.761, "mae": 1.58}, "ratio": {"exact": 0.343, "w1": 0.612, "w2": 0.836, "mae": 1.51}, "rating": {"exact": 0.343, "w1": 0.657, "w2": 0.791, "mae": 1.4}, "auto": {"exact": 0.418, "w1": 0.672, "w2": 0.746, "mae": 1.37}}};
-  var ACC = [
-    ['いつも中央の評価（比較用）', CD.results.baseline],
-    ['一致率', CD.results.match],
-    ['確率の比', CD.results.ratio],
-    ['Mortal の Rating（局ごと）', CD.results.rating],
-    ['候補から自動で選ぶ', CD.results.auto]
+  /* ---------- screenshots of the real app (WebView2 content) ---------- */
+  var SHOTS = [
+    ['samples/round6/widget-v-dark.png', 'ウィジェット 縦長・ダーク'],
+    ['samples/round6/widget-v-light.png', 'ウィジェット 縦長・ライト'],
+    ['samples/round6/widget-h-dark.png', 'ウィジェット 横長・ダーク'],
+    ['samples/round6/widget-h-light.png', 'ウィジェット 横長・ライト'],
+    ['samples/round6/main-records-light.png', '検討画面「記録」・ライト'],
+    ['samples/round6/main-records-dark.png', '検討画面「記録」・ダーク'],
+    ['samples/round6/main-settings-light.png', '検討画面「設定」・ライト'],
+    ['samples/round6/main-settings-dark.png', '検討画面「設定」・ダーク'],
+    ['samples/round6/error-main-light.png', '不具合のときの画面（ブラウザのエラーページの代わり）']
   ];
-  function pct(v) { return Math.round(v * 100) + '%'; }
-  document.querySelector('#acc-table tbody').innerHTML = ACC.map(function (r, i) {
-    return '<tr' + (i === 0 ? ' class="muted-row"' : '') + '><th scope="row">' + r[0] + '</th><td class="num">' + pct(r[1].exact) + '</td><td class="num">' + pct(r[1].w1) +
-      '</td><td class="num">' + pct(r[1].w2) + '</td><td class="num">' + r[1].mae.toFixed(2) + '</td></tr>';
-  }).join('');
-  document.querySelector('#hand-table tbody').innerHTML = CD.points.map(function (p) {
-    return '<tr><td class="num">' + p.g + '</td><td>' + p.k + '</td><td class="sym strong">' + p.m + '</td><td class="num">' + p.r.toFixed(1) + '</td><td class="num">' + p.q.toFixed(1) + '</td><td class="sym">' + p.p + '</td></tr>';
+  document.getElementById('shots-main').innerHTML = SHOTS.map(function (s) {
+    return '<figure class="shot"><button type="button" data-zoom="' + s[0] + '" aria-label="' + s[1] + 'を拡大"><img src="' + s[0] + '" alt="' + s[1] + '" loading="lazy"></button><figcaption>' + s[1] + '</figcaption></figure>';
   }).join('');
 
-  /* ---------- scatter: Rating per hand (x) vs MAKA grade (y) ----------
-     Colors: dots = accent (single series), fitted line = ink. Checked with the dataviz validator:
-     CVD and normal-vision separation pass in both themes; the marks also differ by type (dot vs line). */
-  var SVGNS = 'http://www.w3.org/2000/svg';
-  function el(name, attrs, parent) {
-    var e = document.createElementNS(SVGNS, name);
-    Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
-    if (parent) parent.appendChild(e);
-    return e;
-  }
-  function renderChart() {
-    var host = document.getElementById('chart');
-    var tip = document.getElementById('chart-tip');
-    var W = 640, H = 400, M = { l: 40, r: 16, t: 12, b: 40 };
-    var X0 = 40, X1 = 100;
-    function X(v) { return M.l + (v - X0) / (X1 - X0) * (W - M.l - M.r); }
-    function Y(g) { return M.t + (12 - g) / 12 * (H - M.t - M.b); }
-    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Mortal の Rating と MAKA の評価の散布図。Rating が高い局ほど MAKA の評価も高い。' }, null);
-    var grid = el('g', {}, svg);
-    for (var g = 0; g <= 12; g++) {
-      el('line', { x1: M.l, x2: W - M.r, y1: Y(g), y2: Y(g), class: 'c-grid' + (GRADES[g].length === 1 ? ' major' : '') }, grid);
-      var t = el('text', { x: M.l - 8, y: Y(g) + 4, class: 'c-label', 'text-anchor': 'end' }, grid); t.textContent = GRADES[g];
-    }
-    for (var v = X0; v <= X1; v += 10) {
-      el('line', { x1: X(v), x2: X(v), y1: H - M.b, y2: H - M.b + 5, class: 'c-tick' }, grid);
-      var tx = el('text', { x: X(v), y: H - M.b + 20, class: 'c-label', 'text-anchor': 'middle' }, grid); tx.textContent = String(v);
-    }
-    var xl = el('text', { x: W - M.r, y: H - 4, class: 'c-label', 'text-anchor': 'end' }, grid); xl.textContent = 'Rating（局ごと）';
-    var d = CD.curve.map(function (c, i) { return (i ? 'L' : 'M') + X(c[0]).toFixed(1) + ' ' + Y(c[1]).toFixed(1); }).join(' ');
-    el('path', { d: d, class: 'c-fit' }, svg);
-    var dots = el('g', {}, svg);
-    CD.points.forEach(function (p, i) {
-      var jitter = (((i * 37) % 7) - 3) * 0.06;
-      var cx = X(Math.max(p.r, X0)), cy = Y(p.y + jitter);
-      var dot = el('circle', { cx: cx.toFixed(1), cy: cy.toFixed(1), r: 4.5, class: 'c-dot' }, dots);
-      var hit = el('circle', { cx: cx.toFixed(1), cy: cy.toFixed(1), r: 10, class: 'c-hit' }, dots);
-      function show() {
-        dot.setAttribute('r', 6);
-        tip.textContent = '半荘' + p.g + ' ' + p.k + '　MAKA ' + p.m + '　Rating ' + p.r.toFixed(1) + '　当てた評価 ' + p.p;
-        tip.hidden = false;
-        var box = host.getBoundingClientRect();
-        var sx = box.width / W, sy = box.height / H;
-        var left = Math.min(Math.max(cx * sx - tip.offsetWidth / 2, 0), box.width - tip.offsetWidth);
-        tip.style.left = left + 'px';
-        tip.style.top = (cy * sy - tip.offsetHeight - 12) + 'px';
-      }
-      function hide() { dot.setAttribute('r', 4.5); tip.hidden = true; }
-      hit.addEventListener('mouseenter', show);
-      hit.addEventListener('mouseleave', hide);
-    });
-    host.appendChild(svg);
-  }
+  var viewer = document.getElementById('viewer');
+  var viewerImg = document.getElementById('viewerImg');
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-zoom]');
+    if (!b) return;
+    viewerImg.src = b.getAttribute('data-zoom');
+    viewerImg.alt = b.querySelector('img') ? b.querySelector('img').alt : '';
+    if (typeof viewer.showModal === 'function') viewer.showModal();
+  });
+  viewer.addEventListener('click', function (e) { if (e.target === viewer) viewer.close(); });
+  document.getElementById('viewerClose').addEventListener('click', function () { viewer.close(); });
 
   /* ---------- questions ---------- */
-  var SAMPLE_SLOTS = 4;
-  function samplesBlock(q) {
-    var html = '<div class="block-sample">';
-    for (var i = 1; i <= SAMPLE_SLOTS; i++) {
-      html += '<div class="sample-slot"><div class="panel-title">追加のサンプル ' + i + '</div>' +
-        '<div class="other"><label for="' + q.id + '-url' + i + '">mjai の結果の URL</label>' +
-        '<input type="url" id="' + q.id + '-url' + i + '" inputmode="url" autocomplete="off" spellcheck="false"></div>' +
-        '<div class="other"><label for="' + q.id + '-grades' + i + '">MAKA の評価（局の順、最後に半荘全体。例：S,A+,B,…,半荘 A）</label>' +
-        '<textarea id="' + q.id + '-grades' + i + '" rows="2" spellcheck="false"></textarea></div></div>';
-    }
-    return html + '</div>';
-  }
-  var HANCHAN = [
-    { id: 'h1', k: 'サンプル1（f7388969…）' }, { id: 'h2', k: 'サンプル2（be0a2a52…）' },
-    { id: 'h3', k: 'サンプル3（002ca97a…）' }, { id: 'h4', k: 'サンプル4（3a36dac7…）' }
-  ];
-  function hanchanBlock(q) {
-    return '<div class="table-wrap"><table class="grid"><thead><tr><th>半荘</th><th>MAKA の半荘全体の評価</th></tr></thead><tbody>' +
-      HANCHAN.map(function (h) {
-        var sid = q.id + '-g-' + h.id;
-        return '<tr><th scope="row">' + h.k + '</th><td><label class="sr-only" for="' + sid + '">' + h.k + ' の半荘全体の評価</label><select id="' + sid + '" data-grade="' + h.id + '">' +
-          '<option value="">未入力</option>' + GRADES.map(function (g) { return '<option value="' + g + '">' + g + '</option>'; }).join('') + '<option value="?">分からない</option></select></td></tr>';
-      }).join('') + '</tbody></table></div>';
-  }
-
   var Q = [
-    { id: 'r1', no: 'R5-1', title: 'MAKA への合わせ方',
-      context: '<p>上の検証の結果を踏まえた進め方です。どれを選んでも、区切りは MAKA の評価が増えるたびに合わせ直します。</p>',
+    { id: 'r1', no: 'R6-1', title: 'ウィジェットを受け入れますか',
+      context: '<p>上の「試し方」で動かしてから答えてください。直してほしいところがあれば、補足に書いてください。</p>',
       opts: [
-        { v: 'auto', t: '候補から自動で選び、合わせ直す', rec: true,
-          note: '点数の出し方の候補（Rating、確率の比、評価値の差、その組み合わせなど）を用意し、MAKA の評価が増えるたびに、上と同じ検証でいちばん当たるものを選んで区切りを合わせ直す。画面には、いまの見込み（ぴったり何割、±1段階以内何割）も出す。いまの67局では、ぴったり 42%、±1段階以内 67%。' },
-        { v: 'rating', t: 'Mortal の Rating 1つに決める',
-          note: 'いまの67局では、1つだけ使う中ではいちばん安定していた（ぴったり 34%、±1段階以内 66%）。' },
-        { v: 'ratio', t: '確率の比 1つに決める（4回目で選んだもの）',
-          note: '±2段階以内はいちばん高い（84%）が、ぴったりは 34%、±1段階以内は 61%。' }
+        { v: 'accept', t: '受け入れる' },
+        { v: 'fix', t: '直すところがある（補足に書く）' },
+        { v: 'later', t: 'まだ試していない（あとで答える）' }
       ] },
-    { id: 'r2', no: 'R5-2', title: 'MAKA の推した打牌も記録するか',
-      context: '<p>4回目の補足で「MAKA の考えのほうが Mortal より確からしい」とのことでした。アプリが自動で取り込めるのは Mortal だけですが、答え合わせの画面で、MAKA が推した打牌を任意で入れられるようにできます。MAKA は、アプリで自分の答えを出したあとに見る前提です。</p>',
+    { id: 'r2', no: 'R6-2', title: '雀魂の上でサイドボタンを効かせる方法',
+      context: '<p>上の「管理者権限」の件への対処です。雀魂を管理者なしで起動させる方法は、ランチャーの更新が動かなくなるおそれがあるので外しました。</p>',
       opts: [
-        { v: 'optional', t: '任意で入れられる欄を付ける', rec: true,
-          note: 'Mortal と MAKA が食い違った局面に印が付き、ログで数えられる。入れなくても使える。' },
-        { v: 'no', t: '付けない' }
+        { v: 'helper', t: 'ボタンを拾う部分だけを、管理者で動く小さなプログラムに分ける', rec: true,
+          note: '管理者で動くのは、マウスのボタンを拾って本体に知らせるだけの小さなプログラム。画面・ネット・ファイルの大半は普通の権限のまま。最初の1回だけ Windows の確認が出て、以後はタスクスケジューラから確認なしで起動する。作る手間は少し増える。' },
+        { v: 'whole', t: 'アプリ全体を管理者で動かす',
+          note: 'いちばん簡単。起動のたびに Windows の確認が出る（タスクスケジューラを使えば出ない）。アプリの中の mjai の窓（外部のサイト）も管理者の権限で動く。リンクはエクスプローラー経由で開き、ブラウザが管理者で起動しないようにする。エクスプローラーからのファイルのドラッグ＆ドロップは使えなくなる（ファイルを選ぶ画面で代わりにする）。' },
+        { v: 'click', t: 'サイドボタンはあきらめ、ウィジェットの「迷い」をクリックする',
+          note: '権限は普通のまま。鳴きの判断の数秒のあいだに、ウィジェットまでカーソルを動かす必要がある。' },
+        { v: 'uiaccess', t: '署名した UIAccess のアプリにする',
+          note: '管理者にしないまま、雀魂の上の入力を受け取れる Windows の仕組み。自分用の証明書を作って信頼させ、アプリに署名して Program Files に入れる必要があり、作り直すたびに署名と入れ直しが要る。' }
       ] },
-    { id: 'r3', no: 'R5-3', title: 'サンプル1〜4の半荘全体の評価', hanchan: true,
-      context: '<p>半荘全体の MAKA の評価は、10月9日の半荘（A+）の1つしかありません。この半荘では、局の評価を判断の数で重み付けして平均すると A+ になり、一致しました。半荘全体の評価が局の評価の平均で決まっているのかを確かめたいので、サンプル1〜4の半荘全体の評価を入れてもらえますか。MAKA の結果は7日で消えます。</p>',
-      opts: [
-        { v: 'entered', t: '下の表に入れた', rec: true },
-        { v: 'unavailable', t: 'もう見られない・分からない' }
-      ] },
-    { id: 'r4', no: 'R5-4', title: 'サンプルを足すなら（任意）', samples: true,
-      context: '<p>サンプルが増えるほど、点数の選び方と区切りが安定します。足せる分だけで構いません。アプリの入力欄ができたら、そちらでも貯められます。</p>',
-      opts: [
-        { v: 'add', t: 'このシートに足していく' },
-        { v: 'later', t: 'アプリの入力欄ができてからにする' }
-      ] },
-    { id: 'r5', no: 'R5-5', title: 'ほかに気になることがあれば', free: true,
-      context: '<p>「聞かずに決めたこと」で違うと思うものの番号、分析への指摘、何でも。</p>' }
+    { id: 'r3', no: 'R6-3', title: 'ほかに気になることがあれば', free: true,
+      context: '<p>「聞かずに決めたこと」で違うと思うものの番号、ウィジェットへの要望、何でも。</p>' }
   ];
 
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -701,7 +656,6 @@
     Q.forEach(function (q) {
       html += '<div class="q" id="q-' + q.id + '"><div class="q-head"><div class="q-id">' + q.no + '</div><h3>' + q.title + '</h3>' +
         (q.context ? '<div class="context">' + q.context + '</div>' : '') + '</div>';
-      if (q.hanchan) html += hanchanBlock(q);
       if (!q.free) {
         html += '<fieldset><legend>' + q.no + ' の答え</legend><div class="opts">';
         q.opts.forEach(function (o) {
@@ -713,7 +667,6 @@
         });
         html += '</div></fieldset>';
       }
-      if (q.samples) html += samplesBlock(q);
       html += '<div class="other"><label for="' + q.id + '-note">' + (q.free ? '自由記入' : 'その他・補足') + '</label><textarea id="' + q.id + '-note"' + (q.free ? ' rows="5"' : '') + '></textarea></div></div>';
     });
     host.innerHTML = html;
@@ -723,7 +676,7 @@
     });
   }
 
-  /* ---------- answers: autosave to db answers/round5, restore, copy ---------- */
+  /* ---------- answers: autosave to db answers/round6, restore, copy ---------- */
   var statusEl = document.getElementById('status');
   var state = {};
   var docRef = null;
@@ -741,20 +694,7 @@
         choice = c ? c.value : null;
       }
       if (!choice && note.trim()) choice = 'other';
-      var entry = { choice: choice, note: note };
-      if (q.hanchan) {
-        entry.grades = {};
-        Array.prototype.forEach.call(document.querySelectorAll('#q-' + q.id + ' select[data-grade]'), function (sel) { if (sel.value) entry.grades[sel.getAttribute('data-grade')] = sel.value; });
-      }
-      if (q.samples) {
-        entry.samples = [];
-        for (var i = 1; i <= SAMPLE_SLOTS; i++) {
-          var u = document.getElementById(q.id + '-url' + i).value.trim();
-          var g = document.getElementById(q.id + '-grades' + i).value.trim();
-          if (u || g) entry.samples.push({ slot: i, url: u, grades: g });
-        }
-      }
-      state[q.id] = entry;
+      state[q.id] = { choice: choice, note: note };
     });
   }
 
@@ -767,19 +707,13 @@
         if (input) input.checked = true;
       }
       if (typeof s.note === 'string') document.getElementById(q.id + '-note').value = s.note;
-      if (q.hanchan && s.grades) Object.keys(s.grades).forEach(function (k) { var sel = document.getElementById(q.id + '-g-' + k); if (sel) sel.value = s.grades[k]; });
-      if (q.samples && Array.isArray(s.samples)) s.samples.forEach(function (x) {
-        var u = document.getElementById(q.id + '-url' + x.slot), g = document.getElementById(q.id + '-grades' + x.slot);
-        if (u && typeof x.url === 'string') u.value = x.url;
-        if (g && typeof x.grades === 'string') g.value = x.grades;
-      });
     });
     readForm();
   }
 
   function answerText() {
     readForm();
-    var lines = ['【確認シートの回答（JantamaReviewer・5回目）】'];
+    var lines = ['【確認シートの回答（JantamaReviewer・6回目）】'];
     Q.forEach(function (q) {
       var s = state[q.id];
       var c;
@@ -788,8 +722,6 @@
       else if (!s.choice) c = '未回答';
       else { var o = q.opts.filter(function (x) { return x.v === s.choice; })[0]; c = o ? o.t : s.choice; }
       lines.push(q.no + ' ' + q.title + '：' + c);
-      if (s.grades && Object.keys(s.grades).length) lines.push('　半荘全体：' + HANCHAN.filter(function (h) { return s.grades[h.id]; }).map(function (h) { return h.k + ' ' + s.grades[h.id]; }).join('、'));
-      if (s.samples) s.samples.forEach(function (x) { lines.push('　サンプル' + x.slot + '：' + x.url + ' ／ ' + x.grades.replace(/\n/g, ' ')); });
       if (s.note.trim()) lines.push('　補足：' + s.note.trim().replace(/\n/g, ' / '));
     });
     return lines.join('\n');
@@ -825,7 +757,6 @@
     });
   }
 
-  renderChart();
   renderQuestions();
   var questionsEl = document.getElementById('questions');
   questionsEl.addEventListener('input', schedule);
