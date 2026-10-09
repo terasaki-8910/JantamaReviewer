@@ -450,9 +450,11 @@ impl InputCore {
                 RegisterDecision::Pass => Decision::Pass,
             },
             Mode::Normal | Mode::Test => match config.trigger {
-                Some(trigger) => {
-                    decide_active(event, trigger, current_mods(event, mods, wants_mods(trigger, event)))
-                }
+                Some(trigger) => decide_active(
+                    event,
+                    trigger,
+                    current_mods(event, mods, wants_mods(trigger, event)),
+                ),
                 None => Decision::Pass,
             },
         };
@@ -763,7 +765,10 @@ mod tests {
             Some(ActiveTrigger::key(F8, NONE)),
             Some(ActiveTrigger::key(0xDE, NONE)),
             Some(ActiveTrigger::key(KEY_M, CTRL_ALT)),
-            Some(ActiveTrigger::key(F13, Modifiers::new(true, true, true, true))),
+            Some(ActiveTrigger::key(
+                F13,
+                Modifiers::new(true, true, true, true),
+            )),
         ];
         for trigger in triggers {
             for mode in [Mode::Normal, Mode::Test, Mode::Register] {
@@ -919,10 +924,7 @@ mod tests {
                 "{message:#06x}"
             );
         }
-        assert_eq!(
-            core.on_keyboard(wm::KEYDOWN, F8, 6, || NONE),
-            Outcome::PASS
-        );
+        assert_eq!(core.on_keyboard(wm::KEYDOWN, F8, 6, || NONE), Outcome::PASS);
     }
 
     #[test]
@@ -990,7 +992,8 @@ mod tests {
     }
 
     #[test]
-    fn w10_a_chord_assignment_needs_the_same_modifiers_and_swallows_the_release_after_a_modifier_let_go() {
+    fn w10_a_chord_assignment_needs_the_same_modifiers_and_swallows_the_release_after_a_modifier_let_go(
+    ) {
         let core = core_with(Some(ActiveTrigger::key(KEY_M, CTRL_ALT)), Mode::Normal);
         // 修飾キーが違えば通す。
         assert_eq!(
@@ -1056,10 +1059,7 @@ mod tests {
         assert!(core.on_keyboard(wm::KEYDOWN, F13, 3, || NONE).swallow);
         core.set_config(Config::OFF);
         core.reset();
-        assert_eq!(
-            core.on_keyboard(wm::KEYUP, F13, 4, || NONE),
-            Outcome::PASS
-        );
+        assert_eq!(core.on_keyboard(wm::KEYUP, F13, 4, || NONE), Outcome::PASS);
     }
 
     #[test]
@@ -1241,11 +1241,7 @@ mod tests {
             translate_keyboard(wm::SYSKEYUP, F8),
             Some(InputEvent::KeyUp(F8))
         );
-        assert_eq!(
-            translate_keyboard(0x0102, F8),
-            None,
-            "WM_CHAR は判定しない"
-        );
+        assert_eq!(translate_keyboard(0x0102, F8), None, "WM_CHAR は判定しない");
     }
 
     #[test]

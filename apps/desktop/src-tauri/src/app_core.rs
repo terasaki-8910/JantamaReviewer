@@ -417,9 +417,7 @@ mod tests {
         assert!(change.trigger && !change.orientation && !change.data_dir);
 
         let mut bad = f.core.settings().clone();
-        bad.trigger = Trigger::Key {
-            code: "Enter".into(),
-        };
+        bad.trigger = Trigger::key("Enter");
         assert!(f.core.apply_settings(bad).is_err());
         assert_eq!(f.core.settings().trigger, Trigger::MouseX2);
     }

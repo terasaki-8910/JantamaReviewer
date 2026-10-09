@@ -2,7 +2,7 @@
 //! 本物の WH_MOUSE_LL / WH_KEYBOARD_LL の手続きまで通す。`pnpm test:hook` で動かす。
 //!
 //! 判定と、Windows のメッセージの読み取り、割り当てを変えたあとの動きは、OS に依存しない部品
-//! （`hook::HookCore`）の単体テストが確かめている。ここで確かめるのは、OS との配線だけ:
+//! （`jantama_input::logic::InputCore`）の単体テストが確かめている。ここで確かめるのは、OS との配線だけ:
 //! - 低レベルフックの手続きが、本当に呼ばれ、割り当てたボタンを横取りして、ほかのアプリへ届けないこと
 //! - 割り当てを変えたあとに、キーボードのフックが入り、外れること
 //! - 押された時刻が、記録の担当へ渡ること
@@ -32,8 +32,9 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use jantama_reviewer_lib::hook::{ActiveTrigger, MouseButton, TriggerEvent};
-use jantama_reviewer_lib::hook_win;
+use jantama_input::hook_win;
+use jantama_input::keys::Modifiers;
+use jantama_input::logic::{ActiveTrigger, Config, Mode, MouseButton, Report};
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::GetCurrentThreadId;
@@ -355,8 +356,17 @@ fn key(vk: u32, down: bool) -> Seen {
     Seen::Key { vk, down }
 }
 
-fn triggers(rx: &Receiver<TriggerEvent>) -> Vec<TriggerEvent> {
+/// フックが知らせた「割り当てたボタンが押された」時刻（ミリ秒）。
+fn triggers(rx: &Receiver<i64>) -> Vec<i64> {
     rx.try_iter().collect()
+}
+
+/// 割り当てを変える（通常の動き）。
+fn assign(trigger: Option<ActiveTrigger>) -> Config {
+    Config {
+        trigger,
+        mode: Mode::Normal,
+    }
 }
 
 fn now_ms() -> i64 {
@@ -395,8 +405,19 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     let _ = take_seen();
 
     let (tx, rx) = mpsc::channel();
-    let hook = hook_win::start(Some(ActiveTrigger::Mouse(MouseButton::X1)), tx)
-        .expect("フックを入れられる（対話できるデスクトップが要る）");
+    let (hook, status) = hook_win::start(
+        assign(Some(ActiveTrigger::Mouse(MouseButton::X1))),
+        move |report| {
+            if let Report::Trigger { t_ms } = report {
+                let _ = tx.send(t_ms);
+            }
+        },
+    )
+    .expect("フックを入れられる（対話できるデスクトップが要る）");
+    assert!(
+        status.mouse && !status.keyboard && status.error.is_none(),
+        "マウスの割り当てでは、マウスのフックだけが入る: {status:?}"
+    );
 
     // ---- 既定の割り当て（サイドボタンの「戻る」= X1）----
     let before = now_ms();
@@ -410,9 +431,9 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     let events = triggers(&rx);
     assert_eq!(events.len(), 1, "押下の 1 回だけが記録の担当に渡る");
     assert!(
-        (before..=now_ms()).contains(&events[0].t_ms),
+        (before..=now_ms()).contains(&events[0]),
         "押された時刻が渡る: {} （{before} から {}）",
-        events[0].t_ms,
+        events[0],
         now_ms()
     );
 
@@ -442,7 +463,7 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     assert_eq!(triggers(&rx).len(), 3);
 
     // ---- 割り当てを X2 に変える（実行中に反映される）----
-    hook.set_trigger(Some(ActiveTrigger::Mouse(MouseButton::X2)));
+    hook.apply(assign(Some(ActiveTrigger::Mouse(MouseButton::X2))));
     click(MouseButton::X2, 1);
     click(MouseButton::X1, 1);
     flush_mouse();
@@ -454,7 +475,7 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     assert_eq!(triggers(&rx).len(), 1);
 
     // ---- 割り当てを中ボタンに変える ----
-    hook.set_trigger(Some(ActiveTrigger::Mouse(MouseButton::Middle)));
+    hook.apply(assign(Some(ActiveTrigger::Mouse(MouseButton::Middle))));
     click(MouseButton::Middle, 1);
     click(MouseButton::X1, 1);
     click(MouseButton::X2, 1);
@@ -474,9 +495,13 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     assert_eq!(triggers(&rx).len(), 1);
 
     // ---- 割り当てをキー（F13）に変える。キーボードのフックは、このときに入る ----
-    hook.set_trigger(Some(ActiveTrigger::Key(VK_F13)));
-    // キーボードのフックは別のスレッドが入れるので、F13 が横取りされるようになるまで待つ。
-    thread::sleep(Duration::from_millis(200));
+    let status = hook.apply(assign(Some(ActiveTrigger::key(VK_F13, Modifiers::NONE))));
+    assert!(
+        !status.mouse && status.keyboard,
+        "キーの割り当てでは、キーボードのフックだけが入る: {status:?}"
+    );
+    // フックの入れ直しは終わっている（apply は待つ）が、念のため少し待ってから確かめる。
+    thread::sleep(Duration::from_millis(50));
     let mut installed = false;
     for _ in 0..40 {
         press_key(VK_F13);
@@ -552,7 +577,11 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     let _ = take_seen();
 
     // ---- 割り当てなし: すべて通る ----
-    hook.set_trigger(None);
+    let status = hook.apply(Config::OFF);
+    assert!(
+        !status.mouse && !status.keyboard,
+        "割り当てが無ければ、フックは 1 つも入れない: {status:?}"
+    );
     click(MouseButton::X1, 1);
     click(MouseButton::X2, 1);
     flush_mouse();

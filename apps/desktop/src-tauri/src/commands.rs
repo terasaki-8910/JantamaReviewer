@@ -19,7 +19,6 @@ use tauri::{
 use crate::app_core::{AppState, Core, SettingsChange};
 use crate::appearance::{parse_css_color, Rgb};
 use crate::clock::now_ms;
-use crate::hook::{ActiveTrigger, TriggerEvent};
 use crate::ready::ShowGate;
 use crate::settings::{Orientation, Settings, WidgetPosition};
 use crate::store::{Rating, SessionRecord};
@@ -27,6 +26,7 @@ use crate::widget_window::{
     clamp_to_monitors, default_widget_position, move_window, widget_size, Area, MAIN_LABEL,
     WIDGET_LABEL,
 };
+use jantama_input::logic::{Config, Mode};
 
 /// 記録の状態が変わったときに全部の窓へ送るイベント。
 pub const EVENT_STATE_CHANGED: &str = "state-changed";
@@ -67,7 +67,7 @@ pub const SHOW_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// フックのスレッドへの窓口。フックを入れられなかったときは `None`（ウィジェットのボタンだけで動く）。
 #[cfg(windows)]
-pub struct HookState(pub Option<crate::hook_win::HookHandle>);
+pub struct HookState(pub Option<jantama_input::hook_win::HookHandle>);
 
 /// ウィジェットの右クリックのメニュー。
 pub struct WidgetMenu(pub Menu<Wry>);
@@ -210,14 +210,14 @@ pub fn set_settings_now<R: Runtime>(
 
 /// 設定の変更を、フック・窓・画像の許可範囲に反映する。変わったものだけ。
 fn apply_side_effects<R: Runtime>(app: &AppHandle<R>, settings: &Settings, change: SettingsChange) {
-    #[cfg(windows)]
     if change.trigger {
         if let Some(hook) = &app.state::<HookState>().0 {
-            hook.set_trigger(ActiveTrigger::from_trigger(&settings.trigger));
+            hook.apply(Config {
+                trigger: settings.trigger.to_active(),
+                mode: Mode::Normal,
+            });
         }
     }
-    #[cfg(not(windows))]
-    let _ = ActiveTrigger::from_trigger(&settings.trigger);
     if change.orientation {
         resize_widget(app, settings.orientation);
     }
@@ -290,12 +290,12 @@ pub fn initial_widget_position<R: Runtime>(
 
 /// フックから届いた合図で迷いマークを記録する担当のスレッド。
 /// スクリーンショットや保存は時間がかかるので、フックの手続きの外で行う。
-pub fn spawn_trigger_worker<R: Runtime>(app: AppHandle<R>, rx: Receiver<TriggerEvent>) {
+pub fn spawn_trigger_worker<R: Runtime>(app: AppHandle<R>, rx: Receiver<i64>) {
     let spawned = thread::Builder::new()
         .name("mark-worker".to_string())
         .spawn(move || {
-            for signal in rx {
-                if let Err(e) = mark_now(&app, signal.t_ms) {
+            for t_ms in rx {
+                if let Err(e) = mark_now(&app, t_ms) {
                     eprintln!("迷いマークを記録できませんでした: {e}");
                 }
             }

@@ -27,12 +27,12 @@ use windows::Win32::Storage::FileSystem::{
     CreateFileW, ReadFile, WriteFile, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED,
     FILE_SHARE_NONE, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
 };
-use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, WaitNamedPipeW, PIPE_READMODE_BYTE,
     PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
 };
 use windows::Win32::System::Threading::CreateEventW;
+use windows::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 
 use crate::protocol::PIPE_NAME_PREFIX;
 
@@ -255,7 +255,12 @@ impl Pipe {
             };
             // SAFETY: data・overlapped・イベントは、完了まで待つので、この繰り返しの間は生きている。
             let written = unsafe {
-                match WriteFile(self.handle, Some(&data[sent..]), None, Some(&mut overlapped)) {
+                match WriteFile(
+                    self.handle,
+                    Some(&data[sent..]),
+                    None,
+                    Some(&mut overlapped),
+                ) {
                     Ok(()) => {}
                     Err(error) if is(&error, ERROR_IO_PENDING) => {}
                     Err(error) => return Err(os_error(error)),
@@ -394,7 +399,9 @@ mod tests {
         assert!(started.elapsed() >= Duration::from_millis(250));
         // ファイルの読み書きには使えない。
         for path in ["C:\\Windows\\win.ini", "\\\\?\\C:\\x", "pipe\\x", ""] {
-            let err = Pipe::connect(path, Duration::from_millis(10)).err().expect("断る");
+            let err = Pipe::connect(path, Duration::from_millis(10))
+                .err()
+                .expect("断る");
             assert_eq!(err.kind(), io::ErrorKind::InvalidInput, "{path}");
         }
         assert!(Pipe::create_server("C:\\x", "D:P(A;;GA;;;WD)").is_err());
@@ -412,7 +419,9 @@ mod tests {
             };
             let client = Pipe::connect(&name, Duration::from_secs(5)).unwrap();
             accepting.join().unwrap();
-            client.write_all(format!("round-{round}\n").as_bytes()).unwrap();
+            client
+                .write_all(format!("round-{round}\n").as_bytes())
+                .unwrap();
             assert_eq!(read_exact_line(&server), format!("round-{round}"));
             drop(client);
             server.disconnect();

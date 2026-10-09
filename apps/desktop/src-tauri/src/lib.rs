@@ -15,9 +15,6 @@ pub mod capture_win;
 pub mod clock;
 pub mod commands;
 pub mod external;
-pub mod hook;
-#[cfg(windows)]
-pub mod hook_win;
 pub mod menu;
 pub mod navigation;
 pub mod ready;
@@ -43,7 +40,6 @@ use crate::capture_win::WindowsCapturer;
 use crate::commands::{
     HookState, PositionSaver, SharedCore, SharedShowGate, WidgetMenu, SHOW_TIMEOUT,
 };
-use crate::hook::ActiveTrigger;
 use crate::sound::WindowsSound;
 use crate::widget_window::{
     apply_native_style, build_window, main_window_spec, move_window, widget_window_spec,
@@ -121,8 +117,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
 
     // 割り当てたボタンのフック。入れられなくても、ウィジェットのボタンだけで動かせる。
     let (tx, rx) = mpsc::channel();
-    let hook = match hook_win::start(ActiveTrigger::from_trigger(&settings.trigger), tx) {
-        Ok(hook) => Some(hook),
+    let initial = jantama_input::logic::Config {
+        trigger: settings.trigger.to_active(),
+        mode: jantama_input::logic::Mode::Normal,
+    };
+    let started = jantama_input::hook_win::start(initial, move |report| {
+        if let jantama_input::logic::Report::Trigger { t_ms } = report {
+            let _ = tx.send(t_ms);
+        }
+    });
+    let hook = match started {
+        Ok((hook, _status)) => Some(hook),
         Err(e) => {
             eprintln!("ボタンのフックを入れられませんでした: {e}");
             None

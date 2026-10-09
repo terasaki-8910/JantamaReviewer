@@ -220,7 +220,9 @@ pub enum ProtocolError {
 impl std::fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProtocolError::LineTooLong => write!(f, "連絡の 1 行が長すぎます（{MAX_LINE_BYTES} バイト超）"),
+            ProtocolError::LineTooLong => {
+                write!(f, "連絡の 1 行が長すぎます（{MAX_LINE_BYTES} バイト超）")
+            }
             ProtocolError::Malformed(why) => write!(f, "連絡を読めません: {why}"),
         }
     }
@@ -326,7 +328,10 @@ mod tests {
             encode_line(&none),
             "{\"type\":\"config\",\"trigger\":null,\"mode\":\"normal\"}\n"
         );
-        assert_eq!(encode_line(&ToHelper::Shutdown), "{\"type\":\"shutdown\"}\n");
+        assert_eq!(
+            encode_line(&ToHelper::Shutdown),
+            "{\"type\":\"shutdown\"}\n"
+        );
     }
 
     #[test]
@@ -408,9 +413,10 @@ mod tests {
 
     #[test]
     fn w9_a_key_without_modifier_flags_is_read_with_all_flags_off() {
-        let message: ToHelper =
-            decode_line("{\"type\":\"config\",\"trigger\":{\"kind\":\"key\",\"vk\":124},\"mode\":\"normal\"}")
-                .unwrap();
+        let message: ToHelper = decode_line(
+            "{\"type\":\"config\",\"trigger\":{\"kind\":\"key\",\"vk\":124},\"mode\":\"normal\"}",
+        )
+        .unwrap();
         assert_eq!(
             message,
             ToHelper::Config {
@@ -445,15 +451,23 @@ mod tests {
     #[test]
     fn w9_the_line_buffer_joins_split_reads_and_splits_joined_ones() {
         let mut buffer = LineBuffer::new();
-        assert_eq!(buffer.push(b"{\"type\":\"can").unwrap(), Vec::<String>::new());
         assert_eq!(
-            buffer.push(b"cel\"}\n{\"type\":\"hello\",\"protocol\":1}\r\n{\"ty").unwrap(),
+            buffer.push(b"{\"type\":\"can").unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            buffer
+                .push(b"cel\"}\n{\"type\":\"hello\",\"protocol\":1}\r\n{\"ty")
+                .unwrap(),
             vec![
                 "{\"type\":\"cancel\"}".to_string(),
                 "{\"type\":\"hello\",\"protocol\":1}".to_string()
             ]
         );
-        assert_eq!(buffer.push(b"pe\":\"cancel\"}\n").unwrap(), vec!["{\"type\":\"cancel\"}".to_string()]);
+        assert_eq!(
+            buffer.push(b"pe\":\"cancel\"}\n").unwrap(),
+            vec!["{\"type\":\"cancel\"}".to_string()]
+        );
         // 空行は飛ばす。
         assert_eq!(buffer.push(b"\n\r\n\n").unwrap(), Vec::<String>::new());
     }

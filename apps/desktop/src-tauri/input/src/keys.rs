@@ -37,7 +37,10 @@ impl Modifiers {
 
     /// 1 つの整数に詰める（下位 4 ビット）。
     pub fn bits(self) -> u8 {
-        u8::from(self.ctrl) | (u8::from(self.alt) << 1) | (u8::from(self.shift) << 2) | (u8::from(self.win) << 3)
+        u8::from(self.ctrl)
+            | (u8::from(self.alt) << 1)
+            | (u8::from(self.shift) << 2)
+            | (u8::from(self.win) << 3)
     }
 
     pub fn from_bits(bits: u8) -> Modifiers {
@@ -240,7 +243,15 @@ mod tests {
         // 英字 26・数字 10・テンキー 10 + 5・ファンクション 24・編集と制御 8・記号 11
         assert_eq!(count, 26 + 10 + 10 + 5 + 24 + 8 + 11);
         // 割り当てられるキーの名前は、逆にたどっても同じ名前に戻る。
-        for code in ["KeyM", "Digit7", "F13", "Numpad3", "NumpadDivide", "Insert", "Slash"] {
+        for code in [
+            "KeyM",
+            "Digit7",
+            "F13",
+            "Numpad3",
+            "NumpadDivide",
+            "Insert",
+            "Slash",
+        ] {
             let vk = vk_from_code(code).unwrap();
             assert_eq!(code_from_vk(vk).as_deref(), Some(code));
         }
@@ -261,7 +272,9 @@ mod tests {
 
     #[test]
     fn w10_modifier_keys_are_recognized_left_and_right() {
-        for vk in [0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C] {
+        for vk in [
+            0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C,
+        ] {
             assert!(is_modifier_vk(vk), "{vk:#04x}");
         }
         for vk in [0x41, 0x7C, 0x09, 0x1B, 0x5D, 0x14] {
@@ -280,18 +293,23 @@ mod tests {
         assert!(registrable_key(0x70, none));
         assert!(registrable_key(0x2D, none)); // Insert
         assert!(registrable_key(0x13, none)); // Pause
-        // 文字の入力に使うキーは、そのままでは登録できない。Shift だけでも足りない。
+                                              // 文字の入力に使うキーは、そのままでは登録できない。Shift だけでも足りない。
         assert!(!registrable_key(0x4D, none)); // M
         assert!(!registrable_key(0x4D, shift));
         assert!(!registrable_key(0x35, none)); // 5
         assert!(!registrable_key(0x65, none)); // テンキーの 5
         assert!(!registrable_key(0xBF, none)); // /
-        // Ctrl+Alt+M のように組み合わせれば登録できる。
+                                               // Ctrl+Alt+M のように組み合わせれば登録できる。
         assert!(registrable_key(0x4D, ctrl_alt));
         assert!(registrable_key(0x4D, win));
-        assert!(registrable_key(0x65, Modifiers::new(true, false, false, false)));
+        assert!(registrable_key(
+            0x65,
+            Modifiers::new(true, false, false, false)
+        ));
         // 割り当てられないキー（Esc・Tab・Enter・Space・矢印など）は、修飾キーがあっても登録できない。
-        for vk in [0x1B, 0x09, 0x0D, 0x20, 0x08, 0x25, 0x26, 0x27, 0x28, 0x14, 0xA0] {
+        for vk in [
+            0x1B, 0x09, 0x0D, 0x20, 0x08, 0x25, 0x26, 0x27, 0x28, 0x14, 0xA0,
+        ] {
             assert!(!registrable_key(vk, ctrl_alt), "{vk:#04x}");
         }
     }

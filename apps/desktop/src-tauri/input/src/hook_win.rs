@@ -241,12 +241,7 @@ fn current_modifiers() -> Modifiers {
         // SAFETY: 値を読むだけ。
         (unsafe { GetAsyncKeyState(vk) } as u16) & 0x8000 != 0
     };
-    Modifiers::new(
-        down(0x11),
-        down(0x12),
-        down(0x10),
-        down(0x5B) || down(0x5C),
-    )
+    Modifiers::new(down(0x11), down(0x12), down(0x10), down(0x5B) || down(0x5C))
 }
 
 unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {

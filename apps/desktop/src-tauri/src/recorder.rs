@@ -189,10 +189,11 @@ mod tests {
 
     use super::test_support::{CountingSound, FakeCapturer};
     use super::*;
-    use crate::hook::{
-        process_event, ActiveTrigger, InputEvent, MouseButton, RepeatGate, TriggerEvent,
-    };
     use crate::store::{Event, EventKind, EVENTS_FILE, GAMES_DIR, MARKS_DIR};
+    use jantama_input::keys::Modifiers;
+    use jantama_input::logic::{
+        ActiveTrigger, Config, InputCore, InputEvent, Mode, MouseButton, Report,
+    };
 
     const T0: i64 = 1_760_000_000_123;
     const FAKE_PNG: &[u8] = &[0x89, b'P', b'N', b'G', 1, 2, 3];
@@ -332,10 +333,13 @@ mod tests {
 
     #[test]
     fn w1_w2_the_hook_pipeline_records_one_mark_per_assigned_button_press_only() {
-        // フックの判定（process_event）が返した合図だけを記録に回す、実機と同じつなぎ方。
+        // フックの判定（InputCore）が返した合図だけを記録に回す、実機と同じつなぎ方。
         let mut f = fixture();
-        let gate = RepeatGate::new();
-        let trigger = Some(ActiveTrigger::Mouse(MouseButton::X1));
+        let core = InputCore::new();
+        core.set_config(Config {
+            trigger: Some(ActiveTrigger::Mouse(MouseButton::X1)),
+            mode: Mode::Normal,
+        });
         let inputs = [
             (InputEvent::MouseDown(MouseButton::Left), 1_000),
             (InputEvent::MouseUp(MouseButton::Left), 1_050),
@@ -348,9 +352,9 @@ mod tests {
         ];
         let mut swallowed = Vec::new();
         for (event, offset) in inputs {
-            let (swallow, signal) = process_event(event, trigger, &gate, T0 + offset);
-            swallowed.push(swallow);
-            if let Some(TriggerEvent { t_ms }) = signal {
+            let outcome = core.process(event, || Modifiers::NONE, T0 + offset);
+            swallowed.push(outcome.swallow);
+            if let Some(Report::Trigger { t_ms }) = outcome.report {
                 f.recorder.mark(t_ms).unwrap();
             }
         }

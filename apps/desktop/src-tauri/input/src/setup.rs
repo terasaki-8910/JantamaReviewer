@@ -64,7 +64,9 @@ pub fn is_valid_sid(text: &str) -> bool {
     };
     !rest.is_empty()
         && rest.len() <= 120
-        && rest.split('-').all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+        && rest
+            .split('-')
+            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
 }
 
 /// XML の文字を置き換える。
@@ -165,7 +167,10 @@ pub fn quote_arg(arg: &str) -> String {
 
 /// 引数を 1 本のコマンドラインにする（ShellExecute の `lpParameters` に渡す）。
 pub fn join_args(args: &[String]) -> String {
-    args.iter().map(|a| quote_arg(a)).collect::<Vec<_>>().join(" ")
+    args.iter()
+        .map(|a| quote_arg(a))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// 設定のとき、補助プログラムに渡す引数。ユーザーは SID で渡す（名前の書き方や言語に左右されない）。
@@ -199,15 +204,24 @@ pub fn schtasks_create_args(xml_path: &str) -> Vec<String> {
 }
 
 pub fn schtasks_run_args() -> Vec<String> {
-    ["/run", "/tn", TASK_NAME].into_iter().map(str::to_string).collect()
+    ["/run", "/tn", TASK_NAME]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
 pub fn schtasks_query_args() -> Vec<String> {
-    ["/query", "/tn", TASK_NAME].into_iter().map(str::to_string).collect()
+    ["/query", "/tn", TASK_NAME]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
 pub fn schtasks_end_args() -> Vec<String> {
-    ["/end", "/tn", TASK_NAME].into_iter().map(str::to_string).collect()
+    ["/end", "/tn", TASK_NAME]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
 pub fn schtasks_delete_args() -> Vec<String> {
@@ -237,7 +251,10 @@ mod tests {
     fn w9_install_and_uninstall_commands_are_built_from_fixed_words_and_the_users_sid() {
         assert_eq!(install_args(SID), vec!["install", "--user-sid", SID]);
         assert_eq!(uninstall_args(), vec!["uninstall"]);
-        assert_eq!(parse_install_args(&install_args(SID)[1..]), Some(SID.to_string()));
+        assert_eq!(
+            parse_install_args(&install_args(SID)[1..]),
+            Some(SID.to_string())
+        );
         // 形の合わない引数は読まない（XML に入れる前に断る）。
         assert_eq!(parse_install_args(&[]), None);
         assert_eq!(parse_install_args(&["--user-sid".to_string()]), None);
@@ -257,13 +274,22 @@ mod tests {
 
     #[test]
     fn w9_the_command_line_quotes_arguments_the_way_windows_reads_them() {
-        assert_eq!(join_args(&install_args(SID)), format!("install --user-sid {SID}"));
+        assert_eq!(
+            join_args(&install_args(SID)),
+            format!("install --user-sid {SID}")
+        );
         assert_eq!(quote_arg("plain"), "plain");
         assert_eq!(quote_arg(""), "\"\"");
         assert_eq!(quote_arg("a b"), "\"a b\"");
         assert_eq!(quote_arg("say \"hi\""), "\"say \\\"hi\\\"\"");
-        assert_eq!(quote_arg("C:\\Program Files\\x"), "\"C:\\Program Files\\x\"");
-        assert_eq!(quote_arg("C:\\dir with space\\"), "\"C:\\dir with space\\\\\"");
+        assert_eq!(
+            quote_arg("C:\\Program Files\\x"),
+            "\"C:\\Program Files\\x\""
+        );
+        assert_eq!(
+            quote_arg("C:\\dir with space\\"),
+            "\"C:\\dir with space\\\\\""
+        );
         assert_eq!(
             join_args(&["a".to_string(), "b c".to_string(), "d".to_string()]),
             "a \"b c\" d"
@@ -293,7 +319,10 @@ mod tests {
 
     #[test]
     fn w9_xml_special_characters_are_escaped() {
-        assert_eq!(xml_escape("a&b<c>d\"e'f"), "a&amp;b&lt;c&gt;d&quot;e&apos;f");
+        assert_eq!(
+            xml_escape("a&b<c>d\"e'f"),
+            "a&amp;b&lt;c&gt;d&quot;e&apos;f"
+        );
         assert_eq!(xml_escape("C:\\Program Files\\x"), "C:\\Program Files\\x");
     }
 
@@ -301,7 +330,10 @@ mod tests {
     fn w9_the_task_runs_the_installed_copy_with_the_highest_run_level_and_no_trigger() {
         let exe = installed_exe(Path::new("C:\\Program Files"));
         let exe = exe.to_string_lossy();
-        assert_eq!(exe, "C:\\Program Files\\JantamaReviewer\\jantama-helper.exe");
+        assert_eq!(
+            exe,
+            "C:\\Program Files\\JantamaReviewer\\jantama-helper.exe"
+        );
         let xml = task_xml(SID, &exe);
         assert!(xml.contains("<RunLevel>HighestAvailable</RunLevel>"));
         assert!(xml.contains("<LogonType>InteractiveToken</LogonType>"));
@@ -329,11 +361,27 @@ mod tests {
     fn w9_schtasks_commands_name_the_one_task() {
         assert_eq!(
             schtasks_create_args("C:\\x\\task.xml"),
-            vec!["/create", "/tn", "JantamaReviewerHelper", "/xml", "C:\\x\\task.xml", "/f"]
+            vec![
+                "/create",
+                "/tn",
+                "JantamaReviewerHelper",
+                "/xml",
+                "C:\\x\\task.xml",
+                "/f"
+            ]
         );
-        assert_eq!(schtasks_run_args(), vec!["/run", "/tn", "JantamaReviewerHelper"]);
-        assert_eq!(schtasks_query_args(), vec!["/query", "/tn", "JantamaReviewerHelper"]);
-        assert_eq!(schtasks_end_args(), vec!["/end", "/tn", "JantamaReviewerHelper"]);
+        assert_eq!(
+            schtasks_run_args(),
+            vec!["/run", "/tn", "JantamaReviewerHelper"]
+        );
+        assert_eq!(
+            schtasks_query_args(),
+            vec!["/query", "/tn", "JantamaReviewerHelper"]
+        );
+        assert_eq!(
+            schtasks_end_args(),
+            vec!["/end", "/tn", "JantamaReviewerHelper"]
+        );
         assert_eq!(
             schtasks_delete_args(),
             vec!["/delete", "/tn", "JantamaReviewerHelper", "/f"]
