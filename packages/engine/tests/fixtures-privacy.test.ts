@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest';
+
+import { FX1_IDS, loadReportJson, loadReportText } from './helpers/fixtures';
+
+// FX-1 の結果 JSON をリポジトリに入れてよいかの検査。
+// 雀魂の牌譜 ID・アカウントの番号・本名が入っていないことを、コミットの前にテストで確かめる。
+describe('FX-1 固定データに個人を特定できる値が入っていない', () => {
+  for (const id of FX1_IDS) {
+    describe(id, () => {
+      const text = loadReportText(id);
+
+      it('雀魂の牌譜 ID（日付-UUID の形）が無い', () => {
+        expect(text).not.toMatch(/\d{6}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+        expect(text).not.toMatch(/\d{6}-[0-9a-f]{8}-/i);
+      });
+
+      it('牌譜リンク・雀魂のドメイン・アカウントの番号（_a の後ろの数字）が無い', () => {
+        expect(text).not.toMatch(/paipu/i);
+        expect(text).not.toMatch(/mahjong-?soul|maj-?soul|yo-star/i);
+        expect(text).not.toMatch(/_a\d+/);
+        expect(text).not.toMatch(/account|nickname|user_?id/i);
+      });
+
+      it('プレイヤー名はすべて「Aさん」「Bさん」「Cさん」「Dさん」に置き換わっている', () => {
+        const placeholder = ['Aさん', 'Bさん', 'Cさん', 'Dさん'];
+        const json = loadReportJson(id) as {
+          mjai_log: { type: string; names?: string[] }[];
+          split_logs: { name?: string[] }[];
+        };
+        const starts = json.mjai_log.filter((e) => e.type === 'start_game');
+        expect(starts).toHaveLength(1);
+        expect(starts[0]?.names).toEqual(placeholder);
+        expect(json.split_logs.length).toBeGreaterThan(0);
+        for (const log of json.split_logs) {
+          expect(log.name).toEqual(placeholder);
+        }
+      });
+    });
+  }
+});
