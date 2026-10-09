@@ -39,10 +39,14 @@ pub fn navigation_hook(url: &Url, origins: &AppOrigins, open: &dyn Fn(&Url)) -> 
     match decide_navigation(url, origins) {
         NavigationDecision::Allow => true,
         NavigationDecision::OpenExternal => {
+            eprintln!("外部のページを既定のブラウザで開きます: {url}");
             open(url);
             false
         }
-        NavigationDecision::Cancel => false,
+        NavigationDecision::Cancel => {
+            eprintln!("画面の遷移を取り消しました: {url}");
+            false
+        }
     }
 }
 
@@ -50,7 +54,10 @@ pub fn navigation_hook(url: &Url, origins: &AppOrigins, open: &dyn Fn(&Url)) -> 
 /// 外部の Web ページなら、拒んだうえで `open` に渡す。
 pub fn new_window_hook(url: &Url, origins: &AppOrigins, open: &dyn Fn(&Url)) {
     if decide_new_window(url, origins) == NewWindowDecision::DenyAndOpenExternal {
+        eprintln!("新しい窓の要求を断り、既定のブラウザで開きます: {url}");
         open(url);
+    } else {
+        eprintln!("新しい窓の要求を断りました: {url}");
     }
 }
 
@@ -58,7 +65,13 @@ pub fn new_window_hook(url: &Url, origins: &AppOrigins, open: &dyn Fn(&Url)) {
 /// 終わったという知らせには、何もしない（`true`）。
 pub fn download_hook(event: &DownloadEvent<'_>) -> bool {
     match event {
-        DownloadEvent::Requested { url, .. } => allow_download(url),
+        DownloadEvent::Requested { url, .. } => {
+            let allowed = allow_download(url);
+            if !allowed {
+                eprintln!("ダウンロードを断りました: {url}");
+            }
+            allowed
+        }
         _ => true,
     }
 }

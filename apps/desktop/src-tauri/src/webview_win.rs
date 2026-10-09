@@ -132,9 +132,15 @@ pub fn harden<R: Runtime>(window: &WebviewWindow<R>, flags: WebviewFlags) {
                     let mut access = Webview2Settings { settings };
                     let problems = apply_flags(&flags, &mut access);
                     if problems.is_empty() {
+                        let summary: Vec<String> = flags
+                            .webview2_settings()
+                            .iter()
+                            .map(|(setting, value)| format!("{setting}={value}"))
+                            .collect();
                         eprintln!(
-                            "[{label}] WebView2 の設定 {} 項目を書き込み、読み戻して確かめました",
-                            flags.webview2_settings().len()
+                            "[{label}] WebView2 の設定 {} 項目を書き込み、読み戻して確かめました: {}",
+                            summary.len(),
+                            summary.join(", ")
                         );
                     }
                     for problem in problems {
