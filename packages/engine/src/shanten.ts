@@ -49,6 +49,8 @@ function encode(counts: number[], length: number): number {
 
 const numberSuitCache = new Map<number, SuitTable>();
 const honorSuitCache = new Map<number, SuitTable>();
+/** 記憶する並びの数の上限。長く動かしても増え続けないよう、超えたら捨てて作り直す。 */
+const MAX_CACHE_ENTRIES = 300_000;
 
 /**
  * 1種類の牌（数牌は9枚分、字牌は7枚分の枚数）から、面子・搭子・雀頭の組み合わせの表を作る。
@@ -119,6 +121,7 @@ function suitTable(counts: number[], length: number, sequences: boolean, cache: 
     counts[i] = here;
   }
 
+  if (cache.size >= MAX_CACHE_ENTRIES) cache.clear();
   cache.set(key, result);
   return result;
 }
