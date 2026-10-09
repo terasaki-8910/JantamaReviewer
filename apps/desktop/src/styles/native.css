@@ -17,6 +17,11 @@ body {
   user-select: none;
 }
 
+/* 入力欄の右下のサイズ変更のつまみはブラウザの名残なので出さない（6回目のシートで決定） */
+textarea {
+  resize: none;
+}
+
 /* 選択してよいもの */
 input,
 textarea,

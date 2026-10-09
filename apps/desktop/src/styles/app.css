@@ -109,7 +109,7 @@ textarea.input {
   min-height: 84px;
   padding: var(--s2) var(--s3);
   line-height: 1.6;
-  resize: vertical;
+  resize: none;
 }
 
 .input:hover {
