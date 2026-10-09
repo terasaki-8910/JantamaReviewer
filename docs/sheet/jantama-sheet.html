@@ -205,42 +205,68 @@
   details.doc + details.doc { margin-top: -40px; }
   .sample-slot { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
   .sample-slot input[type="url"] { font-size: 14px; }
+  /* round 5: chart */
+  .chart-fig { margin: 0; display: grid; gap: 8px; position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); }
+  .lg-item { display: inline-flex; align-items: center; gap: 6px; }
+  .chart-box { position: relative; width: 100%; }
+  .chart-box svg { display: block; width: 100%; height: auto; }
+  .c-grid { stroke: var(--line); stroke-width: 1; }
+  .c-grid.major { stroke: var(--line-strong); }
+  .c-tick { stroke: var(--line-strong); stroke-width: 1; }
+  .c-label { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+  .c-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+  .c-fit { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .c-hit { fill: transparent; cursor: default; }
+  .chart-tip { position: absolute; z-index: 2; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12.5px; padding: 4px 8px; border-radius: 4px; white-space: nowrap; }
+  .grid tr.muted-row th, .grid tr.muted-row td { color: var(--muted); }
 </style>
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">JantamaReviewer · 確認シート 4回目 · 2026-10-09</div>
+    <div class="eyebrow">JantamaReviewer · 確認シート 5回目 · 2026-10-09</div>
     <h1>雀魂の検討システム 確認シート</h1>
-    <p class="lead">3回目の補足（一致率だけでは粗い。Mortal の GitHub を調べてほしい）を受けて、局の点数の出し方を調べ、今日の半荘と MAKA の評価で比べました。ウィジェットはまだ作っていて、できたら次のシートで受け入れを聞きます。</p>
+    <p class="lead">4回目の補足（MAKA の式に細かく合わせたい、ここはさぼらないで）を受けて、もらった5半荘・67局で、MAKA の評価を Mortal のデータからどこまで当てられるかを調べました。ウィジェットはまだ作っていて、できたら次のシートで受け入れを聞きます。</p>
     <div class="meta">
-      <span>質問 3 と自由記入 1</span>
+      <span>質問 4 と自由記入 1</span>
       <span class="muted">選ぶと自動で保存されます</span>
       <span class="status" id="status" role="status">保存の準備中…</span>
     </div>
   </header>
 
   <section aria-labelledby="h-found">
-    <div class="sec-head"><h2 id="h-found">調べたこと</h2></div>
+    <div class="sec-head"><h2 id="h-found">分かったこと</h2></div>
     <ul class="decided">
-      <li>3回目の表の「一致の度合い」は一致率ではなく、選んだ手の確率を AI の1位の確率で割った値の平均でした。ほぼ同じ判断には部分点が付く数え方です（説明が足りませんでした）。この数え方を、下では「確率の比」と呼びます。</li>
-      <li>Mortal の Rating の式を、検討ツールのソース（mjai-reviewer の src/review/mortal.rs）で確かめました。判断ごとに、AI と同じなら1点、違えば「選んだ手の評価値が、その場の候補の最低から最高までのどの位置か」を0〜1で点にし、その平均を2乗します。保存した結果で計算し直すと半荘全体で 86.7 になり、サイトの値と一致しました。</li>
-      <li>作者はサイトの注記と FAQ で、Rating は目安にすぎず誤解されやすいこと、AI の1位以外の評価値は正確でないことを書いています。</li>
+      <li>MAKA の評価は、自分の判断が AI の好みにどれだけ近いかと強く連動していました。調べたどの点数でも、順位の相関は 0.7〜0.8 で、偶然では説明できない強さです。</li>
+      <li>局の長さ（判断の数）とはほぼ無関係でした（−0.06）。和了・放銃などの結果とも、判断の質をそろえて比べると関係は弱く（0.1〜0.2）、はっきりしません。MAKA の評価は、主に判断の質で決まっているように見えます。</li>
+      <li>MAKA が中で何を計算しているかは、外からは見えません。MAKA と Mortal は局面ごとの判断が違うことがあるので、Mortal のデータから MAKA と完全に同じ評価は作れません。いまの67局での上限の目安は、ぴったり4割、±1段階以内で7割です。サンプルが増えるほど、点数の選び方と区切りが安定します。</li>
     </ul>
-    <h3>今日の半荘の実例で比べる</h3>
-    <div class="table-wrap"><table class="grid">
-      <thead><tr><th>判断</th><th class="num">一致率</th><th class="num">確率の比</th><th class="num">Rating の点</th></tr></thead>
-      <tbody>
-        <tr><td>東3局1本場 3巡目の打牌（候補11）<br><span class="muted">自分 北 35.3%／AI 1p 44.2%</span></td><td class="num">0</td><td class="num">0.80</td><td class="num">0.98</td></tr>
-        <tr><td>東4局 11巡目、鳴くかどうかの2択<br><span class="muted">自分 スルー 24%／AI 鳴く 76%</span></td><td class="num">0</td><td class="num">0.32</td><td class="num">0.00</td></tr>
-      </tbody>
+
+    <h3>当てる精度</h3>
+    <p class="context">半荘を1つずつ外し、残りの4半荘で区切りを合わせてから、外した半荘の評価を当てる検証です。答えを知った状態で合わせると精度が高く見えてしまうので、この方法にしました。</p>
+    <div class="table-wrap"><table class="grid" id="acc-table">
+      <thead><tr><th>点数の出し方</th><th class="num">ぴったり</th><th class="num">±1段階以内</th><th class="num">±2段階以内</th><th class="num">平均のずれ（段階）</th></tr></thead>
+      <tbody></tbody>
     </table></div>
-    <p class="context">一致率は、ほぼ同点でも違えば0です。Rating は、候補の多い打牌では最低の候補が基準になるので点が甘く、2択では少しでも違えば0点になります。確率の比は、打牌でも2択でも同じ物差しで部分点になります。物差しの幅は Mortal の温度（0.1）で決まりますが、設定を毎回同じにしているので一定です。</p>
-    <h3>局ごとの点数と MAKA の評価</h3>
-    <div class="table-wrap"><table class="grid">
-      <thead><tr><th>局</th><th>MAKA</th><th class="num">Rating</th><th class="num">確率の比</th><th class="num">一致率</th><th class="num">5%未満</th></tr></thead>
-      <tbody id="kyoku-rows"></tbody>
-    </table></div>
-    <p class="src">確率の比は 100 倍して表示。MAKA の評価との順位の相関（スピアマン、12局）は、Rating 0.65、一致率 0.58、確率の比 0.58、評価値の差の合計 0.55、5%未満の数 0.52。12局しかないので、この差は確かではありません。MAKA は別の AI なので、局面ごとの判断が違えば評価もずれます。たとえば南3局は MAKA が S ですが、Mortal は5%未満を2つ付けています。東3局1本場は MAKA が C+ ですが、Rating は 88.0 です。区切りを合わせても、毎回 MAKA と同じにはなりません。</p>
+    <p class="src">「候補から自動で選ぶ」は、11種類の点数とその2〜3個の組み合わせから、残りの4半荘の中でさらに1つずつ外す検証でいちばん当たるものを選び、それで外した半荘を当てたときの成績です。選び方まで含めて検証しているので、甘く見積もっていません。</p>
+
+    <h3>Mortal の Rating（局ごと）と MAKA の評価</h3>
+    <figure class="chart-fig">
+      <div class="chart-legend" aria-hidden="true">
+        <span class="lg-item"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="4.5" class="c-dot"></circle></svg>局（67）</span>
+        <span class="lg-item"><svg width="22" height="14" viewBox="0 0 22 14"><line x1="1" y1="7" x2="21" y2="7" class="c-fit"></line></svg>当てはめ（点数が高いほど評価が下がらない形）</span>
+      </div>
+      <div class="chart-box" id="chart"></div>
+      <div class="chart-tip" id="chart-tip" role="status" hidden></div>
+      <figcaption class="src">横軸は Mortal の Rating を局ごとに計算した値、縦軸は MAKA の評価。同じ評価の点が重ならないよう、縦に少しずらしています。点に重ねると、その局の値が出ます。下の表に全67局の値があります。</figcaption>
+    </figure>
+    <details class="doc">
+      <summary>全67局の表を開く</summary>
+      <div class="doc-body"><div class="table-wrap"><table class="grid" id="hand-table">
+        <thead><tr><th>半荘</th><th>局</th><th>MAKA</th><th class="num">Rating</th><th class="num">確率の比</th><th>当てた評価</th></tr></thead>
+        <tbody></tbody>
+      </table></div><p class="src">当てた評価は、その半荘を外して Rating で合わせたときの評価。半荘1は 10月9日の半荘、2〜5は4回目のサンプル1〜4。</p></div>
+    </details>
   </section>
 
   <section aria-labelledby="h-q">
@@ -253,20 +279,19 @@
 
   <section aria-labelledby="h-decided">
     <div class="sec-head">
-      <h2 id="h-decided">聞かずに決めたこと（4回目）</h2>
+      <h2 id="h-decided">聞かずに決めたこと（5回目）</h2>
       <p class="muted">違うと思うものがあれば、番号を最後の自由記入に書いてください。</p>
     </div>
     <ol class="decided">
-      <li>点数と一緒に、その局の5%未満のミスの数も並べて出す。点数だけだと、どこが悪かったか分からないため。</li>
-      <li>半荘全体には、mjai のサイトと同じ Rating も参考の数字として出す。</li>
-      <li>S+〜D への当てはめは、点数が高いほど評価が下がらない形にする。MAKA と食い違った局には印を付ける。</li>
-      <li>送ってもらった結果の URL は、サイト側で消える前にすぐ取得して保存する。</li>
+      <li>アプリの中でも、この分析と同じ検証で当たり具合を計算して、いまの見込みとして画面に出す。</li>
+      <li>分析に使ったデータ（67局の点数と MAKA の評価）と計算のスクリプトはリポジトリに入れる（名前などは含まない）。アプリの計算がこの結果と同じになるかを、テストで確かめる。</li>
+      <li>4回目の補足の2点はどちらも仕様に入れた。MAKA の評価の入力欄は任意で使える形にする。Mortal の結果 JSON は、取り込んだ時点で手元に保存する（サイト側で消えるため）。</li>
     </ol>
   </section>
 
   <section aria-labelledby="h-next">
     <div class="sec-head"><h2 id="h-next">このあと</h2></div>
-    <p class="lead">ウィジェットができたら、確かめて main に取り込み、5回目のシートで受け入れを聞きます。この4回目の答えは、局の評価の比較（F10）を作るときに使います。サンプルをもらえたら、比較をやり直して結果を次のシートに出します。</p>
+    <p class="lead">ウィジェットができたら、確かめて main に取り込み、次のシートで受け入れを聞きます。続けて、検討結果の取り込みと出題（F1〜F4、F9）を作ります。局の評価の比較（F10）は、この5回目の答えに沿って作ります。</p>
   </section>
 
   <details class="doc">
@@ -280,7 +305,7 @@
 
   <section class="send" aria-labelledby="h-send">
     <div class="sec-head"><h2 id="h-send">送り方</h2></div>
-    <p>選んだ内容はこのシートに自動で保存され、私が直接読みます。答え終わったら、チャットで「回答した」とだけ送ってください。サンプルは、あとから足して保存しても読めます。</p>
+    <p>選んだ内容はこのシートに自動で保存され、私が直接読みます。答え終わったら、チャットで「回答した」とだけ送ってください。サンプルや半荘全体の評価は、あとから足して保存しても読めます。</p>
     <p class="muted">上の表示が「保存できません」のときは、「回答をコピー」で文章にしてチャットに貼ってください。</p>
     <div class="actions">
       <button type="button" class="btn primary" id="copyBtn">回答をコピー</button>
@@ -534,62 +559,138 @@
 <script>
 (function () {
   'use strict';
-  var ROUND = 'round4';
+  var ROUND = 'round5';
+  var GRADES = ['D', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S-', 'S', 'S+'];
 
-  /* ---------- real data: the user's game (2026-10-09) and the MAKA grades entered in round 3 ---------- */
-  var ROWS = [
-    ['東1局', 'C-', 46.8, 50.3, 50, 3], ['東2局', 'S', 97.2, 85.8, 75, 0], ['東2局1本場', 'A-', 92.8, 78.3, 73, 1],
-    ['東3局', 'S+', 94.2, 83.3, 75, 1], ['東3局1本場', 'C+', 88.0, 80.8, 73, 1], ['東4局', 'C+', 65.9, 66.5, 61, 7],
-    ['東4局1本場', 'S', 81.9, 86.3, 86, 1], ['南1局', 'S', 95.2, 89.9, 83, 1], ['南2局1本場', 'S', 97.1, 89.7, 83, 0],
-    ['南3局', 'S', 80.7, 55.1, 50, 2], ['南4局', 'S', 93.9, 92.3, 92, 1], ['西1局', 'S', 93.2, 89.9, 83, 1],
-    ['半荘全体', 'A+', 86.7, 81.5, 76, 19, true]
+  /* ---------- analysis results (5 games, 67 hands; leave-one-game-out) ---------- */
+  var CD = {"points": [{"g": 1, "k": "東1局", "m": "C-", "y": 1, "r": 46.8, "q": 50.3, "p": "B"}, {"g": 1, "k": "東2局", "m": "S", "y": 11, "r": 97.2, "q": 85.8, "p": "S"}, {"g": 1, "k": "東2局1本場", "m": "A-", "y": 7, "r": 92.8, "q": 78.3, "p": "S"}, {"g": 1, "k": "東3局", "m": "S+", "y": 12, "r": 94.2, "q": 83.3, "p": "S"}, {"g": 1, "k": "東3局1本場", "m": "C+", "y": 3, "r": 88.0, "q": 80.8, "p": "A"}, {"g": 1, "k": "東4局", "m": "C+", "y": 3, "r": 65.9, "q": 66.5, "p": "B"}, {"g": 1, "k": "東4局1本場", "m": "S", "y": 11, "r": 81.9, "q": 86.3, "p": "A-"}, {"g": 1, "k": "南1局", "m": "S", "y": 11, "r": 95.2, "q": 89.9, "p": "S"}, {"g": 1, "k": "南2局1本場", "m": "S", "y": 11, "r": 97.1, "q": 89.7, "p": "S"}, {"g": 1, "k": "南3局", "m": "S", "y": 11, "r": 80.7, "q": 55.1, "p": "A-"}, {"g": 1, "k": "南4局", "m": "S", "y": 11, "r": 93.9, "q": 92.3, "p": "S"}, {"g": 1, "k": "西1局", "m": "S", "y": 11, "r": 93.2, "q": 89.9, "p": "S"}, {"g": 2, "k": "東1局", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 2, "k": "東2局", "m": "A", "y": 8, "r": 77.7, "q": 77.1, "p": "A-"}, {"g": 2, "k": "東3局", "m": "A+", "y": 9, "r": 86.9, "q": 72.7, "p": "A"}, {"g": 2, "k": "東3局1本場", "m": "C", "y": 2, "r": 75.9, "q": 74.5, "p": "B"}, {"g": 2, "k": "東3局2本場", "m": "S-", "y": 10, "r": 94.6, "q": 86.8, "p": "S"}, {"g": 2, "k": "東3局3本場", "m": "S", "y": 11, "r": 94.6, "q": 88.5, "p": "S"}, {"g": 2, "k": "東4局", "m": "A+", "y": 9, "r": 92.6, "q": 77.0, "p": "S-"}, {"g": 2, "k": "東4局1本場", "m": "S+", "y": 12, "r": 97.7, "q": 93.8, "p": "S+"}, {"g": 2, "k": "南1局", "m": "S", "y": 11, "r": 91.8, "q": 93.0, "p": "S-"}, {"g": 2, "k": "南1局1本場", "m": "S+", "y": 12, "r": 95.3, "q": 81.2, "p": "S"}, {"g": 2, "k": "南2局", "m": "S+", "y": 12, "r": 90.9, "q": 83.5, "p": "S-"}, {"g": 2, "k": "南3局", "m": "S+", "y": 12, "r": 98.4, "q": 92.6, "p": "S+"}, {"g": 2, "k": "南4局", "m": "S", "y": 11, "r": 94.8, "q": 84.3, "p": "S"}, {"g": 3, "k": "東1局", "m": "S+", "y": 12, "r": 98.5, "q": 93.8, "p": "S+"}, {"g": 3, "k": "東2局", "m": "B", "y": 5, "r": 67.7, "q": 77.2, "p": "B-"}, {"g": 3, "k": "東3局", "m": "B", "y": 5, "r": 87.3, "q": 80.3, "p": "A"}, {"g": 3, "k": "東4局", "m": "S", "y": 11, "r": 92.1, "q": 80.9, "p": "S-"}, {"g": 3, "k": "東4局1本場", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 3, "k": "東4局2本場", "m": "S", "y": 11, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 3, "k": "東4局3本場", "m": "A-", "y": 7, "r": 83.4, "q": 75.4, "p": "A"}, {"g": 3, "k": "南1局", "m": "A-", "y": 7, "r": 75.9, "q": 85.1, "p": "B-"}, {"g": 3, "k": "南2局", "m": "A+", "y": 9, "r": 62.4, "q": 71.3, "p": "C+"}, {"g": 3, "k": "南3局", "m": "S-", "y": 10, "r": 90.2, "q": 84.7, "p": "A"}, {"g": 3, "k": "南4局", "m": "S-", "y": 10, "r": 88.3, "q": 80.3, "p": "A"}, {"g": 4, "k": "東1局", "m": "C+", "y": 3, "r": 66.4, "q": 69.1, "p": "B"}, {"g": 4, "k": "東2局", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 4, "k": "東2局1本場", "m": "S-", "y": 10, "r": 97.2, "q": 91.0, "p": "S"}, {"g": 4, "k": "東2局2本場", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 4, "k": "東3局", "m": "S+", "y": 12, "r": 95.8, "q": 88.5, "p": "S"}, {"g": 4, "k": "東4局", "m": "A+", "y": 9, "r": 84.0, "q": 70.1, "p": "A"}, {"g": 4, "k": "東4局1本場", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 4, "k": "南1局", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 4, "k": "南2局", "m": "B-", "y": 4, "r": 89.0, "q": 62.5, "p": "A"}, {"g": 4, "k": "南3局", "m": "S+", "y": 12, "r": 92.0, "q": 90.5, "p": "S-"}, {"g": 4, "k": "南3局1本場", "m": "S", "y": 11, "r": 93.4, "q": 90.4, "p": "S-"}, {"g": 4, "k": "南3局2本場", "m": "S+", "y": 12, "r": 98.8, "q": 96.4, "p": "S+"}, {"g": 4, "k": "南3局3本場", "m": "A+", "y": 9, "r": 95.8, "q": 89.8, "p": "S"}, {"g": 4, "k": "南4局", "m": "S", "y": 11, "r": 95.4, "q": 85.8, "p": "S"}, {"g": 4, "k": "南4局1本場", "m": "A-", "y": 7, "r": 83.6, "q": 73.4, "p": "A"}, {"g": 4, "k": "南4局2本場", "m": "S-", "y": 10, "r": 95.3, "q": 85.7, "p": "S"}, {"g": 5, "k": "東1局", "m": "B-", "y": 4, "r": 76.6, "q": 66.1, "p": "A-"}, {"g": 5, "k": "東2局", "m": "S-", "y": 10, "r": 94.8, "q": 87.0, "p": "S"}, {"g": 5, "k": "東2局1本場", "m": "S", "y": 11, "r": 76.7, "q": 73.3, "p": "A-"}, {"g": 5, "k": "東2局2本場", "m": "A-", "y": 7, "r": 65.7, "q": 63.0, "p": "B-"}, {"g": 5, "k": "東3局3本場", "m": "S+", "y": 12, "r": 97.7, "q": 90.6, "p": "S+"}, {"g": 5, "k": "東3局4本場", "m": "C+", "y": 3, "r": 80.6, "q": 81.4, "p": "A"}, {"g": 5, "k": "東4局", "m": "A", "y": 8, "r": 83.0, "q": 80.1, "p": "A"}, {"g": 5, "k": "東4局1本場", "m": "A+", "y": 9, "r": 93.4, "q": 83.9, "p": "S"}, {"g": 5, "k": "南1局2本場", "m": "S", "y": 11, "r": 93.8, "q": 83.2, "p": "S"}, {"g": 5, "k": "南1局3本場", "m": "A-", "y": 7, "r": 88.8, "q": 75.5, "p": "A"}, {"g": 5, "k": "南2局", "m": "S+", "y": 12, "r": 100.0, "q": 100.0, "p": "S+"}, {"g": 5, "k": "南2局1本場", "m": "A+", "y": 9, "r": 86.2, "q": 82.3, "p": "A"}, {"g": 5, "k": "南3局", "m": "A-", "y": 7, "r": 80.0, "q": 79.1, "p": "A"}, {"g": 5, "k": "南3局1本場", "m": "S+", "y": 12, "r": 98.2, "q": 95.5, "p": "S+"}, {"g": 5, "k": "南4局", "m": "A", "y": 8, "r": 90.1, "q": 79.9, "p": "S-"}], "curve": [[46.8, 1.0], [62.4, 5.0], [76.6, 5.0], [76.7, 7.25], [80.6, 7.25], [80.7, 7.69], [89.0, 7.69], [90.1, 8.0], [90.2, 10.0], [90.9, 10.33], [93.4, 10.33], [93.8, 10.81], [97.2, 10.81], [97.7, 11.93], [100.0, 11.93]], "results": {"baseline": {"exact": 0.104, "w1": 0.463, "w2": 0.716, "mae": 2.4}, "match": {"exact": 0.358, "w1": 0.612, "w2": 0.761, "mae": 1.58}, "ratio": {"exact": 0.343, "w1": 0.612, "w2": 0.836, "mae": 1.51}, "rating": {"exact": 0.343, "w1": 0.657, "w2": 0.791, "mae": 1.4}, "auto": {"exact": 0.418, "w1": 0.672, "w2": 0.746, "mae": 1.37}}};
+  var ACC = [
+    ['いつも中央の評価（比較用）', CD.results.baseline],
+    ['一致率', CD.results.match],
+    ['確率の比', CD.results.ratio],
+    ['Mortal の Rating（局ごと）', CD.results.rating],
+    ['候補から自動で選ぶ', CD.results.auto]
   ];
-  document.getElementById('kyoku-rows').innerHTML = ROWS.map(function (r) {
-    return '<tr' + (r[6] ? ' class="total"' : '') + '><th scope="row">' + r[0] + '</th><td class="sym strong">' + r[1] + '</td><td class="num">' + r[2].toFixed(1) +
-      '</td><td class="num">' + r[3].toFixed(1) + '</td><td class="num">' + r[4] + '%</td><td class="num">' + r[5] + '</td></tr>';
+  function pct(v) { return Math.round(v * 100) + '%'; }
+  document.querySelector('#acc-table tbody').innerHTML = ACC.map(function (r, i) {
+    return '<tr' + (i === 0 ? ' class="muted-row"' : '') + '><th scope="row">' + r[0] + '</th><td class="num">' + pct(r[1].exact) + '</td><td class="num">' + pct(r[1].w1) +
+      '</td><td class="num">' + pct(r[1].w2) + '</td><td class="num">' + r[1].mae.toFixed(2) + '</td></tr>';
+  }).join('');
+  document.querySelector('#hand-table tbody').innerHTML = CD.points.map(function (p) {
+    return '<tr><td class="num">' + p.g + '</td><td>' + p.k + '</td><td class="sym strong">' + p.m + '</td><td class="num">' + p.r.toFixed(1) + '</td><td class="num">' + p.q.toFixed(1) + '</td><td class="sym">' + p.p + '</td></tr>';
   }).join('');
 
+  /* ---------- scatter: Rating per hand (x) vs MAKA grade (y) ----------
+     Colors: dots = accent (single series), fitted line = ink. Checked with the dataviz validator:
+     CVD and normal-vision separation pass in both themes; the marks also differ by type (dot vs line). */
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(SVGNS, name);
+    Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function renderChart() {
+    var host = document.getElementById('chart');
+    var tip = document.getElementById('chart-tip');
+    var W = 640, H = 400, M = { l: 40, r: 16, t: 12, b: 40 };
+    var X0 = 40, X1 = 100;
+    function X(v) { return M.l + (v - X0) / (X1 - X0) * (W - M.l - M.r); }
+    function Y(g) { return M.t + (12 - g) / 12 * (H - M.t - M.b); }
+    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Mortal の Rating と MAKA の評価の散布図。Rating が高い局ほど MAKA の評価も高い。' }, null);
+    var grid = el('g', {}, svg);
+    for (var g = 0; g <= 12; g++) {
+      el('line', { x1: M.l, x2: W - M.r, y1: Y(g), y2: Y(g), class: 'c-grid' + (GRADES[g].length === 1 ? ' major' : '') }, grid);
+      var t = el('text', { x: M.l - 8, y: Y(g) + 4, class: 'c-label', 'text-anchor': 'end' }, grid); t.textContent = GRADES[g];
+    }
+    for (var v = X0; v <= X1; v += 10) {
+      el('line', { x1: X(v), x2: X(v), y1: H - M.b, y2: H - M.b + 5, class: 'c-tick' }, grid);
+      var tx = el('text', { x: X(v), y: H - M.b + 20, class: 'c-label', 'text-anchor': 'middle' }, grid); tx.textContent = String(v);
+    }
+    var xl = el('text', { x: W - M.r, y: H - 4, class: 'c-label', 'text-anchor': 'end' }, grid); xl.textContent = 'Rating（局ごと）';
+    var d = CD.curve.map(function (c, i) { return (i ? 'L' : 'M') + X(c[0]).toFixed(1) + ' ' + Y(c[1]).toFixed(1); }).join(' ');
+    el('path', { d: d, class: 'c-fit' }, svg);
+    var dots = el('g', {}, svg);
+    CD.points.forEach(function (p, i) {
+      var jitter = (((i * 37) % 7) - 3) * 0.06;
+      var cx = X(Math.max(p.r, X0)), cy = Y(p.y + jitter);
+      var dot = el('circle', { cx: cx.toFixed(1), cy: cy.toFixed(1), r: 4.5, class: 'c-dot' }, dots);
+      var hit = el('circle', { cx: cx.toFixed(1), cy: cy.toFixed(1), r: 10, class: 'c-hit' }, dots);
+      function show() {
+        dot.setAttribute('r', 6);
+        tip.textContent = '半荘' + p.g + ' ' + p.k + '　MAKA ' + p.m + '　Rating ' + p.r.toFixed(1) + '　当てた評価 ' + p.p;
+        tip.hidden = false;
+        var box = host.getBoundingClientRect();
+        var sx = box.width / W, sy = box.height / H;
+        var left = Math.min(Math.max(cx * sx - tip.offsetWidth / 2, 0), box.width - tip.offsetWidth);
+        tip.style.left = left + 'px';
+        tip.style.top = (cy * sy - tip.offsetHeight - 12) + 'px';
+      }
+      function hide() { dot.setAttribute('r', 4.5); tip.hidden = true; }
+      hit.addEventListener('mouseenter', show);
+      hit.addEventListener('mouseleave', hide);
+    });
+    host.appendChild(svg);
+  }
+
+  /* ---------- questions ---------- */
   var SAMPLE_SLOTS = 4;
   function samplesBlock(q) {
     var html = '<div class="block-sample">';
     for (var i = 1; i <= SAMPLE_SLOTS; i++) {
-      html += '<div class="sample-slot"><div class="panel-title">サンプル ' + i + '</div>' +
-        '<div class="other"><label for="' + q.id + '-url' + i + '">mjai の結果の URL（https://mjai.ekyu.moe/killerducky/?data=/report/… の形）</label>' +
-        '<input type="url" id="' + q.id + '-url' + i + '" data-slot="' + i + '" data-field="url" inputmode="url" autocomplete="off" spellcheck="false"></div>' +
-        '<div class="other"><label for="' + q.id + '-grades' + i + '">MAKA の評価（例：東1 S、東2 A+、東2-1 B … 半荘 A）</label>' +
-        '<textarea id="' + q.id + '-grades' + i + '" data-slot="' + i + '" data-field="grades" rows="2" spellcheck="false"></textarea></div></div>';
+      html += '<div class="sample-slot"><div class="panel-title">追加のサンプル ' + i + '</div>' +
+        '<div class="other"><label for="' + q.id + '-url' + i + '">mjai の結果の URL</label>' +
+        '<input type="url" id="' + q.id + '-url' + i + '" inputmode="url" autocomplete="off" spellcheck="false"></div>' +
+        '<div class="other"><label for="' + q.id + '-grades' + i + '">MAKA の評価（局の順、最後に半荘全体。例：S,A+,B,…,半荘 A）</label>' +
+        '<textarea id="' + q.id + '-grades' + i + '" rows="2" spellcheck="false"></textarea></div></div>';
     }
     return html + '</div>';
   }
+  var HANCHAN = [
+    { id: 'h1', k: 'サンプル1（f7388969…）' }, { id: 'h2', k: 'サンプル2（be0a2a52…）' },
+    { id: 'h3', k: 'サンプル3（002ca97a…）' }, { id: 'h4', k: 'サンプル4（3a36dac7…）' }
+  ];
+  function hanchanBlock(q) {
+    return '<div class="table-wrap"><table class="grid"><thead><tr><th>半荘</th><th>MAKA の半荘全体の評価</th></tr></thead><tbody>' +
+      HANCHAN.map(function (h) {
+        var sid = q.id + '-g-' + h.id;
+        return '<tr><th scope="row">' + h.k + '</th><td><label class="sr-only" for="' + sid + '">' + h.k + ' の半荘全体の評価</label><select id="' + sid + '" data-grade="' + h.id + '">' +
+          '<option value="">未入力</option>' + GRADES.map(function (g) { return '<option value="' + g + '">' + g + '</option>'; }).join('') + '<option value="?">分からない</option></select></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
 
   var Q = [
-    { id: 'r1', no: 'R4-1', title: '局の点数の出し方',
-      context: '<p>上の「調べたこと」を踏まえて、局ごとの点数をどれで出すかです。どれを選んでも、和了や放銃の結果には左右されません（判断だけを見ます）。</p>',
+    { id: 'r1', no: 'R5-1', title: 'MAKA への合わせ方',
+      context: '<p>上の検証の結果を踏まえた進め方です。どれを選んでも、区切りは MAKA の評価が増えるたびに合わせ直します。</p>',
       opts: [
-        { v: 'ratio', t: '確率の比の平均', rec: true,
-          note: '打牌でも、鳴き・リーチの2択でも、同じ物差しで部分点になる。今回の MAKA との相関は 0.58 で、Rating（0.65）との差は12局では確かではない。' },
-        { v: 'rating', t: 'Mortal の Rating（作者の式そのまま）',
-          note: 'mjai のサイトの数字と同じで見比べやすい。2択の判断で少しでも違うと0点になり、候補の多い打牌には甘い。' },
-        { v: 'count', t: '5%未満の数（〇△✕のまま）', note: 'いちばん単純。ほぼ同点の違いは数えないが、段階が粗い。' }
+        { v: 'auto', t: '候補から自動で選び、合わせ直す', rec: true,
+          note: '点数の出し方の候補（Rating、確率の比、評価値の差、その組み合わせなど）を用意し、MAKA の評価が増えるたびに、上と同じ検証でいちばん当たるものを選んで区切りを合わせ直す。画面には、いまの見込み（ぴったり何割、±1段階以内何割）も出す。いまの67局では、ぴったり 42%、±1段階以内 67%。' },
+        { v: 'rating', t: 'Mortal の Rating 1つに決める',
+          note: 'いまの67局では、1つだけ使う中ではいちばん安定していた（ぴったり 34%、±1段階以内 66%）。' },
+        { v: 'ratio', t: '確率の比 1つに決める（4回目で選んだもの）',
+          note: '±2段階以内はいちばん高い（84%）が、ぴったりは 34%、±1段階以内は 61%。' }
       ] },
-    { id: 'r2', no: 'R4-2', title: 'S+〜D への当てはめ方',
-      context: '<p>3回目で「MAKA の評価に近くなるように合わせる」を選んでもらいました。その進め方です。</p>',
+    { id: 'r2', no: 'R5-2', title: 'MAKA の推した打牌も記録するか',
+      context: '<p>4回目の補足で「MAKA の考えのほうが Mortal より確からしい」とのことでした。アプリが自動で取り込めるのは Mortal だけですが、答え合わせの画面で、MAKA が推した打牌を任意で入れられるようにできます。MAKA は、アプリで自分の答えを出したあとに見る前提です。</p>',
       opts: [
-        { v: 'collect', t: 'MAKA の評価を貯めて、区切りを合わせていく', rec: true,
-          note: 'アプリの局の評価の画面に、MAKA の評価を入れる欄を付ける。60局（5半荘ほど）たまったら最初の区切りを出し、その後も入れた分で合わせ直す。それまでは仮の区切りで出す。' },
-        { v: 'fixed', t: '固定の区切りにする（MAKA には合わせない）', note: '3回目の「仮の区切り」をそのまま使う。' },
-        { v: 'number', t: 'S+〜D をやめて、点数（0〜100）をそのまま出す' }
+        { v: 'optional', t: '任意で入れられる欄を付ける', rec: true,
+          note: 'Mortal と MAKA が食い違った局面に印が付き、ログで数えられる。入れなくても使える。' },
+        { v: 'no', t: '付けない' }
       ] },
-    { id: 'r3', no: 'R4-3', title: 'サンプルをもう少しもらえますか', samples: true,
-      context: '<p>3回目に「サンプルが欲しかったら遠慮なく」と言ってもらったので、お願いします。打った半荘の mjai の結果の URL と、MAKA の局ごとの評価があると、上の比較を12局よりずっと確かにできます。4半荘ぶんほどあると、点数の出し方の差が見分けやすくなります。下の欄は、あとから足して保存しても読めます。</p>' +
-        '<p>MAKA は評価の一覧だけを見てください。局面ごとの打牌まで見ると、その半荘をアプリで検討するときに答えを知った状態になります。</p>',
-      blockSample: samplesBlock,
+    { id: 'r3', no: 'R5-3', title: 'サンプル1〜4の半荘全体の評価', hanchan: true,
+      context: '<p>半荘全体の MAKA の評価は、10月9日の半荘（A+）の1つしかありません。この半荘では、局の評価を判断の数で重み付けして平均すると A+ になり、一致しました。半荘全体の評価が局の評価の平均で決まっているのかを確かめたいので、サンプル1〜4の半荘全体の評価を入れてもらえますか。MAKA の結果は7日で消えます。</p>',
       opts: [
-        { v: 'yes', t: 'このシートの欄に入れていく', rec: true },
+        { v: 'entered', t: '下の表に入れた', rec: true },
+        { v: 'unavailable', t: 'もう見られない・分からない' }
+      ] },
+    { id: 'r4', no: 'R5-4', title: 'サンプルを足すなら（任意）', samples: true,
+      context: '<p>サンプルが増えるほど、点数の選び方と区切りが安定します。足せる分だけで構いません。アプリの入力欄ができたら、そちらでも貯められます。</p>',
+      opts: [
+        { v: 'add', t: 'このシートに足していく' },
         { v: 'later', t: 'アプリの入力欄ができてからにする' }
       ] },
-    { id: 'r4', no: 'R4-4', title: 'ほかに気になることがあれば', free: true,
-      context: '<p>「聞かずに決めたこと」で違うと思うものの番号、何でも。</p>' }
+    { id: 'r5', no: 'R5-5', title: 'ほかに気になることがあれば', free: true,
+      context: '<p>「聞かずに決めたこと」で違うと思うものの番号、分析への指摘、何でも。</p>' }
   ];
 
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -600,6 +701,7 @@
     Q.forEach(function (q) {
       html += '<div class="q" id="q-' + q.id + '"><div class="q-head"><div class="q-id">' + q.no + '</div><h3>' + q.title + '</h3>' +
         (q.context ? '<div class="context">' + q.context + '</div>' : '') + '</div>';
+      if (q.hanchan) html += hanchanBlock(q);
       if (!q.free) {
         html += '<fieldset><legend>' + q.no + ' の答え</legend><div class="opts">';
         q.opts.forEach(function (o) {
@@ -611,17 +713,17 @@
         });
         html += '</div></fieldset>';
       }
-      if (q.blockSample) html += q.blockSample(q);
+      if (q.samples) html += samplesBlock(q);
       html += '<div class="other"><label for="' + q.id + '-note">' + (q.free ? '自由記入' : 'その他・補足') + '</label><textarea id="' + q.id + '-note"' + (q.free ? ' rows="5"' : '') + '></textarea></div></div>';
     });
     host.innerHTML = html;
-    Array.prototype.forEach.call(document.querySelectorAll('[data-doc]'), function (el) {
-      var t = document.getElementById(el.getAttribute('data-doc'));
-      if (t) el.appendChild(t.content.cloneNode(true));
+    Array.prototype.forEach.call(document.querySelectorAll('[data-doc]'), function (e) {
+      var t = document.getElementById(e.getAttribute('data-doc'));
+      if (t) e.appendChild(t.content.cloneNode(true));
     });
   }
 
-  /* ---------- answers: autosave to db answers/round4, restore, copy ---------- */
+  /* ---------- answers: autosave to db answers/round5, restore, copy ---------- */
   var statusEl = document.getElementById('status');
   var state = {};
   var docRef = null;
@@ -640,6 +742,10 @@
       }
       if (!choice && note.trim()) choice = 'other';
       var entry = { choice: choice, note: note };
+      if (q.hanchan) {
+        entry.grades = {};
+        Array.prototype.forEach.call(document.querySelectorAll('#q-' + q.id + ' select[data-grade]'), function (sel) { if (sel.value) entry.grades[sel.getAttribute('data-grade')] = sel.value; });
+      }
       if (q.samples) {
         entry.samples = [];
         for (var i = 1; i <= SAMPLE_SLOTS; i++) {
@@ -661,21 +767,19 @@
         if (input) input.checked = true;
       }
       if (typeof s.note === 'string') document.getElementById(q.id + '-note').value = s.note;
-      if (q.samples && Array.isArray(s.samples)) {
-        s.samples.forEach(function (x) {
-          var u = document.getElementById(q.id + '-url' + x.slot);
-          var g = document.getElementById(q.id + '-grades' + x.slot);
-          if (u && typeof x.url === 'string') u.value = x.url;
-          if (g && typeof x.grades === 'string') g.value = x.grades;
-        });
-      }
+      if (q.hanchan && s.grades) Object.keys(s.grades).forEach(function (k) { var sel = document.getElementById(q.id + '-g-' + k); if (sel) sel.value = s.grades[k]; });
+      if (q.samples && Array.isArray(s.samples)) s.samples.forEach(function (x) {
+        var u = document.getElementById(q.id + '-url' + x.slot), g = document.getElementById(q.id + '-grades' + x.slot);
+        if (u && typeof x.url === 'string') u.value = x.url;
+        if (g && typeof x.grades === 'string') g.value = x.grades;
+      });
     });
     readForm();
   }
 
   function answerText() {
     readForm();
-    var lines = ['【確認シートの回答（JantamaReviewer・4回目）】'];
+    var lines = ['【確認シートの回答（JantamaReviewer・5回目）】'];
     Q.forEach(function (q) {
       var s = state[q.id];
       var c;
@@ -684,6 +788,7 @@
       else if (!s.choice) c = '未回答';
       else { var o = q.opts.filter(function (x) { return x.v === s.choice; })[0]; c = o ? o.t : s.choice; }
       lines.push(q.no + ' ' + q.title + '：' + c);
+      if (s.grades && Object.keys(s.grades).length) lines.push('　半荘全体：' + HANCHAN.filter(function (h) { return s.grades[h.id]; }).map(function (h) { return h.k + ' ' + s.grades[h.id]; }).join('、'));
       if (s.samples) s.samples.forEach(function (x) { lines.push('　サンプル' + x.slot + '：' + x.url + ' ／ ' + x.grades.replace(/\n/g, ' ')); });
       if (s.note.trim()) lines.push('　補足：' + s.note.trim().replace(/\n/g, ' / '));
     });
@@ -720,6 +825,7 @@
     });
   }
 
+  renderChart();
   renderQuestions();
   var questionsEl = document.getElementById('questions');
   questionsEl.addEventListener('input', schedule);
