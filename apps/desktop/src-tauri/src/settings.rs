@@ -127,6 +127,9 @@ impl Settings {
     /// JSON の文字列から読む。構文が壊れていればエラー。
     /// 構文が正しければ、欠けた項目・読めない項目は既定値で補う。
     pub fn from_json_str(text: &str) -> Result<Settings, serde_json::Error> {
+        // Windows のエディタや PowerShell 5.1 は UTF-8 の先頭に BOM を付けることがある。
+        // BOM 付きを壊れたファイルとして退避しないよう、先に取り除く。
+        let text = text.strip_prefix('\u{feff}').unwrap_or(text);
         let value: Value = serde_json::from_str(text)?;
         Ok(Settings::from_value(&value))
     }
@@ -308,6 +311,23 @@ mod tests {
         assert!(note.is_some());
         assert!(!path.exists());
         assert!(path.with_extension("json.broken").exists());
+    }
+
+    #[test]
+    fn w5_a_settings_file_with_a_utf8_bom_is_read_not_backed_up() {
+        let dir = temp_dir();
+        let path = settings_path(dir.path());
+        fs::write(
+            &path,
+            "\u{feff}{\"orientation\":\"horizontal\",\"sound\":false}",
+        )
+        .unwrap();
+        let (s, note) = Settings::load_or_recover(&path);
+        assert!(note.is_none());
+        assert_eq!(s.orientation, Orientation::Horizontal);
+        assert!(!s.sound);
+        assert!(path.exists());
+        assert!(!path.with_extension("json.broken").exists());
     }
 
     #[test]
