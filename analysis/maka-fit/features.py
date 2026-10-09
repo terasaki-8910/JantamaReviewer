@@ -2,7 +2,7 @@
 import json, math, csv
 import os
 D = os.path.join(os.environ.get('JANTAMA_DATA', os.path.join(os.path.expanduser('~'), 'JantamaReviewerData')), 'reports') + os.sep
-GRADES = ['D', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S-', 'S', 'S+']
+GRADES = ['E', 'D', 'C-', 'C', 'C+', 'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S-', 'S', 'S+']
 GAMES = {
     'f9da87cbcd7af5e9': 'C-,S,A-,S+,C+,C+,S,S,S,S,S,S',
     'f738896995c33fed': 'S+,A,A+,C,S-,S,A+,S+,S,S+,S+,S+,s',
