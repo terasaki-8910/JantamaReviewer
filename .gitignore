@@ -14,3 +14,24 @@ coverage/
 !.env.example
 # 個人の UI ルール（~/.claude/rules/ui.md）へのリンク。機械ごとのパスで、中身をリポジトリに入れないため追跡しない。
 .claude/rules/ui.md
+
+# --- ビルド成果物（F0 ウィジェットのスキャフォールドで追加） ---
+# Rust / Tauri（src-tauri/target は数 GB になる）
+target/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+# フロントエンドのビルド出力
+apps/desktop/dist/
+packages/*/dist/
+*.tsbuildinfo
+.vite/
+# テスト・解析の出力
+playwright-report/
+test-results/
+coverage/
+# パッケージマネージャのキャッシュ
+.pnpm-store/
+# Tauri のビルド成果物（インストーラ）
+*.msi
+*.exe
+*.nsis

@@ -1,0 +1,19 @@
+# 新しく作るソースは LF に揃える（Windows の autocrlf に依存しない）。
+# 既存の文書（SPEC.md など）は書き換えないよう、拡張子を限って指定する。
+*.rs text eol=lf
+*.toml text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+*.png binary
+*.ico binary
+*.icns binary
+*.woff2 binary
