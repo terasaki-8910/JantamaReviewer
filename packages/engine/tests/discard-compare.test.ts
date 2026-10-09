@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { compareDiscardUkeire } from '../src/discard-compare';
 import { type ImportedGame, framesBeforeDecision, importReportText } from '../src/import';
 import { listDisagreements } from '../src/disagreement';
-import { discardOptions, tenhouPairiUrl, ukeire } from '../src/shanten';
+import { discardOptions, ukeire } from '../src/shanten';
+import { tenhouPairiUrl } from '../src/tenhou-url';
 import { countTiles, tileKind } from '../src/tiles';
 import { FX1_IDS, loadReportText } from './helpers/fixtures';
 

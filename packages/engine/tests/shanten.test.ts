@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  bestDiscardOptions,
-  discardOptions,
-  findDiscardOption,
-  shanten,
-  tenhouPairiUrl,
-  ukeire,
-} from '../src/shanten';
+import { bestDiscardOptions, discardOptions, findDiscardOption, shanten, ukeire } from '../src/shanten';
+import { tenhouPairiUrl } from '../src/tenhou-url';
 import { parseTenhouNotation, toTenhouNotation } from '../src/tiles';
 import { loadFixtureJson } from './helpers/fixtures';
 

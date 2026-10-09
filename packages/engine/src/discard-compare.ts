@@ -3,7 +3,8 @@
  * 自分の答え・実戦・AI の 1 位・最大の受け入れ枚数を並べる。数えるのは自分の手牌だけ（天鳳牌理と同じ）。
  */
 import type { Decision } from './decision';
-import { type DiscardOption, bestDiscardOptions, discardOptions, findDiscardOption, tenhouPairiUrl } from './shanten';
+import { type DiscardOption, bestDiscardOptions, discardOptions, findDiscardOption } from './shanten';
+import { tenhouPairiUrl } from './tenhou-url';
 import type { Tile } from './tiles';
 
 export interface DiscardComparison {

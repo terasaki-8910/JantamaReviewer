@@ -10,7 +10,7 @@
  * 組み合わせを数えておき（同じ並びは記憶する）、四つを足し合わせて 8 - 2×面子 - 搭子 - 雀頭 の最小を取る
  * （面子と搭子の合計は4まで）。
  */
-import { type Tile, TILE_KIND_COUNT, countTiles, kindToTile, tileKind, toTenhouNotation } from './tiles';
+import { type Tile, TILE_KIND_COUNT, countTiles, kindToTile, tileKind } from './tiles';
 
 const MAX_SETS = 4;
 /** 表の添字は 面子の数×2 + 雀頭（0 か 1）。値は搭子の最大数で、作れない組み合わせは -1。 */
@@ -329,12 +329,4 @@ export function bestDiscardOptions(options: readonly DiscardOption[]): DiscardOp
 export function findDiscardOption(options: readonly DiscardOption[], tile: Tile): DiscardOption | undefined {
   const kind = tileKind(tile);
   return options.find((o) => o.kind === kind);
-}
-
-/**
- * 天鳳牌理の URL（F6）。`tiles` は閉じた手の牌（副露した牌は含めない）。
- * 赤五は普通の五として書く（牌理は赤を区別しない）。
- */
-export function tenhouPairiUrl(tiles: readonly Tile[]): string {
-  return `https://tenhou.net/2/?q=${toTenhouNotation(tiles)}`;
 }

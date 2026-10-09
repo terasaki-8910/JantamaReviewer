@@ -208,8 +208,9 @@ function alignKyoku(
         return err({
           code: 'log',
           kyokuLabel: label,
+          junme: replayer.junme,
           kyokuPosition: position,
-          message: `${label}: 牌譜が矛盾しています（${e.message}。mjai_log[${e.eventIndex}]）`,
+          message: `${label} ${replayer.junme}巡目付近: 牌譜が矛盾しています（${e.message}。mjai_log[${e.eventIndex}]）`,
         });
       }
       throw e;

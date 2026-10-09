@@ -288,6 +288,8 @@ describe('E-2 一致しないときは取り込みを失敗にして、局と巡
     if (result.ok) return;
     expect(result.error.code).toBe('log');
     expect(result.error.kyokuLabel).toBe('東1局');
+    expect(result.error.junme).toBeGreaterThanOrEqual(0);
+    expect(result.error.message).toContain(`東1局 ${result.error.junme}巡目付近`);
   });
 
   it('E-2 局の数が review と牌譜で違うと失敗する', () => {

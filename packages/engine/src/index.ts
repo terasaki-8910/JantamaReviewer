@@ -33,4 +33,5 @@ export * from './report-types';
 export * from './result';
 export * from './shanten';
 export * from './srs';
+export * from './tenhou-url';
 export * from './tiles';
