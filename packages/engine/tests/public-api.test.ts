@@ -89,6 +89,13 @@ describe('公開 API（src/index.ts）', () => {
     expect(typeof engine.matchSessionForReport).toBe('function');
   });
 
+  it('半荘のまとめ（F9・F10）と、既定の段階の当てはめの入口が使える', () => {
+    for (const name of ['summarizeHanchan', 'roomLabel', 'roomLabelOf', 'roomDispOf'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+    expect(engine.DEFAULT_GRADE_MODEL.recordCount).toBe(67);
+  });
+
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
   });
