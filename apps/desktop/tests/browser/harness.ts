@@ -3,12 +3,14 @@
  * Vite の開発サーバーで画面を配り、Tauri の API は「ページの中に入れた偽物」で置き換える。
  * ブラウザは playwright-core で操作する（ブラウザ本体のダウンロードはしない）。
  */
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { chromium, type Browser, type Page } from 'playwright-core';
-import { createServer } from 'vite';
+import { createLogger, createServer, type ViteDevServer } from 'vite';
 
 const APP_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const requireFromHere = createRequire(import.meta.url);
@@ -19,18 +21,84 @@ export interface PageServer {
   close: () => Promise<void>;
 }
 
+/** 2 つの窓の入口のモジュール（index.html と widget.html が読み込む）。 */
+const ENTRY_MODULES = ['/src/main/main.tsx', '/src/widget/main.tsx'];
+
+/** Vite が「依存の事前変換をやり直した」と知らせる文。起動したあとに出たら、ページが二重の React を読み込みうる。 */
+const REOPTIMIZED = /new dependencies found|re-optimizing dependencies|optimized dependencies changed/i;
+
+/**
+ * 入口のモジュールから読み込まれるものを、先にすべて 1 回ずつ読んでおく（依存の事前変換の結果も含む）。
+ * 事前変換は最初の要求のあとに始まって数秒かかるので、最初のテストの制限時間の中で待たせないための準備。
+ */
+async function warmUp(origin: string): Promise<void> {
+  const seen = new Set<string>();
+  const queue = [...ENTRY_MODULES];
+  for (let path = queue.pop(); path !== undefined; path = queue.pop()) {
+    if (seen.has(path)) continue;
+    seen.add(path);
+    const response = await fetch(new URL(path, origin));
+    const body = await response.text();
+    if (!response.ok) throw new Error(`開発サーバーの応答が ${response.status} でした: ${path}`);
+    for (const match of body.matchAll(/(?:from|import)\s*"(\/[^"]+)"/g)) {
+      if (match[1] !== undefined) queue.push(match[1]);
+    }
+  }
+}
+
 export async function startPageServer(): Promise<PageServer> {
-  const server = await createServer({
-    root: APP_ROOT,
-    configFile: join(APP_ROOT, 'vite.config.ts'),
-    server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false, watch: null },
-    logLevel: 'error',
-    clearScreen: false,
-  });
-  await server.listen();
-  const url = server.resolvedUrls?.local[0];
-  if (!url) throw new Error('開発サーバーの URL を取得できません');
-  return { url, close: () => server.close() };
+  // 依存の事前変換のキャッシュは、このサーバーだけの一時フォルダに置く。
+  // 既定の node_modules/.vite は、`pnpm dev` や、並行して動くもう 1 つのテストファイルのサーバーと共有になる。
+  // キャッシュの鍵には NODE_ENV が入る（テストは test、`pnpm dev` は development）ので、`pnpm dev` を挟むと、
+  // 2 つのサーバーが同じフォルダを同時に作り直して、React が二重に読み込まれた（Invalid hook call）。
+  // HMR を切ってあるので、読み直しで立ち直ることもできない。
+  const cacheDir = await mkdtemp(join(tmpdir(), 'jantama-vite-'));
+  const reoptimized: string[] = [];
+  const logger = createLogger('error', { allowClearScreen: false });
+  let server: ViteDevServer | undefined;
+
+  const close = async () => {
+    try {
+      await server?.close();
+    } finally {
+      await rm(cacheDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(
+        () => undefined,
+      );
+    }
+    if (reoptimized.length > 0) throw new Error(reoptimizedMessage(reoptimized));
+  };
+
+  try {
+    server = await createServer({
+      root: APP_ROOT,
+      configFile: join(APP_ROOT, 'vite.config.ts'),
+      cacheDir,
+      customLogger: {
+        ...logger,
+        info: (message) => {
+          // eslint-disable-next-line no-control-regex -- Vite が文の色付けに入れる制御文字を除く
+          const plain = message.replace(/\u001b\[[0-9;]*m/g, '');
+          if (REOPTIMIZED.test(plain)) reoptimized.push(plain);
+        },
+      },
+      server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false, watch: null },
+      logLevel: 'error',
+      clearScreen: false,
+    });
+    await server.listen();
+    const url = server.resolvedUrls?.local[0];
+    if (!url) throw new Error('開発サーバーの URL を取得できません');
+    await warmUp(url);
+    if (reoptimized.length > 0) throw new Error(reoptimizedMessage(reoptimized));
+    return { url, close };
+  } catch (error) {
+    await close().catch(() => undefined);
+    throw error;
+  }
+}
+
+function reoptimizedMessage(messages: string[]): string {
+  return `Vite が依存の事前変換をやり直した（ページが React を二重に読み込むおそれがある）: ${messages.join(' / ')}`;
 }
 
 /** インストール済みの Chrome、なければ Edge を起動する。どちらも無ければ失敗させる（黙って飛ばさない）。 */
