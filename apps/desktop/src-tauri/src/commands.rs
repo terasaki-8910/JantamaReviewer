@@ -5,7 +5,8 @@
 //! 実際の処理は `app_core::Core`（Tauri に依存しない）に任せ、ここは薄い層にとどめる。
 
 use std::path::Path;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
@@ -19,6 +20,8 @@ use tauri::{
 use crate::app_core::{AppState, Core, SettingsChange};
 use crate::appearance::{parse_css_color, Rgb};
 use crate::clock::now_ms;
+use crate::helper_setup;
+use crate::input_flow::{HelperOp, Input, InputService, InputStatus};
 use crate::ready::ShowGate;
 use crate::settings::{Orientation, Settings, WidgetPosition};
 use crate::store::{Rating, SessionRecord};
@@ -26,7 +29,6 @@ use crate::widget_window::{
     clamp_to_monitors, default_widget_position, move_window, widget_size, Area, MAIN_LABEL,
     WIDGET_LABEL,
 };
-use jantama_input::logic::{Config, Mode};
 
 /// 記録の状態が変わったときに全部の窓へ送るイベント。
 pub const EVENT_STATE_CHANGED: &str = "state-changed";
@@ -65,9 +67,21 @@ impl Default for SharedShowGate {
 /// 画面からの知らせが無いときに、窓を見せるまで待つ時間（N-7）。
 pub const SHOW_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// フックのスレッドへの窓口。フックを入れられなかったときは `None`（ウィジェットのボタンだけで動く）。
-#[cfg(windows)]
-pub struct HookState(pub Option<jantama_input::hook_win::HookHandle>);
+/// 入力の流れ（本体のフック・補助プログラム・ボタンの登録とテスト）への窓口（W-9、W-10、W-11）。
+pub struct InputHandle {
+    pub service: InputService,
+    /// 補助プログラムの設定・解除・起動が進んでいる間は `true`（重ねて始めない）。
+    helper_op_running: Arc<AtomicBool>,
+}
+
+impl InputHandle {
+    pub fn new(service: InputService) -> InputHandle {
+        InputHandle {
+            service,
+            helper_op_running: Arc::new(AtomicBool::new(false)),
+        }
+    }
+}
 
 /// ウィジェットの右クリックのメニュー。
 pub struct WidgetMenu(pub Menu<Wry>);
@@ -221,11 +235,10 @@ pub fn set_settings_now<R: Runtime>(
 /// 設定の変更を、フック・窓・画像の許可範囲に反映する。変わったものだけ。
 fn apply_side_effects<R: Runtime>(app: &AppHandle<R>, settings: &Settings, change: SettingsChange) {
     if change.trigger {
-        if let Some(hook) = &app.state::<HookState>().0 {
-            hook.apply(Config {
-                trigger: settings.trigger.to_active(),
-                mode: Mode::Normal,
-            });
+        if let Some(input) = app.try_state::<InputHandle>() {
+            input
+                .service
+                .send(Input::TriggerChanged(settings.trigger.to_active()));
         }
     }
     if change.sound {
@@ -310,23 +323,6 @@ pub fn initial_widget_position<R: Runtime>(
                 },
             ))
         }
-    }
-}
-
-/// フックから届いた合図で迷いマークを記録する担当のスレッド。
-/// スクリーンショットや保存は時間がかかるので、フックの手続きの外で行う。
-pub fn spawn_trigger_worker<R: Runtime>(app: AppHandle<R>, rx: Receiver<i64>) {
-    let spawned = thread::Builder::new()
-        .name("mark-worker".to_string())
-        .spawn(move || {
-            for t_ms in rx {
-                if let Err(e) = mark_now(&app, t_ms) {
-                    eprintln!("迷いマークを記録できませんでした: {e}");
-                }
-            }
-        });
-    if let Err(e) = spawned {
-        eprintln!("記録の担当のスレッドを起こせませんでした: {e}");
     }
 }
 
@@ -489,4 +485,132 @@ pub async fn show_widget_menu(
     menu: State<'_, WidgetMenu>,
 ) -> Result<(), String> {
     window.popup_menu(&menu.0).map_err(|e| e.to_string())
+}
+
+// ---- 入力の流れ（ボタンの登録・テスト・補助プログラム。W-9、W-10、W-11） ----
+
+/// 入力の状態。設定ページを開いたときに呼ぶ。起動の登録（タスク）があるかは、裏で確かめ直す。
+/// 変わったときは `input-status-changed` で知らせる。
+#[tauri::command]
+pub async fn get_input_status(input: State<'_, InputHandle>) -> Result<InputStatus, String> {
+    refresh_installed(&input.service.sender());
+    Ok(input.service.status())
+}
+
+/// 「ボタンを登録」。次に押された登録できる入力が、割り当てになる（W-10）。
+#[tauri::command]
+pub async fn start_registration(input: State<'_, InputHandle>) -> Result<(), String> {
+    input.service.send(Input::StartRegistration);
+    Ok(())
+}
+
+/// 登録をやめる（キャンセルのボタン・Esc）。
+#[tauri::command]
+pub async fn cancel_registration(input: State<'_, InputHandle>) -> Result<(), String> {
+    input.service.send(Input::CancelRegistration);
+    Ok(())
+}
+
+/// 設定ページが、テストの欄を見せているか。見せている間（かつ窓が操作を受けている間）、
+/// 割り当てたボタンを押しても記録せず、受け取ったことだけを知らせる（W-11）。
+#[tauri::command]
+pub async fn set_probe_wanted(input: State<'_, InputHandle>, wanted: bool) -> Result<(), String> {
+    input.service.send(Input::ProbeWanted(wanted));
+    Ok(())
+}
+
+/// 「管理者の補助プログラムを設定する」。Windows の確認が出る（最初の 1 回だけ）。進み具合は状態で知らせる。
+#[tauri::command]
+pub async fn setup_helper(input: State<'_, InputHandle>) -> Result<(), String> {
+    run_helper_op(&input, HelperOp::Installing);
+    Ok(())
+}
+
+/// 補助プログラムの設定を解除する。Windows の確認が出る。
+#[tauri::command]
+pub async fn remove_helper(input: State<'_, InputHandle>) -> Result<(), String> {
+    run_helper_op(&input, HelperOp::Removing);
+    Ok(())
+}
+
+/// 設定済みの補助プログラムを起動する。確認は出ない。
+#[tauri::command]
+pub async fn start_helper(input: State<'_, InputHandle>) -> Result<(), String> {
+    run_helper_op(&input, HelperOp::Starting);
+    Ok(())
+}
+
+/// 起動の登録（タスク）があるかを、裏で確かめて、入力の流れに知らせる。
+pub fn refresh_installed(tx: &Sender<Input>) {
+    let tx = tx.clone();
+    let spawned = thread::Builder::new()
+        .name("helper-installed".to_string())
+        .spawn(move || {
+            let _ = tx.send(Input::InstalledKnown(helper_setup::query_installed()));
+        });
+    if let Err(e) = spawned {
+        eprintln!("補助プログラムの登録を確かめるスレッドを起こせませんでした: {e}");
+    }
+}
+
+/// 本体の起動のとき、補助プログラムが設定済みなら、確認なしで起動する（W-9）。
+/// パイプを開いてから呼ぶ（補助プログラムが、すぐにつなぎにくるため）。
+pub fn start_helper_at_launch(tx: &Sender<Input>) {
+    let tx = tx.clone();
+    let spawned = thread::Builder::new()
+        .name("helper-launch".to_string())
+        .spawn(move || {
+            let installed = helper_setup::query_installed();
+            let _ = tx.send(Input::InstalledKnown(installed));
+            if installed {
+                if let Err(e) = helper_setup::run_task() {
+                    eprintln!("{e}");
+                }
+            }
+        });
+    if let Err(e) = spawned {
+        eprintln!("補助プログラムを起動するスレッドを起こせませんでした: {e}");
+    }
+}
+
+/// 補助プログラムの設定・解除・起動を、裏で進める。すでに別の操作が進んでいれば、何もしない。
+fn run_helper_op(input: &InputHandle, op: HelperOp) {
+    if input.helper_op_running.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let tx = input.service.sender();
+    let running = Arc::clone(&input.helper_op_running);
+    let _ = tx.send(Input::HelperOpStarted(op));
+    let spawned = thread::Builder::new().name("helper-op".to_string()).spawn({
+        let tx = tx.clone();
+        let running = Arc::clone(&running);
+        move || {
+            let result = perform_helper_op(op, &tx);
+            let _ = tx.send(Input::HelperOpFinished { result });
+            running.store(false, Ordering::SeqCst);
+        }
+    });
+    if let Err(e) = spawned {
+        let _ = tx.send(Input::HelperOpFinished {
+            result: Err(format!("操作のスレッドを起こせませんでした: {e}")),
+        });
+        running.store(false, Ordering::SeqCst);
+    }
+}
+
+fn perform_helper_op(op: HelperOp, tx: &Sender<Input>) -> Result<(), String> {
+    match op {
+        HelperOp::Installing => {
+            helper_setup::install()?;
+            let _ = tx.send(Input::InstalledKnown(helper_setup::query_installed()));
+            // 設定できたら、そのまま起動する（アプリを開き直さなくてよい）。
+            helper_setup::run_task().map_err(|e| format!("設定はできましたが、{e}"))
+        }
+        HelperOp::Removing => {
+            let result = helper_setup::uninstall();
+            let _ = tx.send(Input::InstalledKnown(helper_setup::query_installed()));
+            result
+        }
+        HelperOp::Starting => helper_setup::run_task(),
+    }
 }

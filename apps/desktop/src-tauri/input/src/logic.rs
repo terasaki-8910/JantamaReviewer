@@ -199,6 +199,17 @@ pub fn decide_active(event: InputEvent, trigger: ActiveTrigger, mods: Modifiers)
     }
 }
 
+impl ActiveTrigger {
+    /// 割り当てに登録してよい入力か（W-10）。左右のボタン・割り当てられないキー・文字の入力のキー単独は登録できない。
+    /// 補助プログラムが知らせてきた候補を、本体が受け取る前に確かめるのにも使う。
+    pub fn registrable(self) -> bool {
+        match self {
+            ActiveTrigger::Mouse(button) => button.registrable(),
+            ActiveTrigger::Key(chord) => registrable_key(chord.vk, chord.mods),
+        }
+    }
+}
+
 /// 登録の待機中の判定（W-10）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegisterDecision {
@@ -873,6 +884,19 @@ mod tests {
             decide_register(InputEvent::KeyUp(F13), NONE),
             RegisterDecision::Pass
         );
+    }
+
+    #[test]
+    fn w10_only_registrable_inputs_are_accepted_as_candidates() {
+        assert!(ActiveTrigger::Mouse(MouseButton::X1).registrable());
+        assert!(ActiveTrigger::Mouse(MouseButton::Middle).registrable());
+        assert!(!ActiveTrigger::Mouse(MouseButton::Left).registrable());
+        assert!(!ActiveTrigger::Mouse(MouseButton::Right).registrable());
+        assert!(ActiveTrigger::key(F13, NONE).registrable());
+        assert!(ActiveTrigger::key(KEY_M, CTRL_ALT).registrable());
+        assert!(!ActiveTrigger::key(KEY_M, NONE).registrable());
+        assert!(!ActiveTrigger::key(VK_ESCAPE, CTRL_ALT).registrable());
+        assert!(!ActiveTrigger::key(VK_TAB, NONE).registrable());
     }
 
     // ---- InputCore ----
