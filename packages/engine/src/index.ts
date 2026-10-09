@@ -12,6 +12,7 @@
  * - Rating: `gameRating` / `handRatings`（E-12）、段階の当てはめ: `fitGradeModel` / `evaluateLeaveOneGameOut`（E-13）
  * - 局の結果と暫定の〇△✕: `summarizeKyokus`（E-6）、評価の突き合わせ: `alignRatings`（E-7）
  * - 解き直しの予定: `scheduleReview`（E-5）、牌譜リンク: `parsePaipuLink`（E-9）、MAKA の打牌: `recordMakaMove`（E-14）
+ * - クリップボードの牌譜リンク: `detectPaipuLink`（見つける）・`detectNewPaipuLink` / `PaipuLinkAnnouncer`（同じ牌譜 ID は一度だけ知らせる）（E-15）
  */
 export const ENGINE_PACKAGE = '@jantama/engine' as const;
 

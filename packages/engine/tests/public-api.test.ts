@@ -49,6 +49,12 @@ describe('公開 API（src/index.ts）', () => {
     }
   });
 
+  it('E-15 クリップボードの牌譜リンクの入口が使える', () => {
+    for (const name of ['detectPaipuLink', 'detectNewPaipuLink', 'PaipuLinkAnnouncer'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+  });
+
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
   });
