@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { FX1_IDS, loadReportJson, loadReportText } from './helpers/fixtures';
+import { FX1_IDS, FX4_ID, loadFixtureJson, loadReportJson, loadReportText } from './helpers/fixtures';
 
-// FX-1 の結果 JSON をリポジトリに入れてよいかの検査。
+// 結果 JSON の固定データ（FX-1 の5半荘と FX-4）をリポジトリに入れてよいかの検査。
 // 雀魂の牌譜 ID・アカウントの番号・本名が入っていないことを、コミットの前にテストで確かめる。
-describe('FX-1 固定データに個人を特定できる値が入っていない', () => {
-  for (const id of FX1_IDS) {
+describe('固定データ（FX-1・FX-4）に個人を特定できる値が入っていない', () => {
+  for (const id of [...FX1_IDS, FX4_ID]) {
     describe(id, () => {
       const text = loadReportText(id);
 
@@ -46,4 +46,19 @@ describe('FX-1 固定データに個人を特定できる値が入っていな�
       });
     });
   }
+});
+
+describe('FX-4 の文字認識の写し（fx4-ocr.json）に個人を特定できる値が入っていない', () => {
+  const text = JSON.stringify(loadFixtureJson('fx4-ocr.json'));
+
+  it('牌譜リンク・雀魂のドメイン・アカウントの番号・プレイヤー名が無い', () => {
+    expect(text).not.toMatch(/paipu|mahjong-?soul|maj-?soul|yo-star/i);
+    expect(text).not.toMatch(/_a\d+|account|nickname|user_?id/i);
+    expect(text).not.toMatch(/[A-D]さん/);
+    expect(text).not.toMatch(/\d{6}-[0-9a-f]{8}-/i);
+  });
+
+  it('絵文字として扱われる文字が無い', () => {
+    expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
 });

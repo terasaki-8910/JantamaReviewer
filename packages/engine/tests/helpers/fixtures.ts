@@ -26,6 +26,21 @@ export const FX1_DECISION_COUNTS: Record<(typeof FX1_IDS)[number], number> = {
   '3a36dac7c7fc18ce': 202,
 };
 
+/** FX-4: 10月9日にウィジェットで記録した5局の半荘の結果 JSON（迷いマーク6・評価5）。玉の間・南喰赤。 */
+export const FX4_ID = '5b821c8a048ff791';
+
+/** FX-4 の迷いマーク 1 枚分の、画面中央の文字認識の結果の写し（fixtures/fx4-ocr.json）。 */
+export interface Fx4OcrMark {
+  /** 迷いマークの番号（1 から。押した順）。 */
+  mark: number;
+  /** 押した時刻（ローカル時刻。例: 2026-10-09T19:09:53.812）。 */
+  time: string;
+  /** 認識した行を ` | ` で区切った文字列。 */
+  text: string;
+  /** text を ` | ` で分けた行。 */
+  lines: string[];
+}
+
 export function reportPath(id: string): string {
   return path.join(FIXTURES_DIR, 'reports', `${id}.json`);
 }
@@ -40,6 +55,11 @@ export function loadReportJson(id: string): unknown {
 
 export function loadFixtureJson<T = unknown>(name: string): T {
   return JSON.parse(readFileSync(path.join(FIXTURES_DIR, name), 'utf-8')) as T;
+}
+
+/** FX-4 の迷いマーク6枚の文字認識の結果（押した順）。 */
+export function loadFx4Ocr(): Fx4OcrMark[] {
+  return loadFixtureJson<{ marks: Fx4OcrMark[] }>('fx4-ocr.json').marks;
 }
 
 /**
