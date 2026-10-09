@@ -118,6 +118,8 @@ export interface Scenario {
   label: 'main' | 'widget';
   state: unknown;
   settings: unknown;
+  /** `get_input_status` が返す、ボタンの登録・テスト・補助プログラムの状態。無ければ null。 */
+  inputStatus?: unknown;
   sessions: unknown[];
   /** `convertFileSrc` が返す画像（データ URL）。 */
   thumb: string;
@@ -144,6 +146,7 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'get_settings': return scenario.settings;
       case 'set_settings': return args.settings;
       case 'set_orientation': return Object.assign({}, scenario.settings, { orientation: args.orientation });
+      case 'get_input_status': return scenario.inputStatus === undefined ? null : scenario.inputStatus;
       case 'list_sessions': return scenario.sessions;
       case 'get_startup_note': return null;
       default: return null;

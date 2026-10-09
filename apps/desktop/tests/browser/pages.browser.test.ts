@@ -36,6 +36,15 @@ const baseState = {
   error: null,
 };
 
+/** 設定ページに出す、ボタンの登録・テスト・補助プログラムの状態（既定: 補助プログラムは未設定）。 */
+const inputStatus = {
+  registering: false,
+  probe_ms: null,
+  hook: 'in_process',
+  helper: { installed: false, running: false, busy: null, error: null },
+  message: null,
+};
+
 const settings = {
   trigger: { kind: 'mouse_x1' },
   orientation: 'vertical',
@@ -92,7 +101,15 @@ function makeSessions(): unknown[] {
 }
 
 function scenario(label: Scenario['label'], overrides: Partial<Scenario> = {}): Scenario {
-  return { label, state: baseState, settings, sessions: makeSessions(), thumb: TINY_PNG, ...overrides };
+  return {
+    label,
+    state: baseState,
+    settings,
+    inputStatus,
+    sessions: makeSessions(),
+    thumb: TINY_PNG,
+    ...overrides,
+  };
 }
 
 let server: PageServer;
@@ -184,7 +201,7 @@ describe('検討画面（メインの窓）', () => {
             if (pageName === '設定') {
               await page.getByRole('button', { name: '設定' }).click();
               await page.getByRole('heading', { level: 1, name: '設定' }).waitFor();
-              await page.getByRole('radio', { name: 'マウスの「戻る」ボタン' }).waitFor();
+              await page.getByRole('button', { name: 'ボタンを登録' }).waitFor();
             } else {
               await page.getByRole('navigation', { name: '半荘の一覧' }).waitFor();
               await waitForImages(page);
@@ -205,6 +222,85 @@ describe('検討画面（メインの窓）', () => {
             // U-5: キーボード
             const reach = await unreachableByTab(page);
             expect(reach.total).toBeGreaterThan(3);
+            expect(reach.missed).toEqual([]);
+
+            expect(problems).toEqual([]);
+            expect(external).toEqual([]);
+          } finally {
+            await context.close();
+          }
+        });
+      }
+    }
+  }
+
+  /** 設定ページの、状態ごとの見た目（W-9・W-10・W-11）。 */
+  const SETTINGS_VARIANTS = [
+    {
+      name: '登録の待機中（長い案内文）',
+      input: { ...inputStatus, registering: true },
+      ready: '登録したいボタンを押してください（マウスのボタンでもキーでも）',
+    },
+    {
+      name: 'テストで受け取った・補助プログラムが動いている',
+      input: {
+        ...inputStatus,
+        probe_ms: local(2026, 10, 9, 19, 42, 5),
+        hook: 'helper',
+        helper: { installed: true, running: true, busy: null, error: null },
+      },
+      settings: { ...settings, trigger: { kind: 'key', code: 'KeyM', ctrl: true, alt: true } },
+      ready: '受け取りました',
+    },
+    {
+      name: '設定済みだが動いていない・失敗の理由つき',
+      input: {
+        ...inputStatus,
+        helper: {
+          installed: true,
+          running: false,
+          busy: null,
+          error: 'Windows の確認が取り消されました',
+        },
+        message: 'ボタンを拾う仕組みが動いていません。補助プログラムを設定するか、アプリを開き直してください',
+      },
+      ready: '起動する',
+    },
+    {
+      name: '設定の途中（確認を待っている）',
+      input: {
+        ...inputStatus,
+        helper: { installed: false, running: false, busy: 'installing', error: null },
+      },
+      ready: '設定しています',
+    },
+  ] as const;
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 1280] as const) {
+      for (const variant of SETTINGS_VARIANTS) {
+        it(`設定ページ ${variant.name} 幅${width}px ${scheme}: 横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届く`, async () => {
+          const { context, page, problems, external } = await open(
+            'index.html',
+            { width, height: 900 },
+            scheme,
+            scenario('main', {
+              inputStatus: variant.input,
+              settings: 'settings' in variant ? variant.settings : settings,
+            }),
+          );
+          try {
+            await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+            await page.getByRole('button', { name: '設定' }).click();
+            await page.getByRole('heading', { level: 1, name: '設定' }).waitFor();
+            await page.getByText(variant.ready).first().waitFor();
+
+            const m = await noHorizontalScroll(page);
+            expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+
+            const axe = await runAxe(page);
+            expect(seriousViolations(axe)).toEqual([]);
+            const reach = await unreachableByTab(page);
             expect(reach.missed).toEqual([]);
 
             expect(problems).toEqual([]);

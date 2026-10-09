@@ -5,12 +5,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
-import type { AppState, Orientation, Rating, SessionRecord, Settings } from './types';
+import type { AppState, InputStatus, Orientation, Rating, SessionRecord, Settings } from './types';
 
 /** 記録の状態が変わったときのイベント名（Rust の `EVENT_STATE_CHANGED`）。 */
 export const EVENT_STATE_CHANGED = 'state-changed';
 /** 設定が変わったときのイベント名（Rust の `EVENT_SETTINGS_CHANGED`）。 */
 export const EVENT_SETTINGS_CHANGED = 'settings-changed';
+/** ボタンの登録・テスト・補助プログラムの状態が変わったときのイベント名（Rust の `EVENT_INPUT_STATUS`）。 */
+export const EVENT_INPUT_STATUS = 'input-status-changed';
 
 export const api = {
   getState: () => invoke<AppState>('get_state'),
@@ -37,6 +39,23 @@ export const api = {
   /** テーマが変わったときに、窓の背景色を画面の色にそろえさせる（N-7）。 */
   setWindowBackground: (background: string) =>
     invoke<void>('set_window_background', { background }),
+  /** ボタンの登録・テスト・補助プログラムの、いまの状態。 */
+  getInputStatus: () => invoke<InputStatus>('get_input_status'),
+  /** 「ボタンを登録」。次に押された登録できる入力が、割り当てになる（W-10）。 */
+  startRegistration: () => invoke<void>('start_registration'),
+  /** 登録をやめる（キャンセルのボタン・Esc）。 */
+  cancelRegistration: () => invoke<void>('cancel_registration'),
+  /**
+   * テストの欄を見せているか。見せている間（かつ窓が操作を受けている間）、割り当てたボタンを押しても
+   * 記録せず、受け取ったことだけを知らせる（W-11）。
+   */
+  setProbeWanted: (wanted: boolean) => invoke<void>('set_probe_wanted', { wanted }),
+  /** 「管理者の補助プログラムを設定する」。Windows の確認が出る（最初の 1 回だけ）。進み具合は状態で知らせる。 */
+  setupHelper: () => invoke<void>('setup_helper'),
+  /** 補助プログラムの設定を解除する。Windows の確認が出る。 */
+  removeHelper: () => invoke<void>('remove_helper'),
+  /** 設定済みの補助プログラムを起動する。確認は出ない。 */
+  startHelper: () => invoke<void>('start_helper'),
 };
 
 export function onStateChanged(handler: (state: AppState) => void): Promise<UnlistenFn> {
@@ -45,6 +64,10 @@ export function onStateChanged(handler: (state: AppState) => void): Promise<Unli
 
 export function onSettingsChanged(handler: (settings: Settings) => void): Promise<UnlistenFn> {
   return listen<Settings>(EVENT_SETTINGS_CHANGED, (event) => handler(event.payload));
+}
+
+export function onInputStatus(handler: (status: InputStatus) => void): Promise<UnlistenFn> {
+  return listen<InputStatus>(EVENT_INPUT_STATUS, (event) => handler(event.payload));
 }
 
 /** コマンドが返したエラー（Rust の String）を、画面に出す文にする。 */
