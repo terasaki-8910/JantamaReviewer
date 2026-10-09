@@ -161,3 +161,46 @@ fn n7_the_window_is_never_shown_before_the_background_matches_the_page() {
     let show = ready.find("present_window(").expect("窓を見せる");
     assert!(background < show, "背景色をそろえてから見せる");
 }
+
+#[test]
+fn w12_the_widget_menu_and_the_tray_menu_both_offer_the_sound_toggle_and_stay_in_step_with_the_setting(
+) {
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    let setup = lib.split("fn setup(").nth(1).expect("setup がある");
+    // どちらのメニューも、いまの音の設定の印つきで作る。
+    assert_eq!(
+        setup
+            .matches("menu::build_menu(app, settings.sound)")
+            .count(),
+        2,
+        "右クリックのメニューとトレイのメニューを、同じ作り方で作る"
+    );
+    // 2 つの「音を鳴らす」の項目を覚えておき、設定が変わったときに印を合わせる。
+    assert!(setup.contains("app.manage(SoundMenuItems(vec!["));
+    assert!(setup.contains("widget_menu.sound.clone()"));
+    assert!(setup.contains("tray_menu.sound.clone()"));
+
+    let commands = read(crate_dir().join("src").join("commands.rs"));
+    let side_effects = commands
+        .split("fn apply_side_effects")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("apply_side_effects がある");
+    assert!(
+        side_effects.contains("if change.sound {")
+            && side_effects.contains("sync_sound_menus(app, settings.sound)"),
+        "設定のチェックから変えたときも、メニューの印を合わせる"
+    );
+
+    // メニューから選ぶと、設定の音を切り替える（設定の保存・画面への知らせは、設定を変える共通の経路）。
+    let menu = read(crate_dir().join("src").join("menu.rs"));
+    assert!(menu.contains("MENU_TOGGLE_SOUND => {"));
+    assert!(menu.contains("commands::toggle_sound_now(app)"));
+    let toggle = commands
+        .split("pub fn toggle_sound_now")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("toggle_sound_now がある");
+    assert!(toggle.contains("settings.sound = !settings.sound;"));
+    assert!(toggle.contains("set_settings_now(app, settings)"));
+}

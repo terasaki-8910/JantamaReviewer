@@ -45,6 +45,8 @@ pub struct SettingsChange {
     pub trigger: bool,
     pub orientation: bool,
     pub data_dir: bool,
+    /// 音の入・切（メニューの印を合わせるため）。
+    pub sound: bool,
 }
 
 pub struct Core {
@@ -166,10 +168,9 @@ impl Core {
         Ok(self.app_state())
     }
 
-    pub fn new_session(&mut self, t_ms: i64) -> Result<AppState, String> {
-        self.recorder_mut()?
-            .new_session(t_ms)
-            .map_err(|e| e.to_string())?;
+    /// 今の半荘を閉じる（W-14）。フォルダは作らず、次の記録が新しい半荘を始める。
+    pub fn new_session(&mut self) -> Result<AppState, String> {
+        self.recorder_mut()?.new_session();
         Ok(self.app_state())
     }
 
@@ -203,6 +204,7 @@ impl Core {
             trigger: new.trigger != self.settings.trigger,
             orientation: new.orientation != self.settings.orientation,
             data_dir: data_dir_changed,
+            sound: new.sound != self.settings.sound,
         };
         self.settings = new;
         match reopened {
@@ -307,9 +309,14 @@ mod tests {
         let s = f.core.undo(T0 + 3).unwrap();
         assert_eq!(s.next_hand, 2);
         let before = s.session_id.unwrap();
-        let s = f.core.new_session(T0 + 10_000).unwrap();
-        assert_ne!(s.session_id.unwrap(), before);
+        let s = f.core.new_session().unwrap();
+        assert_eq!(s.session_id, None, "閉じるだけで、空の半荘は作らない");
+        assert_eq!(s.status, Status::Idle);
         assert_eq!(s.mark_count, 0);
+        assert_eq!(s.next_hand, 1);
+        assert_eq!(f.core.list_sessions().unwrap().len(), 1);
+        let s = f.core.mark(T0 + 20_000).unwrap();
+        assert_ne!(s.session_id.unwrap(), before);
         assert_eq!(f.core.list_sessions().unwrap().len(), 2);
     }
 
@@ -451,5 +458,40 @@ mod tests {
         next.capture_keywords = vec!["  雀魂 ".into(), "".into()];
         f.core.apply_settings(next).unwrap();
         assert_eq!(f.core.settings().capture_keywords, vec!["雀魂"]);
+    }
+
+    #[test]
+    fn w12_flipping_the_sound_setting_is_reported_saved_and_kept_after_a_restart() {
+        let mut f = fixture();
+        assert!(f.core.settings().sound);
+        let mut next = f.core.settings().clone();
+        next.sound = !next.sound;
+        let change = f.core.apply_settings(next).unwrap();
+        assert_eq!(
+            change,
+            SettingsChange {
+                sound: true,
+                ..SettingsChange::default()
+            }
+        );
+        assert!(!f.core.settings().sound);
+        // 同じ設定フォルダから読み直す（= 次の起動）。
+        let reloaded = Core::load(f.config_dir(), FakeCapturer::ok(&[1]), CountingSound::new());
+        assert!(!reloaded.settings().sound);
+        // もう一度切り替えると、入に戻って、それも残る。
+        let mut back = f.core.settings().clone();
+        back.sound = !back.sound;
+        assert!(f.core.apply_settings(back).unwrap().sound);
+        let reloaded = Core::load(f.config_dir(), FakeCapturer::ok(&[1]), CountingSound::new());
+        assert!(reloaded.settings().sound);
+    }
+
+    #[test]
+    fn w12_other_settings_changes_do_not_report_a_sound_change() {
+        let mut f = fixture();
+        let mut next = f.core.settings().clone();
+        next.orientation = Orientation::Horizontal;
+        let change = f.core.apply_settings(next).unwrap();
+        assert!(change.orientation && !change.sound);
     }
 }

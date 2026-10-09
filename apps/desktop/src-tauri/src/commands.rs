@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
-use tauri::menu::Menu;
+use tauri::menu::{CheckMenuItem, Menu};
 use tauri::window::Color;
 use tauri::{
     AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, State, WebviewWindow, Wry,
@@ -72,6 +72,9 @@ pub struct HookState(pub Option<jantama_input::hook_win::HookHandle>);
 /// ウィジェットの右クリックのメニュー。
 pub struct WidgetMenu(pub Menu<Wry>);
 
+/// 2 つのメニュー（右クリックとトレイ）の「音を鳴らす」の項目。設定が変わったときに、印を合わせる（W-12）。
+pub struct SoundMenuItems(pub Vec<CheckMenuItem<Wry>>);
+
 /// ウィジェットを動かしたときの位置を、動かし終わってから保存する担当への窓口。
 pub struct PositionSaver(pub Mutex<Sender<WidgetPosition>>);
 
@@ -105,7 +108,7 @@ pub fn mark_now<R: Runtime>(app: &AppHandle<R>, t_ms: i64) -> Result<AppState, S
 
 pub fn new_session_now<R: Runtime>(app: &AppHandle<R>) -> Result<AppState, String> {
     let shared = app.state::<SharedCore>();
-    let state = shared.lock().new_session(now_ms())?;
+    let state = shared.lock().new_session()?;
     emit_state(app, &state);
     Ok(state)
 }
@@ -181,6 +184,13 @@ pub fn toggle_orientation_now<R: Runtime>(app: &AppHandle<R>) -> Result<Settings
     set_orientation_now(app, next)
 }
 
+/// 音の入・切を反対にする（メニューの「音を鳴らす」。設定のチェックと同じ設定を切り替える。W-12）。
+pub fn toggle_sound_now<R: Runtime>(app: &AppHandle<R>) -> Result<Settings, String> {
+    let mut settings = app.state::<SharedCore>().lock().settings().clone();
+    settings.sound = !settings.sound;
+    set_settings_now(app, settings)
+}
+
 pub fn set_orientation_now<R: Runtime>(
     app: &AppHandle<R>,
     orientation: Orientation,
@@ -218,11 +228,26 @@ fn apply_side_effects<R: Runtime>(app: &AppHandle<R>, settings: &Settings, chang
             });
         }
     }
+    if change.sound {
+        sync_sound_menus(app, settings.sound);
+    }
     if change.orientation {
         resize_widget(app, settings.orientation);
     }
     if change.data_dir {
         allow_asset_dir(app, &settings.data_dir);
+    }
+}
+
+/// メニューの「音を鳴らす」の印を、設定に合わせる（設定のチェックから変えたときも、メニューから変えたときも）。
+fn sync_sound_menus<R: Runtime>(app: &AppHandle<R>, on: bool) {
+    let Some(items) = app.try_state::<SoundMenuItems>() else {
+        return;
+    };
+    for item in &items.0 {
+        if let Err(e) = item.set_checked(on) {
+            eprintln!("メニューの音の印を変えられませんでした: {e}");
+        }
     }
 }
 

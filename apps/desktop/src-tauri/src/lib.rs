@@ -38,7 +38,7 @@ use tauri::{Manager, WindowEvent};
 use crate::app_core::Core;
 use crate::capture_win::WindowsCapturer;
 use crate::commands::{
-    HookState, PositionSaver, SharedCore, SharedShowGate, WidgetMenu, SHOW_TIMEOUT,
+    HookState, PositionSaver, SharedCore, SharedShowGate, SoundMenuItems, WidgetMenu, SHOW_TIMEOUT,
 };
 use crate::sound::WindowsSound;
 use crate::widget_window::{
@@ -160,12 +160,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // 画面からの知らせが来なくても、窓が見えないままにならないようにする。
     commands::spawn_show_watchdog(handle.clone(), SHOW_TIMEOUT);
 
-    // 右クリックのメニューとタスクトレイ。
-    app.manage(WidgetMenu(menu::build_menu(app)?));
-    let tray_menu = menu::build_menu(app)?;
+    // 右クリックのメニューとタスクトレイ。「音を鳴らす」の印は、設定が変わるたびに両方で合わせる（W-12）。
+    let widget_menu = menu::build_menu(app, settings.sound)?;
+    let tray_menu = menu::build_menu(app, settings.sound)?;
+    app.manage(SoundMenuItems(vec![
+        widget_menu.sound.clone(),
+        tray_menu.sound.clone(),
+    ]));
+    app.manage(WidgetMenu(widget_menu.menu));
     let mut tray = TrayIconBuilder::new()
         .tooltip("JantamaReviewer")
-        .menu(&tray_menu);
+        .menu(&tray_menu.menu);
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
