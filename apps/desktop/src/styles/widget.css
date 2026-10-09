@@ -1,0 +1,224 @@
+/*
+  widget.css: 雀魂の窓の横に置く、常に手前の細い窓。
+  承認済みのサンプル（round2-samples/widget.css）を、実際の窓に合わせて移したもの。
+  ゲームの画面は読まない。操作はすべてマウスで届き、ボタンは 40px 以上。
+  重みの順: 評価（いちばん押す）> 迷い（このアプリの要の操作。淡い色）> 取り消し（目立たせない）。
+  点は緑（accent）。赤は「AI に対する自分の手」のためだけに取っておく。
+*/
+
+/* 窓いっぱいに描く（サンプルの .stage の余白は、実際の窓では無い）。 */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.widget {
+  width: 100%;
+  height: 100%;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+
+  /* Windows 11 の枠なしの窓の標準の角丸（8px）にそろえる。サンプルは 10px。 */
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.3;
+  user-select: none;
+  cursor: grab;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+
+/* 半荘がまだ始まっていない: 中を抜いた点。 */
+.dot.idle {
+  background: transparent;
+  border: 1.5px solid var(--muted);
+}
+
+/* 保存先を開けず記録できない。 */
+.dot.error {
+  background: var(--ink);
+}
+
+.next {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.w-btn {
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    transform 80ms ease;
+}
+
+.w-btn:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  background: var(--hover);
+  border-color: var(--line);
+}
+
+.w-btn:hover:not(:disabled) {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 100vmax var(--hover);
+}
+
+.w-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.w-btn.flash {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.rate-btn {
+  height: 44px;
+}
+
+.rate-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.doubt {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+  gap: 0;
+  align-content: center;
+  line-height: 1.1;
+}
+
+.doubt .lbl {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.doubt .num {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.doubt.flash {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.undo {
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border-color: var(--line);
+}
+
+.undo:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+/* 縦長: 幅 76px */
+.widget.v {
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.widget.v .status {
+  justify-content: center;
+}
+
+.widget.v .rate {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.widget.v .next {
+  text-align: center;
+  margin-bottom: -2px;
+}
+
+.widget.v .doubt {
+  height: 54px;
+  padding-top: 2px;
+}
+
+.widget.v .undo {
+  height: 40px;
+}
+
+/* 横長: 340 x 64 */
+.widget.h {
+  padding: 0 8px;
+  display: grid;
+  grid-template-columns: 58px auto 48px 54px;
+  column-gap: 7px;
+  align-items: center;
+}
+
+.widget.h .info {
+  display: grid;
+  gap: 3px;
+}
+
+.widget.h .rate {
+  display: flex;
+  gap: 3px;
+}
+
+.widget.h .rate-btn {
+  width: 44px;
+}
+
+.widget.h .doubt {
+  width: 48px;
+  height: 44px;
+}
+
+.widget.h .undo {
+  width: 54px;
+  height: 44px;
+  font-size: 11.5px;
+}

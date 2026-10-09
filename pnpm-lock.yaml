@@ -38,6 +38,12 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@fontsource/ibm-plex-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/zen-old-mincho':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@tauri-apps/api':
         specifier: ^2.12.1
         version: 2.12.1
@@ -301,6 +307,12 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@fontsource/ibm-plex-mono@5.3.0':
+    resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
+
+  '@fontsource/zen-old-mincho@5.3.0':
+    resolution: {integrity: sha512-pNvegTkx6rOQRaBMcUoxxeNoIRJajdY0TeX4ngf/26KrtsVoqY11ho6WlwPWDYHi7PY65vf88TV2xjIO+YxQ8Q==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2447,6 +2459,10 @@ snapshots:
       levn: 0.4.1
 
   '@exodus/bytes@1.16.0': {}
+
+  '@fontsource/ibm-plex-mono@5.3.0': {}
+
+  '@fontsource/zen-old-mincho@5.3.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:
