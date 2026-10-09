@@ -11,6 +11,13 @@ publish = false
 name = "jantama_reviewer_lib"
 crate-type = ["rlib"]
 
+# 本体（このパッケージ）と、管理者で動くボタンの補助プログラム（helper）、2 つが共有する部品（input）。
+# `cargo build` で本体と補助プログラムの両方を作る（default-members）。
+[workspace]
+members = ["input", "helper"]
+default-members = [".", "helper"]
+resolver = "2"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -27,6 +34,8 @@ png = "0.18"
 tauri-plugin-opener = "2"
 # 画面の遷移先の判定（navigation.rs）。URL の文字列を調べるだけ。
 url = "2"
+# ボタンを拾う部品（判定・補助プログラムとの連絡・Windows のフックとパイプ）。補助プログラムと共有する。
+jantama-input = { path = "input" }
 
 [target.'cfg(windows)'.dependencies]
 # WebView2 の設定を変える（webview_win.rs）。Tauri（wry 0.57）が使う版にそろえる。
