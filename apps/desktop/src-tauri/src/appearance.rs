@@ -110,7 +110,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_the_computed_style_forms() {
+    fn n7_reads_the_computed_style_forms() {
         assert_eq!(
             parse_css_color("rgb(244, 244, 244)"),
             Some(Rgb(244, 244, 244))
@@ -136,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_srgb_color_functions_and_hex() {
+    fn n7_reads_srgb_color_functions_and_hex() {
         assert_eq!(
             parse_css_color("color(srgb 0.9568 0.9568 0.9568)"),
             Some(Rgb(244, 244, 244))
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn percentages_and_fractions_round_to_the_nearest_value() {
+    fn n7_percentages_and_fractions_round_to_the_nearest_value() {
         assert_eq!(
             parse_css_color("rgb(100%, 50%, 0%)"),
             Some(Rgb(255, 128, 0))
@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn a_transparent_color_is_not_a_background() {
+    fn n7_a_transparent_color_is_not_a_background() {
         assert_eq!(parse_css_color("rgba(0, 0, 0, 0)"), None);
         assert_eq!(parse_css_color("rgb(0 0 0 / 0)"), None);
         assert_eq!(parse_css_color("rgb(0 0 0 / 0%)"), None);
@@ -176,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn unreadable_strings_give_nothing() {
+    fn n7_unreadable_strings_give_nothing() {
         for text in [
             "",
             "transparent",

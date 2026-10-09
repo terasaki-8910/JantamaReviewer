@@ -271,7 +271,7 @@ mod tests {
     ];
 
     #[test]
-    fn strict_flags_turn_off_every_browser_feature_in_release() {
+    fn n1_to_n12_strict_flags_turn_off_every_browser_feature_in_release() {
         // 全項目を名前で書き出す（`..` を使わない）。項目を足したら、ここも直さないとコンパイルが通らない。
         let WebviewFlags {
             browser_accelerator_keys,
@@ -314,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn dev_tools_are_on_only_when_running_under_tauri_dev() {
+    fn n12_dev_tools_are_on_only_when_running_under_tauri_dev() {
         assert!(WebviewFlags::strict(true).dev_tools);
         assert!(!WebviewFlags::strict(false).dev_tools);
         // ほかの設定は、開発のときも変わらない。
@@ -324,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn the_webview2_table_lists_every_setting_exactly_once_with_the_flag_value() {
+    fn n1_to_n12_the_webview2_table_lists_every_setting_exactly_once_with_the_flag_value() {
         let flags = WebviewFlags::strict(false);
         let table = flags.webview2_settings();
         let settings: Vec<Setting> = table.iter().map(|(s, _)| *s).collect();
@@ -350,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_flags_writes_every_setting_and_reports_nothing_when_all_match() {
+    fn n1_to_n12_apply_flags_writes_every_setting_and_reports_nothing_when_all_match() {
         let mut access = RecordingAccess::default();
         let problems = apply_flags(&WebviewFlags::strict(false), &mut access);
         assert_eq!(problems, Vec::<String>::new());
@@ -380,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_flags_turns_dev_tools_on_only_for_dev() {
+    fn n12_apply_flags_turns_dev_tools_on_only_for_dev() {
         let mut dev = RecordingAccess::default();
         assert!(apply_flags(&WebviewFlags::strict(true), &mut dev).is_empty());
         assert_eq!(dev.values.get(&Setting::DevTools), Some(&true));
@@ -404,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_flags_reports_settings_that_did_not_take_effect() {
+    fn n1_to_n12_apply_flags_reports_settings_that_did_not_take_effect() {
         let problems = apply_flags(&WebviewFlags::strict(false), &mut IgnoringAccess);
         // 有効のまま読み戻される 9 項目（既定のメニューは、true にしたので一致する）。
         assert_eq!(problems.len(), 9, "{problems:?}");
@@ -434,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_flags_keeps_going_after_an_unsupported_setting() {
+    fn n1_to_n12_apply_flags_keeps_going_after_an_unsupported_setting() {
         let mut access = PartialAccess {
             inner: RecordingAccess::default(),
             unsupported: Setting::PasswordAutosave,
@@ -447,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn builder_options_follow_the_flags() {
+    fn n2_n8_n10_n12_builder_options_follow_the_flags() {
         let release = WebviewFlags::strict(false).builder_options();
         assert_eq!(
             release,
@@ -480,14 +480,14 @@ mod tests {
     }
 
     #[test]
-    fn the_context_menu_is_suppressed_outside_editable_fields() {
+    fn n3_the_context_menu_is_suppressed_outside_editable_fields() {
         let items = vec![item("copy"), item("selectAll"), item("inspectElement")];
         assert_eq!(plan_context_menu(false, &items), ContextMenuPlan::Suppress);
         assert_eq!(plan_context_menu(false, &[]), ContextMenuPlan::Suppress);
     }
 
     #[test]
-    fn an_editable_field_keeps_only_cut_copy_paste_and_select_all() {
+    fn n3_an_editable_field_keeps_only_cut_copy_paste_and_select_all() {
         let items = vec![
             item("undo"),
             separator(),
@@ -516,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn separators_never_lead_trail_or_double_up() {
+    fn n3_separators_never_lead_trail_or_double_up() {
         let items = vec![
             separator(),
             item("emoji"),
@@ -541,13 +541,13 @@ mod tests {
     }
 
     #[test]
-    fn an_editable_field_with_nothing_to_keep_shows_no_menu() {
+    fn n3_an_editable_field_with_nothing_to_keep_shows_no_menu() {
         let items = vec![item("emoji"), separator(), item("inspectElement")];
         assert_eq!(plan_context_menu(true, &items), ContextMenuPlan::Suppress);
     }
 
     #[test]
-    fn a_separator_is_not_mistaken_for_an_item_with_a_kept_name() {
+    fn n3_a_separator_is_not_mistaken_for_an_item_with_a_kept_name() {
         let items = vec![
             MenuItemInfo {
                 name: "copy".to_string(),
