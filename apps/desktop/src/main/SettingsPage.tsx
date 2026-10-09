@@ -260,9 +260,10 @@ export function SettingsPage() {
                 data-got={probeMs !== null}
               >
                 {probeMs !== null ? (
-                  <>
+                  // 1 つの要素に包む（.probe は flex なので、文字と時刻が別の項目になると、間の空白が消える）。
+                  <span>
                     受け取りました <span className="mono">{formatClock(probeMs)}</span>
-                  </>
+                  </span>
                 ) : (
                   PROBE_IDLE
                 )}

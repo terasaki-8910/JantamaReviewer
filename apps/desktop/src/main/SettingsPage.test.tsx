@@ -359,7 +359,8 @@ describe('設定ページ: テスト（W-11）', () => {
     const mock = await renderPage();
     const at = new Date(2026, 9, 9, 19, 42, 5).getTime();
     emitStatus(mock, status({ probe_ms: at }));
-    const probe = await screen.findByText(/受け取りました/);
+    await screen.findByText(/受け取りました/);
+    const probe = screen.getByRole('status', { name: 'テスト' });
     expect(probe).toHaveTextContent(`受け取りました ${formatClock(at)}`);
     expect(probe).toHaveTextContent('受け取りました 19:42:05');
     expect(probe).toHaveAttribute('data-got', 'true');

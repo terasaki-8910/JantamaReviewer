@@ -313,6 +313,37 @@ describe('検討画面（メインの窓）', () => {
     }
   }
 
+  it('W-11 「受け取りました」と時刻の間に、見える空白がある（flex の中で、文字と時刻が別の項目になると消える）', async () => {
+    const { context, page } = await open(
+      'index.html',
+      { width: 1280, height: 900 },
+      'light',
+      scenario('main', {
+        inputStatus: { ...inputStatus, probe_ms: local(2026, 10, 9, 19, 42, 5) },
+        settings,
+      }),
+    );
+    try {
+      await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+      await page.getByRole('button', { name: '設定' }).click();
+      await page.getByText('受け取りました').first().waitFor();
+      const gap = await page.evaluate(() => {
+        const time = document.querySelector('.probe .mono');
+        const text = time?.previousSibling;
+        if (!time || !text || !text.textContent) return null;
+        // 「受け取りました」の見える文字の右端（最後の空白は含めない）から、時刻の左端まで。
+        const range = document.createRange();
+        range.setStart(text, 0);
+        range.setEnd(text, text.textContent.length - 1);
+        return time.getBoundingClientRect().left - range.getBoundingClientRect().right;
+      });
+      expect(gap).not.toBeNull();
+      expect(gap ?? 0).toBeGreaterThanOrEqual(2);
+    } finally {
+      await context.close();
+    }
+  });
+
   it('幅 390px では、サイドバーがアイコンだけの細い列になり、行き先の名前は読み上げに残る', async () => {
     const { context, page } = await open('index.html', { width: 390, height: 800 }, 'light', scenario('main'));
     try {
