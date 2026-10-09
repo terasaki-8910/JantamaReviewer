@@ -536,3 +536,76 @@ describe('ウィジェット', () => {
     }
   });
 });
+
+describe('N-5: エラー画面（ブラウザのエラーページの代わり）', () => {
+  it('検討画面: 描画が壊れたら、アプリのデザインのエラー画面になり、ボタンで描き直せる（再読み込みしない）', async () => {
+    // 半荘の記録が壊れた形（marks が null）で届くと、描画の途中で例外になる。
+    const broken = [{ ...sessions[0], marks: null, ratings: null }];
+    const { context, page } = await open('index.html', { width: 1280, height: 800 }, scenario('main', { sessions: broken }));
+    try {
+      const alert = page.getByRole('alert');
+      await alert.waitFor();
+      await page.getByRole('heading', { level: 1, name: '表示できませんでした' }).waitFor();
+      expect(await alert.evaluate((el) => el.className)).toContain('error-screen');
+      // アプリのデザイン: 見出しはアプリの見出しのフォント、ボタンは accent の枠。
+      const look = await page.evaluate(() => {
+        const title = getComputedStyle(document.querySelector('.error-title') as Element);
+        const button = getComputedStyle(document.querySelector('.error-retry') as Element);
+        const probe = document.createElement('i');
+        probe.style.color = 'var(--accent)';
+        document.body.appendChild(probe);
+        const accent = getComputedStyle(probe).color;
+        probe.remove();
+        return { titleFont: title.fontFamily, buttonBorder: button.borderTopColor, accent, buttonCursor: button.cursor };
+      });
+      expect(look.titleFont).toContain('Zen Old Mincho');
+      expect(look.buttonBorder).toBe(look.accent);
+      expect(look.buttonCursor).toBe('pointer');
+      // 直っていないので、押しても同じエラー画面。ページは再読み込みされない。
+      await page.evaluate(() => ((window as unknown as { __marker: string }).__marker = 'alive'));
+      await page.getByRole('button', { name: 'もう一度表示する' }).click();
+      await alert.waitFor();
+      expect(await page.evaluate(() => (window as unknown as { __marker?: string }).__marker)).toBe('alive');
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('ウィジェット: 最初の設定を受け取れなかったら、小さい窓向けのエラー画面になる（縦・横のどちらの大きさでも、はみ出さない）', async () => {
+    for (const size of [
+      { width: 76, height: 336 },
+      { width: 340, height: 64 },
+    ]) {
+      const { context, page } = await open('widget.html', size, scenario('widget', { settings: null }));
+      try {
+        const alert = page.getByRole('alert');
+        await alert.waitFor();
+        expect(await alert.evaluate((el) => el.className)).toContain('compact');
+        const fit = await page.evaluate(() => {
+          const root = document.querySelector('.error-screen') as HTMLElement;
+          const rect = root.getBoundingClientRect();
+          const outside = Array.from(root.querySelectorAll<HTMLElement>('*'))
+            .map((el) => ({ name: el.className || el.tagName, r: el.getBoundingClientRect() }))
+            .filter(({ r }) => r.left < -0.5 || r.top < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5)
+            .map(({ name }) => String(name));
+          const button = (document.querySelector('.error-retry') as HTMLElement).getBoundingClientRect();
+          return {
+            outside,
+            docW: document.documentElement.scrollWidth,
+            docH: document.documentElement.scrollHeight,
+            rootH: rect.height,
+            buttonW: button.width,
+            buttonH: button.height,
+          };
+        });
+        const label = `${size.width}x${size.height}`;
+        expect(fit.outside, label).toEqual([]);
+        expect(fit.docW, label).toBeLessThanOrEqual(size.width);
+        expect(fit.docH, label).toBeLessThanOrEqual(size.height);
+        expect(fit.buttonH, label).toBeGreaterThanOrEqual(40);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+});
