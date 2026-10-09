@@ -12,7 +12,7 @@ import { type Decision, type DecisionKind, classifyDecisionKind, classifyTags } 
 import { kyokuLabel } from './kyoku';
 import { type ParseIssue, parseReport } from './report';
 import type { Fuuro, MjaiEvent, MortalReport, ReportEntry, Seat } from './report-types';
-import { KyokuReplayer, type KyokuLog, ReplayLogError, splitKyokus } from './replay';
+import { KyokuReplayer, type KyokuLog, type ReplayFrame, ReplayLogError, replayFrames, splitKyokus } from './replay';
 import { type Result, err, ok } from './result';
 import { type Tile, sortTiles } from './tiles';
 
@@ -279,6 +279,20 @@ function alignKyoku(
     );
   }
   return ok(decisions);
+}
+
+/**
+ * 判断の 2〜3 巡前から判断の時点までの盤面を、event ごとに返す（F3: 2〜3巡前から再生できる）。
+ * 本人の巡目が「判断の巡目 - turnsBefore」になったとき（そのツモ・チー・ポンの直後）から始める。
+ * それより前が無ければ配牌から。最後の盤面は、判断の盤面と同じ。
+ */
+export function framesBeforeDecision(game: ImportedGame, decision: Decision, turnsBefore = 2): ReplayFrame[] {
+  const log = splitKyokus(game.report.mjai_log)[decision.kyokuPosition];
+  if (!log) throw new RangeError(`${decision.kyokuPosition + 1}局目が牌譜にありません`);
+  const frames = replayFrames(log, game.playerId);
+  const target = decision.board.junme - Math.max(0, Math.floor(turnsBefore));
+  const found = target > 0 ? frames.findIndex((f) => f.board.junme >= target) : -1;
+  return frames.slice(Math.max(0, found), decision.eventIndex - log.startIndex + 1);
 }
 
 /** 結果 JSON（読み込み済みの値）を検査して、再生する。 */

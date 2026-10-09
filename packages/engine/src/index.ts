@@ -17,6 +17,7 @@ export const ENGINE_PACKAGE = '@jantama/engine' as const;
 export * from './actions';
 export * from './decision';
 export * from './disagreement';
+export * from './discard-compare';
 export * from './grade';
 export * from './import';
 export * from './isotonic';

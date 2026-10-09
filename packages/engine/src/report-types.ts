@@ -204,6 +204,7 @@ export interface ReportEntry {
   is_equal: boolean;
   /** q_value の大きい順。 */
   details: ReportDetail[];
+  /** シャンテン数（0 が聴牌）。ツモ牌を除いた閉じた手牌のもの（ツモの判断では、ツモる前の手牌）。 */
   shanten: number;
   at_furiten: boolean;
   actual_index: number;
