@@ -129,7 +129,7 @@ async function openSettings(): Promise<Opened> {
   const opened = await openMain();
   await opened.page.getByRole('button', { name: '設定' }).click();
   await opened.page.getByRole('heading', { level: 1, name: '設定' }).waitFor();
-  await opened.page.getByRole('radio', { name: 'マウスの「戻る」ボタン' }).waitFor();
+  await opened.page.getByRole('button', { name: 'ボタンを登録' }).waitFor();
   return opened;
 }
 
@@ -459,7 +459,8 @@ describe('検討画面（設定ページ）', () => {
           autocapitalize: el.getAttribute('autocapitalize'),
         })),
       );
-      expect(fields.length).toBeGreaterThanOrEqual(7);
+      // 設定ページの入力欄: ウィジェットの形のラジオ 2・音のチェック 1・窓を探す語の入力欄 1（見落としていないことの確認）。
+      expect(fields.length).toBeGreaterThanOrEqual(4);
       for (const field of fields) {
         expect(field, `${field.tag} ${field.type}`).toMatchObject({
           spellcheck: false,
