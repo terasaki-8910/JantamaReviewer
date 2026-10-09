@@ -6,6 +6,9 @@
 //!   同期の入出力だと、1 つのハンドルでは、読みが終わるまで書きが待たされてしまう。
 //! - クライアントは、名前付きパイプの名前（`\\.\pipe\` で始まるもの）にしかつながない。
 //!   ファイルの読み書きに使う窓口ではない（tests/safety.rs が、この部品だけがファイルを開く API を使うことを確かめる）。
+//! - クライアントは、サーバーに自分の権限を使わせない（`SECURITY_IDENTIFICATION`）。管理者で動く補助プログラムが、
+//!   先回りして同じ名前のパイプを作ったほかのプログラムにつないでしまっても、そのプログラムは補助プログラムが誰かを
+//!   知れるだけで、補助プログラムの権限で動くことはできない。
 
 use std::io;
 use std::mem::size_of;
@@ -25,7 +28,8 @@ use windows::Win32::Security::Authorization::{
 use windows::Win32::Security::{PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES};
 use windows::Win32::Storage::FileSystem::{
     CreateFileW, ReadFile, WriteFile, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED,
-    FILE_SHARE_NONE, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
+    FILE_SHARE_NONE, OPEN_EXISTING, PIPE_ACCESS_DUPLEX, SECURITY_IDENTIFICATION,
+    SECURITY_SQOS_PRESENT,
 };
 use windows::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, WaitNamedPipeW, PIPE_READMODE_BYTE,
@@ -143,7 +147,8 @@ impl Pipe {
     }
 
     /// クライアントとして、名前付きパイプにつなぐ。サーバーがまだ無い・ほかの相手とつながっている間は、`timeout` まで待つ。
-    /// 名前付きパイプ（`\\.\pipe\` で始まる名前）以外は開かない。
+    /// 名前付きパイプ（`\\.\pipe\` で始まる名前）以外は開かない。サーバーには、こちらが誰かを知ることだけを許す
+    /// （`SECURITY_IDENTIFICATION`。こちらの権限でサーバーが動くことはできない）。
     pub fn connect(name: &str, timeout: Duration) -> io::Result<Pipe> {
         if !name.starts_with(PIPE_NAME_PREFIX) {
             return Err(io::Error::new(
@@ -162,7 +167,7 @@ impl Pipe {
                     FILE_SHARE_NONE,
                     None,
                     OPEN_EXISTING,
-                    FILE_FLAG_OVERLAPPED,
+                    FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
                     None,
                 )
             };
@@ -352,6 +357,62 @@ mod tests {
         assert!(
             Pipe::create_server(&name, &pipe_sddl(&sid)).is_err(),
             "先に作られているパイプを、そのまま使わない"
+        );
+    }
+
+    #[test]
+    fn w9_the_server_can_only_identify_the_client_and_cannot_act_with_its_rights() {
+        use windows::Win32::Security::{
+            GetTokenInformation, RevertToSelf, SecurityIdentification, TokenImpersonationLevel,
+            SECURITY_IMPERSONATION_LEVEL, TOKEN_QUERY,
+        };
+        use windows::Win32::System::Pipes::ImpersonateNamedPipeClient;
+        use windows::Win32::System::Threading::{GetCurrentThread, OpenThreadToken};
+
+        let sid = current_user_sid().unwrap();
+        let name = test_pipe_name("sqos");
+        let server = Arc::new(Pipe::create_server(&name, &pipe_sddl(&sid)).unwrap());
+        let accepting = {
+            let server = Arc::clone(&server);
+            thread::spawn(move || server.accept().unwrap())
+        };
+        let client = Pipe::connect(&name, Duration::from_secs(5)).unwrap();
+        accepting.join().unwrap();
+        // なりすましは、相手から読んだあとでないとできないので、先に 1 行受け取る。
+        client.write_all(b"hello\n").unwrap();
+        assert_eq!(read_exact_line(&server), "hello");
+
+        // 試験の間、この試験のスレッドだけが相手になりすまし、終わったら必ず戻す。
+        let level = thread::spawn(move || {
+            // SAFETY: なりすましはこのスレッドの中だけで行い、RevertToSelf で戻す。トークンは読んだあと閉じる。
+            unsafe {
+                ImpersonateNamedPipeClient(server.handle).expect("相手が誰かは知れる");
+                let mut token = HANDLE::default();
+                let opened = OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, true, &mut token);
+                let mut level = SECURITY_IMPERSONATION_LEVEL::default();
+                let mut length = 0u32;
+                let read = opened.and_then(|()| {
+                    GetTokenInformation(
+                        token,
+                        TokenImpersonationLevel,
+                        Some(&mut level as *mut _ as *mut core::ffi::c_void),
+                        size_of::<SECURITY_IMPERSONATION_LEVEL>() as u32,
+                        &mut length,
+                    )
+                });
+                RevertToSelf().expect("自分に戻れる");
+                if !token.is_invalid() {
+                    let _ = CloseHandle(token);
+                }
+                read.expect("なりすましの段階を読める");
+                level
+            }
+        })
+        .join()
+        .unwrap();
+        assert_eq!(
+            level, SecurityIdentification,
+            "サーバーは相手が誰かを知れるだけで、相手の権限では動けない"
         );
     }
 

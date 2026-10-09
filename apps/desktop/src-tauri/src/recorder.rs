@@ -103,9 +103,10 @@ impl Recorder {
     }
 
     /// 今の半荘を閉じる（W-14）。フォルダは作らない。次の記録が、新しい半荘を始める。
-    pub fn new_session(&mut self) -> SessionState {
-        self.store.close_session();
-        self.state()
+    /// 「閉じた」記録を書けなかったときもエラーを返すが、半荘は閉じている。
+    pub fn new_session(&mut self, t_ms: i64) -> Result<SessionState, StoreError> {
+        self.store.close_session(t_ms)?;
+        Ok(self.state())
     }
 
     pub fn list_sessions(&self) -> Result<Vec<SessionRecord>, StoreError> {
@@ -390,7 +391,7 @@ mod tests {
         f.recorder.rate(T0, Rating::Good).unwrap();
         assert_eq!(f.capturer.call_count(), 1, "評価は画面を 1 回撮る（W-13）");
         f.recorder.undo(T0 + 1).unwrap();
-        f.recorder.new_session();
+        f.recorder.new_session(T0 + 2).unwrap();
         assert_eq!(
             f.sound.count(),
             0,
@@ -479,7 +480,7 @@ mod tests {
         let mut f = fixture();
         f.recorder.rate(T0, Rating::Good).unwrap();
         f.recorder.mark(T0 + 1).unwrap();
-        let state = f.recorder.new_session();
+        let state = f.recorder.new_session(T0 + 2).unwrap();
         assert_eq!(
             state.session_id, None,
             "閉じたあとは、次の記録まで半荘が無い"
@@ -499,13 +500,13 @@ mod tests {
     fn w14_a_new_session_creates_no_folder_until_something_is_recorded() {
         let mut f = fixture();
         let games = f.recorder.data_dir().join(GAMES_DIR);
-        f.recorder.new_session();
-        f.recorder.new_session();
+        f.recorder.new_session(T0).unwrap();
+        f.recorder.new_session(T0).unwrap();
         assert_eq!(fs::read_dir(&games).unwrap().count(), 0);
         f.recorder.rate(T0, Rating::Good).unwrap();
         assert_eq!(fs::read_dir(&games).unwrap().count(), 1);
-        f.recorder.new_session();
-        f.recorder.new_session();
+        f.recorder.new_session(T0 + 1).unwrap();
+        f.recorder.new_session(T0 + 1).unwrap();
         assert_eq!(
             fs::read_dir(&games).unwrap().count(),
             1,
@@ -538,7 +539,7 @@ mod tests {
         f.recorder.mark(T0).unwrap();
         f.recorder.rate(T0 + 1, Rating::Fair).unwrap();
         f.recorder.undo(T0 + 2).unwrap();
-        f.recorder.new_session();
+        f.recorder.new_session(T0 + 3).unwrap();
         f.recorder.mark(T0 + 3_001).unwrap();
 
         let root = f.recorder.data_dir().to_path_buf();

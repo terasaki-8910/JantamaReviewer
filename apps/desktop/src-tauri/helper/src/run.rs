@@ -12,10 +12,11 @@ use std::thread;
 use std::time::Duration;
 
 use jantama_input::hook_win;
-use jantama_input::logic::Config;
+use jantama_input::logic::{ActiveTrigger, Config};
 use jantama_input::pipe_win::Pipe;
 use jantama_input::protocol::{
-    decode_line, encode_line, pipe_name, FromHelper, LineBuffer, ToHelper, PROTOCOL_VERSION,
+    decode_line, encode_line, pipe_name, FromHelper, LineBuffer, ToHelper, WireMode, WireTrigger,
+    PROTOCOL_VERSION,
 };
 use jantama_input::setup::{EXIT_BAD_ARGS, EXIT_FAILED, EXIT_OK};
 use jantama_input::user_win::current_user_sid;
@@ -25,6 +26,18 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// つないだあと、最初の指示（割り当て）が来るまで待つ時間。来なければ終わる。
 const FIRST_CONFIG_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// 本体から届いた設定を、フックに渡す形にする。登録できない入力（左右のボタン、文字の入力のキー単独など）の
+/// 割り当ては受け取らず、割り当て無しとして扱う。パイプの相手が本体でなくても、管理者の権限で、普通の権限では
+/// 拾えない窓（管理者の窓）への文字の入力を拾ったり止めたりしないため。本体は、登録できる入力しか割り当てない。
+pub fn config_from_wire(trigger: Option<WireTrigger>, mode: WireMode) -> Config {
+    Config {
+        trigger: trigger
+            .map(ActiveTrigger::from)
+            .filter(|trigger| trigger.registrable()),
+        mode: mode.into(),
+    }
+}
 
 /// 引数 `--pipe <名前>` から、つなぐパイプの名前を取り出す。試験で、本物のアプリのパイプと混ざらないために使う。
 /// 無ければ `None`（いまのユーザーの既定の名前）。形が合わなければ `Err`。
@@ -144,10 +157,7 @@ fn serve(
             match decode_line::<ToHelper>(&line) {
                 Ok(ToHelper::Config { trigger, mode }) => {
                     got_config.store(true, Ordering::SeqCst);
-                    let status = apply(Config {
-                        trigger: trigger.map(Into::into),
-                        mode: mode.into(),
-                    });
+                    let status = apply(config_from_wire(trigger, mode));
                     let reply = match status.error {
                         Some(message) => FromHelper::Error { message },
                         None => FromHelper::Ready {
@@ -168,6 +178,56 @@ fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use jantama_input::logic::{Mode, MouseButton};
+    use jantama_input::protocol::WireButton;
+
+    fn key(vk: u32, ctrl: bool, alt: bool) -> WireTrigger {
+        WireTrigger::Key {
+            vk,
+            ctrl,
+            alt,
+            shift: false,
+            win: false,
+        }
+    }
+
+    #[test]
+    fn w9_the_helper_accepts_only_registrable_triggers_from_the_pipe() {
+        const F13: u32 = 0x7C;
+        const KEY_A: u32 = 0x41;
+        // 登録できる割り当ては、そのまま使う。
+        let x1 = config_from_wire(
+            Some(WireTrigger::Mouse {
+                button: WireButton::X1,
+            }),
+            WireMode::Normal,
+        );
+        assert_eq!(x1.trigger, Some(ActiveTrigger::Mouse(MouseButton::X1)));
+        assert_eq!(x1.mode, Mode::Normal);
+        assert!(
+            config_from_wire(Some(key(F13, false, false)), WireMode::Test)
+                .trigger
+                .is_some()
+        );
+        assert!(
+            config_from_wire(Some(key(KEY_A, true, true)), WireMode::Normal)
+                .trigger
+                .is_some(),
+            "Ctrl+Alt+A は登録できる"
+        );
+        // 文字のキー単独と、左右のボタンは、割り当て無しになる（扱い方はそのまま）。
+        let typing = config_from_wire(Some(key(KEY_A, false, false)), WireMode::Test);
+        assert_eq!(typing.trigger, None);
+        assert_eq!(typing.mode, Mode::Test);
+        for button in [WireButton::Left, WireButton::Right] {
+            let config = config_from_wire(Some(WireTrigger::Mouse { button }), WireMode::Normal);
+            assert_eq!(config.trigger, None, "{button:?}");
+        }
+        assert_eq!(
+            config_from_wire(None, WireMode::Register).mode,
+            Mode::Register
+        );
+    }
 
     #[test]
     fn w9_the_pipe_argument_is_optional_and_must_be_well_formed() {

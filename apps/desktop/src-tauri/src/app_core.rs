@@ -71,7 +71,9 @@ fn open_recorder(
     capturer: &Arc<dyn Capturer>,
     sound: &Arc<dyn Sound>,
 ) -> Result<Recorder, String> {
-    let store = Store::open(&settings.data_dir).map_err(|e| e.to_string())?;
+    let mut store = Store::open(&settings.data_dir).map_err(|e| e.to_string())?;
+    // 起動し直しても、最後の記録から 30 分以内で閉じていない半荘には、続けて記録する（W-14）。
+    store.resume_recent(crate::clock::now_ms());
     Ok(Recorder::new(
         store,
         capturer.clone(),
@@ -169,8 +171,10 @@ impl Core {
     }
 
     /// 今の半荘を閉じる（W-14）。フォルダは作らず、次の記録が新しい半荘を始める。
-    pub fn new_session(&mut self) -> Result<AppState, String> {
-        self.recorder_mut()?.new_session();
+    pub fn new_session(&mut self, t_ms: i64) -> Result<AppState, String> {
+        self.recorder_mut()?
+            .new_session(t_ms)
+            .map_err(|e| e.to_string())?;
         Ok(self.app_state())
     }
 
@@ -309,7 +313,7 @@ mod tests {
         let s = f.core.undo(T0 + 3).unwrap();
         assert_eq!(s.next_hand, 2);
         let before = s.session_id.unwrap();
-        let s = f.core.new_session().unwrap();
+        let s = f.core.new_session(T0 + 4).unwrap();
         assert_eq!(s.session_id, None, "閉じるだけで、空の半荘は作らない");
         assert_eq!(s.status, Status::Idle);
         assert_eq!(s.mark_count, 0);

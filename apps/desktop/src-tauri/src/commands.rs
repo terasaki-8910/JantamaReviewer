@@ -123,7 +123,7 @@ pub fn mark_now<R: Runtime>(app: &AppHandle<R>, t_ms: i64) -> Result<AppState, S
 
 pub fn new_session_now<R: Runtime>(app: &AppHandle<R>) -> Result<AppState, String> {
     let shared = app.state::<SharedCore>();
-    let state = shared.lock().new_session()?;
+    let state = shared.lock().new_session(now_ms())?;
     emit_state(app, &state);
     Ok(state)
 }

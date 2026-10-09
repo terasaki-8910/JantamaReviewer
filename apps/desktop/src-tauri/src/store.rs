@@ -81,6 +81,8 @@ pub enum EventKind {
     },
     /// 取り消し。`target` は取り消した記録の `id`。
     Undo { target: u64 },
+    /// 半荘を閉じた（「新しい半荘」）。アプリを起動し直しても、閉じた半荘には続けて記録しない（W-14）。
+    SessionClose,
 }
 
 /// 取り消されていない迷いマーク。
@@ -201,6 +203,7 @@ pub fn reduce(events: &[Event]) -> SessionView {
                     record.cancelled = true;
                 }
             }
+            EventKind::SessionClose => {}
         }
     }
 
@@ -492,8 +495,56 @@ impl Store {
     }
 
     /// 今の半荘を閉じる（W-14）。フォルダは作らない。次の記録が、新しい半荘のフォルダを作る。
-    pub fn close_session(&mut self) {
-        self.current = None;
+    /// 開いている半荘には「閉じた」記録を追記する（起動し直したときに、その半荘へ続けて記録しないため）。
+    /// 追記できなくても、半荘は閉じる。
+    pub fn close_session(&mut self, t_ms: i64) -> Result<(), StoreError> {
+        match self.current.take() {
+            Some(mut current) => current.append(t_ms, EventKind::SessionClose),
+            None => Ok(()),
+        }
+    }
+
+    /// 起動したとき、いちばん最近の半荘に続けて記録できるなら開く（W-14）。続けられるのは、記録（迷いマークか評価）が
+    /// あり、「新しい半荘」で閉じておらず、最後の記録から `now_ms` まで 30 分以内のとき。続けられなければ何もしない
+    /// （次の記録が新しい半荘を始める）。読めないフォルダは飛ばす。
+    pub fn resume_recent(&mut self, now_ms: i64) {
+        let Ok(entries) = fs::read_dir(self.root.join(GAMES_DIR)) else {
+            return;
+        };
+        let mut latest: Option<Current> = None;
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            if !dir.is_dir() {
+                continue;
+            }
+            let Ok(Some(events)) = read_events(&dir.join(EVENTS_FILE)) else {
+                continue;
+            };
+            let has_record = events
+                .iter()
+                .any(|e| matches!(e.kind, EventKind::Mark { .. } | EventKind::Rating { .. }));
+            let Some(last) = events.last() else {
+                continue;
+            };
+            if !has_record || latest.as_ref().is_some_and(|l| l.last_ms >= last.t_ms) {
+                continue;
+            }
+            let Some(id) = dir.file_name().and_then(|n| n.to_str()).map(str::to_owned) else {
+                continue;
+            };
+            latest = Some(Current {
+                id,
+                last_ms: last.t_ms,
+                dir,
+                events,
+            });
+        }
+        self.current = latest.filter(|c| {
+            !matches!(
+                c.events.last().map(|e| &e.kind),
+                Some(EventKind::SessionClose)
+            ) && now_ms.saturating_sub(c.last_ms) <= SESSION_GAP_MS
+        });
     }
 
     /// 新しい半荘のフォルダを作って開く。半荘の最初の記録のときだけ呼ぶ（W-14）。
@@ -809,7 +860,7 @@ mod tests {
         let (_tmp, mut store) = open_store();
         store.add_rating(T0 + 10, Rating::Good, shot()).unwrap();
         let first = store.current_session_id().unwrap().to_string();
-        store.close_session();
+        store.close_session(T0 + 20).unwrap();
         store.add_rating(T0 + 6_000, Rating::Bad, shot()).unwrap();
         let second = store.current_session_id().unwrap().to_string();
         assert_ne!(first, second);
@@ -817,7 +868,11 @@ mod tests {
         let games = store.root().join(GAMES_DIR);
         let first_lines = fs::read_to_string(games.join(&first).join(EVENTS_FILE)).unwrap();
         let second_lines = fs::read_to_string(games.join(&second).join(EVENTS_FILE)).unwrap();
-        assert_eq!(first_lines.lines().count(), 2, "半荘の開始と評価1件");
+        assert_eq!(
+            first_lines.lines().count(),
+            3,
+            "半荘の開始と評価1件と、閉じた記録"
+        );
         assert!(first_lines.contains("\"good\""));
         assert!(!first_lines.contains("\"bad\""));
         assert_eq!(second_lines.lines().count(), 2);
@@ -842,7 +897,7 @@ mod tests {
         let (_tmp, mut store) = open_store();
         store.add_mark(T0, shot()).unwrap();
         let a = store.current_session_id().unwrap().to_string();
-        store.close_session();
+        store.close_session(T0 + 200).unwrap();
         store.add_mark(T0 + 400, shot()).unwrap();
         let b = store.current_session_id().unwrap().to_string();
         assert_ne!(a, b);
@@ -1208,7 +1263,7 @@ mod tests {
         store.add_rating(T0 + 2, Rating::Good, shot()).unwrap();
         store.add_rating(T0 + 3, Rating::Bad, shot()).unwrap();
         store.undo(T0 + 4).unwrap();
-        store.close_session();
+        store.close_session(T0 + 5).unwrap();
         store.add_mark(T0 + 100_001, shot()).unwrap();
         store.add_mark(T0 + 100_002, shot()).unwrap();
 
@@ -1227,8 +1282,8 @@ mod tests {
         assert_eq!(sessions[1].ratings[0].entry.hand, 1);
         assert_eq!(
             sessions[1].events.len(),
-            5,
-            "開始・マーク・評価2件・取り消し。取り消しも含めて全部の記録を返す"
+            6,
+            "開始・マーク・評価2件・取り消し・閉じた記録。取り消しも含めて全部の記録を返す"
         );
         let path = sessions[1].marks[0].screenshot_path.as_ref().unwrap();
         assert!(Path::new(path).is_absolute());
@@ -1279,8 +1334,8 @@ mod tests {
     fn w14_a_session_folder_is_created_only_by_its_first_record() {
         let (_tmp, mut store) = open_store();
         assert!(session_folders(&store).is_empty());
-        store.close_session();
-        store.close_session();
+        store.close_session(T0).unwrap();
+        store.close_session(T0).unwrap();
         assert!(
             session_folders(&store).is_empty(),
             "閉じるだけではフォルダを作らない"
@@ -1294,7 +1349,7 @@ mod tests {
         let (_tmp, mut store) = open_store();
         store.add_rating(T0, Rating::Good, shot()).unwrap();
         assert_eq!(session_folders(&store).len(), 1);
-        store.close_session();
+        store.close_session(T0 + 1).unwrap();
         assert_eq!(
             session_folders(&store).len(),
             1,
@@ -1306,8 +1361,8 @@ mod tests {
         assert_eq!(view.next_hand(), 1);
         assert!(!view.can_undo());
         // 続けて何度閉じても、フォルダは増えない。
-        store.close_session();
-        store.close_session();
+        store.close_session(T0 + 2).unwrap();
+        store.close_session(T0 + 2).unwrap();
         assert_eq!(session_folders(&store).len(), 1);
     }
 
@@ -1316,7 +1371,7 @@ mod tests {
         let (_tmp, mut store) = open_store();
         store.add_mark(T0, shot()).unwrap();
         let first = store.current_session_id().unwrap().to_string();
-        store.close_session();
+        store.close_session(T0 + 1).unwrap();
         store.add_rating(T0 + 5_000, Rating::Fair, shot()).unwrap();
         let second = store.current_session_id().unwrap().to_string();
         assert_ne!(first, second);
@@ -1375,6 +1430,103 @@ mod tests {
         assert_eq!(SESSION_GAP_MS, 1_800_000);
     }
 
+    /// 同じ保存先を、アプリを起動し直したときと同じように開き直す。
+    fn reopen(root: &Path, now_ms: i64) -> Store {
+        let mut again = Store::open(root).unwrap();
+        again.resume_recent(now_ms);
+        again
+    }
+
+    #[test]
+    fn w14_after_a_restart_a_record_within_30_minutes_continues_the_same_session() {
+        let (_tmp, mut store) = open_store();
+        store.add_mark(T0, shot()).unwrap();
+        store.add_rating(T0 + 60_000, Rating::Good, shot()).unwrap();
+        let id = store.current_session_id().unwrap().to_string();
+        let root = store.root().to_path_buf();
+        drop(store);
+
+        let now = T0 + 60_000 + 10 * 60 * 1000;
+        let mut store = reopen(&root, now);
+        assert_eq!(store.current_session_id(), Some(id.as_str()));
+        let view = store.view();
+        assert_eq!(view.mark_count(), 1, "ウィジェットの数字も続きから");
+        assert_eq!(view.next_hand(), 2);
+        store.add_mark(now, shot()).unwrap();
+        assert_eq!(store.current_session_id(), Some(id.as_str()));
+        let sessions = store.list_sessions().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].marks.len(), 2);
+    }
+
+    #[test]
+    fn w14_after_a_restart_a_record_more_than_30_minutes_later_starts_a_new_session() {
+        let (_tmp, mut store) = open_store();
+        store.add_mark(T0, shot()).unwrap();
+        let root = store.root().to_path_buf();
+        drop(store);
+        let now = T0 + SESSION_GAP_MS + 1;
+        let mut store = reopen(&root, now);
+        assert_eq!(store.current_session_id(), None, "古い半荘の数字は出さない");
+        store.add_mark(now, shot()).unwrap();
+        assert_eq!(store.list_sessions().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn w14_a_session_closed_with_new_hanchan_is_not_continued_after_a_restart() {
+        let (_tmp, mut store) = open_store();
+        store.add_mark(T0, shot()).unwrap();
+        store.close_session(T0 + 1_000).unwrap();
+        let root = store.root().to_path_buf();
+        drop(store);
+        let mut store = reopen(&root, T0 + 2_000);
+        assert_eq!(store.current_session_id(), None);
+        store.add_mark(T0 + 2_000, shot()).unwrap();
+        assert_eq!(store.list_sessions().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn w14_only_the_most_recent_session_is_continued_and_empty_folders_never_are() {
+        let (_tmp, mut store) = open_store();
+        // 古い半荘（閉じていない）と、新しい半荘（閉じた）。新しい方を閉じたなら、古い方にも戻らない。
+        store.add_mark(T0, shot()).unwrap();
+        store.add_mark(T0 + SESSION_GAP_MS + 1, shot()).unwrap();
+        store.close_session(T0 + SESSION_GAP_MS + 2).unwrap();
+        // 昔の形の空の半荘（開始の行だけ）。いちばん新しくても、続けて記録しない。
+        let empty = store.root().join(GAMES_DIR).join("20991231-235959");
+        fs::create_dir_all(&empty).unwrap();
+        let start = Event {
+            id: 0,
+            t_ms: T0 + SESSION_GAP_MS + 3,
+            kind: EventKind::SessionStart,
+        };
+        fs::write(
+            empty.join(EVENTS_FILE),
+            format!("{}\n", serde_json::to_string(&start).unwrap()),
+        )
+        .unwrap();
+        let root = store.root().to_path_buf();
+        drop(store);
+        let store = reopen(&root, T0 + SESSION_GAP_MS + 4);
+        assert_eq!(store.current_session_id(), None);
+    }
+
+    #[test]
+    fn w14_closing_writes_a_close_record_that_the_lists_and_counts_ignore() {
+        let (_tmp, mut store) = open_store();
+        store.add_mark(T0, shot()).unwrap();
+        let id = store.current_session_id().unwrap().to_string();
+        store.close_session(T0 + 5).unwrap();
+        let text =
+            fs::read_to_string(store.root().join(GAMES_DIR).join(&id).join(EVENTS_FILE)).unwrap();
+        let last: Event = serde_json::from_str(text.lines().last().unwrap()).unwrap();
+        assert_eq!(last.kind, EventKind::SessionClose);
+        assert_eq!(last.t_ms, T0 + 5);
+        let sessions = store.list_sessions().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].marks.len(), 1);
+    }
+
     #[test]
     fn w14_an_undo_does_not_create_a_folder_and_keeps_the_session_alive() {
         let (_tmp, mut store) = open_store();
@@ -1406,7 +1558,7 @@ mod tests {
         // 記録を 1 つ付けて、全部取り消した半荘も、記録が無いのと同じ。
         store.add_mark(T0, shot()).unwrap();
         store.undo(T0 + 1).unwrap();
-        store.close_session();
+        store.close_session(T0 + 2).unwrap();
         // 記録のある半荘。
         store.add_rating(T0 + 10_000, Rating::Good, shot()).unwrap();
 

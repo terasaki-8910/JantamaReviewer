@@ -78,6 +78,8 @@ export type StoredEvent = { id: number; t_ms: number } & (
   | { type: 'mark'; screenshot?: string; capture?: CaptureTarget; capture_error?: string }
   | { type: 'rating'; rating: Rating; screenshot?: string; capture?: CaptureTarget; capture_error?: string }
   | { type: 'undo'; target: number }
+  /** 「新しい半荘」で閉じた（W-14）。 */
+  | { type: 'session_close' }
 );
 
 /** 半荘 1 つ分。取り消された記録は marks / ratings に含まれない。 */
