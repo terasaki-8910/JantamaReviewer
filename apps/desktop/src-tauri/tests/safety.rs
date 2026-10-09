@@ -1,6 +1,8 @@
 //! 安全の検査（ACCEPTANCE の S-1〜S-4、SPEC 2章）。
 //!
 //! 製品のソース（Rust・TypeScript・HTML・CSS）と依存の一覧を走査して、次のものが入っていないことを確かめる。
+//! Rust のソースは、本体（src）・共有の部品（input/src）・管理者で動く補助プログラム（helper/src）のすべて。
+//! 補助プログラムには、さらに W-9 の決まり（ファイル・ほかのプログラム・画面・文字認識の部品を持たない。例外は設定と解除の 1 ファイル）を課す。
 //! - S-1: ほかのプロセス（ゲーム）のメモリを読み書きする・スレッドを差し込むなどの API。
 //! - S-2: 雀魂のドメインへの通信、通信の部品（HTTP クライアントなど）。
 //! - S-3: 画像の解析・文字認識のライブラリ（PNG の書き出しは良い）。
@@ -189,6 +191,10 @@ const ALLOWED_NETWORK_FILES: &[(&str, &str)] = &[
         "packages/engine/src/tenhou-url.ts",
         "E-3: 天鳳牌理へのリンクの文字列を作る。文字列を扱うだけで通信しない（リンクは既定のブラウザで開く。N-5）",
     ),
+    (
+        "input/src/xml_ns.rs",
+        "W-9: タスクスケジューラの XML の名前空間（URL の形をした識別子の 1 行だけ）。通信には使わない。補助プログラムの設定で、その XML を作る",
+    ),
 ];
 
 /// 既定のブラウザで URL を開く部品（tauri-plugin-opener）を使ってよい場所（ファイル名とその理由）。
@@ -266,9 +272,23 @@ fn is_test_file(path: &Path) -> bool {
     name.contains(".test.") || name.contains(".spec.")
 }
 
-/// 製品の Rust のソース。
+/// 本体・共有の部品（input）・補助プログラム（helper）の、クレートのフォルダ。
+fn crate_dirs() -> [PathBuf; 3] {
+    [
+        crate_dir(),
+        crate_dir().join("input"),
+        crate_dir().join("helper"),
+    ]
+}
+
+/// 製品の Rust のソース（本体・共有の部品・補助プログラム。どれも `src` の下）。
 fn rust_sources() -> Vec<PathBuf> {
-    files_under(&crate_dir().join("src"), &|p| has_ext(p, &["rs"]))
+    let mut files: Vec<PathBuf> = Vec::new();
+    for dir in crate_dirs() {
+        files.extend(files_under(&dir.join("src"), &|p| has_ext(p, &["rs"])));
+    }
+    files.sort();
+    files
 }
 
 /// 製品の TypeScript のソース（テストを除く）。
@@ -562,12 +582,15 @@ fn s1_no_source_touches_another_process() {
 
 #[test]
 fn s1_windows_crate_features_exclude_cross_process_and_ocr_apis() {
-    let toml = read(&crate_dir().join("Cargo.toml"));
     let mut violations = Vec::new();
-    for (line, feature) in scan_lines(&toml, FORBIDDEN_WINDOWS_FEATURES, false) {
-        violations.push(format!(
-            "[S-1] Cargo.toml:{line}: windows の feature {feature}"
-        ));
+    for dir in crate_dirs() {
+        let toml = read(&dir.join("Cargo.toml"));
+        for (line, feature) in scan_lines(&toml, FORBIDDEN_WINDOWS_FEATURES, false) {
+            violations.push(format!(
+                "[S-1] {}/Cargo.toml:{line}: windows の feature {feature}",
+                dir.display()
+            ));
+        }
     }
     assert_no_violations(violations);
 }
@@ -646,7 +669,6 @@ fn s2_html_and_css_load_nothing_from_outside() {
 
 #[test]
 fn s2_cargo_toml_declares_no_network_dependency() {
-    let toml = read(&crate_dir().join("Cargo.toml"));
     let network = [
         "reqwest",
         "hyper",
@@ -663,12 +685,17 @@ fn s2_cargo_toml_declares_no_network_dependency() {
         "tauri-plugin-updater",
         "tauri-plugin-shell",
     ];
-    let hits = forbidden_crates_in_manifest(&toml, &network);
-    assert_no_violations(
-        hits.iter()
-            .map(|(line, name)| format!("[S-2] Cargo.toml:{line}: 通信の部品 {name}"))
-            .collect(),
-    );
+    let mut violations = Vec::new();
+    for dir in crate_dirs() {
+        let toml = read(&dir.join("Cargo.toml"));
+        for (line, name) in forbidden_crates_in_manifest(&toml, &network) {
+            violations.push(format!(
+                "[S-2] {}/Cargo.toml:{line}: 通信の部品 {name}",
+                dir.display()
+            ));
+        }
+    }
+    assert_no_violations(violations);
 }
 
 /// 既定のブラウザで URL を開く部品（tauri-plugin-opener）は、許した 1 か所からだけ、開く関数だけを使う。
@@ -804,11 +831,13 @@ fn s2_s3_the_runtime_dependency_graph_has_no_network_or_vision_crates() {
 #[test]
 fn s3_no_vision_or_ocr_crate_in_cargo_toml_or_cargo_lock() {
     let mut violations = Vec::new();
-    for file in ["Cargo.toml", "Cargo.lock"] {
-        let path = crate_dir().join(file);
+    let mut manifests: Vec<PathBuf> = crate_dirs().iter().map(|d| d.join("Cargo.toml")).collect();
+    manifests.push(crate_dir().join("Cargo.lock"));
+    for path in manifests {
         for (line, name) in forbidden_crates_in_manifest(&read(&path), VISION_CRATES) {
             violations.push(format!(
-                "[S-3] {file}:{line}: 画像解析・文字認識の部品 {name}"
+                "[S-3] {}:{line}: 画像解析・文字認識の部品 {name}",
+                path.display()
             ));
         }
     }
@@ -928,4 +957,465 @@ fn s4_the_widget_window_has_no_file_dialog_or_plugin_permission() {
         );
     }
     assert!(!permissions.is_empty());
+}
+
+// ---- W-9: 管理者で動く補助プログラム ----
+//
+// 補助プログラムは、管理者の権限で動く。そのため、「ボタンを拾って本体に知らせる」以外のことをする部品を、
+// ソースにも依存にも入れない。ファイルの読み書き・ほかのプログラムを動かす・画面を撮る・文字認識・通信（S-2 の走査が見る）。
+// 例外は、設定と解除のための 1 ファイル（helper/src/install.rs）だけ。ファイルを写す・消す・書く、schtasks.exe を動かす。
+// そのファイルにも、フック・パイプ・画面・文字認識の部品は入れない。
+
+/// 補助プログラムのうち、管理者の権限で「ボタンを拾って知らせる」部分に入れないもの（種類ごとの語）。
+const ELEVATED_FORBIDDEN: &[(&str, &[&str])] = &[
+    (
+        "ファイルを扱う",
+        &[
+            "std::fs",
+            "fs::",
+            "File::",
+            "OpenOptions",
+            "tempfile",
+            "WriteFileEx",
+            "CopyFile",
+            "MoveFile",
+            "DeleteFile",
+            "CreateDirectory",
+            "RemoveDirectory",
+            "SetEndOfFile",
+            "SetFilePointer",
+            "NtWriteFile",
+        ],
+    ),
+    (
+        "ほかのプログラムを動かす",
+        &[
+            "std::process::Command",
+            "std::process::Stdio",
+            "std::process::Child",
+            "Command::new",
+            "ShellExecute",
+            "CreateProcess",
+            "WinExec",
+        ],
+    ),
+    (
+        "画面を撮る",
+        &[
+            "BitBlt",
+            "StretchBlt",
+            "MaskBlt",
+            "PlgBlt",
+            "GetDC",
+            "GetWindowDC",
+            "CreateCompatibleDC",
+            "CreateCompatibleBitmap",
+            "GetDIBits",
+            "GetPixel",
+            "PrintWindow",
+            "Graphics_Gdi",
+            "Graphics_Dxgi",
+            "Graphics_Direct3D",
+            "Graphics_Capture",
+            "DuplicateOutput",
+            "IDXGI",
+            "Windows.Graphics.Capture",
+        ],
+    ),
+    (
+        "文字認識・画像の解析",
+        &[
+            "Media_Ocr",
+            "OcrEngine",
+            "Windows.Media.Ocr",
+            "tesseract",
+            "png::",
+            "image::",
+        ],
+    ),
+];
+
+/// 設定と解除の 1 ファイルにも入れないもの（フック・パイプ・画面・文字認識）と、ファイルのうち危ない操作。
+const INSTALL_FORBIDDEN: &[&str] = &[
+    "SetWindowsHookEx",
+    "hook_win",
+    "pipe_win",
+    "CreateNamedPipe",
+    "CreateFileW",
+    "BitBlt",
+    "GetDC",
+    "GetDIBits",
+    "Media_Ocr",
+    "OcrEngine",
+    "png::",
+    "image::",
+    "remove_dir_all",
+    "OpenOptions",
+    "File::",
+    "fs::read",
+    "read_to_string",
+];
+
+/// 共有の部品（input）が使ってよい windows の feature。フック・パイプ・自分のトークンの読み取りに要るものだけ。
+const INPUT_WINDOWS_FEATURES: &[&str] = &[
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+];
+
+/// 補助プログラム本体（helper）が使ってよい windows の feature。設定と解除のための、フォルダとシステムの場所の問い合わせだけ。
+const HELPER_WINDOWS_FEATURES: &[&str] = &[
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_SystemInformation",
+    "Win32_UI_Shell",
+];
+
+/// 補助プログラムの実行時の依存（`cargo tree -e normal`）に入ってよい部品。
+/// serde（連絡の JSON）と windows クレートの一式だけ。足すときは、ここに理由つきで足す。
+const HELPER_ALLOWED_CRATES: &[&str] = &[
+    "jantama-helper",
+    "jantama-input",
+    // 連絡の JSON（serde とその周り）
+    "serde",
+    "serde_core",
+    "serde_derive",
+    "serde_json",
+    "itoa",
+    "memchr",
+    "zmij",
+    "proc-macro2",
+    "quote",
+    "syn",
+    "unicode-ident",
+];
+
+/// `windows` で始まる部品（windows・windows-core・windows-link など）は、Windows の API の窓口。
+const HELPER_ALLOWED_CRATE_PREFIX: &str = "windows";
+
+/// 管理者の権限で動く部分のソース: 共有の部品（input）の全部と、補助プログラム（helper）のうち設定と解除の 1 ファイル以外。
+fn elevated_runtime_sources() -> Vec<PathBuf> {
+    let mut files = files_under(&crate_dir().join("input").join("src"), &|p| {
+        has_ext(p, &["rs"])
+    });
+    files.extend(files_under(&crate_dir().join("helper").join("src"), &|p| {
+        has_ext(p, &["rs"]) && !is_install_file(p)
+    }));
+    files.sort();
+    files
+}
+
+fn is_install_file(path: &Path) -> bool {
+    path.to_string_lossy()
+        .replace('\\', "/")
+        .ends_with("helper/src/install.rs")
+}
+
+fn install_source() -> PathBuf {
+    crate_dir().join("helper").join("src").join("install.rs")
+}
+
+/// ファイルの製品の部分（`#[cfg(test)]` より前）。試験の道具は、製品ではない。
+fn product_part(text: &str) -> &str {
+    text.split("#[cfg(test)]").next().unwrap_or("")
+}
+
+/// `windows = { ... features = [ "..." ] }` の feature の一覧。
+fn windows_features(toml: &str) -> Vec<String> {
+    let Some(start) = toml.find("windows = {") else {
+        return Vec::new();
+    };
+    let block = &toml[start..];
+    let Some(features_at) = block.find("features = [") else {
+        return Vec::new();
+    };
+    let list = &block[features_at..];
+    let end = list.find(']').unwrap_or(list.len());
+    list[..end]
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect()
+}
+
+/// `[... dependencies]` の表で宣言されている部品の名前。
+fn declared_dependencies(toml: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut in_dependencies = false;
+    for line in toml.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_dependencies = trimmed.ends_with("dependencies]");
+            continue;
+        }
+        if !in_dependencies || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((name, _)) = trimmed.split_once(" = ") {
+            let name = name.trim();
+            if !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                names.push(name.to_string());
+            }
+        }
+    }
+    names
+}
+
+#[test]
+fn w9_the_scanner_detects_every_forbidden_word_of_the_elevated_runtime() {
+    for (kind, patterns) in ELEVATED_FORBIDDEN {
+        for pattern in *patterns {
+            let sample = format!("let x = {pattern}example;");
+            assert_eq!(
+                scan_lines(&sample, &[pattern], false).len(),
+                1,
+                "{kind}: {pattern} を検出できない"
+            );
+        }
+    }
+    for pattern in INSTALL_FORBIDDEN {
+        let sample = format!("let x = {pattern}example;");
+        assert_eq!(
+            scan_lines(&sample, &[pattern], false).len(),
+            1,
+            "設定と解除: {pattern} を検出できない"
+        );
+    }
+    // 試験の道具は、製品の部分に入らない。
+    assert_eq!(
+        product_part("a\nb\n#[cfg(test)]\nmod tests { fs::x }"),
+        "a\nb\n"
+    );
+}
+
+#[test]
+fn w9_the_elevated_runtime_has_no_file_process_capture_or_ocr_code() {
+    let files = elevated_runtime_sources();
+    assert!(files.len() >= 8, "走査の対象が見つからない: {files:?}");
+    let mut violations = Vec::new();
+    for file in &files {
+        let text = read(file);
+        for (kind, patterns) in ELEVATED_FORBIDDEN {
+            let hits = scan_lines(product_part(&text), patterns, false);
+            if !hits.is_empty() {
+                violations.push(report(&format!("W-9 {kind}"), file, &hits));
+            }
+        }
+    }
+    assert_no_violations(violations);
+}
+
+#[test]
+fn w9_only_the_pipe_module_opens_files_and_it_only_opens_named_pipes() {
+    let pipe_module = crate_dir().join("input").join("src").join("pipe_win.rs");
+    let mut violations = Vec::new();
+    for file in elevated_runtime_sources() {
+        if file == pipe_module {
+            continue;
+        }
+        let text = read(&file);
+        let hits = scan_lines(
+            product_part(&text),
+            &["CreateFileW", "ReadFile", "WriteFile", "CreateNamedPipe"],
+            false,
+        );
+        if !hits.is_empty() {
+            violations.push(report("W-9 ファイルを開く API", &file, &hits));
+        }
+    }
+    assert_no_violations(violations);
+
+    // パイプの部品は、名前付きパイプの名前でなければ、開く前に断る。
+    let text = read(&pipe_module);
+    let product = product_part(&text);
+    let connect = product
+        .split("pub fn connect(")
+        .nth(1)
+        .and_then(|rest| rest.split("\n    }\n").next())
+        .expect("connect がある");
+    let guard = connect
+        .find("starts_with(PIPE_NAME_PREFIX)")
+        .expect("名前付きパイプの名前かを確かめている");
+    let open = connect.find("CreateFileW(").expect("パイプを開く");
+    assert!(guard < open, "開く前に、名前付きパイプの名前かを確かめる");
+    assert_eq!(
+        product.matches("CreateFileW(").count(),
+        1,
+        "ファイルを開く呼び出しは 1 か所だけ"
+    );
+}
+
+#[test]
+fn w9_the_install_file_is_the_only_one_that_touches_files_and_it_does_nothing_else() {
+    let text = read(&install_source());
+    let product = product_part(&text);
+    let hits = scan_lines(product, INSTALL_FORBIDDEN, false);
+    assert!(
+        hits.is_empty(),
+        "{}",
+        report("W-9 設定と解除", &install_source(), &hits)
+    );
+    // 動かすほかのプログラムは、Windows に尋ねたシステムのフォルダの schtasks.exe の 1 つだけ。
+    assert_eq!(product.matches("Command::new(").count(), 1);
+    assert!(product.contains("Command::new(system.join(\"schtasks.exe\"))"));
+    // 書き込みは、タスクの定義を置く 1 か所だけ。
+    assert_eq!(product.matches("fs::write(").count(), 1);
+    // 管理者の権限で動いていることを確かめてから、何かする。
+    for entry in ["pub fn install(", "pub fn uninstall("] {
+        let body = product.split(entry).nth(1).expect("入口がある");
+        let check = body.find("is_elevated()").expect("権限を確かめている");
+        let first_change = ["fs::", "schtasks("]
+            .iter()
+            .filter_map(|word| body.find(word))
+            .min()
+            .expect("何かする");
+        assert!(check < first_change, "{entry} は、権限を確かめてから動く");
+    }
+}
+
+#[test]
+fn w9_the_install_code_is_reachable_only_through_the_install_and_uninstall_commands() {
+    let text = read(&crate_dir().join("helper").join("src").join("main.rs"));
+    let product = product_part(&text);
+    let uses: Vec<&str> = product
+        .lines()
+        .filter(|line| line.contains("install::"))
+        .collect();
+    assert_eq!(uses.len(), 2, "{uses:?}");
+    for line in uses {
+        assert!(
+            line.contains("\"install\"") || line.contains("\"uninstall\""),
+            "{line}"
+        );
+    }
+    // 「run」（確認なしのタスクが動かすもの）の入口は、設定と解除のコードを呼ばない。
+    let run = read(&crate_dir().join("helper").join("src").join("run.rs"));
+    assert!(!product_part(&run).contains("install"));
+}
+
+#[test]
+fn w9_the_helper_and_the_shared_crate_declare_only_the_expected_dependencies() {
+    let input = declared_dependencies(&read(&crate_dir().join("input").join("Cargo.toml")));
+    let mut sorted = input.clone();
+    sorted.sort();
+    assert_eq!(sorted, vec!["serde", "serde_json", "windows"]);
+
+    let helper = declared_dependencies(&read(&crate_dir().join("helper").join("Cargo.toml")));
+    let mut sorted = helper.clone();
+    sorted.sort();
+    // tempfile は、試験だけの道具（[dev-dependencies]）。
+    assert_eq!(sorted, vec!["jantama-input", "tempfile", "windows"]);
+    let helper_toml = read(&crate_dir().join("helper").join("Cargo.toml"));
+    let runtime = helper_toml.split("[dev-dependencies]").next().unwrap();
+    assert!(!runtime.contains("tempfile"));
+}
+
+#[test]
+fn w9_the_windows_features_of_the_elevated_crates_are_a_short_fixed_list() {
+    for (dir, allowed) in [
+        ("input", INPUT_WINDOWS_FEATURES),
+        ("helper", HELPER_WINDOWS_FEATURES),
+    ] {
+        let toml = read(&crate_dir().join(dir).join("Cargo.toml"));
+        let features = windows_features(&toml);
+        assert!(!features.is_empty(), "{dir}: feature の一覧を読めない");
+        for feature in &features {
+            assert!(
+                allowed.contains(&feature.as_str()),
+                "{dir}: 許していない windows の feature {feature}（足すなら、理由とともに一覧に足す）"
+            );
+        }
+    }
+}
+
+#[test]
+fn w9_the_helper_runtime_dependency_graph_is_tiny() {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let output = Command::new(cargo)
+        .args([
+            "tree",
+            "-p",
+            "jantama-helper",
+            "-e",
+            "normal",
+            "--prefix",
+            "none",
+            "--format",
+            "{p}",
+            "--offline",
+        ])
+        .current_dir(crate_dir())
+        .output()
+        .expect("cargo tree を実行できる");
+    assert!(
+        output.status.success(),
+        "cargo tree が失敗: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    let crates: Vec<String> = text
+        .lines()
+        .filter_map(|l| l.split_whitespace().next())
+        .map(str::to_string)
+        .collect();
+    assert!(
+        crates.iter().any(|c| c == "jantama-input"),
+        "依存の一覧を読めていない"
+    );
+    let unexpected: Vec<&String> = crates
+        .iter()
+        .filter(|name| {
+            !HELPER_ALLOWED_CRATES.contains(&name.as_str())
+                && !name.starts_with(HELPER_ALLOWED_CRATE_PREFIX)
+        })
+        .collect();
+    assert!(
+        unexpected.is_empty(),
+        "補助プログラムの実行時の依存に、許していない部品がある: {unexpected:?}"
+    );
+    // Tauri・WebView・画像・通信の部品は、補助プログラムには入らない。
+    for banned in ["tauri", "wry", "png", "image", "url", "reqwest", "hyper"] {
+        assert!(
+            !crates.iter().any(|c| c == banned),
+            "{banned} が補助プログラムに入っている"
+        );
+    }
+}
+
+#[test]
+fn w9_the_helper_is_built_without_a_console_and_every_scan_covers_its_sources() {
+    // 窓もコンソールも出さない（管理者の権限で、見えない所で動く。結果は終了コードで返す）。
+    let text = read(&crate_dir().join("helper").join("src").join("main.rs"));
+    assert!(text.contains("#![cfg_attr(windows, windows_subsystem = \"windows\")]"));
+    // S-1（他のプロセス）・S-2（通信）・S-3（画面の解析）の走査は、補助プログラムと共有の部品のソースも見る。
+    let scanned: Vec<String> = rust_sources()
+        .iter()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .collect();
+    for needed in [
+        "helper/src/main.rs",
+        "helper/src/run.rs",
+        "helper/src/install.rs",
+        "input/src/hook_win.rs",
+        "input/src/pipe_win.rs",
+        "input/src/logic.rs",
+        "src/commands.rs",
+    ] {
+        assert!(
+            scanned.iter().any(|p| p.ends_with(needed)),
+            "{needed} が走査の対象に入っていない"
+        );
+    }
 }

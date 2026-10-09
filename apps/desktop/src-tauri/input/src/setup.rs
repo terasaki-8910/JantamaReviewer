@@ -165,7 +165,7 @@ pub fn quote_arg(arg: &str) -> String {
     out
 }
 
-/// 引数を 1 本のコマンドラインにする（ShellExecute の `lpParameters` に渡す）。
+/// 引数を 1 本のコマンドラインにする（管理者の確認つきで動かすときの、引数の文字列）。
 pub fn join_args(args: &[String]) -> String {
     args.iter()
         .map(|a| quote_arg(a))
