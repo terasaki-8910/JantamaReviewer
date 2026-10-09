@@ -95,6 +95,16 @@ describe('局の照合（kyokuFits・locateKyokus）', () => {
     expect(kyokuFits(east2, { wind: 'W', number: 2, score: 25000 })).toBe(false);
   });
 
+  it('局の番号が 1〜4 の整数でない読み取りは、どの局にも当たらない（次の風の局と取り違えない）', () => {
+    const east1 = facts[0];
+    const south1 = facts.find((f) => f.label === '南1局');
+    if (!east1 || !south1) throw new Error('東1局か南1局が無い');
+    for (const number of [0, 5, 1.5, -1, Number.NaN]) {
+      expect(kyokuFits(east1, { wind: 'E', number, score: 25000 }), `${number}`).toBe(false);
+      expect(kyokuFits(south1, { wind: 'E', number, score: south1.startScore }), `${number}`).toBe(false);
+    }
+  });
+
   it('点数が局の始めより高い・1000 点の倍数でない差は当たらない', () => {
     const east2 = facts[1];
     if (!east2) throw new Error('東2局が無い');

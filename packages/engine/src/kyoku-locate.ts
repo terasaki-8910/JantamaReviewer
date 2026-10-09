@@ -75,6 +75,7 @@ export function kyokuFactsOf(report: MortalReport): KyokuFacts[] {
  *   残りの牌の数が無ければ、局のどこかで出していれば引ける。
  */
 export function kyokuFits(facts: KyokuFacts, reading: CenterReading): boolean {
+  if (!Number.isInteger(reading.number) || reading.number < 1 || reading.number > 4) return false;
   if (facts.kyoku !== kyokuNumber(reading.wind, reading.number)) return false;
   const diff = facts.startScore - reading.score;
   if (diff < 0 || diff % RIICHI_STICK !== 0) return false;
