@@ -204,3 +204,103 @@ fn w12_the_widget_menu_and_the_tray_menu_both_offer_the_sound_toggle_and_stay_in
     assert!(toggle.contains("settings.sound = !settings.sound;"));
     assert!(toggle.contains("set_settings_now(app, settings)"));
 }
+
+// ---- 取り込み（F1）: mjai の窓と、画面から呼ぶコマンドの配線 ----
+
+#[test]
+fn n1_to_n13_the_mjai_window_gets_every_browser_remnant_setting_and_every_navigation_hook() {
+    let source = read(
+        crate_dir()
+            .join("src")
+            .join("import")
+            .join("mjai_window.rs"),
+    );
+    let product = source
+        .split("#[cfg(test)]")
+        .next()
+        .expect("製品の部分がある");
+    for needle in [
+        // 設定の元は、ほかの窓と同じ 1 つ。tauri dev のときだけ開発者ツールが開く（N-12）。
+        "WebviewFlags::strict(tauri::is_dev())",
+        ".zoom_hotkeys_enabled(options.zoom_hotkeys_enabled)",
+        ".general_autofill_enabled(options.general_autofill_enabled)",
+        ".devtools(options.devtools)",
+        "disable_drag_drop_handler",
+        // WebView2 の残りの設定（N-1、N-2、N-4、N-5、N-10）と、右クリックのメニュー（N-3）。
+        "crate::webview_win::harden(&window, flags)",
+        // ページの中でしか止められないもの（N-9、N-10）。
+        ".initialization_script(NATIVE_SCRIPT)",
+        // 画面の遷移・新しい窓・ダウンロード（N-5、N-6）。E-10 の判定を通す。
+        ".on_navigation(move |url| match decide_navigation(url)",
+        ".on_new_window(move |url, _features|",
+        "NewWindowResponse::Deny",
+        ".on_download(|_webview, event| download_hook(&event))",
+        // 題名は日本語の名前だけ（N-13）。隠したまま作り、最初のページを読み終えてから見せる（N-7）。
+        ".title(MJAI_TITLE)",
+        ".visible(false)",
+        ".background_color(",
+        // 開くのは mjai のサイトの入り口だけ。牌譜リンクは、E-11 のスクリプトで URL 欄に入れるだけ。
+        "WebviewUrl::External(start_url())",
+        "prefill_script(link)",
+    ] {
+        assert!(
+            product.contains(needle),
+            "mjai_window.rs に {needle} が無い"
+        );
+    }
+    // 窓を見せるのは、最初のページを読み終えたとき・見張りの時間が来たとき・開いている窓を前面に出すときだけ。
+    assert_eq!(product.matches("present(&window)").count(), 3);
+    // 窓を見せる呼び出しは 2 つだけ: mjai の窓を見せる `present` と、閉じたあとに検討画面を前面に出す `focus_main`。
+    assert_eq!(product.matches(".show()").count(), 2);
+    for function in ["fn present<", "fn focus_main<"] {
+        let body = product
+            .split(function)
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_else(|| panic!("{function} がある"));
+        assert_eq!(body.matches(".show()").count(), 1, "{function}");
+    }
+    // 評価するスクリプトは、牌譜リンクを入れるものだけ（呼び出しは 2 か所。どちらも作ったスクリプトを渡す）。
+    assert_eq!(product.matches(".eval(").count(), 2);
+    assert_eq!(product.matches(".eval(&script)").count(), 2);
+    // 窓の移動を許すかどうかを、ここで独自に決めない（判定は mjai_nav の 1 か所）。
+    assert!(
+        !product.contains("MJAI_HOST ==")
+            || product.contains("payload.url().host_str() == Some(MJAI_HOST)")
+    );
+    // 起動のときに、mjai の窓は作らない。
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    let setup = lib.split("fn setup(").nth(1).expect("setup がある");
+    assert!(!setup.contains("mjai_window::open"));
+}
+
+#[test]
+fn every_import_command_is_registered_and_the_mjai_window_is_wired_into_the_app() {
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    let commands = read(crate_dir().join("src").join("import").join("commands.rs"));
+    // import/commands.rs の `#[tauri::command]` が、すべて登録されている（登録の忘れを防ぐ）。
+    let mut names = Vec::new();
+    let mut lines = commands.lines();
+    while let Some(line) = lines.next() {
+        if line.trim() == "#[tauri::command]" {
+            let signature = lines.next().expect("関数が続く");
+            let name = signature
+                .trim_start_matches("pub async fn ")
+                .split('(')
+                .next()
+                .expect("関数名");
+            names.push(name.to_string());
+        }
+    }
+    assert!(names.len() >= 14, "{names:?}");
+    for name in &names {
+        assert!(
+            lib.contains(&format!("import::commands::{name},")),
+            "{name} を generate_handler に登録していない"
+        );
+    }
+    // mjai の窓の状態を管理し、窓が壊れたときの知らせをつないでいる。
+    assert!(lib.contains("app.manage(import::mjai_window::MjaiWindowState::default())"));
+    assert!(lib.contains("(import::mjai_window::MJAI_LABEL, WindowEvent::Destroyed)"));
+    assert!(lib.contains("import::mjai_window::on_destroyed("));
+}

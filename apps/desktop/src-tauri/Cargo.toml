@@ -37,6 +37,13 @@ tauri-plugin-opener = "2"
 url = "2"
 # ボタンを拾う部品（判定・補助プログラムとの連絡・Windows のフックとパイプ）。補助プログラムと共有する。
 jantama-input = { path = "input" }
+# 取り込みのときだけ使う文字認識（保存済みのスクリーンショットを読む。S-3）。src/import/ocr_job.rs の 1 か所からだけ使う。
+jantama-ocr = { path = "ocr" }
+# 結果 JSON の取得（GET の 1 種類だけ）。src/import/report_fetch.rs の 1 か所からだけ使う（S-2）。
+# TLS は Windows の SChannel（native-tls）。同梱の証明書の一覧を持たず、OS の信頼する証明書を使う。
+ureq = { version = "3", default-features = false, features = ["native-tls"] }
+# クリップボードの文字を読む（文字だけ。画像やファイルは読まない）。src/clipboard.rs の 1 か所からだけ使う。
+clipboard-win = "5"
 
 [target.'cfg(windows)'.dependencies]
 # WebView2 の設定を変える（webview_win.rs）。Tauri（wry 0.57）が使う版にそろえる。

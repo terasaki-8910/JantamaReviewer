@@ -9,8 +9,9 @@
 //! - S-4: ウィジェットのコードが、ファイル保存と記録の追記以外の窓口（プラグインなど）を読み込むこと。
 //!
 //! 走査の道具そのものも、禁止の一覧のすべてを実際に検出できることをテストする。
-//! 後の機能（F1 の取り込みなど）が通信を足すときは、`ALLOWED_*` に理由つきで足す。
-//! 一覧を黙って緩めない。
+//! 後の機能が通信や文字認識を足すときは、`ALLOWED_*` に理由つきで足す（取り込み F1・F11 が足したのは、
+//! 結果 JSON を取る HTTP クライアントの 1 か所 `ALLOWED_HTTP_CLIENT_FILES` と、保存済みの画像を読む文字認識の 1 か所
+//! `ALLOWED_OCR_FILES`）。一覧を黙って緩めない。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -210,6 +211,67 @@ const ALLOWED_OPENER_FILES: &[(&str, &str)] = &[(
 const OPENER_RUST: &str = "tauri_plugin_opener";
 /// 開く部品のクレート名（Cargo.toml での書き方）。
 const OPENER_CRATE: &str = "tauri-plugin-opener";
+
+/// HTTP のクライアント（ureq）を使ってよい場所（ファイル名とその理由）。アプリが外へ出す通信は、ここの 1 種類だけ。
+/// 使えるのはここだけで、本体のクレート（`src-tauri`）の依存にだけ置く。ウィジェット・ボタンを拾う部分・補助プログラムには入れない。
+/// 通信先は mjai のサイトの結果の置き場所（`/report/<16 桁の小文字の 16 進数>.json`）に固定し、雀魂のサーバー・牌譜屋には触れない。
+const ALLOWED_HTTP_CLIENT_FILES: &[(&str, &str)] = &[(
+    "src/import/report_fetch.rs",
+    "F1・E-19: ユーザー自身が mjai のサイトで Submit した結果を、GET の 1 種類で 1 回だけ取る。ID の形・通信先・パス・待ち時間・大きさの上限・移動の指示に従わないことを、このファイルの 1 か所に集める",
+)];
+
+/// HTTP クライアントの名前（Rust のソースでの書き方）。
+const HTTP_CLIENT_RUST: &str = "ureq::";
+/// HTTP クライアントのクレート名（Cargo.toml での書き方）。
+const HTTP_CLIENT_CRATE: &str = "ureq";
+
+/// 通信の部品のうち、HTTP クライアントの下にだけ入ってよいもの（クレート名とその理由）。
+/// ureq が https で通信するときの、Windows の SChannel（OS が信頼する証明書）の窓口。
+/// 実行時の依存の一覧では、これらが HTTP クライアントの下にだけ現れることを確かめる。ほかの経路で入ったら、違反。
+const TLS_BELOW_HTTP_CLIENT: &[(&str, &str)] = &[(
+    "native-tls",
+    "ureq の https の通信に使う（Windows では SChannel。OS の証明書の一覧を使い、同梱の証明書を持たない）",
+)];
+
+/// 文字認識のクレート（`ocr`）を使ってよい本体のソース（ファイル名とその理由）。取り込みのときだけ動く読み取りの 1 か所。
+/// ウィジェット・ボタンを拾う部分・撮影・記録・補助プログラムのコードは、文字認識に触れない（S-3）。
+const ALLOWED_OCR_FILES: &[(&str, &str)] = &[(
+    "src/import/ocr_job.rs",
+    "F11: 取り込みのとき（対局のあと）だけ、すでに保存された迷いマーク・評価の画像から、画面中央の板の文字を読む。結果は半荘のフォルダの ocr.json に残し、読み直さない",
+)];
+
+/// 文字認識のクレートの名前（Rust のソースでの書き方）。
+const OCR_RUST: &str = "jantama_ocr";
+/// 文字認識のクレート名（Cargo.toml での書き方）。
+const OCR_CRATE: &str = "jantama-ocr";
+
+/// 文字認識のクレートが使ってよい windows の feature（理由つき）。保存済みの画像を読み、日本語の文字認識にかけるのに要るものだけ。
+/// ほかのクレートには、画像の読み取り・文字認識の feature（`Media_Ocr`・`Graphics_Imaging`）を入れない（S-1 の一覧）。
+const OCR_WINDOWS_FEATURES: &[(&str, &str)] = &[
+    ("Foundation", "WinRT の基本の型（非同期の処理の待ち）"),
+    ("Foundation_Collections", "文字認識の結果の行の一覧を読む"),
+    ("Globalization", "文字認識の言語（日本語）を指定する"),
+    (
+        "Graphics_Imaging",
+        "PNG を読んで、文字認識にかけるビットマップにする",
+    ),
+    ("Media_Ocr", "Windows の日本語の文字認識"),
+    ("Storage", "保存済みの画像のファイルを開く（読むだけ）"),
+    (
+        "Storage_Streams",
+        "画像の読み取りと、切り出した画素の受け渡しの入れ物",
+    ),
+];
+
+/// 文字認識のクレートの実行時の依存に入ってよい部品の接頭辞（理由つき）。windows クレートの一式と、その手続きマクロの部品だけ。
+const OCR_ALLOWED_CRATES: &[&str] = &[
+    "jantama-ocr",
+    "windows",
+    "proc-macro2",
+    "quote",
+    "syn",
+    "unicode-ident",
+];
 
 /// ウィジェットの画面のコードが読み込んでよいもの。ウィジェットはファイル保存と記録の追記しかしない（S-4）ので、
 /// プラグインは一切読まない。`@tauri-apps/api` も、記録のコマンドとイベントの窓口に限る。
@@ -455,6 +517,24 @@ fn allowed_opener_file(path: &Path) -> bool {
         .any(|(file, _reason)| name.ends_with(file))
 }
 
+fn allowed_http_client_file(path: &Path) -> bool {
+    let name = path.to_string_lossy().replace('\\', "/");
+    ALLOWED_HTTP_CLIENT_FILES
+        .iter()
+        .any(|(file, _reason)| name.ends_with(file))
+}
+
+/// 文字認識のクレート（`ocr`）のフォルダ。
+fn ocr_dir() -> PathBuf {
+    crate_dir().join("ocr")
+}
+
+/// 文字認識のクレートのソース（`ocr/src`）。本体・共有の部品・補助プログラムの走査（`rust_sources`）には入れない
+/// （画像の読み取り・文字認識の窓口は、ここにだけ置く）。ここには、別の決まりの走査をかける。
+fn ocr_sources() -> Vec<PathBuf> {
+    files_under(&ocr_dir().join("src"), &|p| has_ext(p, &["rs"]))
+}
+
 fn report(rule: &str, file: &Path, hits: &[(usize, String)]) -> String {
     hits.iter()
         .map(|(line, what)| format!("[{rule}] {}:{line}: {what}", file.display()))
@@ -627,6 +707,9 @@ fn s2_no_rust_source_uses_a_network_client() {
         if allowed_opener_file(&file) {
             hits.retain(|(_, what)| what != OPENER_RUST);
         }
+        if allowed_http_client_file(&file) {
+            hits.retain(|(_, what)| what != HTTP_CLIENT_RUST);
+        }
         hits.extend(scan_lines(&text, URL_SCHEMES, false));
         if !hits.is_empty() {
             violations.push(report("S-2 Rust", &file, &hits));
@@ -686,9 +769,15 @@ fn s2_cargo_toml_declares_no_network_dependency() {
         "tauri-plugin-shell",
     ];
     let mut violations = Vec::new();
-    for dir in crate_dirs() {
+    let mut dirs = crate_dirs().to_vec();
+    dirs.push(ocr_dir());
+    for dir in dirs {
         let toml = read(&dir.join("Cargo.toml"));
         for (line, name) in forbidden_crates_in_manifest(&toml, &network) {
+            // HTTP クライアントは、本体のクレートの依存にだけ置く（理由は ALLOWED_HTTP_CLIENT_FILES）。
+            if dir == crate_dir() && name == HTTP_CLIENT_CRATE {
+                continue;
+            }
             violations.push(format!(
                 "[S-2] {}/Cargo.toml:{line}: 通信の部品 {name}",
                 dir.display()
@@ -696,6 +785,147 @@ fn s2_cargo_toml_declares_no_network_dependency() {
         }
     }
     assert_no_violations(violations);
+
+    // 本体のクレートが HTTP クライアントを宣言しているのは 1 つだけで、既定の機能（rustls・圧縮など）を切り、
+    // TLS は Windows の SChannel（native-tls）だけにしている。
+    let main_toml = read(&crate_dir().join("Cargo.toml"));
+    let declared: Vec<&str> = main_toml
+        .lines()
+        .filter(|l| {
+            l.trim_start()
+                .starts_with(&format!("{HTTP_CLIENT_CRATE} = "))
+        })
+        .collect();
+    assert_eq!(declared.len(), 1, "{declared:?}");
+    assert!(
+        declared[0].contains("default-features = false")
+            && declared[0].contains("features = [\"native-tls\"]"),
+        "HTTP クライアントは、既定の機能を切って native-tls だけにする: {}",
+        declared[0]
+    );
+}
+
+/// HTTP のクライアントは、許した 1 か所だけが使い、結果の取得（GET の 1 種類）しかできない形のままであること（S-2）。
+#[test]
+fn s2_the_http_client_is_only_used_from_its_one_file_and_it_can_only_get_the_report() {
+    // どのソースがクライアントの名前を持つか。
+    let mut users: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        if read(&file).contains(HTTP_CLIENT_RUST) {
+            users.push(file.to_string_lossy().replace('\\', "/"));
+        }
+    }
+    assert_eq!(users.len(), ALLOWED_HTTP_CLIENT_FILES.len(), "{users:?}");
+    for user in &users {
+        assert!(
+            ALLOWED_HTTP_CLIENT_FILES
+                .iter()
+                .any(|(file, reason)| user.ends_with(file) && !reason.is_empty()),
+            "許していない場所が HTTP クライアントを使っている: {user}"
+        );
+    }
+
+    for (file, _) in ALLOWED_HTTP_CLIENT_FILES {
+        let text = read(&crate_dir().join(file));
+        let product = product_part(&text);
+        // 要求は GET の 1 つだけ（呼び出しは 1 か所）。ほかの種類の要求・本文を送る口・クッキーは使わない。
+        assert_eq!(product.matches(".get(url.as_str())").count(), 1, "{file}");
+        assert_eq!(product.matches(".call()").count(), 1, "{file}");
+        for forbidden in [
+            ".post(",
+            ".put(",
+            ".delete(",
+            ".patch(",
+            ".head(",
+            ".options(",
+            ".send(",
+            ".send_json(",
+            ".send_form(",
+            ".send_empty(",
+            ".run(",
+            "ureq::get(",
+            "ureq::post(",
+            "ureq::put(",
+            "ureq::delete(",
+            "ureq::head(",
+            "ureq::patch(",
+            "ureq::run(",
+            "ureq::agent(",
+            "cookie",
+            "Cookie",
+        ] {
+            assert!(
+                !product.contains(forbidden),
+                "{file}: {forbidden} を使っている"
+            );
+        }
+        // 守り: 通信先は固定の形で組み立てる（ID の形の確認は ReportId が先）。移動の指示に従わず、待ち時間と大きさに上限を付け、
+        // https の通信は OS の証明書で確かめる。
+        for needle in [
+            "endpoint.report_url(id)",
+            "max_redirects(0)",
+            "timeout_global(",
+            "timeout_connect(",
+            ".limit(",
+            "https_only(endpoint.is_secure())",
+            "TlsProvider::NativeTls",
+            "RootCerts::PlatformVerifier",
+            "ReportId::parse(",
+        ] {
+            assert!(product.contains(needle), "{file}: {needle} が無い");
+        }
+        let url_at = product.find("endpoint.report_url(id)").unwrap();
+        let call_at = product.find(".call()").unwrap();
+        assert!(
+            url_at < call_at,
+            "{file}: 通信先を固定の形で組み立ててから、通信する"
+        );
+        // 文字の ID から取る入口は、形を確かめてから、取る。
+        let by_text = product
+            .split("pub fn fetch_report_by_text(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_else(|| panic!("{file}: fetch_report_by_text が無い"));
+        assert!(
+            by_text.contains("ReportId::parse(id)") && by_text.contains("FetchError::InvalidId"),
+            "{file}: ID の形を確かめてから使う"
+        );
+    }
+
+    // 通信先を差し替える関数は、製品のコードでは呼ばない（試験だけ）。製品の取得の入口は、製品の通信先だけを使う。
+    let report_fetch = read(
+        &crate_dir()
+            .join("src")
+            .join("import")
+            .join("report_fetch.rs"),
+    );
+    assert!(
+        !product_part(&report_fetch).contains("ReportEndpoint::for_test"),
+        "report_fetch.rs の製品の部分が、試験用の通信先を使っている"
+    );
+    let mut endpoint_users: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        let name = file.to_string_lossy().replace('\\', "/");
+        let text = read(&file);
+        if name.ends_with("src/import/report_fetch.rs") {
+            continue;
+        }
+        assert!(
+            !text.contains("for_test("),
+            "{name}: 試験用の通信先を、製品のコードが使っている"
+        );
+        if text.contains("ReportEndpoint::") {
+            endpoint_users.push(name);
+        }
+    }
+    assert_eq!(endpoint_users.len(), 1, "{endpoint_users:?}");
+    assert!(endpoint_users[0].ends_with("src/import/commands.rs"));
+    let commands = read(&crate_dir().join("src").join("import").join("commands.rs"));
+    assert_eq!(
+        commands.matches("ReportEndpoint::").count(),
+        commands.matches("ReportEndpoint::production()").count(),
+        "取得の入口は、製品の通信先（production）だけを使う"
+    );
 }
 
 /// 既定のブラウザで URL を開く部品（tauri-plugin-opener）は、許した 1 か所からだけ、開く関数だけを使う。
@@ -789,14 +1019,27 @@ fn s2_s3_the_runtime_dependency_graph_has_no_network_or_vision_crates() {
         String::from_utf8_lossy(&output.stderr)
     );
     let text = String::from_utf8_lossy(&output.stdout);
-    let crates: Vec<String> = text
+    // 各行は「名前 v版 …」。
+    let packages: Vec<(String, String)> = text
         .lines()
-        .filter_map(|l| l.split_whitespace().next())
-        .map(str::to_string)
+        .filter_map(|l| {
+            let mut words = l.split_whitespace();
+            Some((
+                words.next()?.to_string(),
+                words.next()?.trim_start_matches('v').to_string(),
+            ))
+        })
         .collect();
+    let crates: Vec<&str> = packages.iter().map(|(name, _)| name.as_str()).collect();
+    assert!(crates.contains(&"tauri"), "依存の一覧を読めていない");
+    // 理由つきで許した部品が、実際に依存に入っている（許可が、無い部品を指していない）。
     assert!(
-        crates.iter().any(|c| c == "tauri"),
-        "依存の一覧を読めていない"
+        crates.contains(&HTTP_CLIENT_CRATE),
+        "HTTP クライアントが依存に無い"
+    );
+    assert!(
+        crates.contains(&OCR_CRATE),
+        "文字認識のクレートが依存に無い"
     );
 
     let network = [
@@ -814,9 +1057,10 @@ fn s2_s3_the_runtime_dependency_graph_has_no_network_or_vision_crates() {
         "openssl",
     ];
     let mut violations = Vec::new();
-    for name in &crates {
+    for (name, version) in &packages {
         if network.contains(&name.as_str()) {
-            violations.push(format!("[S-2] 実行時の依存に通信の部品 {name}"));
+            // 通信の部品は、本体のクレートが直接宣言した HTTP クライアントと、その下の TLS の窓口だけ。
+            violations.extend(network_crate_violations(name, version));
         }
         let manifest_line = format!("{name} = 1");
         for (_, hit) in forbidden_crates_in_manifest(&manifest_line, VISION_CRATES) {
@@ -824,6 +1068,82 @@ fn s2_s3_the_runtime_dependency_graph_has_no_network_or_vision_crates() {
         }
     }
     assert_no_violations(violations);
+}
+
+/// 実行時の依存の中の通信の部品 `名前@版` が、許していない経路で入っていないかを調べる（`cargo tree -i` の逆向きの木）。
+/// 許す経路は 2 つだけ: 本体のクレートが直接宣言した HTTP クライアント自身（`ALLOWED_HTTP_CLIENT_FILES`）と、
+/// その下にだけ現れる TLS の窓口（`TLS_BELOW_HTTP_CLIENT`）。補助プログラム・共有の部品（input）・文字認識のクレートの下、
+/// ほかの部品を通って入るものは、違反。
+fn network_crate_violations(name: &str, version: &str) -> Vec<String> {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let spec = format!("{name}@{version}");
+    let output = Command::new(cargo)
+        .args([
+            "tree",
+            "-p",
+            "jantama-reviewer",
+            "-e",
+            "normal",
+            "-i",
+            &spec,
+            "--no-dedupe",
+            "--prefix",
+            "depth",
+            "--format",
+            "{p}",
+            "--offline",
+        ])
+        .current_dir(crate_dir())
+        .output()
+        .expect("cargo tree を実行できる");
+    assert!(
+        output.status.success(),
+        "cargo tree -i {spec} が失敗: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    // 各行は「深さ 名前 v版 …」。逆向きの木なので、根（深さ 0）が調べる部品で、深さが増えるほど、それを使う側になる。
+    let lines: Vec<(usize, String)> = text
+        .lines()
+        .filter_map(|l| {
+            let digits = l.chars().take_while(char::is_ascii_digit).count();
+            let depth = l[..digits].parse::<usize>().ok()?;
+            let package = l[digits..].split_whitespace().next()?.to_string();
+            Some((depth, package))
+        })
+        .collect();
+    assert!(!lines.is_empty(), "{spec}: 木を読めない");
+
+    let mut violations = Vec::new();
+    let mut path: Vec<String> = Vec::new();
+    for (index, (depth, package)) in lines.iter().enumerate() {
+        path.truncate(*depth);
+        path.push(package.clone());
+        let is_leaf = lines.get(index + 1).is_none_or(|(next, _)| next <= depth);
+        if !is_leaf {
+            continue;
+        }
+        // 根（調べる部品）から、使う側へたどった 1 本の経路。最後は、本体のクレートのはず。
+        let shown = path.join(" ← ");
+        let ends_at_main = path.last().is_some_and(|last| last == "jantama-reviewer");
+        let allowed = ends_at_main
+            && if name == HTTP_CLIENT_CRATE {
+                // HTTP クライアントは、本体のクレートが直接使う（間に別の部品を挟まない）。
+                path.len() == 2
+            } else {
+                // TLS の窓口は、HTTP クライアントを通ってだけ入る。
+                path.iter().any(|p| p == HTTP_CLIENT_CRATE)
+                    && TLS_BELOW_HTTP_CLIENT
+                        .iter()
+                        .any(|(allowed, reason)| *allowed == name && !reason.is_empty())
+            };
+        if !allowed {
+            violations.push(format!(
+                "[S-2] 実行時の依存に、許していない経路の通信の部品: {shown}"
+            ));
+        }
+    }
+    violations
 }
 
 // ---- S-3: 対局中に画面を読まない ----
@@ -905,6 +1225,273 @@ fn s3_png_is_only_ever_encoded_never_decoded_in_product_code() {
         }
     }
     assert_no_violations(violations);
+}
+
+// ---- S-3: 文字認識は、取り込みの読み取りの 1 か所だけ（F11） ----
+
+/// 文字認識のクレートを使えるのは、許した 1 つのソースだけ。依存に宣言するのも、本体のクレートだけ。
+#[test]
+fn s3_the_ocr_crate_is_used_from_one_import_file_and_declared_only_by_the_main_crate() {
+    // どのソースが文字認識のクレートの名前を持つか。
+    let mut users: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        if read(&file).contains(OCR_RUST) {
+            users.push(file.to_string_lossy().replace('\\', "/"));
+        }
+    }
+    assert_eq!(users.len(), ALLOWED_OCR_FILES.len(), "{users:?}");
+    for user in &users {
+        assert!(
+            ALLOWED_OCR_FILES
+                .iter()
+                .any(|(file, reason)| user.ends_with(file) && !reason.is_empty()),
+            "許していない場所が文字認識のクレートを使っている: {user}"
+        );
+    }
+
+    // 文字認識の仕事（ocr_job）を呼べるのは、取り込みのコマンドだけ（モジュールの宣言を除く）。
+    let mut callers: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        let name = file.to_string_lossy().replace('\\', "/");
+        if name.ends_with("src/import/ocr_job.rs") {
+            continue;
+        }
+        if read(&file).contains("ocr_job") {
+            callers.push(name);
+        }
+    }
+    callers.sort();
+    assert_eq!(callers.len(), 2, "{callers:?}");
+    assert!(
+        callers[0].ends_with("src/import/commands.rs"),
+        "{callers:?}"
+    );
+    assert!(callers[1].ends_with("src/import/mod.rs"), "{callers:?}");
+
+    // 依存に宣言するのは、本体のクレートだけ。共有の部品（input）・補助プログラム（helper）には入れない。
+    let main_toml = read(&crate_dir().join("Cargo.toml"));
+    let declared: Vec<&str> = main_toml
+        .lines()
+        .filter(|l| l.trim_start().starts_with(&format!("{OCR_CRATE} = ")))
+        .collect();
+    assert_eq!(declared.len(), 1, "{declared:?}");
+    for dir in [crate_dir().join("input"), crate_dir().join("helper")] {
+        assert!(
+            !read(&dir.join("Cargo.toml")).contains(OCR_CRATE),
+            "{}: 文字認識のクレートを依存に入れている",
+            dir.display()
+        );
+    }
+}
+
+/// 文字認識のクレートは、保存済みの画像を読んで文字にするだけ: windows の feature は決めた一覧だけ、依存は windows だけ、
+/// ほかのプロセス・通信・画面の撮影・ファイルへの書き込みの語は、製品の部分に無い。
+#[test]
+fn s3_the_ocr_crate_reads_saved_images_and_does_nothing_else() {
+    let toml = read(&ocr_dir().join("Cargo.toml"));
+    let features = windows_features(&toml);
+    assert!(!features.is_empty(), "feature の一覧を読めない");
+    for feature in &features {
+        assert!(
+            OCR_WINDOWS_FEATURES
+                .iter()
+                .any(|(allowed, reason)| allowed == feature && !reason.is_empty()),
+            "文字認識のクレートに、許していない windows の feature {feature}（足すなら、理由とともに一覧に足す）"
+        );
+    }
+    for (allowed, _) in OCR_WINDOWS_FEATURES {
+        assert!(
+            features.iter().any(|f| f == allowed),
+            "一覧にある feature {allowed} が、宣言に無い（一覧を実際に合わせる）"
+        );
+    }
+    // ほかのプロセスに触れる feature（S-1 の一覧）は、画像の読み取りと文字認識のもの以外、ここにも入れない。
+    for forbidden in FORBIDDEN_WINDOWS_FEATURES {
+        if matches!(*forbidden, "Media_Ocr" | "Graphics_Imaging") {
+            continue;
+        }
+        assert!(!features.iter().any(|f| f == forbidden), "{forbidden}");
+    }
+    // 依存は windows だけ（試験の道具は [dev-dependencies]）。
+    let runtime = toml.split("[dev-dependencies]").next().unwrap();
+    assert_eq!(declared_dependencies(runtime), vec!["windows"]);
+
+    // ソースの製品の部分（試験を除く）に、禁止の語が無い。
+    let capture_words = ELEVATED_FORBIDDEN
+        .iter()
+        .find(|(kind, _)| *kind == "画面を撮る")
+        .map(|(_, words)| *words)
+        .expect("画面を撮る語の一覧がある");
+    let write_words: &[&str] = &[
+        "fs::write",
+        "File::create",
+        "OpenOptions",
+        "remove_file",
+        "remove_dir",
+        "fs::rename",
+        "fs::copy",
+        "create_dir",
+        "WriteFile",
+        "CreateDirectory",
+    ];
+    let files = ocr_sources();
+    assert!(files.len() >= 5, "走査の対象が見つからない: {files:?}");
+    let mut violations = Vec::new();
+    for file in &files {
+        let text = read(file);
+        let product = product_part(&text);
+        for (rule, hits) in [
+            ("S-1 API", scan_lines(product, GAME_PROCESS_APIS, false)),
+            ("S-1 フック", disallowed_hook_ids(product)),
+            ("S-2 通信", scan_lines(product, NETWORK_RUST, false)),
+            ("S-2 URL", scan_lines(product, URL_SCHEMES, false)),
+            ("S-2 ドメイン", scan_lines(product, GAME_DOMAINS, true)),
+            ("S-3 画面を撮る", scan_lines(product, capture_words, false)),
+            (
+                "S-3 ファイルへの書き込み",
+                scan_lines(product, write_words, false),
+            ),
+        ] {
+            if !hits.is_empty() {
+                violations.push(report(rule, file, &hits));
+            }
+        }
+    }
+    assert_no_violations(violations);
+
+    // 実行時の依存の一覧（cargo tree）は、windows の部品とその手続きマクロの部品だけ。
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let output = Command::new(cargo)
+        .args([
+            "tree",
+            "-p",
+            OCR_CRATE,
+            "-e",
+            "normal",
+            "--prefix",
+            "none",
+            "--format",
+            "{p}",
+            "--offline",
+        ])
+        .current_dir(crate_dir())
+        .output()
+        .expect("cargo tree を実行できる");
+    assert!(
+        output.status.success(),
+        "cargo tree が失敗: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8_lossy(&output.stdout);
+    let crates: Vec<&str> = text
+        .lines()
+        .filter_map(|l| l.split_whitespace().next())
+        .collect();
+    assert!(crates.contains(&OCR_CRATE), "依存の一覧を読めていない");
+    let unexpected: Vec<&&str> = crates
+        .iter()
+        .filter(|name| {
+            !OCR_ALLOWED_CRATES
+                .iter()
+                .any(|allowed| name == &allowed || name.starts_with(&format!("{allowed}-")))
+        })
+        .collect();
+    assert!(
+        unexpected.is_empty(),
+        "文字認識のクレートの実行時の依存に、許していない部品がある: {unexpected:?}"
+    );
+}
+
+// ---- クリップボード: 文字を読むだけ（F1・E-15） ----
+
+#[test]
+fn s4_the_clipboard_is_only_read_as_text_and_only_the_import_command_reads_it() {
+    let clipboard = read(&crate_dir().join("src").join("clipboard.rs"));
+    let product = product_part(&clipboard);
+    // 読む口は 1 つ（文字の形式だけ）。書き込み・消去・ほかの形式（画像・ファイルの一覧・HTML など）・監視は使わない。
+    assert!(product.contains("get_clipboard_string()"));
+    assert!(product.contains("CF_UNICODETEXT"));
+    for forbidden in [
+        "set_clipboard",
+        "clipboard_win::set",
+        "clipboard_win::empty",
+        "clipboard_win::raw",
+        "formats::Bitmap",
+        "formats::FileList",
+        "formats::RawData",
+        "formats::Html",
+        "formats::Text",
+        "register_format",
+        "Monitor",
+    ] {
+        assert!(!product.contains(forbidden), "{forbidden} を使っている");
+    }
+    // クリップボードのクレートに触れるのは、このファイルだけ。
+    let mut users: Vec<String> = Vec::new();
+    // 文字を読む関数を呼ぶのは、取り込みのコマンドだけ。
+    let mut readers: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        let name = file.to_string_lossy().replace('\\', "/");
+        let text = read(&file);
+        if text.contains("clipboard_win") {
+            users.push(name.clone());
+        }
+        if text.contains("clipboard::read_text") {
+            readers.push(name);
+        }
+    }
+    assert_eq!(users.len(), 1, "{users:?}");
+    assert!(users[0].ends_with("src/clipboard.rs"));
+    assert_eq!(readers.len(), 1, "{readers:?}");
+    assert!(readers[0].ends_with("src/import/commands.rs"));
+}
+
+// ---- mjai の窓: 外のページにアプリの権限を与えない（F1・R3-3） ----
+
+#[test]
+fn s2_no_capability_reaches_remote_pages_or_the_mjai_window() {
+    let files = files_under(&crate_dir().join("capabilities"), &|p| {
+        has_ext(p, &["json"])
+    });
+    assert!(!files.is_empty());
+    for file in files {
+        let text = read(&file);
+        let json: serde_json::Value = serde_json::from_str(&text).expect("capability は JSON");
+        // 外のオリジンに権限を与える `remote` が無い。
+        assert!(
+            json.get("remote").is_none(),
+            "{}: 外のページに権限を与えている",
+            file.display()
+        );
+        // 権限を与える窓は、アプリ自身の 2 つだけ（mjai の窓・すべての窓を表す印は入れない）。
+        let windows: Vec<&str> = json["windows"]
+            .as_array()
+            .expect("windows は配列")
+            .iter()
+            .filter_map(|w| w.as_str())
+            .collect();
+        assert!(!windows.is_empty());
+        for window in windows {
+            assert!(
+                window == "main" || window == "widget",
+                "{}: 権限を与える窓が多すぎる: {window}",
+                file.display()
+            );
+        }
+        assert!(json.get("webviews").is_none(), "{}", file.display());
+        assert!(!text.contains("mjai"), "{}", file.display());
+    }
+    // 設定ファイルと Rust のソースで、外のオリジンからの呼び出しを許す設定をしていない。
+    let conf = read(&crate_dir().join("tauri.conf.json"));
+    assert!(!conf.contains("dangerousRemoteDomainIpcAccess"));
+    for file in rust_sources() {
+        let text = read(&file);
+        assert!(
+            !text.contains("dangerous_remote_domain_ipc_access"),
+            "{}",
+            file.display()
+        );
+    }
 }
 
 // ---- S-4: ウィジェットは保存と追記しかしない ----
