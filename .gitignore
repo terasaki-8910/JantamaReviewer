@@ -14,3 +14,5 @@ coverage/
 !.env.example
 # 個人の UI ルール（~/.claude/rules/ui.md）へのリンク。機械ごとのパスで、中身をリポジトリに入れないため追跡しない。
 .claude/rules/ui.md
+# 確認シートの確認用の一時ファイル（スクショ・プレビュー）
+docs/sheet/_*
