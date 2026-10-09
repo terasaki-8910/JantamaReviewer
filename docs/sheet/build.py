@@ -28,7 +28,8 @@ def main() -> None:
     out = src.replace("{{SPEC}}", to_fragment(ROOT / "SPEC.md")).replace(
         "{{ACCEPTANCE}}", to_fragment(ROOT / "ACCEPTANCE.md")
     )
-    (HERE / "jantama-sheet.html").write_text(out, encoding="utf-8")
+    # Windows でも LF で書く（.gitattributes の eol=lf に合わせる）
+    (HERE / "jantama-sheet.html").write_text(out, encoding="utf-8", newline="\n")
     print(f"jantama-sheet.html: {len(out)} 文字")
 
 
