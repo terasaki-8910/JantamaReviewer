@@ -21,6 +21,9 @@
  * - 局の評価（〇△✕）の結びつけ: `linkRatings(report, ratings)`（E-18）。評価は `t_ms` と読み取り（`center` か `lines`）を持つ記録。
  *   局の始め（残り `HAND_START_TILES_LEFT` 枚以上）に読めたら前の局、途中なら読んだ局、読めないものは前後の間へ押した順。
  *   戻り値は `alignRatings`（E-7）と同じ形（status・assigned・extra・missingHands・message）に、評価ごとの当てはめ方 `placements` を足したもの
+ * - 結果を結びつける半荘: `matchSessionForReport(report, sessions)`（E-19）。sessions は結果がまだ無い半荘
+ *   （`id`・`started_ms`・スクショの読み取り `marks`）。合うものがちょうど1つなら `match`、合うものが無いか2つ以上なら `choose`
+ *   （`sessionIds` は新しい順）、結果の無い半荘が無ければ `new`
  */
 export const ENGINE_PACKAGE = '@jantama/engine' as const;
 
@@ -46,6 +49,7 @@ export * from './replay';
 export * from './report';
 export * from './report-types';
 export * from './result';
+export * from './session-match';
 export * from './shanten';
 export * from './srs';
 export * from './tenhou-url';

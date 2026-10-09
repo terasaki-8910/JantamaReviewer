@@ -85,6 +85,10 @@ describe('公開 API（src/index.ts）', () => {
     expect(engine.HAND_START_TILES_LEFT).toBe(66);
   });
 
+  it('E-19 結びつける半荘の入口が使える', () => {
+    expect(typeof engine.matchSessionForReport).toBe('function');
+  });
+
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
   });
