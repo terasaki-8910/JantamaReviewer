@@ -75,10 +75,18 @@ export default tseslint.config(
         { name: 'XMLHttpRequest', message: 'webview からは通信しない（SPEC 2章）。' },
         { name: 'WebSocket', message: 'webview からは通信しない（SPEC 2章）。' },
         { name: 'EventSource', message: 'webview からは通信しない（SPEC 2章）。' },
+        // N-5: 画面の切り替えは、メモリの中の状態だけで持つ。URL・履歴・再読み込み・新しい窓は使わない。
+        { name: 'history', message: '履歴の項目は作らない。画面の切り替えはメモリの中の状態で持つ（N-5）。' },
+        { name: 'location', message: 'URL のパス・ハッシュ・再読み込みは使わない（N-5）。' },
+        { name: 'open', message: '新しい窓は開かない。外部のページは Rust 側が既定のブラウザで開く（N-5）。' },
       ],
       'no-restricted-properties': [
         'error',
         { object: 'navigator', property: 'sendBeacon', message: 'webview からは通信しない（SPEC 2章）。' },
+        { object: 'window', property: 'history', message: '履歴の項目は作らない（N-5）。' },
+        { object: 'window', property: 'location', message: 'URL のパス・ハッシュ・再読み込みは使わない（N-5）。' },
+        { object: 'window', property: 'open', message: '新しい窓は開かない（N-5）。' },
+        { object: 'document', property: 'location', message: 'URL のパス・ハッシュ・再読み込みは使わない（N-5）。' },
       ],
     },
   },

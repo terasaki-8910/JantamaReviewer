@@ -4,6 +4,8 @@
  * localStorage に覚え、同じアプリの別の窓（ウィジェット）にも反映する。
  */
 
+import { reportBackground } from './windowReady';
+
 export const THEME_STORAGE_KEY = 'jr-theme';
 
 export type ThemeChoice = 'light' | 'dark';
@@ -45,7 +47,8 @@ export function effectiveTheme(): ThemeChoice {
 }
 
 /**
- * 起動時に呼ぶ。覚えているテーマを適用し、ほかの窓での切り替え（storage イベント）に追従する。
+ * 起動時に呼ぶ。覚えているテーマを適用し、ほかの窓での切り替え（storage イベント）と、
+ * OS の設定の変化に追従する。テーマが変わったら、窓の背景色も画面の色にそろえさせる（N-7）。
  * 戻り値は後始末の関数。
  */
 export function initTheme(): () => void {
@@ -53,8 +56,15 @@ export function initTheme(): () => void {
   const onStorage = (event: StorageEvent) => {
     if (event.key === THEME_STORAGE_KEY || event.key === null) {
       applyTheme(readStoredTheme());
+      void reportBackground();
     }
   };
+  const query = window.matchMedia('(prefers-color-scheme: dark)');
+  const onSystemChange = () => void reportBackground();
   window.addEventListener('storage', onStorage);
-  return () => window.removeEventListener('storage', onStorage);
+  query.addEventListener('change', onSystemChange);
+  return () => {
+    window.removeEventListener('storage', onStorage);
+    query.removeEventListener('change', onSystemChange);
+  };
 }

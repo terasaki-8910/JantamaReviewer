@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { baseSettings, baseState, installTauriMock, type TauriMock } from '../../tests/tauri-mock';
 import type { AppState, Settings } from '../api/types';
+import { ErrorBoundary } from '../shared/ErrorBoundary';
+import { resetWindowReadyForTest } from '../shared/windowReady';
 import { WidgetApp } from './WidgetApp';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -231,5 +233,52 @@ describe('ウィジェット: ボタンは正しいコマンドを呼ぶ', () =>
     const notPrevented = fireEvent(document.body, event);
     expect(notPrevented).toBe(false);
     expect(mock.count('show_widget_menu')).toBe(1);
+  });
+});
+
+describe('ウィジェット: 窓を見せる知らせ（N-7）と、エラー画面（N-5）', () => {
+  beforeEach(() => {
+    resetWindowReadyForTest();
+  });
+
+  it('N-7: 状態と形を受け取って本物の絵を描いたあとに、window_ready を 1 回だけ送る', async () => {
+    const { mock } = await renderWidget();
+    await vi.waitFor(() => expect(mock.count('window_ready')).toBe(1));
+    // そのあと状態が変わっても、知らせ直さない。
+    act(() => {
+      mock.emit('state-changed', { ...baseState, mark_count: 3 } satisfies AppState);
+    });
+    await screen.findByRole('button', { name: /^迷い 3/ });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(mock.count('window_ready')).toBe(1);
+  });
+
+  it('N-7: 状態を受け取る前（何も描いていない間）は、窓を見せてよいと知らせない', async () => {
+    const mock = installTauriMock({
+      handlers: { get_state: () => new Promise(() => {}), get_settings: () => new Promise(() => {}) },
+    });
+    render(<WidgetApp />);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(mock.count('window_ready')).toBe(0);
+  });
+
+  it('N-5: 最初の状態を受け取れなかったら、アプリの中のエラー画面（小さい窓向け）に替わる', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    installTauriMock({
+      handlers: {
+        get_state: () => {
+          throw '保存先を開けません';
+        },
+      },
+    });
+    render(
+      <ErrorBoundary compact>
+        <WidgetApp />
+      </ErrorBoundary>,
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveClass('error-screen', 'compact');
+    expect(screen.getByRole('button', { name: '再表示' })).toBeInTheDocument();
+    vi.restoreAllMocks();
   });
 });

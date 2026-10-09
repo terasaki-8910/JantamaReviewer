@@ -128,7 +128,7 @@ export function SettingsPage() {
       </header>
       <div className="page">
         {startupNote && (
-          <p className="notice" role="status">
+          <p className="notice selectable" role="status">
             {startupNote}
           </p>
         )}
@@ -194,7 +194,7 @@ export function SettingsPage() {
               データの保存先
             </span>
             <div className="setting-row">
-              <p className="path" aria-labelledby="data-dir-label">
+              <p className="path selectable" aria-labelledby="data-dir-label">
                 {settings.data_dir}
               </p>
               <button type="button" className="btn" onClick={() => void pickFolder()}>
@@ -202,7 +202,7 @@ export function SettingsPage() {
               </button>
             </div>
             {storeError && (
-              <p className="error" role="alert">
+              <p className="error selectable" role="alert">
                 {storeError}
               </p>
             )}
@@ -225,7 +225,7 @@ export function SettingsPage() {
           </div>
         </div>
         {error && (
-          <p className="error" role="alert">
+          <p className="error selectable" role="alert">
             {error}
           </p>
         )}

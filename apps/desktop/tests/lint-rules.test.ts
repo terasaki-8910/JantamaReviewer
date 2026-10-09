@@ -67,6 +67,29 @@ describe('eslint（TSX）', () => {
     );
   });
 
+  it('N-5: URL・履歴・再読み込み・新しい窓を使えない（画面の切り替えはメモリの中の状態だけ）', async () => {
+    for (const code of [
+      "history.pushState({}, '', '/x')",
+      "location.hash = '#x'",
+      "window.location.href = 'x'",
+      'window.history.back()',
+      "window.open('x')",
+      'location.reload()',
+      'document.location.reload()',
+      "open('x')",
+    ]) {
+      const ids = await eslintRuleIds(`export const f = () => {\n  ${code};\n};\n`);
+      expect(
+        ids.some((id) => id === 'no-restricted-globals' || id === 'no-restricted-properties'),
+        code,
+      ).toBe(true);
+    }
+    // import した名前の open（保存先を選ぶダイアログ）は、禁止の対象ではない。
+    const dialog =
+      "import { open } from '@tauri-apps/plugin-dialog';\nexport const f = () => open({ directory: true });\n";
+    expect(await eslintRuleIds(dialog)).toEqual([]);
+  });
+
   it('絵文字の禁止は、画面以外のコード（テスト・設定）にも掛かる', async () => {
     expect(await eslintRuleIds('export const t = "\u{1F600}";\n', 'apps/desktop/tests/probe.ts')).toContain(
       'local/no-emoji',

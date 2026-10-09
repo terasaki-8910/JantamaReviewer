@@ -1,0 +1,61 @@
+/*
+  native.css: Web ページの名残を見せない（N-8、N-9、N-11）。両方の窓で読み込む。
+  - 文字は選択できない・カーソルは矢印（アプリの画面は、読む文章ではなく操作の面）。
+    入力欄と、写して使う文字（.selectable）だけは、選択できる。
+  - 画像・図は引きずれない。
+  - スクロールバーは細く、色はトークンから。端まで行っても、ページが引っ張られたり、戻ったりしない。
+  色はトークン（tokens.css）だけを使う。
+*/
+
+html {
+  overscroll-behavior: none;
+}
+
+body {
+  overscroll-behavior: none;
+  cursor: default;
+  user-select: none;
+}
+
+/* 選択してよいもの */
+input,
+textarea,
+.selectable {
+  user-select: text;
+}
+
+/* カーソル: 操作できるものだけが指の形。入力欄は文字の形。使えないものは禁止の形。 */
+button,
+[role="button"],
+select,
+summary,
+a[href],
+label:has(input[type="radio"], input[type="checkbox"]),
+input[type="radio"],
+input[type="checkbox"] {
+  cursor: pointer;
+}
+
+input:not([type="radio"], [type="checkbox"], [type="range"], [type="button"], [type="submit"]),
+textarea {
+  cursor: text;
+}
+
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+/* 画像と図は引きずれない */
+img,
+svg {
+  -webkit-user-drag: none;
+}
+
+/* スクロールバー: 細く、トークンの色で */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}

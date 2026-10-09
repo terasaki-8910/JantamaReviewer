@@ -27,6 +27,14 @@ export const api = {
   listSessions: () => invoke<SessionRecord[]>('list_sessions'),
   getStartupNote: () => invoke<string | null>('get_startup_note'),
   showWidgetMenu: () => invoke<void>('show_widget_menu'),
+  /**
+   * 最初の絵を描き終えたことを知らせる（N-7）。窓は隠したまま作られ、これを受けた Rust 側が
+   * 窓の背景色を `background`（いま描いている背景の色。CSS の色の文字列）にそろえてから見せる。
+   */
+  windowReady: (background: string) => invoke<void>('window_ready', { background }),
+  /** テーマが変わったときに、窓の背景色を画面の色にそろえさせる（N-7）。 */
+  setWindowBackground: (background: string) =>
+    invoke<void>('set_window_background', { background }),
 };
 
 export function onStateChanged(handler: (state: AppState) => void): Promise<UnlistenFn> {

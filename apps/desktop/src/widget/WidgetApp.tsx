@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage, onSettingsChanged, onStateChanged } from '../api/tauri';
 import type { AppState, Orientation, Rating } from '../api/types';
 import { describeChange } from './announce';
+import { signalWindowReady } from '../shared/windowReady';
 import { useFlash } from './useFlash';
 import { Widget } from './Widget';
 
@@ -15,6 +16,8 @@ export function WidgetApp() {
   const [state, setState] = useState<AppState | null>(null);
   const [orientation, setOrientation] = useState<Orientation | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  // 最初の状態を受け取れなかったとき。エラー画面（ErrorBoundary）に回す。
+  const [fatal, setFatal] = useState<Error | null>(null);
   const [flashing, flash] = useFlash();
   const previous = useRef<AppState | null>(null);
 
@@ -42,8 +45,15 @@ export function WidgetApp() {
     };
     track(onStateChanged(accept));
     track(onSettingsChanged((settings) => setOrientation(settings.orientation)));
-    void api.getState().then((s) => alive && accept(s));
-    void api.getSettings().then((s) => alive && setOrientation(s.orientation));
+    const fail = (error: unknown) => alive && setFatal(new Error(errorMessage(error)));
+    void api
+      .getState()
+      .then((s) => alive && accept(s))
+      .catch(fail);
+    void api
+      .getSettings()
+      .then((s) => alive && setOrientation(s.orientation))
+      .catch(fail);
     return () => {
       alive = false;
       disposers.forEach((dispose) => dispose());
@@ -77,6 +87,13 @@ export function WidgetApp() {
     void api.undo().then(accept).catch(report);
   }, [accept, report]);
 
+  // 状態と形がそろって、本物の絵が描けるようになったら、窓を見せてよいと知らせる（N-7）。
+  const loaded = state !== null && orientation !== null;
+  useEffect(() => {
+    if (loaded) void signalWindowReady();
+  }, [loaded]);
+
+  if (fatal) throw fatal;
   // 状態を受け取る前に、間違った数字を一瞬出さない。
   if (!state || !orientation) return null;
 

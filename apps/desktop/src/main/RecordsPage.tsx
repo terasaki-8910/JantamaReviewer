@@ -48,7 +48,7 @@ export function RecordsPage() {
       </header>
       <div className="page">
         {loadError && (
-          <p className="error" role="alert">
+          <p className="error selectable" role="alert">
             {loadError}
           </p>
         )}
@@ -142,6 +142,7 @@ function MarkItem({ mark, number }: { mark: MarkRecord; number: number }) {
           alt={`迷い ${number} のスクリーンショット（${clock}）`}
           loading="lazy"
           decoding="async"
+          draggable={false}
         />
       ) : (
         <div className="thumb-empty" title={mark.capture_error ?? undefined}>

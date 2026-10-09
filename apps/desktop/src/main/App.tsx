@@ -1,19 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { applyTheme, effectiveTheme, storeTheme, type ThemeChoice } from '../shared/theme';
+import { reportBackground, signalWindowReady } from '../shared/windowReady';
 import { Icon } from './Icon';
 import { RecordsPage } from './RecordsPage';
 import { SettingsPage } from './SettingsPage';
-
-type Page = 'records' | 'settings';
+import { resolveView, START_VIEW, type View } from './views';
 
 /**
  * 検討画面（メインの窓）。承認済みのシェル: 左に固定幅のサイドバー（幅 640px 未満ではアイコンだけの細い列）、
  * 下に設定とテーマの切り替え。今ある行き先（記録・設定）だけを置き、未完成の機能の項目は置かない。
  */
 export function App() {
-  const [page, setPage] = useState<Page>('records');
+  // どの画面を見ているかは、メモリの中だけで持つ（URL のパスや履歴は使わない）。知らない名前は最初の画面。
+  const [view, setView] = useState<View>(START_VIEW);
   const [theme, setTheme] = useState<ThemeChoice>(effectiveTheme);
+  const show = useCallback((name: string) => setView(resolveView(name)), []);
+
+  // 最初の絵を描き終えたと知らせる。窓は、それまで隠れている（N-7）。
+  useEffect(() => {
+    void signalWindowReady();
+  }, []);
 
   // OS のテーマが変わったとき（明示して選んでいなければ）表示を合わせる。
   useEffect(() => {
@@ -28,6 +35,7 @@ export function App() {
     applyTheme(next);
     storeTheme(next);
     setTheme(next);
+    void reportBackground();
   }, []);
 
   const themeLabel = theme === 'dark' ? 'ライトテーマに切り替え' : 'ダークテーマに切り替え';
@@ -48,8 +56,8 @@ export function App() {
                 <NavButton
                   label="記録"
                   icon="log"
-                  current={page === 'records'}
-                  onClick={() => setPage('records')}
+                  current={view === 'records'}
+                  onClick={() => show('records')}
                 />
               </li>
             </ul>
@@ -58,8 +66,8 @@ export function App() {
             <NavButton
               label="設定"
               icon="settings"
-              current={page === 'settings'}
-              onClick={() => setPage('settings')}
+              current={view === 'settings'}
+              onClick={() => show('settings')}
             />
             <button
               type="button"
@@ -73,7 +81,7 @@ export function App() {
           </div>
         </div>
       </aside>
-      <main className="main">{page === 'records' ? <RecordsPage /> : <SettingsPage />}</main>
+      <main className="main">{view === 'records' ? <RecordsPage /> : <SettingsPage />}</main>
     </div>
   );
 }

@@ -30,6 +30,16 @@ export const baseSettings: Settings = {
   data_dir: 'C:\\Users\\test\\JantamaReviewerData',
 };
 
+/**
+ * 画面が「いま描いている背景の色」として知らせてくる CSS の色の文字列（getComputedStyle が返す形）の見本。
+ * テストのデータで、画面の色ではない（src の中には色の値を書けないので、ここに置く）。
+ */
+export const PAGE_BACKGROUNDS = {
+  light: 'rgb(244, 244, 244)',
+  dark: 'rgb(18, 18, 18)',
+  surface: 'rgb(28, 28, 28)',
+} as const;
+
 type Handler = (event: { payload: unknown }) => void;
 
 export interface TauriMock {
