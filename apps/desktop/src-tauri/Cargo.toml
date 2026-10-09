@@ -11,10 +11,11 @@ publish = false
 name = "jantama_reviewer_lib"
 crate-type = ["rlib"]
 
-# 本体（このパッケージ）と、管理者で動くボタンの補助プログラム（helper）、2 つが共有する部品（input）。
+# 本体（このパッケージ）と、管理者で動くボタンの補助プログラム（helper）、2 つが共有する部品（input）、
+# 取り込みのときだけ使う文字認識（ocr）。
 # `cargo build` で本体と補助プログラムの両方を作る（default-members）。
 [workspace]
-members = ["input", "helper"]
+members = ["input", "helper", "ocr"]
 default-members = [".", "helper"]
 resolver = "2"
 

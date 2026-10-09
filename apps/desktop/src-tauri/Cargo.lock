@@ -1774,6 +1774,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "jantama-ocr"
+version = "0.1.0"
+dependencies = [
+ "png 0.18.1",
+ "tempfile",
+ "windows",
+]
+
+[[package]]
 name = "jantama-reviewer"
 version = "0.1.0"
 dependencies = [
