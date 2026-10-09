@@ -5,6 +5,7 @@
 
 use std::sync::mpsc::Sender;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use jantama_input::hook_win::{self, HookHandle};
 use jantama_input::logic::Config;
@@ -44,6 +45,9 @@ impl<R: Runtime> TauriEffects<R> {
             }
         };
         let _ = feedback.send(Input::InProcessHook(hook.is_some()));
+        if std::env::var_os(crate::input_flow::TRACE_ENV).is_some_and(|v| !v.is_empty()) {
+            spawn_hook_trace();
+        }
         TauriEffects {
             app,
             hook,
@@ -68,6 +72,11 @@ impl<R: Runtime> TauriEffects<R> {
 }
 
 impl<R: Runtime> Effects for TauriEffects<R> {
+    fn trace_info(&self) -> String {
+        let (keys, mouse) = hook_win::event_counts();
+        format!("（フックが見た入力: キー {keys}、マウス {mouse}）")
+    }
+
     fn run(&mut self, effect: Effect) {
         match effect {
             Effect::ConfigureInProcess(config) => {
@@ -109,6 +118,44 @@ impl<R: Runtime> Effects for TauriEffects<R> {
             }
             Effect::EmitStatus(status) => emit_status(&self.app, &status),
         }
+    }
+}
+
+/// 原因調べ（`TRACE_ENV`）のとき、フックが受け取ったキーボードの入力を、標準エラーに 1 つずつ出す。
+/// マウスは動かすだけでも大量に来るので、数が変わったときに 1 秒に 1 回だけ出す。
+fn spawn_hook_trace() {
+    let spawned = thread::Builder::new()
+        .name("hook-trace".to_string())
+        .spawn(|| {
+            let started = Instant::now();
+            let mut next = 0usize;
+            let mut last_mouse = 0u64;
+            let mut last_mouse_print = Instant::now();
+            loop {
+                thread::sleep(Duration::from_millis(20));
+                for note in hook_win::recent_keys(&mut next) {
+                    eprintln!(
+                        "[フック] キー vk=0x{:02X} flags=0x{:02X}{} 起動から {} ms（記録 {:.3} 秒）",
+                        note.vk,
+                        note.flags,
+                        if note.flags & 0x10 != 0 { "（注入）" } else { "" },
+                        note.at_ms,
+                        started.elapsed().as_secs_f32()
+                    );
+                }
+                let (_, mouse) = hook_win::event_counts();
+                if mouse != last_mouse && last_mouse_print.elapsed() >= Duration::from_secs(1) {
+                    eprintln!(
+                        "[フック] マウス {mouse}（フックの手続きの最長 {} マイクロ秒）",
+                        hook_win::max_proc_micros()
+                    );
+                    last_mouse = mouse;
+                    last_mouse_print = Instant::now();
+                }
+            }
+        });
+    if let Err(e) = spawned {
+        eprintln!("フックの記録の見張りを起こせませんでした: {e}");
     }
 }
 

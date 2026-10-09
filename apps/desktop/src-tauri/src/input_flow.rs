@@ -433,6 +433,11 @@ impl InputState {
 /// `Effect` を実行する側。実機では Tauri・フック・パイプにつなぎ、試験では記録するだけの偽物を入れる。
 pub trait Effects: Send + 'static {
     fn run(&mut self, effect: Effect);
+
+    /// 原因調べ（`TRACE_ENV`）のとき、入力の記録に添える一言。既定は何も添えない。
+    fn trace_info(&self) -> String {
+        String::new()
+    }
 }
 
 /// 入力の流れの窓口。どのスレッドからでも `send` で入力を渡せる（すぐ返る）。
@@ -462,6 +467,10 @@ impl InputService {
     }
 }
 
+/// この環境変数が空でなければ、入力の流れが受け取った入力と、決めたやることを、標準エラーに出す
+/// （ボタンが効かないときの原因調べ。フックの手続きの中では出さない。遅いと Windows にフックを外される）。
+pub const TRACE_ENV: &str = "JANTAMA_TRACE_INPUT";
+
 /// 入力を順番に処理するスレッドを起こす。`make_effects` には、入力を渡す口が渡される
 /// （フックの手続きや、時間切れの知らせが、そこへ入力を送る）。
 /// `InputService` が（`sender` の分も含めて）すべて無くなると、スレッドは終わる。
@@ -473,15 +482,22 @@ pub fn spawn_service<E: Effects>(
     let mut effects = make_effects(tx.clone());
     let state = Arc::new(Mutex::new(initial));
     let worker_state = Arc::clone(&state);
+    let trace = std::env::var_os(TRACE_ENV).is_some_and(|v| !v.is_empty());
     let handle = thread::Builder::new()
         .name("input-flow".to_string())
         .spawn(move || {
             for input in rx {
+                if trace {
+                    eprintln!("[入力] 受け取った: {input:?} {}", effects.trace_info());
+                }
                 let produced = worker_state
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
                     .reduce(input);
                 for effect in produced {
+                    if trace && !matches!(effect, Effect::EmitStatus(_)) {
+                        eprintln!("[入力] やること: {effect:?}");
+                    }
                     effects.run(effect);
                 }
             }

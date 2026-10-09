@@ -9,10 +9,11 @@
 //! 割り当てたボタンの押下・離しは横取りして、ほかのアプリに届けない（Chrome 版の雀魂で
 //! サイドボタンが「戻る」として働くのを防ぐ）。ほかの入力は何も変えずに次へ渡す。
 
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -47,6 +48,76 @@ static ACK: Mutex<Option<Sender<HookStatus>>> = Mutex::new(None);
 
 /// 設定を変える呼び出しを、1 つずつにする。
 static APPLY_LOCK: Mutex<()> = Mutex::new(());
+
+/// フックの手続きが受け取った入力の数（原因調べのため。ボタンが効かないとき、フックまで入力が届いているかが分かる）。
+static KEY_EVENTS: AtomicU64 = AtomicU64::new(0);
+static MOUSE_EVENTS: AtomicU64 = AtomicU64::new(0);
+
+/// フックの手続きが、これまでに受け取った入力の数（キーボード、マウス）。
+pub fn event_counts() -> (u64, u64) {
+    (
+        KEY_EVENTS.load(Ordering::Relaxed),
+        MOUSE_EVENTS.load(Ordering::Relaxed),
+    )
+}
+
+/// フックを起こした時刻（入力の時刻の基準）。
+static STARTED: OnceLock<Instant> = OnceLock::new();
+
+/// 直近のキーボードの入力の記録（原因調べのため。仮想キーコード・フラグ・起こしてからの時刻を 1 つの整数に詰める）。
+const RING_LEN: usize = 128;
+static RING: [AtomicU64; RING_LEN] = [const { AtomicU64::new(0) }; RING_LEN];
+static RING_HEAD: AtomicUsize = AtomicUsize::new(0);
+
+/// フックの手続き 1 回にかかった時間の最大（マイクロ秒）。長いと Windows にフックを外される。
+static MAX_PROC_US: AtomicU64 = AtomicU64::new(0);
+
+/// キーボードのフックが受け取った入力 1 つ（原因調べ用）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyNote {
+    pub vk: u32,
+    /// `KBDLLHOOKSTRUCT.flags`（0x10 は他のプロセスが注入した入力）。
+    pub flags: u32,
+    /// フックのスレッドを起こしてからの時間（ミリ秒）。
+    pub at_ms: u64,
+}
+
+fn note_key(vk: u32, flags: u32) {
+    let at_ms = STARTED
+        .get()
+        .map_or(0, |started| started.elapsed().as_millis() as u64);
+    let slot = RING_HEAD.fetch_add(1, Ordering::AcqRel);
+    let packed = u64::from(vk & 0xFFFF) | (u64::from(flags & 0xFFFF) << 16) | (at_ms << 32);
+    RING[slot % RING_LEN].store(packed, Ordering::Release);
+}
+
+fn note_duration(entered: Instant) {
+    let us = entered.elapsed().as_micros() as u64;
+    MAX_PROC_US.fetch_max(us, Ordering::Relaxed);
+}
+
+/// `next` から後のキーボードの入力を返し、`next` を進める（原因調べ用。取りこぼしても構わない）。
+pub fn recent_keys(next: &mut usize) -> Vec<KeyNote> {
+    let head = RING_HEAD.load(Ordering::Acquire);
+    let from = (*next).max(head.saturating_sub(RING_LEN));
+    let notes = (from..head)
+        .map(|slot| {
+            let packed = RING[slot % RING_LEN].load(Ordering::Acquire);
+            KeyNote {
+                vk: (packed & 0xFFFF) as u32,
+                flags: ((packed >> 16) & 0xFFFF) as u32,
+                at_ms: packed >> 32,
+            }
+        })
+        .collect();
+    *next = head;
+    notes
+}
+
+/// フックの手続き 1 回にかかった時間の最大（マイクロ秒）。
+pub fn max_proc_micros() -> u64 {
+    MAX_PROC_US.load(Ordering::Relaxed)
+}
 
 /// いまのフックの状態。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,6 +178,7 @@ pub fn start(
 ) -> Result<(HookHandle, HookStatus), String> {
     SINK.set(Box::new(sink))
         .map_err(|_| "フックはすでに開始しています".to_string())?;
+    let _ = STARTED.set(Instant::now());
     CORE.set_config(initial);
 
     let (ready_tx, ready_rx) = mpsc::channel::<Result<(u32, HookStatus), String>>();
@@ -248,6 +320,7 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     if code == HC_ACTION as i32 {
         // SAFETY: WH_MOUSE_LL では lparam は MSLLHOOKSTRUCT へのポインタ。
         let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+        MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
         if deliver(CORE.on_mouse(wparam.0 as u32, info.mouseData, now_ms())) {
             return LRESULT(1);
         }
@@ -259,9 +332,17 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
     if code == HC_ACTION as i32 {
         // SAFETY: WH_KEYBOARD_LL では lparam は KBDLLHOOKSTRUCT へのポインタ。
         let info = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+        let entered = Instant::now();
+        KEY_EVENTS.fetch_add(1, Ordering::Relaxed);
+        note_key(info.vkCode, info.flags.0);
         if deliver(CORE.on_keyboard(wparam.0 as u32, info.vkCode, now_ms(), current_modifiers)) {
+            note_duration(entered);
             return LRESULT(1);
         }
+        // SAFETY: 受け取った値をそのまま次のフックへ渡す。
+        let next = unsafe { CallNextHookEx(None, code, wparam, lparam) };
+        note_duration(entered);
+        return next;
     }
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
