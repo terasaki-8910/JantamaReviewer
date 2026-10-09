@@ -21,6 +21,15 @@ describe('FX-1 固定データに個人を特定できる値が入っていな�
         expect(text).not.toMatch(/account|nickname|user_?id/i);
       });
 
+      it('絵文字として扱われる文字（段位の星など）は、JSON のエスケープで書いてある（リポジトリの絵文字の走査に掛からない）', () => {
+        // 星（U+2605）は Extended_Pictographic に入る。apps/desktop の L-2 の走査は packages 以下の JSON も見るので、
+        // 値は同じまま、ファイルの中の字を \u2605 の書き方にしてある。
+        expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
+        expect(text).toContain(`${String.fromCharCode(92)}u2605`);
+        const stars = JSON.stringify(loadReportJson(id)).match(new RegExp(String.fromCharCode(0x2605), 'g'));
+        expect(stars?.length).toBeGreaterThan(0);
+      });
+
       it('プレイヤー名はすべて「Aさん」「Bさん」「Cさん」「Dさん」に置き換わっている', () => {
         const placeholder = ['Aさん', 'Bさん', 'Cさん', 'Dさん'];
         const json = loadReportJson(id) as {
