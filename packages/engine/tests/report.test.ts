@@ -2,17 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { parseReport, parseReportText } from '../src/report';
 import type { MortalReport } from '../src/report-types';
-import { FX1_DECISION_COUNTS, FX1_IDS, loadReportJson, loadReportText } from './helpers/fixtures';
+import { FX1_DECISION_COUNTS, FX1_IDS, loadMutableReport, loadReportText } from './helpers/fixtures';
 
 function parseFx1(id: (typeof FX1_IDS)[number]): MortalReport {
   const result = parseReportText(loadReportText(id));
   if (!result.ok) throw new Error(result.error.message);
   return result.value;
-}
-
-/** 結果 JSON を読み込んで、書き換えやすい形で返す。 */
-function loadMutable(id: (typeof FX1_IDS)[number] = 'f9da87cbcd7af5e9'): any {
-  return structuredClone(loadReportJson(id));
 }
 
 describe('E-1 取り込み（結果 JSON の読み取り）', () => {
@@ -40,7 +35,7 @@ describe('E-1 取り込み（結果 JSON の読み取り）', () => {
   });
 
   it('E-1 判断の数が total_reviewed と合わないとき、両方の数を示して失敗する', () => {
-    const json = loadMutable();
+    const json = loadMutableReport();
     json.review.kyokus[0].entries.pop();
     const result = parseReport(json);
     expect(result.ok).toBe(false);
@@ -51,7 +46,7 @@ describe('E-1 取り込み（結果 JSON の読み取り）', () => {
   });
 
   it('E-1 項目の型が違うとき、どの項目かをパスで示して失敗する', () => {
-    const json = loadMutable();
+    const json = loadMutableReport();
     json.review.kyokus[3].entries[2].details[1].prob = 'abc';
     const result = parseReport(json);
     expect(result.ok).toBe(false);
@@ -63,7 +58,7 @@ describe('E-1 取り込み（結果 JSON の読み取り）', () => {
   });
 
   it('E-1 必須の項目が無いとき、どの項目が無いかを示して失敗する', () => {
-    const json = loadMutable();
+    const json = loadMutableReport();
     delete json.review.kyokus[0].entries[0].state.tehai;
     delete json.player_id;
     const result = parseReport(json);
@@ -75,7 +70,7 @@ describe('E-1 取り込み（結果 JSON の読み取り）', () => {
   });
 
   it('E-1 牌の表記・席の番号・行動の種類が正しくないとき、失敗する', () => {
-    const json = loadMutable();
+    const json = loadMutableReport();
     json.mjai_log[1].tehais[0][0] = '0m';
     json.mjai_log[3].actor = 4;
     json.review.kyokus[0].entries[0].expected.type = 'jump';
@@ -89,7 +84,7 @@ describe('E-1 取り込み（結果 JSON の読み取り）', () => {
   });
 
   it('E-1 実戦の行動の番号（actual_index）が候補の範囲を出ているとき、失敗する', () => {
-    const json = loadMutable();
+    const json = loadMutableReport();
     json.review.kyokus[0].entries[0].actual_index = 99;
     const result = parseReport(json);
     expect(result.ok).toBe(false);
@@ -98,7 +93,7 @@ describe('E-1 取り込み（結果 JSON の読み取り）', () => {
   });
 
   it('E-1 Mortal 以外の結果・JSON でないもの・オブジェクトでないものは、理由を返して失敗する', () => {
-    const json = loadMutable();
+    const json = loadMutableReport();
     json.engine = 'Akochan';
     const akochan = parseReport(json);
     expect(akochan.ok).toBe(false);
@@ -116,7 +111,7 @@ describe('E-1 取り込み（結果 JSON の読み取り）', () => {
   });
 
   it('E-1 問題が多いときも、集める件数に上限がある（巨大なエラー一覧にならない）', () => {
-    const json = loadMutable();
+    const json = loadMutableReport();
     for (const k of json.review.kyokus) for (const e of k.entries) e.junme = 'x';
     const result = parseReport(json);
     expect(result.ok).toBe(false);
