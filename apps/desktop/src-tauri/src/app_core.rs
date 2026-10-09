@@ -286,6 +286,51 @@ mod tests {
         Fixture { tmp, core, sound }
     }
 
+    /// 起動の前に、保存先へ迷いマーク 1 件の半荘を書いておく（`ago_ms` だけ前の記録）。半荘の名前を返す。
+    fn seed_session(data: &std::path::Path, ago_ms: i64) -> String {
+        use crate::capture::{CaptureTarget, Screenshot};
+        let mut store = Store::open(data).unwrap();
+        let shot = Ok(Screenshot {
+            png: vec![0x89, b'P', b'N', b'G'],
+            target: CaptureTarget::Window,
+        });
+        store
+            .add_mark(crate::clock::now_ms() - ago_ms, shot)
+            .unwrap();
+        store.current_session_id().unwrap().to_string()
+    }
+
+    fn start_core(tmp: &tempfile::TempDir) -> Core {
+        let settings = Settings {
+            data_dir: tmp.path().join("data"),
+            ..Settings::default()
+        };
+        Core::with_settings(
+            tmp.path().join("config"),
+            settings,
+            FakeCapturer::ok(&[1, 2, 3]),
+            CountingSound::new(),
+        )
+    }
+
+    #[test]
+    fn w14_starting_the_app_again_within_30_minutes_continues_the_last_session() {
+        let tmp = tempfile::tempdir().unwrap();
+        let id = seed_session(&tmp.path().join("data"), 5 * 60 * 1000);
+        let s = start_core(&tmp).app_state();
+        assert_eq!(s.session_id.as_deref(), Some(id.as_str()));
+        assert_eq!(s.mark_count, 1, "ウィジェットの数字も続きから");
+    }
+
+    #[test]
+    fn w14_starting_the_app_more_than_30_minutes_later_does_not_continue_the_last_session() {
+        let tmp = tempfile::tempdir().unwrap();
+        seed_session(&tmp.path().join("data"), 31 * 60 * 1000);
+        let s = start_core(&tmp).app_state();
+        assert_eq!(s.session_id, None);
+        assert_eq!(s.mark_count, 0);
+    }
+
     #[test]
     fn starts_idle_and_the_first_mark_starts_a_session() {
         let mut f = fixture();
