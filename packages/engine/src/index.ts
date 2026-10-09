@@ -13,20 +13,27 @@
  * - 局の結果と暫定の〇△✕: `summarizeKyokus`（E-6）、評価の突き合わせ: `alignRatings`（E-7）
  * - 解き直しの予定: `scheduleReview`（E-5）、牌譜リンク: `parsePaipuLink`（E-9）、MAKA の打牌: `recordMakaMove`（E-14）
  * - クリップボードの牌譜リンク: `detectPaipuLink`（見つける）・`detectNewPaipuLink` / `PaipuLinkAnnouncer`（同じ牌譜 ID は一度だけ知らせる）（E-15）
- * - 画面中央の文字認識の行から局・残りの牌の数・点数: `parseCenterText`（E-16）
+ * - 画面中央の文字認識の行から局・残りの牌の数・点数: `parseCenterText(lines)`（E-16）。
+ *   結びつけの関数に渡すスクショの読み取りは `ScreenReading`（`center`＝読み取り済み か `lines`＝文字認識の行）。
+ * - 迷いマークの結びつけ: `linkMarks(report, marks)`（E-17）。局は点数との照合で決め（`kyokuFactsOf` / `locateKyokus`）、
+ *   判断は残りの牌の数がいちばん近いもの（同じ差は候補すべて）。判断の呼び名と保存用の鍵は
+ *   `DecisionRef`（`listDecisionRefs` / `findDecisionRef` / `decisionKey`。「手で選ぶ」の一覧にも使う）
  */
 export const ENGINE_PACKAGE = '@jantama/engine' as const;
 
 export * from './actions';
 export * from './center-text';
 export * from './decision';
+export * from './decision-ref';
 export * from './disagreement';
 export * from './discard-compare';
 export * from './grade';
 export * from './import';
 export * from './isotonic';
 export * from './kyoku';
+export * from './kyoku-locate';
 export * from './maka';
+export * from './mark-link';
 export * from './outcome';
 export * from './paipu-link';
 export * from './rating';

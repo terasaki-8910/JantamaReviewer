@@ -91,3 +91,19 @@ export function parseCenterText(lines: readonly string[]): CenterText | null {
 
   return { wind, number: Number(kyoku[2]) as CenterText['number'], tilesLeft, score };
 }
+
+/**
+ * スクショ 1 枚の読み取り。結びつけの関数（迷いマーク・評価・半荘）には、このどちらかを持つ記録をそのまま渡せる。
+ * 読み取り済みなら `center`（読めなかったときは null）、文字認識の行のままなら `lines`（`parseCenterText` に通す）。
+ * どちらも無い記録は「読めない」として扱う。
+ */
+export interface ScreenReading {
+  center?: CenterText | null;
+  lines?: readonly string[];
+}
+
+/** スクショ 1 枚の読み取り結果。`center` があればそれ、無ければ `lines` を読む。どちらも無ければ null（読めない）。 */
+export function readingOf(input: ScreenReading): CenterText | null {
+  if (input.center !== undefined) return input.center;
+  return input.lines === undefined ? null : parseCenterText(input.lines);
+}

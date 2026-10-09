@@ -56,7 +56,28 @@ describe('公開 API（src/index.ts）', () => {
   });
 
   it('E-16 画面中央の文字認識の読み取りの入口が使える', () => {
-    expect(typeof engine.parseCenterText).toBe('function');
+    for (const name of ['parseCenterText', 'readingOf'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+  });
+
+  it('E-17 迷いマークの結びつけと、判断の呼び名・鍵の入口が使える', () => {
+    for (const name of [
+      'linkMarks',
+      'kyokuFactsOf',
+      'kyokuFits',
+      'locateKyokus',
+      'listDecisionRefs',
+      'findDecisionRef',
+      'decisionRefAt',
+      'decisionKey',
+      'parseDecisionKey',
+      'decisionKindLabel',
+      'tileLabel',
+      'actionLabel',
+    ] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
   });
 
   it('パッケージ名の定数がある', () => {
