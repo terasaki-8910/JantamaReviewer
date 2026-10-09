@@ -19,7 +19,8 @@ run state/init-tools.sh myself. Never auto-install or enable tools.
 ## Commands
 どれもリポジトリのルートで実行する（Windows 専用。pnpm 11・Node・Rust が要る）。
 - Install: `pnpm install`
-- Tests: `pnpm test`（= `pnpm test:ts`（全 vitest）+ `pnpm test:rust`（cargo test））。実ブラウザの検査（tests/browser）は、インストール済みの Chrome か Edge を使う。フックの結合試験（src-tauri/tests/hook_integration.rs）は、実際にマウスとキーの入力を注入するので、対話できるデスクトップが要る。
+- Tests: `pnpm test`（= `pnpm test:ts`（全 vitest）+ `pnpm test:rust`（cargo test））。実ブラウザの検査（tests/browser）は、インストール済みの Chrome か Edge を使う。
+- Hook test（手動）: `pnpm test:hook`。実際にマウスとキーの入力を注入して、本物のフックを通す（src-tauri/tests/hook_integration.rs。`pnpm test` には含めない）。前面の窓が昇格している（管理者として動く雀魂のクライアントなど）と、入力が届かず、理由を示して失敗する。
 - Lint:  `pnpm lint`（= eslint（絵文字禁止・色はトークンのみ・jsx-a11y）+ stylelint（色はトークンのみ）+ tsc --noEmit + cargo clippy -D warnings + cargo fmt --check）
 - Debug build: `pnpm build:debug`（`tauri build --debug --no-bundle`。画面を埋め込んだ実行ファイルが `apps/desktop/src-tauri/target/debug/jantama-reviewer.exe` にできる）
 - Dev: `pnpm dev`（`tauri dev`。開発者ツールが使えるのはこのときだけ）

@@ -6,7 +6,7 @@
 //! 横取りが要るのは、Chrome 版の雀魂ではサイドボタンが「戻る」として働き、
 //! ページを離れてしまうため（SPEC F0）。
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use crate::settings::Trigger;
 
@@ -270,6 +270,118 @@ pub fn process_event(
     }
 }
 
+/// Windows のメッセージ番号（WM_*）と X ボタンの番号。低レベルフックの手続きが受け取る値を、
+/// 判定用のイベントにするために使う（`translate_mouse`・`translate_keyboard`）。
+/// 値が Windows のものと同じことは、Windows 上のテスト（`message_numbers_match_windows`）が確かめる。
+pub mod wm {
+    pub const KEYDOWN: u32 = 0x0100;
+    pub const KEYUP: u32 = 0x0101;
+    pub const SYSKEYDOWN: u32 = 0x0104;
+    pub const SYSKEYUP: u32 = 0x0105;
+    pub const LBUTTONDOWN: u32 = 0x0201;
+    pub const LBUTTONUP: u32 = 0x0202;
+    pub const RBUTTONDOWN: u32 = 0x0204;
+    pub const RBUTTONUP: u32 = 0x0205;
+    pub const MBUTTONDOWN: u32 = 0x0207;
+    pub const MBUTTONUP: u32 = 0x0208;
+    pub const XBUTTONDOWN: u32 = 0x020B;
+    pub const XBUTTONUP: u32 = 0x020C;
+    /// `MSLLHOOKSTRUCT.mouseData` の上位ワードが、どちらの X ボタンかを表す。
+    pub const XBUTTON1: u32 = 1;
+    pub const XBUTTON2: u32 = 2;
+}
+
+/// WH_MOUSE_LL のメッセージ（`wparam`）と `MSLLHOOKSTRUCT.mouseData` を、判定用のイベントにする。
+/// 移動・ホイールなどは `None`（判定せず、そのまま通す）。
+pub fn translate_mouse(message: u32, mouse_data: u32) -> Option<InputEvent> {
+    let x_button = || match (mouse_data >> 16) & 0xFFFF {
+        wm::XBUTTON1 => Some(MouseButton::X1),
+        wm::XBUTTON2 => Some(MouseButton::X2),
+        _ => None,
+    };
+    match message {
+        wm::LBUTTONDOWN => Some(InputEvent::MouseDown(MouseButton::Left)),
+        wm::LBUTTONUP => Some(InputEvent::MouseUp(MouseButton::Left)),
+        wm::RBUTTONDOWN => Some(InputEvent::MouseDown(MouseButton::Right)),
+        wm::RBUTTONUP => Some(InputEvent::MouseUp(MouseButton::Right)),
+        wm::MBUTTONDOWN => Some(InputEvent::MouseDown(MouseButton::Middle)),
+        wm::MBUTTONUP => Some(InputEvent::MouseUp(MouseButton::Middle)),
+        wm::XBUTTONDOWN => x_button().map(InputEvent::MouseDown),
+        wm::XBUTTONUP => x_button().map(InputEvent::MouseUp),
+        _ => None,
+    }
+}
+
+/// WH_KEYBOARD_LL のメッセージ（`wparam`）と `KBDLLHOOKSTRUCT.vkCode` を、判定用のイベントにする。
+pub fn translate_keyboard(message: u32, vk_code: u32) -> Option<InputEvent> {
+    match message {
+        wm::KEYDOWN | wm::SYSKEYDOWN => Some(InputEvent::KeyDown(vk_code)),
+        wm::KEYUP | wm::SYSKEYUP => Some(InputEvent::KeyUp(vk_code)),
+        _ => None,
+    }
+}
+
+/// フックの手続きの中身のすべて（OS に依存しない）。割り当てを覚え、OS から渡された値を
+/// イベントにして判定し、「横取りするか」と「記録の担当に渡す合図」を返す。
+/// 割り当ては 1 つの整数で持つので、フックの手続きはロックを取らずに読める。
+pub struct HookCore {
+    trigger: AtomicU32,
+    gate: RepeatGate,
+}
+
+impl HookCore {
+    pub const fn new() -> HookCore {
+        HookCore {
+            trigger: AtomicU32::new(0),
+            gate: RepeatGate::new(),
+        }
+    }
+
+    /// いまの割り当て。
+    pub fn trigger(&self) -> Option<ActiveTrigger> {
+        ActiveTrigger::unpack(self.trigger.load(Ordering::SeqCst))
+    }
+
+    /// 割り当てを変える。押し続けの状態は捨てる。
+    pub fn set_trigger(&self, trigger: Option<ActiveTrigger>) {
+        self.trigger
+            .store(ActiveTrigger::pack(trigger), Ordering::SeqCst);
+        self.gate.reset();
+    }
+
+    /// マウスのフックの手続きが受け取った値を判定する。
+    pub fn on_mouse(
+        &self,
+        message: u32,
+        mouse_data: u32,
+        now_ms: i64,
+    ) -> (bool, Option<TriggerEvent>) {
+        match translate_mouse(message, mouse_data) {
+            Some(event) => process_event(event, self.trigger(), &self.gate, now_ms),
+            None => (false, None),
+        }
+    }
+
+    /// キーボードのフックの手続きが受け取った値を判定する。
+    pub fn on_keyboard(
+        &self,
+        message: u32,
+        vk_code: u32,
+        now_ms: i64,
+    ) -> (bool, Option<TriggerEvent>) {
+        match translate_keyboard(message, vk_code) {
+            Some(event) => process_event(event, self.trigger(), &self.gate, now_ms),
+            None => (false, None),
+        }
+    }
+}
+
+impl Default for HookCore {
+    fn default() -> Self {
+        HookCore::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -488,5 +600,228 @@ mod tests {
         ] {
             assert_eq!(vk_from_code(code), None, "{code:?}");
         }
+    }
+
+    // ---- Windows のメッセージの読み取りと、フックの手続きの中身（OS に依存しない配線） ----
+
+    const XBUTTON1_DATA: u32 = wm::XBUTTON1 << 16;
+    const XBUTTON2_DATA: u32 = wm::XBUTTON2 << 16;
+
+    #[cfg(windows)]
+    #[test]
+    fn message_numbers_match_windows() {
+        use windows::Win32::UI::WindowsAndMessaging as w;
+        assert_eq!(wm::KEYDOWN, w::WM_KEYDOWN);
+        assert_eq!(wm::KEYUP, w::WM_KEYUP);
+        assert_eq!(wm::SYSKEYDOWN, w::WM_SYSKEYDOWN);
+        assert_eq!(wm::SYSKEYUP, w::WM_SYSKEYUP);
+        assert_eq!(wm::LBUTTONDOWN, w::WM_LBUTTONDOWN);
+        assert_eq!(wm::LBUTTONUP, w::WM_LBUTTONUP);
+        assert_eq!(wm::RBUTTONDOWN, w::WM_RBUTTONDOWN);
+        assert_eq!(wm::RBUTTONUP, w::WM_RBUTTONUP);
+        assert_eq!(wm::MBUTTONDOWN, w::WM_MBUTTONDOWN);
+        assert_eq!(wm::MBUTTONUP, w::WM_MBUTTONUP);
+        assert_eq!(wm::XBUTTONDOWN, w::WM_XBUTTONDOWN);
+        assert_eq!(wm::XBUTTONUP, w::WM_XBUTTONUP);
+        assert_eq!(wm::XBUTTON1, u32::from(w::XBUTTON1));
+        assert_eq!(wm::XBUTTON2, u32::from(w::XBUTTON2));
+    }
+
+    #[test]
+    fn w2_mouse_messages_become_events_and_x_buttons_are_told_apart_by_the_high_word() {
+        use InputEvent::{MouseDown, MouseUp};
+        assert_eq!(
+            translate_mouse(wm::XBUTTONDOWN, XBUTTON1_DATA),
+            Some(MouseDown(MouseButton::X1))
+        );
+        assert_eq!(
+            translate_mouse(wm::XBUTTONUP, XBUTTON1_DATA),
+            Some(MouseUp(MouseButton::X1))
+        );
+        assert_eq!(
+            translate_mouse(wm::XBUTTONDOWN, XBUTTON2_DATA),
+            Some(MouseDown(MouseButton::X2))
+        );
+        assert_eq!(
+            translate_mouse(wm::XBUTTONUP, XBUTTON2_DATA),
+            Some(MouseUp(MouseButton::X2))
+        );
+        // 下位ワードの値には左右されない（上位ワードだけが番号）。
+        assert_eq!(
+            translate_mouse(wm::XBUTTONDOWN, XBUTTON1_DATA | 0x1234),
+            Some(MouseDown(MouseButton::X1))
+        );
+        // 知らない番号の X ボタンは判定しない。
+        assert_eq!(translate_mouse(wm::XBUTTONDOWN, 3 << 16), None);
+        assert_eq!(translate_mouse(wm::XBUTTONDOWN, 0), None);
+        assert_eq!(
+            translate_mouse(wm::LBUTTONDOWN, 0),
+            Some(MouseDown(MouseButton::Left))
+        );
+        assert_eq!(
+            translate_mouse(wm::LBUTTONUP, 0),
+            Some(MouseUp(MouseButton::Left))
+        );
+        assert_eq!(
+            translate_mouse(wm::RBUTTONDOWN, 0),
+            Some(MouseDown(MouseButton::Right))
+        );
+        assert_eq!(
+            translate_mouse(wm::RBUTTONUP, 0),
+            Some(MouseUp(MouseButton::Right))
+        );
+        assert_eq!(
+            translate_mouse(wm::MBUTTONDOWN, 0),
+            Some(MouseDown(MouseButton::Middle))
+        );
+        assert_eq!(
+            translate_mouse(wm::MBUTTONUP, 0),
+            Some(MouseUp(MouseButton::Middle))
+        );
+        // 移動（0x0200）・ホイール（0x020A）・左のダブルクリック（0x0203）などは判定しない。
+        for other in [0x0200, 0x020A, 0x0203, 0x020E, 0] {
+            assert_eq!(translate_mouse(other, XBUTTON1_DATA), None, "{other:#06x}");
+        }
+    }
+
+    #[test]
+    fn w2_keyboard_messages_become_events() {
+        assert_eq!(
+            translate_keyboard(wm::KEYDOWN, 0x77),
+            Some(InputEvent::KeyDown(0x77))
+        );
+        assert_eq!(
+            translate_keyboard(wm::SYSKEYDOWN, 0x77),
+            Some(InputEvent::KeyDown(0x77)),
+            "Alt を押しながらの押下も同じ"
+        );
+        assert_eq!(
+            translate_keyboard(wm::KEYUP, 0x77),
+            Some(InputEvent::KeyUp(0x77))
+        );
+        assert_eq!(
+            translate_keyboard(wm::SYSKEYUP, 0x77),
+            Some(InputEvent::KeyUp(0x77))
+        );
+        assert_eq!(
+            translate_keyboard(0x0102, 0x77),
+            None,
+            "WM_CHAR は判定しない"
+        );
+    }
+
+    #[test]
+    fn w2_the_default_assignment_swallows_only_the_back_button_and_hands_over_the_time() {
+        let core = HookCore::new();
+        assert_eq!(core.trigger(), None, "割り当ての前は、何も止めない");
+        assert_eq!(
+            core.on_mouse(wm::XBUTTONDOWN, XBUTTON1_DATA, 1),
+            (false, None)
+        );
+
+        core.set_trigger(ActiveTrigger::from_trigger(&Trigger::default()));
+        assert_eq!(core.trigger(), Some(ActiveTrigger::Mouse(MouseButton::X1)));
+        // 「戻る」: 押下は止めて合図を渡し、離すのは止めるだけ。
+        assert_eq!(
+            core.on_mouse(wm::XBUTTONDOWN, XBUTTON1_DATA, 1_760_000_000_123),
+            (
+                true,
+                Some(TriggerEvent {
+                    t_ms: 1_760_000_000_123
+                })
+            )
+        );
+        assert_eq!(
+            core.on_mouse(wm::XBUTTONUP, XBUTTON1_DATA, 1_760_000_000_200),
+            (true, None)
+        );
+        // 「進む」・左・右・中・キー・移動は、そのまま通す。
+        for (message, data) in [
+            (wm::XBUTTONDOWN, XBUTTON2_DATA),
+            (wm::XBUTTONUP, XBUTTON2_DATA),
+            (wm::LBUTTONDOWN, 0),
+            (wm::LBUTTONUP, 0),
+            (wm::RBUTTONDOWN, 0),
+            (wm::RBUTTONUP, 0),
+            (wm::MBUTTONDOWN, 0),
+            (wm::MBUTTONUP, 0),
+            (0x0200, 0),
+            (0x020A, 0),
+        ] {
+            assert_eq!(
+                core.on_mouse(message, data, 5),
+                (false, None),
+                "{message:#06x}"
+            );
+        }
+        assert_eq!(core.on_keyboard(wm::KEYDOWN, 0x77, 6), (false, None));
+    }
+
+    #[test]
+    fn w2_changing_the_assignment_takes_effect_on_the_next_input() {
+        let core = HookCore::new();
+        core.set_trigger(Some(ActiveTrigger::Mouse(MouseButton::X2)));
+        assert_eq!(
+            core.on_mouse(wm::XBUTTONDOWN, XBUTTON1_DATA, 1),
+            (false, None)
+        );
+        assert_eq!(
+            core.on_mouse(wm::XBUTTONDOWN, XBUTTON2_DATA, 2),
+            (true, Some(TriggerEvent { t_ms: 2 }))
+        );
+        core.set_trigger(Some(ActiveTrigger::Mouse(MouseButton::Middle)));
+        assert_eq!(
+            core.on_mouse(wm::XBUTTONDOWN, XBUTTON2_DATA, 3),
+            (false, None)
+        );
+        assert_eq!(
+            core.on_mouse(wm::MBUTTONDOWN, 0, 4),
+            (true, Some(TriggerEvent { t_ms: 4 }))
+        );
+        assert_eq!(core.on_mouse(wm::MBUTTONUP, 0, 5), (true, None));
+        core.set_trigger(None);
+        assert_eq!(core.on_mouse(wm::MBUTTONDOWN, 0, 6), (false, None));
+    }
+
+    #[test]
+    fn w2_a_key_assignment_swallows_the_key_only_and_records_once_while_held() {
+        let core = HookCore::new();
+        let f8 = vk_from_code("F8").unwrap();
+        core.set_trigger(ActiveTrigger::from_trigger(&Trigger::Key {
+            code: "F8".into(),
+        }));
+        assert!(ActiveTrigger::Key(f8).needs_keyboard_hook());
+        assert_eq!(
+            core.on_keyboard(wm::KEYDOWN, f8, 10),
+            (true, Some(TriggerEvent { t_ms: 10 }))
+        );
+        // 押し続けたときの自動リピート（2 回目以降の押下）は、止めるだけ。
+        assert_eq!(core.on_keyboard(wm::KEYDOWN, f8, 11), (true, None));
+        assert_eq!(core.on_keyboard(wm::KEYDOWN, f8, 12), (true, None));
+        assert_eq!(core.on_keyboard(wm::KEYUP, f8, 13), (true, None));
+        // 離したあとの次の押下は、また記録する。
+        assert_eq!(
+            core.on_keyboard(wm::SYSKEYDOWN, f8, 14),
+            (true, Some(TriggerEvent { t_ms: 14 }))
+        );
+        // ほかのキーとマウスのボタンは通す。
+        assert_eq!(core.on_keyboard(wm::KEYDOWN, f8 + 1, 15), (false, None));
+        assert_eq!(
+            core.on_mouse(wm::XBUTTONDOWN, XBUTTON1_DATA, 16),
+            (false, None)
+        );
+    }
+
+    #[test]
+    fn w2_changing_the_assignment_forgets_a_held_key() {
+        let core = HookCore::new();
+        let f8 = vk_from_code("F8").unwrap();
+        core.set_trigger(Some(ActiveTrigger::Key(f8)));
+        assert!(core.on_keyboard(wm::KEYDOWN, f8, 1).1.is_some());
+        core.set_trigger(Some(ActiveTrigger::Key(f8)));
+        assert!(
+            core.on_keyboard(wm::KEYDOWN, f8, 2).1.is_some(),
+            "割り当てを変えたら、押し続けの状態は捨てる"
+        );
     }
 }

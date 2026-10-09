@@ -10,6 +10,7 @@
     "test": "pnpm test:ts && pnpm test:rust",
     "test:ts": "pnpm -r --if-present test",
     "test:rust": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "test:hook": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --test hook_integration -- --ignored --nocapture",
     "lint": "pnpm lint:eslint && pnpm lint:style && pnpm lint:types && pnpm lint:clippy && pnpm lint:fmt",
     "lint:eslint": "eslint .",
     "lint:style": "stylelint \"apps/*/src/**/*.css\" --allow-empty-input",
