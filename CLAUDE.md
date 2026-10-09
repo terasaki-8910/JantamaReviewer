@@ -19,11 +19,15 @@ run state/init-tools.sh myself. Never auto-install or enable tools.
 ## Commands
 どれもリポジトリのルートで実行する（Windows 専用。pnpm 11・Node・Rust が要る）。
 - Install: `pnpm install`
-- Tests: `pnpm test`（= `pnpm test:ts`（全 vitest）+ `pnpm test:rust`（cargo test））。実ブラウザの検査（tests/browser）は、インストール済みの Chrome か Edge を使う。
-- Hook test（手動）: `pnpm test:hook`。実際にマウスとキーの入力を注入して、本物のフックを通す（src-tauri/tests/hook_integration.rs。`pnpm test` には含めない）。前面の窓が昇格している（管理者として動く雀魂のクライアントなど）と、入力が届かず、理由を示して失敗する。
-- Lint:  `pnpm lint`（= eslint（絵文字禁止・色はトークンのみ・jsx-a11y）+ stylelint（色はトークンのみ）+ tsc --noEmit + cargo clippy -D warnings + cargo fmt --check）
-- Debug build: `pnpm build:debug`（`tauri build --debug --no-bundle`。画面を埋め込んだ実行ファイルが `apps/desktop/src-tauri/target/debug/jantama-reviewer.exe` にできる）
-- Dev: `pnpm dev`（`tauri dev`。開発者ツールが使えるのはこのときだけ。ブラウザのショートカットは切ってあるので、F12 か Ctrl+Shift+I のアプリ自身のキー処理で開く）
+- Tests: `pnpm test`（= `pnpm test:ts`（全 vitest）+ `pnpm test:rust`（cargo test --workspace））。実ブラウザの検査（tests/browser）は、インストール済みの Chrome か Edge を使う。Rust は 3 つのクレートの workspace（`apps/desktop/src-tauri` の本体、共有の部品 `input`、管理者で動く補助プログラム `helper`）。
+- Hook test（手動）: `pnpm test:hook`。実際にマウスとキーの入力を注入して、本物のフック（修飾キー付きのキー・登録の待機を含む）を通す（src-tauri/tests/hook_integration.rs。`pnpm test` には含めない）。前面の窓が昇格している（管理者として動く雀魂のクライアントなど）と、入力が届かず、理由を示して失敗する。
+- Task test（手動）: `pnpm test:task`。補助プログラムのタスクの定義を、本物のタスクスケジューラが受け付けて、呼んだときだけ動かすことを確かめる（試験用の名前で一時的に登録し、終わったら消す。実行の権限だけは「普通」に替える。helper/tests/task_scheduler.rs。`pnpm test` には含めない）。
+- Lint:  `pnpm lint`（= eslint（絵文字禁止・色はトークンのみ・jsx-a11y）+ stylelint（色はトークンのみ）+ tsc --noEmit + cargo clippy --workspace -D warnings + cargo fmt --all --check）
+- Debug build: `pnpm build:debug`（`tauri build --debug --no-bundle`。本体と補助プログラムの 2 つの実行ファイル `jantama-reviewer.exe`・`jantama-helper.exe` が `apps/desktop/src-tauri/target/debug/` にできる。補助プログラムは本体と同じフォルダに置く。設定のとき、ここから Program Files に写す）
+- Release build: `pnpm --filter @jantama/desktop tauri build --no-bundle`（同じ 2 つが `target/release/` にできる）
+- Dev: `pnpm dev`（`tauri dev`。開発者ツールが使えるのはこのときだけ。ブラウザのショートカットは切ってあるので、F12 か Ctrl+Shift+I のアプリ自身のキー処理で開く）。補助プログラムは作らないので、設定を試すときは、先に `pnpm build:helper` で作る。
+- Helper build: `pnpm build:helper`（補助プログラムだけを作る。`tauri dev` の前や、補助プログラムを直したあとに使う）
+- 補助プログラムの手動確認（管理者の確認が出るので、自動の試験では確かめられない）: 設定ページの「管理者の補助プログラムを設定する」→ Windows の確認で「はい」→ 行が「動いています」になる。雀魂（管理者で動く）を前面にして、割り当てたサイドボタンを押すと、迷いが記録される。「設定を解除する」で、タスクと Program Files の写しが消える。
 - 試しに動かすときは、環境変数 `JANTAMA_CONFIG_DIR` に一時フォルダを指定し、そこの `settings.json` で `data_dir` も一時フォルダにする。本物のデータ（`%USERPROFILE%\JantamaReviewerData`）には触れない。`--show-main` を付けると検討画面も開く。
 
 ## UI rules

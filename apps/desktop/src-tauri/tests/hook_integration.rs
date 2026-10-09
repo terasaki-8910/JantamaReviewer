@@ -60,6 +60,12 @@ const XBUTTON2: u32 = 2;
 const VK_F13: u32 = 0x7C;
 const VK_F14: u32 = 0x7D;
 const VK_F15: u32 = 0x7E;
+const VK_A: u32 = 0x41;
+const VK_M: u32 = 0x4D;
+const VK_TAB: u32 = 0x09;
+const VK_ESCAPE: u32 = 0x1B;
+const VK_LCONTROL: u32 = 0xA2;
+const VK_LMENU: u32 = 0xA4;
 
 /// 見張りのフックが見た入力（本物のフックが通したもの）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -356,9 +362,52 @@ fn key(vk: u32, down: bool) -> Seen {
     Seen::Key { vk, down }
 }
 
-/// フックが知らせた「割り当てたボタンが押された」時刻（ミリ秒）。
-fn triggers(rx: &Receiver<i64>) -> Vec<i64> {
+/// フックが知らせた「割り当てたボタンが押された」時刻（ミリ秒）。ほかの知らせは捨てる。
+fn triggers(rx: &Receiver<Report>) -> Vec<i64> {
+    rx.try_iter()
+        .filter_map(|report| match report {
+            Report::Trigger { t_ms } => Some(t_ms),
+            _ => None,
+        })
+        .collect()
+}
+
+/// フックが知らせたことのすべて（押下・登録の候補・取り消し）。
+fn reports(rx: &Receiver<Report>) -> Vec<Report> {
     rx.try_iter().collect()
+}
+
+/// 修飾キーを押したまま、キーを 1 回押す。1 回の注入にまとめる（途中で止まって、修飾キーが押されたままにならない）。
+fn chord(modifiers: &[u32], vk: u32) {
+    let mut inputs: Vec<INPUT> = modifiers
+        .iter()
+        .map(|m| key_input(*m, KEYBD_EVENT_FLAGS(0)))
+        .collect();
+    inputs.push(key_input(vk, KEYBD_EVENT_FLAGS(0)));
+    inputs.push(key_input(vk, KEYEVENTF_KEYUP));
+    inputs.extend(
+        modifiers
+            .iter()
+            .rev()
+            .map(|m| key_input(*m, KEYEVENTF_KEYUP)),
+    );
+    send(&inputs);
+}
+
+/// 登録の待機中の、キー版の目印（A）。待機中は、F キーなども候補として止まるので、文字のキーを使う。
+fn flush_keys_registering() {
+    press_key(VK_A);
+    wait_for(Seen::Key {
+        vk: VK_A,
+        down: false,
+    });
+}
+
+fn passed_keys_registering() -> Vec<Seen> {
+    take_seen()
+        .into_iter()
+        .filter(|s| !matches!(s, Seen::Key { vk: VK_A, .. }))
+        .collect()
 }
 
 /// 割り当てを変える（通常の動き）。
@@ -404,13 +453,11 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     );
     let _ = take_seen();
 
-    let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::channel::<Report>();
     let (hook, status) = hook_win::start(
         assign(Some(ActiveTrigger::Mouse(MouseButton::X1))),
         move |report| {
-            if let Report::Trigger { t_ms } = report {
-                let _ = tx.send(t_ms);
-            }
+            let _ = tx.send(report);
         },
     )
     .expect("フックを入れられる（対話できるデスクトップが要る）");
@@ -609,6 +656,105 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
         thread::sleep(Duration::from_millis(25));
     }
     assert!(released, "割り当てを外すと、F13 も通る");
+
+    // ---- 修飾キー付きのキー（Ctrl+Alt+M。W-10）----
+    let ctrl_alt = Modifiers::new(true, true, false, false);
+    hook.apply(assign(Some(ActiveTrigger::key(VK_M, ctrl_alt))));
+    thread::sleep(Duration::from_millis(50));
+    let _ = (take_seen(), reports(&rx));
+    // M だけでは当たらない（通る）。Ctrl だけを足しても当たらない。
+    press_key(VK_M);
+    chord(&[VK_LCONTROL], VK_M);
+    flush_keys();
+    let passed = passed_keys();
+    assert_eq!(
+        passed.iter().filter(|s| **s == key(VK_M, true)).count(),
+        2,
+        "修飾キーが違えば、M は通る: {passed:?}"
+    );
+    assert_eq!(reports(&rx), vec![], "修飾キーが違えば、記録されない");
+    // Ctrl+Alt+M: M は止まり、1 回だけ記録される。Ctrl と Alt は、そのまま通る。
+    chord(&[VK_LCONTROL, VK_LMENU], VK_M);
+    flush_keys();
+    let passed = passed_keys();
+    assert!(
+        !passed.contains(&key(VK_M, true)) && !passed.contains(&key(VK_M, false)),
+        "割り当てた組み合わせの M は止まる: {passed:?}"
+    );
+    assert!(
+        passed.contains(&key(VK_LCONTROL, true)) && passed.contains(&key(VK_LMENU, true)),
+        "修飾キー自体は通る: {passed:?}"
+    );
+    let got = reports(&rx);
+    assert!(
+        matches!(got.as_slice(), [Report::Trigger { .. }]),
+        "1 回だけ記録される: {got:?}"
+    );
+
+    // ---- 登録の待機（W-10）----
+    hook.apply(Config {
+        trigger: None,
+        mode: Mode::Register,
+    });
+    let _ = (take_seen(), reports(&rx));
+    // 左右のボタンは通る（「キャンセル」を押せる）。拾わない。
+    click(MouseButton::Left, 1);
+    flush_mouse();
+    assert_eq!(
+        passed_mouse(),
+        vec![
+            mouse(MouseButton::Left, true),
+            mouse(MouseButton::Left, false)
+        ]
+    );
+    assert_eq!(reports(&rx), vec![]);
+    // 「進む」ボタン: 止まって、候補として知らせる（押すのも離すのも）。
+    click(MouseButton::X2, 1);
+    flush_mouse();
+    assert_eq!(passed_mouse(), vec![], "候補にしたボタンは止まる");
+    assert_eq!(
+        reports(&rx),
+        vec![Report::Captured(ActiveTrigger::Mouse(MouseButton::X2))]
+    );
+    // F13: 候補（止まる）。
+    press_key(VK_F13);
+    flush_keys_registering();
+    assert_eq!(passed_keys_registering(), vec![]);
+    assert_eq!(
+        reports(&rx),
+        vec![Report::Captured(ActiveTrigger::key(
+            VK_F13,
+            Modifiers::NONE
+        ))]
+    );
+    // M だけは候補にならない（通る）。Ctrl+Alt+M は候補（M は止まる）。
+    press_key(VK_M);
+    flush_keys_registering();
+    assert_eq!(
+        passed_keys_registering(),
+        vec![key(VK_M, true), key(VK_M, false)]
+    );
+    assert_eq!(reports(&rx), vec![]);
+    chord(&[VK_LCONTROL, VK_LMENU], VK_M);
+    flush_keys_registering();
+    let passed = passed_keys_registering();
+    assert!(!passed.contains(&key(VK_M, true)), "{passed:?}");
+    assert_eq!(
+        reports(&rx),
+        vec![Report::Captured(ActiveTrigger::key(VK_M, ctrl_alt))]
+    );
+    // Tab は通る（拾わない）。Esc は通したうえで、やめる合図を知らせる。
+    press_key(VK_TAB);
+    press_key(VK_ESCAPE);
+    flush_keys_registering();
+    let passed = passed_keys_registering();
+    assert!(
+        passed.contains(&key(VK_TAB, true)) && passed.contains(&key(VK_ESCAPE, true)),
+        "{passed:?}"
+    );
+    assert_eq!(reports(&rx), vec![Report::Cancel]);
+    hook.apply(Config::OFF);
+    let _ = (take_seen(), reports(&rx));
 
     // ---- 終わり ----
     hook.stop();
