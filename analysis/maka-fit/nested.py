@@ -15,7 +15,7 @@ def fit_predict(feats, tr, te, alpha):
     iso = IsotonicRegression(out_of_bounds='clip').fit(s[tr], y[tr])
     return iso.predict(s[te]), r.coef_, mu, sd
 def score(pred, yy):
-    pr = np.clip(np.rint(pred), 0, 13)
+    pr = np.clip(np.floor(pred + 0.5), 0, 13)
     return np.mean(np.abs(pr - yy)), np.mean(pr == yy), np.mean(np.abs(pr - yy) <= 1)
 # 1) honest estimate of "search the best 1-3 feature combo" via nested LOGO
 combos = [c for s in (1, 2, 3) for c in itertools.combinations(['ratio', 'logr', 'rating', 'qloss_sum', 'bad5', 'bad10', 'bad20', 'miss', 'n', 'match', 'qloss_max'], s)]
@@ -29,7 +29,7 @@ for g in G:
         for h in inner_games:
             itr = outer_tr & (games != h); ite = games == h
             p[ite] = fit_predict(list(c), itr, ite, 3.0)[0]
-        mae = np.mean(np.abs(np.clip(np.rint(p[outer_tr]), 0, 13) - y[outer_tr]))
+        mae = np.mean(np.abs(np.clip(np.floor(p[outer_tr] + 0.5), 0, 13) - y[outer_tr]))
         if best is None or mae < best[0]: best = (mae, c)
     chosen.append(best[1])
     pred[te] = fit_predict(list(best[1]), outer_tr, te, 3.0)[0]

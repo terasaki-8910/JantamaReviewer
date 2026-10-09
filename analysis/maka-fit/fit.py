@@ -20,7 +20,7 @@ for k in sorted(X, key=lambda k: -abs(np.nan_to_num(spearmanr(X[k], y, nan_polic
     print(f'{k:16s} rho={rho:+.2f} p={p:.3f}')
 
 def metrics(pred):
-    pr = np.clip(np.rint(pred), 0, 13)
+    pr = np.clip(np.floor(pred + 0.5), 0, 13)
     return dict(mae=np.mean(np.abs(pr - y)), exact=np.mean(pr == y), within1=np.mean(np.abs(pr - y) <= 1), within2=np.mean(np.abs(pr - y) <= 2), rho=spearmanr(pred, y)[0])
 
 def logo_iso(feat, increasing):
