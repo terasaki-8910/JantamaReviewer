@@ -367,16 +367,32 @@ textarea.input {
   max-width: 720px;
 }
 
+/*
+  設定どうしの区切りは、上ではなく下の罫線で引く。fieldset の上の罫線は、legend（見出し）の高さを
+  横切って描かれ、見出しの文字に線が重なってしまうため。
+*/
 .setting {
   display: grid;
   gap: var(--s2);
   padding: var(--s4) 0;
-  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
 .setting:first-child {
-  border-top: 0;
   padding-top: 0;
+}
+
+.setting:last-child {
+  border-bottom: 0;
+}
+
+/* fieldset の上の余白は、見出し（legend）の下ではなく上に取る（legend は枠の上端に置かれるため）。 */
+fieldset.setting {
+  padding-top: 0;
+}
+
+fieldset.setting:not(:first-child) {
+  margin-top: var(--s4);
 }
 
 .setting-row {
