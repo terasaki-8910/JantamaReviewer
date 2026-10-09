@@ -64,8 +64,7 @@ const VK_A: u32 = 0x41;
 const VK_M: u32 = 0x4D;
 const VK_TAB: u32 = 0x09;
 const VK_ESCAPE: u32 = 0x1B;
-const VK_LCONTROL: u32 = 0xA2;
-const VK_LMENU: u32 = 0xA4;
+const VK_LSHIFT: u32 = 0xA0;
 
 /// 見張りのフックが見た入力（本物のフックが通したもの）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,6 +146,12 @@ unsafe extern "system" fn witness_keyboard(code: i32, wparam: WPARAM, lparam: LP
                     down: false,
                 }),
                 _ => {}
+            }
+            // Shift だけは通す。押している間の修飾キーの状態は、通した入力で OS が更新するため、止めると、
+            // 本物のフックが修飾キーを読めない。Shift だけを押して離しても、ほかのアプリには何も起こらない
+            // （Ctrl・Alt・Windows は、メニューや開始画面を開くので、注入しない）。
+            if info.vkCode == VK_LSHIFT {
+                return unsafe { CallNextHookEx(None, code, wparam, lparam) };
             }
             return LRESULT(1);
         }
@@ -657,32 +662,30 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
     }
     assert!(released, "割り当てを外すと、F13 も通る");
 
-    // ---- 修飾キー付きのキー（Ctrl+Alt+M。W-10）----
-    let ctrl_alt = Modifiers::new(true, true, false, false);
-    hook.apply(assign(Some(ActiveTrigger::key(VK_M, ctrl_alt))));
+    // ---- 修飾キー付きのキー（Shift+F13。W-10）----
+    let shift = Modifiers::new(false, false, true, false);
+    hook.apply(assign(Some(ActiveTrigger::key(VK_F13, shift))));
     thread::sleep(Duration::from_millis(50));
     let _ = (take_seen(), reports(&rx));
-    // M だけでは当たらない（通る）。Ctrl だけを足しても当たらない。
-    press_key(VK_M);
-    chord(&[VK_LCONTROL], VK_M);
+    // Shift が無ければ当たらない（F13 は通る。記録されない）。
+    press_key(VK_F13);
     flush_keys();
-    let passed = passed_keys();
     assert_eq!(
-        passed.iter().filter(|s| **s == key(VK_M, true)).count(),
-        2,
-        "修飾キーが違えば、M は通る: {passed:?}"
+        passed_keys(),
+        vec![key(VK_F13, true), key(VK_F13, false)],
+        "修飾キーが違えば、F13 は通る"
     );
     assert_eq!(reports(&rx), vec![], "修飾キーが違えば、記録されない");
-    // Ctrl+Alt+M: M は止まり、1 回だけ記録される。Ctrl と Alt は、そのまま通る。
-    chord(&[VK_LCONTROL, VK_LMENU], VK_M);
+    // Shift+F13: F13 は止まり、1 回だけ記録される。Shift は、そのまま通る。
+    chord(&[VK_LSHIFT], VK_F13);
     flush_keys();
     let passed = passed_keys();
     assert!(
-        !passed.contains(&key(VK_M, true)) && !passed.contains(&key(VK_M, false)),
-        "割り当てた組み合わせの M は止まる: {passed:?}"
+        !passed.contains(&key(VK_F13, true)) && !passed.contains(&key(VK_F13, false)),
+        "割り当てた組み合わせの F13 は止まる: {passed:?}"
     );
     assert!(
-        passed.contains(&key(VK_LCONTROL, true)) && passed.contains(&key(VK_LMENU, true)),
+        passed.contains(&key(VK_LSHIFT, true)),
         "修飾キー自体は通る: {passed:?}"
     );
     let got = reports(&rx);
@@ -727,7 +730,7 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
             Modifiers::NONE
         ))]
     );
-    // M だけは候補にならない（通る）。Ctrl+Alt+M は候補（M は止まる）。
+    // 文字のキー（M）は、そのままでは候補にならない（通る）。
     press_key(VK_M);
     flush_keys_registering();
     assert_eq!(
@@ -735,13 +738,14 @@ fn w2_injected_input_reaches_the_real_hooks_and_only_the_assigned_button_is_swal
         vec![key(VK_M, true), key(VK_M, false)]
     );
     assert_eq!(reports(&rx), vec![]);
-    chord(&[VK_LCONTROL, VK_LMENU], VK_M);
+    // Shift+F13 は、修飾キーつきの候補（F13 は止まる）。
+    chord(&[VK_LSHIFT], VK_F13);
     flush_keys_registering();
     let passed = passed_keys_registering();
-    assert!(!passed.contains(&key(VK_M, true)), "{passed:?}");
+    assert!(!passed.contains(&key(VK_F13, true)), "{passed:?}");
     assert_eq!(
         reports(&rx),
-        vec![Report::Captured(ActiveTrigger::key(VK_M, ctrl_alt))]
+        vec![Report::Captured(ActiveTrigger::key(VK_F13, shift))]
     );
     // Tab は通る（拾わない）。Esc は通したうえで、やめる合図を知らせる。
     press_key(VK_TAB);
