@@ -18,6 +18,9 @@
  * - 迷いマークの結びつけ: `linkMarks(report, marks)`（E-17）。局は点数との照合で決め（`kyokuFactsOf` / `locateKyokus`）、
  *   判断は残りの牌の数がいちばん近いもの（同じ差は候補すべて）。判断の呼び名と保存用の鍵は
  *   `DecisionRef`（`listDecisionRefs` / `findDecisionRef` / `decisionKey`。「手で選ぶ」の一覧にも使う）
+ * - 局の評価（〇△✕）の結びつけ: `linkRatings(report, ratings)`（E-18）。評価は `t_ms` と読み取り（`center` か `lines`）を持つ記録。
+ *   局の始め（残り `HAND_START_TILES_LEFT` 枚以上）に読めたら前の局、途中なら読んだ局、読めないものは前後の間へ押した順。
+ *   戻り値は `alignRatings`（E-7）と同じ形（status・assigned・extra・missingHands・message）に、評価ごとの当てはめ方 `placements` を足したもの
  */
 export const ENGINE_PACKAGE = '@jantama/engine' as const;
 
@@ -38,6 +41,7 @@ export * from './outcome';
 export * from './paipu-link';
 export * from './rating';
 export * from './rating-alignment';
+export * from './rating-link';
 export * from './replay';
 export * from './report';
 export * from './report-types';

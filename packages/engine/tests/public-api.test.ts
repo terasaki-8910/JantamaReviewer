@@ -80,6 +80,11 @@ describe('公開 API（src/index.ts）', () => {
     }
   });
 
+  it('E-18 評価の結びつけの入口が使える', () => {
+    expect(typeof engine.linkRatings).toBe('function');
+    expect(engine.HAND_START_TILES_LEFT).toBe(66);
+  });
+
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
   });
