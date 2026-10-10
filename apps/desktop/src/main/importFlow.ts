@@ -185,6 +185,21 @@ function messageOf(error: unknown): string {
   return String(error);
 }
 
+/** 結果の JSON を検査して出た失敗を、見出しと理由にする。 */
+function failureOf(error: { code: string; message: string }): ImportFailure {
+  if (error.code !== 'parse') {
+    // 再生して合わなかった。理由は、局と巡目を含む文（例: 東1局 4巡目: 手牌が記録と一致しません…）。
+    return { title: '牌譜と検討結果が合いません', message: error.message };
+  }
+  const title = '結果の JSON を読めませんでした';
+  // エンジンの理由は、見出しと同じ文で始まる。見出しと重ならないよう、あとの詳しい部分だけを括弧に入れる。
+  const detail = error.message.startsWith(`${title}: `) ? error.message.slice(title.length + 2) : error.message;
+  return {
+    title,
+    message: `mjai の検討結果として読めませんでした。別のページやファイルを選んだか、サイトの作りが変わった可能性があります。（${detail}）`,
+  };
+}
+
 /**
  * 結果の JSON を検査して、結びつけ先を決めるところまで進める（保存はしない）。
  * `onStep` は、段階が変わるたびに呼ぶ。
@@ -197,16 +212,7 @@ export async function prepareImport(
   onStep('checking');
   const imported = importReportText(text);
   if (!imported.ok) {
-    return {
-      ok: false,
-      failure: {
-        title:
-          imported.error.code === 'parse'
-            ? '結果の JSON を読めませんでした'
-            : '牌譜と検討結果が合いません',
-        message: imported.error.message,
-      },
-    };
+    return { ok: false, failure: failureOf(imported.error) };
   }
 
   let all: SessionRecord[];

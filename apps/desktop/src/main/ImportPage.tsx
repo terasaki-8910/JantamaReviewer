@@ -111,7 +111,7 @@ function StatePanel({ state, flow, heading, onOpenSession }: PanelProps) {
       return flow.link ? (
         <section className="panel" aria-labelledby="import-heading">
           <h2 id="import-heading" ref={heading} tabIndex={-1}>
-            <Icon name="link" />
+            <Icon name="link" className="lead-icon" />
             コピーした牌譜リンクを見つけました
           </h2>
           <dl className="kv">
@@ -123,7 +123,7 @@ function StatePanel({ state, flow, heading, onOpenSession }: PanelProps) {
             <dd>{halfLabel(flow.link.paipuId)}</dd>
           </dl>
           <div>
-            <button type="button" className="btn primary" onClick={() => void flow.startMjai()}>
+            <button type="button" className="btn primary wrap" onClick={() => void flow.startMjai()}>
               mjai で検討する
             </button>
           </div>
@@ -132,7 +132,7 @@ function StatePanel({ state, flow, heading, onOpenSession }: PanelProps) {
       ) : (
         <section className="panel" aria-labelledby="import-heading">
           <h2 id="import-heading" ref={heading} tabIndex={-1}>
-            <Icon name="link" />
+            <Icon name="link" className="lead-icon" />
             {state.checked ? '牌譜リンクがありません' : 'クリップボードを調べています'}
           </h2>
           {state.checked && (
@@ -142,7 +142,7 @@ function StatePanel({ state, flow, heading, onOpenSession }: PanelProps) {
                 雀魂で「牌譜を共有」→「コピー」をしてから、ここに戻ってください。コピーしたリンクは、この窓に戻ったときに、自動で見つけます。
               </p>
               <div>
-                <button type="button" className="btn" onClick={() => void flow.refreshClipboard()}>
+                <button type="button" className="btn wrap" onClick={() => void flow.refreshClipboard()}>
                   クリップボードを調べ直す
                 </button>
               </div>
@@ -155,7 +155,7 @@ function StatePanel({ state, flow, heading, onOpenSession }: PanelProps) {
       return (
         <section className="panel" aria-labelledby="import-heading">
           <h2 id="import-heading" ref={heading} tabIndex={-1}>
-            <Icon name="external" />
+            <Icon name="external" className="lead-icon" />
             mjai の窓で Submit を押してください
           </h2>
           <p>
@@ -164,10 +164,10 @@ function StatePanel({ state, flow, heading, onOpenSession }: PanelProps) {
           </p>
           <MortalNote />
           <div className="actions">
-            <button type="button" className="btn" onClick={() => void flow.showMjaiWindow()}>
+            <button type="button" className="btn wrap" onClick={() => void flow.showMjaiWindow()}>
               窓を前面に出す
             </button>
-            <button type="button" className="btn" onClick={flow.cancel}>
+            <button type="button" className="btn wrap" onClick={flow.cancel}>
               やめる
             </button>
           </div>
@@ -212,7 +212,7 @@ function StatePanel({ state, flow, heading, onOpenSession }: PanelProps) {
             ))}
           </ul>
           <div>
-            <button type="button" className="btn" onClick={() => void flow.choose(null)}>
+            <button type="button" className="btn wrap" onClick={() => void flow.choose(null)}>
               どれでもない（記録の無い半荘として取り込む）
             </button>
           </div>
@@ -231,14 +231,14 @@ function StatePanel({ state, flow, heading, onOpenSession }: PanelProps) {
       return (
         <section className="panel" aria-labelledby="import-heading">
           <h2 id="import-heading" ref={heading} tabIndex={-1}>
-            <Icon name="alert" />
+            <Icon name="alert" className="lead-icon" />
             {state.title}
           </h2>
           <p role="alert" className="selectable">
             {state.message}
           </p>
           <div>
-            <button type="button" className="btn" onClick={flow.reset}>
+            <button type="button" className="btn wrap" onClick={flow.reset}>
               最初からやり直す
             </button>
           </div>
@@ -297,7 +297,7 @@ function DonePanel({
   return (
     <section className="panel" aria-labelledby="import-heading">
       <h2 id="import-heading" ref={heading} tabIndex={-1}>
-        <Icon name="check" />
+        <Icon name="check" className="lead-icon" />
         取り込みました
       </h2>
       <dl className="kv wide">
@@ -339,7 +339,7 @@ function DonePanel({
       <div>
         <button
           type="button"
-          className="btn primary"
+          className="btn primary wrap"
           onClick={() => onOpenSession(summary.sessionId)}
         >
           {formatSessionShort(summary.startedMs)} の半荘を開く

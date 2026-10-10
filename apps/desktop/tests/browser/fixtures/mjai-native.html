@@ -1,0 +1,24 @@
+<!doctype html>
+<!--
+  mjai の窓に入れる、ページ側の設定（mjai_native.js。N-9・N-10）の試験用の、手書きのページ。
+  入力欄が、最初からあるものと、あとから足されるもの。
+-->
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>mjai の窓の写し</title>
+  </head>
+  <body>
+    <p><input id="early" type="url" name="log-url" /></p>
+    <p><textarea id="area"></textarea></p>
+    <p><a id="link" href="#x">リンク</a></p>
+    <script>
+      setTimeout(function () {
+        var field = document.createElement('input');
+        field.id = 'late';
+        field.type = 'text';
+        document.body.append(field);
+      }, 200);
+    </script>
+  </body>
+</html>

@@ -741,6 +741,243 @@ fieldset.setting:not(:first-child) {
   font-size: 14px;
 }
 
+/* ---------- 取り込み（F1） ----------
+  承認済みの見本（round7-samples/round7.css・round8-samples/round8.css）の写し。既存の部品を言い換えて作る:
+  主な操作 = accent で塗ったボタン、面 = 罫線で区切るパネル、「まだ空」「待っている」 = 点線・accent の淡い塗り。
+  見本に無い状態（半荘を選ぶ・失敗・代わりの取り込み方）は、同じ静かな書き方（小さい見出し・薄い文字・小さいボタン）で足している。 */
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+.btn.primary:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+/* 長い文のボタン（「どれでもない（記録の無い半荘として取り込む）」など）は、狭い幅で折り返す。 */
+.btn.wrap {
+  height: auto;
+  padding-block: var(--s2);
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.side-top {
+  display: grid;
+  gap: var(--s3);
+}
+
+.import {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 9px;
+}
+
+.import-flow {
+  display: grid;
+  gap: var(--s5);
+  max-width: 640px;
+}
+
+.panel {
+  display: grid;
+  gap: var(--s4);
+  padding: var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+}
+
+.panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.offer .lead-icon,
+.panel h2 .lead-icon {
+  color: var(--accent);
+}
+
+.panel h2:focus {
+  outline: none;
+}
+
+.panel p {
+  margin: 0;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 3.5em minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  margin: 0;
+}
+
+.kv.wide {
+  grid-template-columns: 5em minmax(0, 1fr);
+}
+
+.kv dt {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.kv dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.grade-note {
+  margin-left: var(--s2);
+  color: var(--muted);
+}
+
+.linkline {
+  margin: 0;
+  padding: 6px 10px;
+  overflow: hidden;
+  background: var(--hover);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counts {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.counts b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.counts .quiet {
+  display: inline;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+}
+
+.meter {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}
+
+.choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s2);
+}
+
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s1) var(--s3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--s2) var(--s3);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.choice:hover {
+  border-color: var(--ink);
+  background: var(--hover);
+}
+
+.choice-when {
+  font-weight: 700;
+}
+
+.choice-counts {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.choice-counts b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 var(--s2);
+  background: var(--accent-fill);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.fallback {
+  display: grid;
+  gap: var(--s3);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+
+.fallback .sec-title {
+  margin: 0;
+}
+
+.paste {
+  flex: 1;
+  min-width: 14em;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  max-width: 1240px;
+  margin: 0 auto var(--s4);
+  padding: var(--s2) var(--s3);
+  background: var(--accent-fill);
+  border: 1px solid var(--accent);
+  border-radius: var(--r2);
+  font-size: 13.5px;
+}
+
+.offer .spacer {
+  flex: 1 1 8em;
+}
+
 /* ---------- 狭いとき（640px 未満）: アイコンだけの細い列にする。完全には隠さない ---------- */
 @media (width < 640px) {
   .app {
@@ -765,7 +1002,8 @@ fieldset.setting:not(:first-child) {
 
   .brand .full,
   .nav-item .label,
-  .nav-item .count {
+  .nav-item .count,
+  .import .label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -779,6 +1017,17 @@ fieldset.setting:not(:first-child) {
 
   .nav {
     gap: var(--s1);
+  }
+
+  .side-top {
+    justify-items: center;
+  }
+
+  .import {
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
   }
 
   .nav-item,

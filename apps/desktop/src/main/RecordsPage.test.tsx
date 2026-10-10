@@ -44,6 +44,9 @@ const newest: SessionRecord = {
     { id: 5, t_ms: local(2026, 10, 9, 16, 30, 0), rating: 'fair', hand: 3 },
   ],
   events: [],
+  report_path: null,
+  ocr: null,
+  links: { marks: {}, ratings: {} },
 };
 
 const older: SessionRecord = {
@@ -54,6 +57,9 @@ const older: SessionRecord = {
   marks: [],
   ratings: [],
   events: [],
+  report_path: null,
+  ocr: null,
+  links: { marks: {}, ratings: {} },
 };
 
 describe('記録ページ', () => {

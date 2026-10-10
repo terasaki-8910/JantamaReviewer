@@ -11,6 +11,7 @@
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { COPIED_LINK, FX4_ID, FX4_TEXT, fx4Ocr, fx4Session } from '../import-fixtures';
 import {
   TINY_PNG,
   launchBrowser,
@@ -78,6 +79,9 @@ function makeSessions(): unknown[] {
       marks,
       ratings,
       events: [],
+      report_path: null,
+      ocr: null,
+      links: { marks: {}, ratings: {} },
     },
     {
       id: '20261008-210000',
@@ -87,6 +91,9 @@ function makeSessions(): unknown[] {
       marks: [],
       ratings: [],
       events: [],
+      report_path: 'C:\\data\\games\\20261008-210000\\report.json',
+      ocr: null,
+      links: { marks: {}, ratings: {} },
     },
     {
       id: '20250101-090000',
@@ -96,6 +103,9 @@ function makeSessions(): unknown[] {
       marks: marks.slice(0, 3),
       ratings: ratings.slice(0, 1),
       events: [],
+      report_path: null,
+      ocr: null,
+      links: { marks: {}, ratings: {} },
     },
   ];
 }
@@ -385,6 +395,188 @@ describe('検討画面（メインの窓）', () => {
       expect(await colorOf()).toBe(light);
     } finally {
       await context.close();
+    }
+  });
+});
+
+// ---- 取り込みのページ（F1）の、状態ごとの見た目 ----
+
+interface ImportView {
+  name: string;
+  /** 状態ごとの、Tauri の偽物の答え。 */
+  scenario: Partial<Scenario>;
+  /** その状態まで進める操作。 */
+  drive: (page: Page) => Promise<void>;
+  /** その状態になったことを知らせる、画面の見出しか文。 */
+  ready: { heading?: string; text?: string };
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+const importSession = (id: string, ago: number) => fx4Session(id, Date.now() - ago);
+
+/** Rust 側のイベント（mjai の窓の知らせなど）を、偽の Tauri を通して画面に送る。 */
+async function emitEvent(page: Page, event: string, payload: unknown) {
+  await page.evaluate(
+    ([name, body]) =>
+      (window as unknown as { __jrEmit: (e: string, p: unknown) => void }).__jrEmit(name as string, body),
+    [event, payload] as const,
+  );
+}
+
+/** サイドバーの「検討結果を取り込む」を押して、取り込みのページを開く。 */
+async function openImportPage(page: Page) {
+  await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+  await page.getByRole('button', { name: '検討結果を取り込む' }).click();
+  await page.getByRole('heading', { level: 1, name: '検討結果を取り込む' }).waitFor();
+}
+
+/** 「mjai で検討する」を押して、mjai の窓の結果を待つ状態にする。 */
+async function waitForWindow(page: Page) {
+  await openImportPage(page);
+  await page.getByRole('button', { name: 'mjai で検討する' }).click();
+  await page.getByRole('heading', { name: 'mjai の窓で Submit を押してください' }).waitFor();
+}
+
+/** mjai の窓が結果のページを見つけた、という知らせを送る。 */
+async function foundReport(page: Page) {
+  await waitForWindow(page);
+  await emitEvent(page, 'mjai-window', { kind: 'report_found', id: FX4_ID });
+}
+
+const IMPORT_VIEWS: ImportView[] = [
+  {
+    name: '牌譜リンクが無い',
+    scenario: { importing: { clipboard: null } },
+    drive: openImportPage,
+    ready: { heading: '牌譜リンクがありません' },
+  },
+  {
+    name: '牌譜リンクを見つけた',
+    scenario: { importing: { clipboard: COPIED_LINK } },
+    drive: openImportPage,
+    ready: { heading: 'コピーした牌譜リンクを見つけました' },
+  },
+  {
+    name: 'mjai の窓で Submit を待つ',
+    scenario: { importing: { clipboard: COPIED_LINK } },
+    drive: waitForWindow,
+    ready: { heading: 'mjai の窓で Submit を押してください' },
+  },
+  {
+    name: '取り込んでいます',
+    scenario: { importing: { clipboard: COPIED_LINK, reportText: FX4_TEXT, fetchHangs: true } },
+    drive: foundReport,
+    ready: { heading: '取り込んでいます' },
+  },
+  {
+    name: '半荘を選ぶ',
+    scenario: {
+      importing: { clipboard: COPIED_LINK, reportText: FX4_TEXT, ocr: fx4Ocr() },
+      sessions: [
+        importSession('20261009-190953', 17 * HOUR_MS),
+        importSession('20261009-210000', 5 * HOUR_MS),
+      ],
+    },
+    drive: foundReport,
+    ready: { heading: 'どの半荘の結果か、選んでください' },
+  },
+  {
+    name: '取り込みました',
+    scenario: {
+      importing: { clipboard: COPIED_LINK, reportText: FX4_TEXT, ocr: fx4Ocr() },
+      sessions: [importSession('20261009-190953', 17 * HOUR_MS)],
+    },
+    drive: foundReport,
+    ready: { heading: '取り込みました' },
+  },
+  {
+    name: '失敗（検討結果が読めない）',
+    scenario: {
+      importing: { clipboard: COPIED_LINK, reportText: '{"not":"a report"}' },
+      sessions: [importSession('20261009-190953', 17 * HOUR_MS)],
+    },
+    drive: foundReport,
+    ready: { heading: '結果の JSON を読めませんでした' },
+  },
+  {
+    name: '「この半荘を取り込みますか」の帯（記録のページ）',
+    scenario: { importing: { clipboard: COPIED_LINK } },
+    drive: async (page) => {
+      await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+      await emitEvent(page, 'main-window-focused', null);
+    },
+    ready: { text: 'この半荘を取り込みますか' },
+  },
+];
+
+describe('取り込みのページ', () => {
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 1280] as const) {
+      for (const view of IMPORT_VIEWS) {
+        it(`${view.name} 幅${width}px ${scheme}: 横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届き、外へ通信しない`, async () => {
+          const { context, page, problems, external } = await open(
+            'index.html',
+            { width, height: 900 },
+            scheme,
+            scenario('main', view.scenario),
+          );
+          try {
+            await view.drive(page);
+            if (view.ready.heading) {
+              await page.getByRole('heading', { name: view.ready.heading }).waitFor();
+            } else if (view.ready.text) {
+              await page.getByText(view.ready.text).first().waitFor();
+            }
+
+            const m = await noHorizontalScroll(page);
+            expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+            expect(m.body).toBeLessThanOrEqual(m.client);
+
+            const axe = await runAxe(page);
+            expect(seriousViolations(axe)).toEqual([]);
+            expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(3);
+
+            const reach = await unreachableByTab(page);
+            expect(reach.total).toBeGreaterThan(3);
+            expect(reach.missed).toEqual([]);
+
+            expect(problems).toEqual([]);
+            expect(external).toEqual([]);
+          } finally {
+            await context.close();
+          }
+        });
+      }
+    }
+  }
+
+  it('幅 1280px では、取り込みのボタンがサイドバーの上にあり、accent で塗られている。幅 390px ではアイコンだけ（44px）', async () => {
+    for (const [width, withLabel] of [
+      [1280, true],
+      [390, false],
+    ] as const) {
+      const { context, page } = await open('index.html', { width, height: 800 }, 'light', scenario('main'));
+      try {
+        await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+        const button = page.getByRole('button', { name: '検討結果を取り込む' });
+        const box = await button.boundingBox();
+        const records = await page.getByRole('button', { name: '記録' }).first().boundingBox();
+        // ブランドの下、記録の行き先より上。
+        expect(box !== null && records !== null && box.y < records.y).toBe(true);
+        const label = await page.locator('.import .label').boundingBox();
+        if (withLabel) {
+          expect(label?.width ?? 0).toBeGreaterThan(40);
+        } else {
+          expect(Math.round(box?.width ?? 0)).toBe(44);
+          expect(label?.width ?? 0).toBeLessThanOrEqual(1);
+        }
+        // 塗りは accent（背景色が、ページの背景と違う）。
+        const fill = await button.evaluate((el) => getComputedStyle(el).backgroundColor);
+        const base = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+        expect(fill).not.toBe(base);
+      } finally {
+        await context.close();
+      }
     }
   });
 });

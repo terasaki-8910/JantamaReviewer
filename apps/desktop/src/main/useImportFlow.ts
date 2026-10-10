@@ -51,7 +51,15 @@ export type ImportState =
   | { phase: 'done'; summary: ImportSummary }
   | { phase: 'error'; title: string; message: string };
 
-const PROMPT: ImportState = { phase: 'prompt', checked: false, problem: null, notice: null };
+/** 牌譜リンクを待つ状態（最初の状態）。 */
+type PromptState = Extract<ImportState, { phase: 'prompt' }>;
+
+const PROMPT: PromptState = { phase: 'prompt', checked: false, problem: null, notice: null };
+
+/** クリップボードの答え（文字・null）を、文字か null にそろえる（文字でないものは、文字が無いのと同じ）。 */
+function textOrNull(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
 
 /** 結果を受け取る・結びつけを書くときに使うコマンド（試験では、Tauri の偽物がこれらに答える）。 */
 const DEFAULT_DEPS: ImportDeps = {
@@ -141,7 +149,7 @@ export function useImportFlow(): ImportFlow {
   const refreshClipboard = useCallback(async () => {
     let text: string | null;
     try {
-      text = await api.readClipboardText();
+      text = textOrNull(await api.readClipboardText());
     } catch (error) {
       setLink(null);
       patchPrompt({ problem: { kind: 'unreadable', message: errorMessage(error) } });
@@ -165,7 +173,7 @@ export function useImportFlow(): ImportFlow {
     if (phase === 'window' || phase === 'working' || phase === 'choose') return;
     let text: string | null;
     try {
-      text = await api.readClipboardText();
+      text = textOrNull(await api.readClipboardText());
     } catch {
       return;
     }

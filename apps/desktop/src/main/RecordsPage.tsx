@@ -6,14 +6,20 @@ import type { MarkRecord, RatingEntry, SessionRecord } from '../api/types';
 import { RATING_GLYPH, RatingShape } from '../shared/RatingShape';
 import { formatClock, formatSessionTitle } from './format';
 
+interface RecordsPageProps {
+  /** 開いたときに選んでおく半荘（取り込みの完了から開くときなど）。無ければ、いちばん新しい半荘。ページを開くたびに読む。 */
+  focusSessionId?: string | null;
+}
+
 /**
  * 記録ページ。半荘の一覧と、選んだ半荘の迷いマーク（スクリーンショットと時刻）・評価（局の順）。
  * ウィジェットで記録するたびに、その場で更新する。
  */
-export function RecordsPage() {
+export function RecordsPage({ focusSessionId = null }: RecordsPageProps = {}) {
   const [sessions, setSessions] = useState<SessionRecord[] | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(focusSessionId);
   const [loadError, setLoadError] = useState<string | null>(null);
+
 
   const reload = useCallback(() => {
     api
@@ -77,6 +83,7 @@ export function RecordsPage() {
                         <span>
                           評価 <b>{session.rating_count}</b>
                         </span>
+                        {session.report_path && <span className="tag">結果あり</span>}
                       </span>
                     </button>
                   </li>
@@ -98,6 +105,7 @@ function SessionDetail({ session }: { session: SessionRecord }) {
         <h2 className="detail-title" id="detail-title">
           {formatSessionTitle(session.started_ms)}
         </h2>
+        {session.report_path && <span className="tag">検討結果を取り込み済み</span>}
       </div>
       <div>
         <h3 className="sec-title">迷い（{session.marks.length}）</h3>
