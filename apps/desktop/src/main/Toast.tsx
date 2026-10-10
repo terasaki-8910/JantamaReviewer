@@ -54,7 +54,7 @@ export function Toast({ toast, onClose }: ToastProps) {
     if (toast.focusAction) actionRef.current?.focus();
   }, [toast.id, toast.focusAction]);
 
-  // 通知の中にキーボードの位置があるとき、Esc で閉じる。
+  // 通知の中にキーボードの位置があるとき、Esc で閉じる。先に受けて（キャプチャ）、止める（一覧の選択をやめる Esc に重ねない）。
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !rootRef.current?.contains(document.activeElement)) return;
@@ -62,8 +62,8 @@ export function Toast({ toast, onClose }: ToastProps) {
       event.stopPropagation();
       closeRef.current();
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
   const pause = () => {
