@@ -185,8 +185,11 @@
   color: var(--muted);
 }
 
+/* 行の頭に来たとき、文字が札や選択欄の左端にそろうように、内側の余白の分だけ左へ寄せる */
 .mctl .link-btn {
   min-height: 28px;
+  padding-inline: 6px;
+  margin-inline: -6px 0;
 }
 
 /* 候補の札（1 つ押すと、決まる）。選んである札は accent の淡い塗り */
@@ -465,7 +468,7 @@
 }
 
 /* 幅が狭いときは、1 局を 2 行のかたまりにする。1 行目: 局・結果・点。2 行目: 自分・AI 基準・MAKA（小さな見出し付き） */
-@container main (width < 700px) {
+@container main (width < 600px) {
   .tbl-wrap {
     max-width: none;
     overflow-x: visible;

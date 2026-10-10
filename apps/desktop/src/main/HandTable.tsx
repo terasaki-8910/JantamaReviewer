@@ -116,7 +116,8 @@ function SelfCell({ row, onSelfRating }: { row: HandRow; onSelfRating: HandTable
         items={SELF_OPTIONS.map((option) => ({
           key: option.value,
           label: option.label,
-          icon: option.value === 'none' ? undefined : <RatingShape rating={option.value} />,
+          // 「なし」にも、図の幅の空きを置く（文字が、〇△✕の図と縦にそろう）。
+          icon: option.value === 'none' ? <span /> : <RatingShape rating={option.value} />,
           hideLabel: option.value !== 'none',
           checked: option.value === current,
           onSelect: () => onSelfRating(row, option.value),

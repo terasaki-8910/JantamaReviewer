@@ -141,6 +141,8 @@ export interface Scenario {
   failRestore?: string;
   /** `convertFileSrc` が返す画像（データ URL）。 */
   thumb: string;
+  /** 画像のパスに、このキーの文字が含まれていれば、`thumb` の代わりに、この画像（データ URL）を返す（画像ごとに違う絵にしたいとき）。 */
+  thumbBy?: Record<string, string>;
   /** 取り込みの流れへの答え。無ければ、クリップボードは空。 */
   importing?: ImportScenario;
 }
@@ -174,6 +176,15 @@ export function tauriMockScript(scenario: Scenario): string {
   function announceChange() {
     setTimeout(function () { window.__jrEmit('state-changed', {}); }, 0);
   }
+  // 結びつけ・自己評価・MAKA の保存（Rust 側と同じく、半荘に値を入れて、一覧に反映する）。
+  function mutate(id, change) {
+    var at = sessions.findIndex(function (s) { return s.id === id; });
+    if (at < 0) throw '半荘が見つかりません: ' + id;
+    var copy = JSON.parse(JSON.stringify(sessions[at]));
+    change(copy);
+    sessions[at] = copy;
+    announceChange();
+  }
   function reply(cmd, args) {
     window.__jrCalls.push({ cmd: cmd, args: args });
     switch (cmd) {
@@ -201,6 +212,14 @@ export function tauriMockScript(scenario: Scenario): string {
         announceChange();
         return null;
       }
+      case 'set_mark_link': mutate(args.sessionId, function (s) { s.links.marks[String(args.markId)] = args.decision; }); return null;
+      case 'clear_mark_link': mutate(args.sessionId, function (s) { delete s.links.marks[String(args.markId)]; }); return null;
+      case 'set_self_rating': mutate(args.sessionId, function (s) { s.self_ratings.kyokus[args.kyoku] = args.rating; }); return null;
+      case 'clear_self_rating': mutate(args.sessionId, function (s) { delete s.self_ratings.kyokus[args.kyoku]; }); return null;
+      case 'set_maka_grade': mutate(args.sessionId, function (s) { s.maka.kyokus[args.kyoku] = args.grade; }); return null;
+      case 'clear_maka_grade': mutate(args.sessionId, function (s) { delete s.maka.kyokus[args.kyoku]; }); return null;
+      case 'set_maka_hanchan': mutate(args.sessionId, function (s) { s.maka.hanchan = args.grade; }); return null;
+      case 'clear_maka_hanchan': mutate(args.sessionId, function (s) { delete s.maka.hanchan; }); return null;
       case 'read_report': return reports[args.sessionId] === undefined ? null : reports[args.sessionId];
       case 'plugin:event|listen':
         (listeners[args.event] = listeners[args.event] || []).push(args.handler);
@@ -233,7 +252,11 @@ export function tauriMockScript(scenario: Scenario): string {
     },
     transformCallback: function (cb) { var id = nextCallback++; callbacks[id] = cb; return id; },
     unregisterCallback: function (id) { delete callbacks[id]; },
-    convertFileSrc: function () { return scenario.thumb; },
+    convertFileSrc: function (path) {
+      var by = scenario.thumbBy || {};
+      for (var key in by) { if (String(path).indexOf(key) >= 0) return by[key]; }
+      return scenario.thumb;
+    },
     invoke: function (cmd, args) {
       try { return Promise.resolve(reply(cmd, args || {})); } catch (e) { return Promise.reject(e); }
     }
