@@ -1,0 +1,25 @@
+[package]
+name = "jantama-ocr"
+version = "0.1.0"
+description = "取り込みのときだけ使う、保存済みのスクリーンショットの文字認識（Windows の日本語 OCR）。対局中に動く部分には入れない"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+# 文字認識と画像の読み取りに要る windows の feature は、このクレートだけに置く（tests/safety.rs が一覧を確かめる。S-3）。
+# 本体のうち、取り込みの読み取り（src/import/ocr_job.rs）だけがこのクレートを使う。ウィジェット・フック・撮影・記録・補助プログラムには入れない。
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Foundation",
+  "Foundation_Collections",
+  "Globalization",
+  "Graphics_Imaging",
+  "Media_Ocr",
+  "Storage",
+  "Storage_Streams",
+] }
+
+[dev-dependencies]
+# 試験用の画像を作るだけ（製品のコードでは使わない）。
+png = "0.18"
+tempfile = "3"

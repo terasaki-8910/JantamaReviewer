@@ -12,12 +12,14 @@ pub mod appearance;
 pub mod capture;
 #[cfg(windows)]
 pub mod capture_win;
+pub mod clipboard;
 pub mod clock;
 pub mod commands;
 pub mod external;
 #[cfg(windows)]
 pub mod helper_link;
 pub mod helper_setup;
+pub mod import;
 #[cfg(windows)]
 pub mod input_effects;
 pub mod input_flow;
@@ -28,6 +30,7 @@ pub mod recorder;
 pub mod settings;
 pub mod sound;
 pub mod store;
+pub mod webview_data;
 pub mod webview_policy;
 #[cfg(windows)]
 pub mod webview_win;
@@ -88,6 +91,20 @@ pub fn run() {
             commands::setup_helper,
             commands::remove_helper,
             commands::start_helper,
+            import::commands::read_clipboard_text,
+            import::commands::open_mjai_window,
+            import::commands::close_mjai_window,
+            import::commands::report_id_from_text,
+            import::commands::fetch_report,
+            import::commands::read_report_file_text,
+            import::commands::ocr_sessions,
+            import::commands::save_report,
+            import::commands::read_report,
+            import::commands::set_mark_link,
+            import::commands::clear_mark_link,
+            import::commands::set_rating_link,
+            import::commands::clear_rating_link,
+            import::commands::replace_links,
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)
@@ -105,8 +122,16 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
             tell_main_window_focus(window.app_handle(), false);
         }
         // 検討画面が操作を受けている間だけ、設定のテストが効く（W-11）。
+        // 前面に来たときは、画面（取り込み）にも知らせる: クリップボードの牌譜リンクを探し直すため（F1、E-15）。
         (MAIN_LABEL, WindowEvent::Focused(focused)) => {
             tell_main_window_focus(window.app_handle(), *focused);
+            if *focused {
+                import::commands::announce_main_window_focus(window.app_handle());
+            }
+        }
+        // mjai の窓が結果を見つける前に閉じられたら、検討画面に知らせる（取り込みの待ちをやめるため）。
+        (import::mjai_window::MJAI_LABEL, WindowEvent::Destroyed) => {
+            import::mjai_window::on_destroyed(window.app_handle());
         }
         (WIDGET_LABEL, WindowEvent::Moved(position)) => {
             commands::widget_moved(window.app_handle(), *position);
@@ -142,6 +167,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         eprintln!("{note}");
     }
     app.manage(SharedCore(Arc::new(Mutex::new(core))));
+    app.manage(import::mjai_window::MjaiWindowState::default());
     commands::allow_asset_dir(&handle, &settings.data_dir);
 
     // 入力の流れ: 本体の中のフック・補助プログラム・ボタンの登録とテスト（W-9、W-10、W-11）。

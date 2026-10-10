@@ -8,9 +8,13 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type {
   AppState,
   InputStatus,
+  Links,
+  MjaiWindowEvent,
+  OcrProgress,
   Orientation,
   PageKeyEvent,
   Rating,
+  SessionOcr,
   SessionRecord,
   Settings,
 } from './types';
@@ -21,6 +25,12 @@ export const EVENT_STATE_CHANGED = 'state-changed';
 export const EVENT_SETTINGS_CHANGED = 'settings-changed';
 /** ボタンの登録・テスト・補助プログラムの状態が変わったときのイベント名（Rust の `EVENT_INPUT_STATUS`）。 */
 export const EVENT_INPUT_STATUS = 'input-status-changed';
+/** mjai の窓からの知らせのイベント名（Rust の `EVENT_MJAI`）。 */
+export const EVENT_MJAI_WINDOW = 'mjai-window';
+/** 文字認識の進み具合のイベント名（Rust の `EVENT_OCR_PROGRESS`）。 */
+export const EVENT_OCR_PROGRESS = 'ocr-progress';
+/** 検討画面が前面に来たときのイベント名（Rust の `EVENT_MAIN_FOCUSED`）。 */
+export const EVENT_MAIN_FOCUSED = 'main-window-focused';
 
 export const api = {
   getState: () => invoke<AppState>('get_state'),
@@ -69,6 +79,45 @@ export const api = {
   removeHelper: () => invoke<void>('remove_helper'),
   /** 設定済みの補助プログラムを起動する。確認は出ない。 */
   startHelper: () => invoke<void>('start_helper'),
+
+  // ---- 取り込み（F1・F9・F11）。通信・ファイル・文字認識は、すべて Rust 側が行う ----
+  /** クリップボードの文字（文字だけ）。文字が無ければ null。牌譜リンクは、画面側（エンジンの `detectPaipuLink`）が探す。 */
+  readClipboardText: () => invoke<string | null>('read_clipboard_text'),
+  /**
+   * mjai の窓を開いて、URL 欄に牌譜リンクを入れる。Submit はユーザーが押す。
+   * `background` は、いま描いている背景の色（窓の背景色をそろえる）。
+   */
+  openMjaiWindow: (link: string, background: string) =>
+    invoke<void>('open_mjai_window', { link, background }),
+  /** mjai の窓を閉じる（開いていなければ何もしない）。 */
+  closeMjaiWindow: () => invoke<void>('close_mjai_window'),
+  /** 貼り付けた文字から、mjai の結果の ID を探す。見つからなければ null。 */
+  reportIdFromText: (text: string) => invoke<string | null>('report_id_from_text', { text }),
+  /** 結果の JSON を mjai のサイトから取る（アプリが外へ出す通信は、これだけ）。 */
+  fetchReport: (id: string) => invoke<string>('fetch_report', { id }),
+  /** 結果の JSON ファイルを読む（ファイルを開くダイアログで選んだパス）。 */
+  readReportFileText: (path: string) => invoke<string>('read_report_file_text', { path }),
+  /** 半荘の迷いマーク・評価の画像を文字認識にかけて、結果の写しを返す（読んだ分は半荘のフォルダに残る）。 */
+  ocrSessions: (sessionIds: string[]) =>
+    invoke<SessionOcr[]>('ocr_sessions', { sessionIds }),
+  /** 取り込んだ結果を保存する。`sessionId` が null なら、記録の無い半荘として新しく作る。半荘の名前を返す。 */
+  saveReport: (sessionId: string | null, text: string) =>
+    invoke<string>('save_report', { sessionId, text }),
+  /** 取り込んだ結果の生の JSON。まだ取り込んでいなければ null。 */
+  readReport: (sessionId: string) => invoke<string | null>('read_report', { sessionId }),
+  /** 迷いマークを、判断の鍵（または "manual"）に結びつける。選び直しにも使う。 */
+  setMarkLink: (sessionId: string, markId: number, decision: string) =>
+    invoke<void>('set_mark_link', { sessionId, markId, decision }),
+  clearMarkLink: (sessionId: string, markId: number) =>
+    invoke<void>('clear_mark_link', { sessionId, markId }),
+  /** 評価を、局の鍵に結びつける（空の文字列は「どの局にも結びつけない」）。 */
+  setRatingLink: (sessionId: string, ratingId: number, kyoku: string) =>
+    invoke<void>('set_rating_link', { sessionId, ratingId, kyoku }),
+  clearRatingLink: (sessionId: string, ratingId: number) =>
+    invoke<void>('clear_rating_link', { sessionId, ratingId }),
+  /** 結びつけをまるごと置き換える（取り込みのときに、自動で決めた結びつけを一度に書く）。 */
+  replaceLinks: (sessionId: string, links: Links) =>
+    invoke<void>('replace_links', { sessionId, links }),
 };
 
 export function onStateChanged(handler: (state: AppState) => void): Promise<UnlistenFn> {
@@ -81,6 +130,19 @@ export function onSettingsChanged(handler: (settings: Settings) => void): Promis
 
 export function onInputStatus(handler: (status: InputStatus) => void): Promise<UnlistenFn> {
   return listen<InputStatus>(EVENT_INPUT_STATUS, (event) => handler(event.payload));
+}
+
+export function onMjaiWindow(handler: (event: MjaiWindowEvent) => void): Promise<UnlistenFn> {
+  return listen<MjaiWindowEvent>(EVENT_MJAI_WINDOW, (event) => handler(event.payload));
+}
+
+export function onOcrProgress(handler: (progress: OcrProgress) => void): Promise<UnlistenFn> {
+  return listen<OcrProgress>(EVENT_OCR_PROGRESS, (event) => handler(event.payload));
+}
+
+/** 検討画面が前面に来たとき（クリップボードの牌譜リンクを探し直す合図）。 */
+export function onMainWindowFocused(handler: () => void): Promise<UnlistenFn> {
+  return listen<null>(EVENT_MAIN_FOCUSED, () => handler());
 }
 
 /** コマンドが返したエラー（Rust の String）を、画面に出す文にする。 */

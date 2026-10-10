@@ -114,6 +114,18 @@ export async function launchBrowser(): Promise<Browser> {
   throw new Error(`テスト用のブラウザ（Chrome か Edge）を起動できません:\n${problems.join('\n')}`);
 }
 
+/** 取り込みの流れ（クリップボード・結果の取得・文字認識）に答えるための、偽物の答え。 */
+export interface ImportScenario {
+  /** `read_clipboard_text` の答え。無ければ null（クリップボードが空）。 */
+  clipboard?: string | null;
+  /** `fetch_report`・`read_report_file_text` の答え（結果の JSON の文字）。 */
+  reportText?: string;
+  /** true なら、結果の取得が終わらない（「取り込んでいます」の画面を見るため）。 */
+  fetchHangs?: boolean;
+  /** `ocr_sessions` が、すべての半荘について返す文字認識の写し。無ければ、空の写し。 */
+  ocr?: unknown;
+}
+
 export interface Scenario {
   label: 'main' | 'widget';
   state: unknown;
@@ -123,6 +135,8 @@ export interface Scenario {
   sessions: unknown[];
   /** `convertFileSrc` が返す画像（データ URL）。 */
   thumb: string;
+  /** 取り込みの流れへの答え。無ければ、クリップボードは空。 */
+  importing?: ImportScenario;
 }
 
 /** 1x1 の緑の PNG。サムネイルの代わり（枠の中に引き伸ばして使う）。 */
@@ -138,10 +152,24 @@ export function tauriMockScript(scenario: Scenario): string {
   var nextCallback = 1;
   var nextEvent = 1;
   var callbacks = {};
+  var listeners = {};
+  var importing = scenario.importing || {};
   function reply(cmd, args) {
     switch (cmd) {
-      case 'plugin:event|listen': return nextEvent++;
+      case 'plugin:event|listen':
+        (listeners[args.event] = listeners[args.event] || []).push(args.handler);
+        return nextEvent++;
       case 'plugin:event|unlisten': return null;
+      case 'read_clipboard_text': return importing.clipboard === undefined ? null : importing.clipboard;
+      case 'open_mjai_window': case 'close_mjai_window': case 'replace_links': return null;
+      case 'report_id_from_text': { var m = /[0-9a-f]{16}/.exec(args.text); return m ? m[0] : null; }
+      case 'fetch_report': case 'read_report_file_text':
+        return importing.fetchHangs ? new Promise(function () {}) : importing.reportText;
+      case 'ocr_sessions':
+        return args.sessionIds.map(function (id) {
+          return { session_id: id, ocr: importing.ocr || { geometry: 'center-v1-lanczos3x', entries: {} } };
+        });
+      case 'save_report': return args.sessionId === null ? '20261010-120000' : args.sessionId;
       case 'get_state': case 'add_mark': case 'add_rating': case 'undo': case 'new_session': return scenario.state;
       case 'get_settings': return scenario.settings;
       case 'set_settings': return args.settings;
@@ -165,6 +193,13 @@ export function tauriMockScript(scenario: Scenario): string {
     }
   };
   window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: function () {} };
+  // 試験から、Rust 側のイベント（mjai の窓の知らせなど）を、登録された受け手に送る。
+  window.__jrEmit = function (event, payload) {
+    (listeners[event] || []).forEach(function (handler) {
+      var callback = callbacks[handler];
+      if (callback) callback({ event: event, id: 0, payload: payload });
+    });
+  };
 })(${JSON.stringify(scenario)});`;
 }
 

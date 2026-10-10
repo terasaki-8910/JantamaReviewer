@@ -1,0 +1,70 @@
+<!doctype html>
+<!--
+  mjai.ekyu.moe の検討の送信フォームの、手書きの小さな写し（E-11 の試験用。サイトの HTML ではない）。
+  実際のフォームと同じ要点だけを持つ: 牌譜の URL 欄 input[name="log-url"]（change で、値の前の余計な文字を取る）と、
+  送信のボタン。試験が確かめられるように、欄のイベントの数・送信の数・ボタンを押した数を数える。
+  送信のボタンは、実際のサイトのように「Cloudflare の確認が終わるまで押せない」にはせず、押せる状態にしてある
+  （スクリプトが押してしまえば、数に出る）。
+-->
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>mjai の検討フォームの写し</title>
+    <script>
+      window.__events = [];
+      window.__changeHandlerCalls = 0;
+      window.__submits = 0;
+      window.__clicks = 0;
+      window.__pwned = undefined;
+
+      // 実際のサイトと同じ働き: 値の中の「http」より前の文字を取り除く。
+      function changeURL(field) {
+        window.__changeHandlerCalls += 1;
+        var index = field.value.indexOf('http');
+        if (index > -1) {
+          field.value = field.value.slice(index).trim();
+        }
+      }
+
+      function reviewFormSubmit() {
+        window.__submits += 1;
+        // 試験の間は、ページを移さない。
+        return false;
+      }
+    </script>
+  </head>
+  <body>
+    <h1>Game log input</h1>
+    <form name="reviewForm" method="POST" action="/review" onsubmit="return reviewFormSubmit(this)">
+      <p>
+        <label>
+          <input type="radio" name="input-method" value="log-url" checked />
+          Game URL
+        </label>
+      </p>
+      <p>
+        <input
+          type="url"
+          name="log-url"
+          required
+          onchange="changeURL(this)"
+          placeholder="https://tenhou.net/0/?log=..."
+        />
+      </p>
+      <p>
+        <button type="submit" name="submitBtn">Submit</button>
+      </p>
+    </form>
+    <script>
+      var field = document.querySelector('input[name="log-url"]');
+      ['input', 'change'].forEach(function (type) {
+        field.addEventListener(type, function () {
+          window.__events.push(type);
+        });
+      });
+      document.querySelector('button[name="submitBtn"]').addEventListener('click', function () {
+        window.__clicks += 1;
+      });
+    </script>
+  </body>
+</html>

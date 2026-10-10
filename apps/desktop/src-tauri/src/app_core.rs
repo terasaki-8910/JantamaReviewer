@@ -178,6 +178,21 @@ impl Core {
         Ok(self.app_state())
     }
 
+    /// 保存先。開けていないとき（保存先エラー）は、その理由。取り込みが使う。
+    pub fn store(&self) -> Result<&Store, String> {
+        self.recorder
+            .as_ref()
+            .map(Recorder::store)
+            .map_err(|e| e.clone())
+    }
+
+    pub fn store_mut(&mut self) -> Result<&mut Store, String> {
+        self.recorder
+            .as_mut()
+            .map(Recorder::store_mut)
+            .map_err(|e| e.clone())
+    }
+
     pub fn list_sessions(&self) -> Result<Vec<SessionRecord>, String> {
         match &self.recorder {
             Ok(recorder) => recorder.list_sessions().map_err(|e| e.to_string()),

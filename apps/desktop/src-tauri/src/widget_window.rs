@@ -158,6 +158,10 @@ pub fn build_window<R: Runtime, M: Manager<R>>(
     if let Some((min_width, min_height)) = spec.min_size {
         builder = builder.min_inner_size(min_width, min_height);
     }
+    // 試しに動かすときは、WebView2 のデータも試しの設定フォルダの下に置く（本物のアプリのデータに混ぜない）。
+    if let Some(dir) = crate::webview_data::app_webview_dir(crate::webview_data::config_env()) {
+        builder = builder.data_directory(dir);
+    }
     let window = builder.build()?;
     if spec.min_size.is_some() {
         // 作る最中は Windows の既定の下限（幅 136px）が先に効いて、小さい窓が広がってしまう。

@@ -15,15 +15,18 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
 describe('検討画面のシェル', () => {
-  it('サイドバーには、いま在る行き先（記録・設定）だけを置く', async () => {
+  it('サイドバーには、主な操作「検討結果を取り込む」と、いま在る行き先（記録・設定）だけを置く', async () => {
     installTauriMock();
     render(<App />);
     const side = screen.getByRole('complementary', { name: 'サイドバー' });
     const nav = within(side).getByRole('navigation', { name: 'メイン' });
     expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual(['記録']);
     expect(within(side).getByRole('button', { name: '設定' })).toBeInTheDocument();
+    // 取り込みの入口は、行き先の一覧の外（上）に、主な操作として 1 つだけ。
+    expect(within(side).getAllByRole('button', { name: '検討結果を取り込む' })).toHaveLength(1);
+    expect(within(nav).queryByRole('button', { name: '検討結果を取り込む' })).toBeNull();
     // まだ作っていない機能の項目は置かない。
-    for (const absent of ['検討', '解き直し', 'ログ', '週の集計', '取り込み']) {
+    for (const absent of ['解き直し', 'ログ', '週の集計']) {
       expect(within(side).queryByText(new RegExp(absent))).toBeNull();
     }
     expect(await screen.findByRole('heading', { level: 1, name: '記録' })).toBeInTheDocument();
@@ -105,6 +108,8 @@ describe('検討画面: 窓を見せる知らせ（N-7）と、URL・履歴を�
     render(<App />);
     await user.click(screen.getByRole('button', { name: '設定' }));
     expect(await screen.findByRole('heading', { level: 1, name: '設定' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '検討結果を取り込む' }));
+    expect(await screen.findByRole('heading', { level: 1, name: '検討結果を取り込む' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '記録' }));
     expect(await screen.findByRole('heading', { level: 1, name: '記録' })).toBeInTheDocument();
     expect(window.location.href).toBe(href);
@@ -116,7 +121,7 @@ describe('検討画面: 窓を見せる知らせ（N-7）と、URL・履歴を�
     installTauriMock();
     const user = userEvent.setup();
     const { container } = render(<App />);
-    for (const name of ['設定', '記録']) {
+    for (const name of ['設定', '検討結果を取り込む', '記録']) {
       await user.click(screen.getByRole('button', { name }));
       expect(container.querySelectorAll('a[href]')).toHaveLength(0);
       expect(container.querySelectorAll('form')).toHaveLength(0);

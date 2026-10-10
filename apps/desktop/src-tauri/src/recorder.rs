@@ -116,6 +116,15 @@ impl Recorder {
     pub fn data_dir(&self) -> &std::path::Path {
         self.store.root()
     }
+
+    /// 保存先（半荘のフォルダ）。取り込みが、結果・文字認識の写し・結びつけを、半荘のフォルダに読み書きするのに使う。
+    pub fn store(&self) -> &Store {
+        &self.store
+    }
+
+    pub fn store_mut(&mut self) -> &mut Store {
+        &mut self.store
+    }
 }
 
 #[cfg(test)]

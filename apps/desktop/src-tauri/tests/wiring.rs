@@ -116,6 +116,34 @@ fn n1_to_n12_build_window_applies_every_option_and_hook() {
 }
 
 #[test]
+fn trial_runs_keep_webview_data_out_of_the_real_app_and_the_mjai_window_has_its_own() {
+    // 試しに動かすとき（JANTAMA_CONFIG_DIR）は、検討画面とウィジェットの WebView2 のデータも試しのフォルダに置く。
+    // mjai の窓は、いつもアプリの画面とは別の場所。どちらも webview_data.rs の決まりを通す。
+    let product = |name: &[&str]| {
+        let mut path = crate_dir().join("src");
+        for part in name {
+            path = path.join(part);
+        }
+        read(path)
+            .split("#[cfg(test)]")
+            .next()
+            .expect("製品の部分がある")
+            .to_string()
+    };
+    let windows = product(&["widget_window.rs"]);
+    assert!(
+        windows.contains("webview_data::app_webview_dir(crate::webview_data::config_env())")
+            && windows.contains(".data_directory(dir)"),
+        "build_window が、試しのときの WebView2 のデータの場所を使っていない"
+    );
+    let mjai = product(&["import", "mjai_window.rs"]);
+    assert!(
+        mjai.contains("webview_data::mjai_webview_dir(") && mjai.contains(".data_directory(dir)"),
+        "mjai の窓が、自分の WebView2 のデータの場所を使っていない"
+    );
+}
+
+#[test]
 fn n12_the_devtools_command_does_nothing_outside_tauri_dev() {
     let lib = read(crate_dir().join("src").join("lib.rs"));
     assert!(
@@ -203,4 +231,111 @@ fn w12_the_widget_menu_and_the_tray_menu_both_offer_the_sound_toggle_and_stay_in
         .expect("toggle_sound_now がある");
     assert!(toggle.contains("settings.sound = !settings.sound;"));
     assert!(toggle.contains("set_settings_now(app, settings)"));
+}
+
+// ---- 取り込み（F1）: mjai の窓と、画面から呼ぶコマンドの配線 ----
+
+#[test]
+fn n1_to_n13_the_mjai_window_gets_every_browser_remnant_setting_and_every_navigation_hook() {
+    let source = read(
+        crate_dir()
+            .join("src")
+            .join("import")
+            .join("mjai_window.rs"),
+    );
+    let product = source
+        .split("#[cfg(test)]")
+        .next()
+        .expect("製品の部分がある");
+    for needle in [
+        // 設定の元は、ほかの窓と同じ 1 つ。tauri dev のときだけ開発者ツールが開く（N-12）。
+        "WebviewFlags::strict(tauri::is_dev())",
+        ".zoom_hotkeys_enabled(options.zoom_hotkeys_enabled)",
+        ".general_autofill_enabled(options.general_autofill_enabled)",
+        ".devtools(options.devtools)",
+        "disable_drag_drop_handler",
+        // WebView2 の残りの設定（N-1、N-2、N-4、N-5、N-10）と、右クリックのメニュー（N-3）。
+        "crate::webview_win::harden(&window, flags)",
+        // ページの中でしか止められないもの（N-9、N-10）。
+        ".initialization_script(NATIVE_SCRIPT)",
+        // 画面の遷移・新しい窓・ダウンロード（N-5、N-6）。E-10 の判定を通す。
+        ".on_navigation(move |url| match decide_navigation(url)",
+        ".on_new_window(move |url, _features|",
+        "NewWindowResponse::Deny",
+        ".on_download(|_webview, event| download_hook(&event))",
+        // 題名は日本語の名前だけ（N-13）。隠したまま作り、最初のページを読み終えてから見せる（N-7）。
+        ".title(MJAI_TITLE)",
+        ".visible(false)",
+        ".background_color(",
+        // 開くのは mjai のサイトの入り口だけ。牌譜リンクは、E-11 のスクリプトで URL 欄に入れるだけ。
+        "WebviewUrl::External(start_url())",
+        "prefill_script(link)",
+        // 置き場所は、検討画面と同じ画面の、検討画面の上（見せる前に決める）。
+        "place_near_main(app, &window)",
+    ] {
+        assert!(
+            product.contains(needle),
+            "mjai_window.rs に {needle} が無い"
+        );
+    }
+    // 「画面の真ん中」を OS に任せない（別のモニターに出て、窓を見失ったため。実機で確かめた）。
+    assert!(
+        !product.contains(".center()"),
+        "mjai の窓は、検討画面の上に置く（place_near_main）"
+    );
+    // 窓を見せるのは、最初のページを読み終えたとき・見張りの時間が来たとき・開いている窓を前面に出すときだけ。
+    assert_eq!(product.matches("present(&window)").count(), 3);
+    // 窓を見せる呼び出しは 2 つだけ: mjai の窓を見せる `present` と、閉じたあとに検討画面を前面に出す `focus_main`。
+    assert_eq!(product.matches(".show()").count(), 2);
+    for function in ["fn present<", "fn focus_main<"] {
+        let body = product
+            .split(function)
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_else(|| panic!("{function} がある"));
+        assert_eq!(body.matches(".show()").count(), 1, "{function}");
+    }
+    // 評価するスクリプトは、牌譜リンクを入れるものだけ（呼び出しは 2 か所。どちらも作ったスクリプトを渡す）。
+    assert_eq!(product.matches(".eval(").count(), 2);
+    assert_eq!(product.matches(".eval(&script)").count(), 2);
+    // 窓の移動を許すかどうかを、ここで独自に決めない（判定は mjai_nav の 1 か所）。
+    assert!(
+        !product.contains("MJAI_HOST ==")
+            || product.contains("payload.url().host_str() == Some(MJAI_HOST)")
+    );
+    // 起動のときに、mjai の窓は作らない。
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    let setup = lib.split("fn setup(").nth(1).expect("setup がある");
+    assert!(!setup.contains("mjai_window::open"));
+}
+
+#[test]
+fn every_import_command_is_registered_and_the_mjai_window_is_wired_into_the_app() {
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    let commands = read(crate_dir().join("src").join("import").join("commands.rs"));
+    // import/commands.rs の `#[tauri::command]` が、すべて登録されている（登録の忘れを防ぐ）。
+    let mut names = Vec::new();
+    let mut lines = commands.lines();
+    while let Some(line) = lines.next() {
+        if line.trim() == "#[tauri::command]" {
+            let signature = lines.next().expect("関数が続く");
+            let name = signature
+                .trim_start_matches("pub async fn ")
+                .split('(')
+                .next()
+                .expect("関数名");
+            names.push(name.to_string());
+        }
+    }
+    assert!(names.len() >= 14, "{names:?}");
+    for name in &names {
+        assert!(
+            lib.contains(&format!("import::commands::{name},")),
+            "{name} を generate_handler に登録していない"
+        );
+    }
+    // mjai の窓の状態を管理し、窓が壊れたときの知らせをつないでいる。
+    assert!(lib.contains("app.manage(import::mjai_window::MjaiWindowState::default())"));
+    assert!(lib.contains("(import::mjai_window::MJAI_LABEL, WindowEvent::Destroyed)"));
+    assert!(lib.contains("import::mjai_window::on_destroyed("));
 }

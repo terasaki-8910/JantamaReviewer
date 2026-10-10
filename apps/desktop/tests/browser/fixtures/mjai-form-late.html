@@ -1,0 +1,46 @@
+<!doctype html>
+<!--
+  mjai-form.html と同じフォームが、ページを読み込んでしばらくしてから現れる版（E-11 の試験用の、手書きの写し）。
+  Cloudflare の確認のあとに、ページが作り直されるときのように、最初は URL 欄が無い。
+-->
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>mjai の検討フォームの写し（あとから現れる）</title>
+    <script>
+      window.__events = [];
+      window.__submits = 0;
+      window.__clicks = 0;
+    </script>
+  </head>
+  <body>
+    <p id="wait">Just a moment...</p>
+    <script>
+      setTimeout(function () {
+        var form = document.createElement('form');
+        form.name = 'reviewForm';
+        form.addEventListener('submit', function (event) {
+          event.preventDefault();
+          window.__submits += 1;
+        });
+        var field = document.createElement('input');
+        field.type = 'url';
+        field.name = 'log-url';
+        ['input', 'change'].forEach(function (type) {
+          field.addEventListener(type, function () {
+            window.__events.push(type);
+          });
+        });
+        var button = document.createElement('button');
+        button.type = 'submit';
+        button.name = 'submitBtn';
+        button.textContent = 'Submit';
+        button.addEventListener('click', function () {
+          window.__clicks += 1;
+        });
+        form.append(field, button);
+        document.body.append(form);
+      }, 400);
+    </script>
+  </body>
+</html>
