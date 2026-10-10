@@ -101,8 +101,14 @@ export function HandTable({ table, onSelfRating, onMaka }: HandTableProps) {
   );
 }
 
-function ratingText(value: Rating | null): string {
-  return value === null ? '付けていない' : RATING_GLYPH[value];
+/** 自分の評価のボタンの名前。見える文字（点線の「付ける」）を、名前の一部にする（ラベルの文字と名前をそろえる）。 */
+function selfButtonLabel(label: string, value: Rating | null): string {
+  return value === null ? `${label}の自分の評価を付ける` : `${label}の自分の評価（${RATING_GLYPH[value]}）`;
+}
+
+/** MAKA のボタンの名前。見える文字（点線の「入力」）を、名前の一部にする。 */
+function makaButtonLabel(label: string, value: Grade | null): string {
+  return value === null ? `${label}の MAKA を入力` : `${label}の MAKA ${value}`;
 }
 
 function SelfCell({ row, onSelfRating }: { row: HandRow; onSelfRating: HandTableProps['onSelfRating'] }) {
@@ -111,7 +117,7 @@ function SelfCell({ row, onSelfRating }: { row: HandRow; onSelfRating: HandTable
     <span className="self">
       <MenuSelect
         className={row.self === null ? 'ghost' : 'self-btn'}
-        label={`${row.label}の自分の評価（${ratingText(row.self)}）`}
+        label={selfButtonLabel(row.label, row.self)}
         menuLabel={`${row.label}の自分の評価`}
         items={SELF_OPTIONS.map((option) => ({
           key: option.value,
@@ -162,7 +168,7 @@ function MakaCell({
   return (
     <MenuSelect
       className={value === null ? 'ghost' : 'sel-btn maka-btn'}
-      label={`${label}の MAKA（${value ?? '未入力'}）`}
+      label={makaButtonLabel(label, value)}
       menuLabel={`${label}の MAKA`}
       items={[
         { key: 'none', label: 'なし', checked: value === null, onSelect: () => onChange(undefined) },

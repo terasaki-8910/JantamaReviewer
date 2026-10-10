@@ -161,6 +161,11 @@
   line-height: 1.5;
 }
 
+.msub > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .msub .link-btn {
   min-height: 24px;
   flex: none;
@@ -496,7 +501,7 @@
   .tbl tr {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
+    align-items: start;
     gap: 2px var(--s3);
     padding: var(--s2) 0 10px;
     border-top: 1px solid var(--line);

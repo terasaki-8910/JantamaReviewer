@@ -247,8 +247,8 @@ describe('F9 迷いのカード（取り込んだあと。FX-4）', () => {
     const six = card(6);
     expect(within(six).getByText('読み取れませんでした')).toBeInTheDocument();
     expect(within(six).getByText('局面を手で選ぶ')).toBeInTheDocument();
-    expect(within(six).getByRole('button', { name: '迷い6の局（未選択）' })).toBeEnabled();
-    expect(within(six).getByRole('button', { name: '迷い6の判断' })).toBeDisabled();
+    expect(within(six).getByRole('button', { name: '迷い6の局を選ぶ' })).toBeEnabled();
+    expect(within(six).getByRole('button', { name: '迷い6の判断を選ぶ' })).toBeDisabled();
     expect(within(six).queryByRole('button', { name: /選び直す/ })).toBeNull();
   });
 
@@ -336,7 +336,7 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     await user.click(within(card(1)).getByRole('button', { name: '迷い1を選び直す' }));
     expect(within(card(1)).getByText('局面を手で選ぶ')).toBeInTheDocument();
     // いまの局が選んである。判断のメニューにも、いまの判断が印の付いた形で出る。
-    expect(within(card(1)).getByRole('button', { name: '迷い1の局（東1局）' })).toBeInTheDocument();
+    expect(within(card(1)).getByRole('button', { name: '迷い1の局 東1局' })).toBeInTheDocument();
     await user.click(within(card(1)).getByRole('button', { name: 'やめる' }));
     expect(within(card(1)).getByText('自分：打5p')).toBeInTheDocument();
     expect(within(card(1)).getByRole('button', { name: '迷い1を選び直す' })).toHaveFocus();
@@ -347,7 +347,7 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     const { user, mock, store } = setup();
     await tableReady();
     const six = card(6);
-    await user.click(within(six).getByRole('button', { name: '迷い6の局（未選択）' }));
+    await user.click(within(six).getByRole('button', { name: '迷い6の局を選ぶ' }));
     const kyokuMenu = screen.getByRole('menu', { name: '迷い6の局' });
     expect(within(kyokuMenu).getAllByRole('menuitemradio').map((i) => i.textContent)).toEqual([
       '東1局',
@@ -358,10 +358,10 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     ]);
     await user.click(within(kyokuMenu).getByRole('menuitemradio', { name: '東3局1本場' }));
     expect(screen.queryByRole('menu')).toBeNull();
-    expect(within(six).getByRole('button', { name: '迷い6の局（東3局1本場）' })).toHaveFocus();
+    expect(within(six).getByRole('button', { name: '迷い6の局 東3局1本場' })).toHaveFocus();
     expect(calls(mock, 'set_mark_link')).toEqual([]); // 局を選んだだけでは、保存しない
 
-    const decisionButton = within(six).getByRole('button', { name: '迷い6の判断' });
+    const decisionButton = within(six).getByRole('button', { name: '迷い6の判断を選ぶ' });
     expect(decisionButton).toBeEnabled();
     await user.click(decisionButton);
     const decisionMenu = screen.getByRole('menu', { name: '迷い6の判断' });
@@ -395,7 +395,7 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     const { user, mock } = setup();
     await tableReady();
     await user.click(within(card(1)).getByRole('button', { name: '迷い1を選び直す' }));
-    await user.click(within(card(1)).getByRole('button', { name: '迷い1の判断（4巡目 · 打5p）' }));
+    await user.click(within(card(1)).getByRole('button', { name: '迷い1の判断 4巡目 · 打5p' }));
     await user.click(screen.getByRole('menuitemradio', { name: '4巡目 · 打5p' }));
     expect(calls(mock, 'set_mark_link')).toEqual([]);
     expect(within(card(1)).getByText('自分：打5p')).toBeInTheDocument();
@@ -420,7 +420,7 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
   it('メニューは Esc で閉じ、何も保存しない。キーボードの位置は開いたボタンへ戻る', async () => {
     const { user, mock } = setup();
     await tableReady();
-    const open = within(card(6)).getByRole('button', { name: '迷い6の局（未選択）' });
+    const open = within(card(6)).getByRole('button', { name: '迷い6の局を選ぶ' });
     await user.click(open);
     expect(screen.getByRole('menu', { name: '迷い6の局' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
@@ -554,10 +554,10 @@ describe('F10 局の評価の表（FX-4）', () => {
     setup({ session: { ...base, links } });
     const table = await tableReady();
     const row = within(table).getAllByRole('row')[3] as HTMLElement; // 東2局1本場
-    const make = within(row).getByRole('button', { name: '東2局1本場の自分の評価（付けていない）' });
+    const make = within(row).getByRole('button', { name: '東2局1本場の自分の評価を付ける' });
     expect(make).toHaveTextContent('付ける');
     expect(make).toHaveClass('ghost');
-    expect(within(row).getByRole('button', { name: '東2局1本場の MAKA（未入力）' })).toHaveTextContent('入力');
+    expect(within(row).getByRole('button', { name: '東2局1本場の MAKA を入力' })).toHaveTextContent('入力');
     expect(screen.getByText('ウィジェットで付けた評価のうち、1件は、どの局にも当てはまりませんでした')).toBeInTheDocument();
   });
 
@@ -606,13 +606,13 @@ describe('F10 局の評価の表（FX-4）', () => {
     const table = await tableReady();
     await user.click(within(table).getByRole('button', { name: '東3局の自分の評価（✕）' }));
     await user.click(screen.getByRole('menuitemradio', { name: 'なし' }));
-    await waitFor(() => expect(within(table).getByRole('button', { name: '東3局の自分の評価（付けていない）' })).toBeInTheDocument());
+    await waitFor(() => expect(within(table).getByRole('button', { name: '東3局の自分の評価を付ける' })).toBeInTheDocument());
     expect(calls(mock, 'set_self_rating')).toEqual([{ sessionId: ID, kyoku: 'k2h0', rating: 'none' }]);
     // 評価なしにした局に、旗は付かない。
     expect(
       within(within(table).getAllByRole('row')[4] as HTMLElement).queryByRole('img', { name: 'AI 基準と大きく違います' }),
     ).toBeNull();
-    await user.click(within(table).getByRole('button', { name: '東3局の自分の評価（付けていない）' }));
+    await user.click(within(table).getByRole('button', { name: '東3局の自分の評価を付ける' }));
     await user.click(screen.getByRole('menuitemradio', { name: '△' }));
     await waitFor(() => expect(within(table).getByRole('button', { name: '東3局の自分の評価（△）' })).toBeInTheDocument());
   });
@@ -630,7 +630,7 @@ describe('F10 局の評価の表（FX-4）', () => {
   it('MAKA: 「入力」を押すと、なし＋14 段階のメニュー。選ぶと保存して、段階の文字になる', async () => {
     const { user, mock, store } = setup();
     const table = await tableReady();
-    await user.click(within(table).getByRole('button', { name: '東1局の MAKA（未入力）' }));
+    await user.click(within(table).getByRole('button', { name: '東1局の MAKA を入力' }));
     const menu = screen.getByRole('menu', { name: '東1局の MAKA' });
     expect(within(menu).getAllByRole('menuitemradio').map((i) => i.textContent)).toEqual([
       'なし',
@@ -650,27 +650,27 @@ describe('F10 局の評価の表（FX-4）', () => {
       'E',
     ]);
     await user.click(within(menu).getByRole('menuitemradio', { name: 'C-' }));
-    await waitFor(() => expect(within(table).getByRole('button', { name: '東1局の MAKA（C-）' })).toBeInTheDocument());
+    await waitFor(() => expect(within(table).getByRole('button', { name: '東1局の MAKA C-' })).toBeInTheDocument());
     expect(calls(mock, 'set_maka_grade')).toEqual([{ sessionId: ID, kyoku: 'k0h0', grade: 'C-' }]);
     expect(store.session(ID).maka.kyokus).toEqual({ k0h0: 'C-' });
-    expect(within(table).getByRole('button', { name: '東1局の MAKA（C-）' })).toHaveTextContent('C-');
+    expect(within(table).getByRole('button', { name: '東1局の MAKA C-' })).toHaveTextContent('C-');
   });
 
   it('MAKA を「なし」にすると消す。Ctrl+Z で前の段階に戻る。同じ段階を選んでも保存しない', async () => {
     const base = imported();
     const { user, mock, store } = setup({ session: { ...base, maka: { kyokus: { k0h0: 'B' }, hanchan: 'A+' } } });
     const table = await tableReady();
-    await user.click(within(table).getByRole('button', { name: '東1局の MAKA（B）' }));
+    await user.click(within(table).getByRole('button', { name: '東1局の MAKA B' }));
     await user.click(screen.getByRole('menuitemradio', { name: 'B' }));
     expect(calls(mock, 'set_maka_grade')).toEqual([]);
 
-    await user.click(within(table).getByRole('button', { name: '東1局の MAKA（B）' }));
+    await user.click(within(table).getByRole('button', { name: '東1局の MAKA B' }));
     await user.click(screen.getByRole('menuitemradio', { name: 'なし' }));
-    await waitFor(() => expect(within(table).getByRole('button', { name: '東1局の MAKA（未入力）' })).toBeInTheDocument());
+    await waitFor(() => expect(within(table).getByRole('button', { name: '東1局の MAKA を入力' })).toBeInTheDocument());
     expect(calls(mock, 'clear_maka_grade')).toEqual([{ sessionId: ID, kyoku: 'k0h0' }]);
 
     await undoKey(user);
-    await waitFor(() => expect(within(table).getByRole('button', { name: '東1局の MAKA（B）' })).toBeInTheDocument());
+    await waitFor(() => expect(within(table).getByRole('button', { name: '東1局の MAKA B' })).toBeInTheDocument());
     expect(calls(mock, 'set_maka_grade')).toEqual([{ sessionId: ID, kyoku: 'k0h0', grade: 'B' }]);
     expect(store.session(ID).maka).toEqual({ kyokus: { k0h0: 'B' }, hanchan: 'A+' });
   });
@@ -678,13 +678,13 @@ describe('F10 局の評価の表（FX-4）', () => {
   it('半荘全体の MAKA: 半荘全体の行から入れる・消す（局とは別の保存）。Ctrl+Z で戻る', async () => {
     const { user, mock, store } = setup();
     const table = await tableReady();
-    await user.click(within(table).getByRole('button', { name: '半荘全体の MAKA（未入力）' }));
+    await user.click(within(table).getByRole('button', { name: '半荘全体の MAKA を入力' }));
     await user.click(screen.getByRole('menuitemradio', { name: 'A+' }));
-    await waitFor(() => expect(within(table).getByRole('button', { name: '半荘全体の MAKA（A+）' })).toBeInTheDocument());
+    await waitFor(() => expect(within(table).getByRole('button', { name: '半荘全体の MAKA A+' })).toBeInTheDocument());
     expect(calls(mock, 'set_maka_hanchan')).toEqual([{ sessionId: ID, grade: 'A+' }]);
     expect(store.session(ID).maka.hanchan).toBe('A+');
     await undoKey(user);
-    await waitFor(() => expect(within(table).getByRole('button', { name: '半荘全体の MAKA（未入力）' })).toBeInTheDocument());
+    await waitFor(() => expect(within(table).getByRole('button', { name: '半荘全体の MAKA を入力' })).toBeInTheDocument());
     expect(calls(mock, 'clear_maka_hanchan')).toEqual([{ sessionId: ID }]);
   });
 
@@ -699,9 +699,9 @@ describe('F10 局の評価の表（FX-4）', () => {
     });
     const table = await tableReady();
     expect(within(table).getByRole('button', { name: '東1局の自分の評価（〇）' })).toBeInTheDocument();
-    expect(within(table).getByRole('button', { name: '東2局の自分の評価（付けていない）' })).toBeInTheDocument();
-    expect(within(table).getByRole('button', { name: '東2局の MAKA（S）' })).toBeInTheDocument();
-    expect(within(table).getByRole('button', { name: '東3局1本場の MAKA（E）' })).toBeInTheDocument();
+    expect(within(table).getByRole('button', { name: '東2局の自分の評価を付ける' })).toBeInTheDocument();
+    expect(within(table).getByRole('button', { name: '東2局の MAKA S' })).toBeInTheDocument();
+    expect(within(table).getByRole('button', { name: '東3局1本場の MAKA E' })).toBeInTheDocument();
   });
 });
 
@@ -747,15 +747,15 @@ describe('U-1・F3 この画面に AI の答えは出さない（答えを書く
       expect(html).not.toMatch(/data-ai/i);
       expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
     };
-    await user.click(within(card(6)).getByRole('button', { name: '迷い6の局（未選択）' }));
+    await user.click(within(card(6)).getByRole('button', { name: '迷い6の局を選ぶ' }));
     check();
     await user.click(screen.getByRole('menuitemradio', { name: '東2局' }));
-    await user.click(within(card(6)).getByRole('button', { name: '迷い6の判断' }));
+    await user.click(within(card(6)).getByRole('button', { name: '迷い6の判断を選ぶ' }));
     check();
     await user.click(screen.getByRole('menuitemradio', { name: '8巡目 · 打4s' }));
     await waitFor(() => expect(within(card(6)).getByText('自分：打4s')).toBeInTheDocument());
     check();
-    await user.click(within(table).getByRole('button', { name: '東1局の MAKA（未入力）' }));
+    await user.click(within(table).getByRole('button', { name: '東1局の MAKA を入力' }));
     check();
   });
 

@@ -231,7 +231,7 @@ function PickArea({ number, decisions, kyoku, current, onKyoku, onDecision, onBa
       <span className="mpick-lbl">局面を手で選ぶ</span>
       <MenuSelect
         className="sel-btn"
-        label={`迷い${number}の局${kyokuLabel === null ? '（未選択）' : `（${kyokuLabel}）`}`}
+        label={kyokuLabel === null ? `迷い${number}の局を選ぶ` : `迷い${number}の局 ${kyokuLabel}`}
         menuLabel={`迷い${number}の局`}
         items={kyokus.map((option) => ({
           key: String(option.position),
@@ -245,7 +245,7 @@ function PickArea({ number, decisions, kyoku, current, onKyoku, onDecision, onBa
       </MenuSelect>
       <MenuSelect
         className="sel-btn"
-        label={`迷い${number}の判断${currentOption === null ? '' : `（${currentOption.label}）`}`}
+        label={currentOption === null ? `迷い${number}の判断を選ぶ` : `迷い${number}の判断 ${currentOption.label}`}
         menuLabel={`迷い${number}の判断`}
         disabled={kyoku === null}
         items={options.map((option) => ({

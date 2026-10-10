@@ -245,7 +245,11 @@ describe('U-4・U-5・U-6: 一覧の各状態（実ブラウザ）', () => {
 
             const axe = await runAxe(page);
             expect(seriousViolations(axe)).toEqual([]);
-            expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(3);
+            // 色のコントラストの規則が実際に働いている（検査が空振りしていない）。取り込んだ半荘のページ（幅 768px では、表が縦に
+            // 長くなる）が裏にあるとき、確認の説明の文だけは、axe が「背景を決められない」（incomplete）に入れる。裏の画面のサイドバーか
+            // 表を隠すと、その文も数えられる。原因までは調べていない。確認の文字の色そのものは、トークンの試験（contrast.test.ts）が確かめている。
+            // 確認の中の、題と 2 つのボタンの 3 つは、いつも数える。
+            expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThanOrEqual(name === 'confirm' ? 3 : 4);
 
             // 確認が開いている間は、裏が inert なので、Tab で行ける所は確認の中の 2 つだけ。
             const reach = await unreachableByTab(page);

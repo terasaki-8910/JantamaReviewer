@@ -157,7 +157,7 @@ describe('U-11 半荘のページの編集の通知と取り消し（アプリ�
     await user.click(within(table).getByRole('button', { name: '東2局の自分の評価（✕）' }));
     await user.click(screen.getByRole('menuitemradio', { name: '〇' }));
     await toastShows('東2局の自分の評価を〇にしました');
-    await user.click(within(table).getByRole('button', { name: '東1局の MAKA（未入力）' }));
+    await user.click(within(table).getByRole('button', { name: '東1局の MAKA を入力' }));
     await user.click(screen.getByRole('menuitemradio', { name: 'C-' }));
     await toastShows('東1局の MAKA を C- にしました');
     await user.click(within(card(5)).getByRole('button', { name: '打9m' }));
