@@ -4,7 +4,7 @@
  * どの画面を見ているかは、メモリの中の状態だけで持つ。URL のパス・ハッシュ・履歴の項目は使わない
  * （ブラウザの戻る・進む・再読み込みが意味を持たない。使わないことは、eslint の規則が確かめる）。
  */
-export const VIEWS = ['records', 'settings'] as const;
+export const VIEWS = ['records', 'settings', 'import'] as const;
 
 export type View = (typeof VIEWS)[number];
 

@@ -121,8 +121,12 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
             tell_main_window_focus(window.app_handle(), false);
         }
         // 検討画面が操作を受けている間だけ、設定のテストが効く（W-11）。
+        // 前面に来たときは、画面（取り込み）にも知らせる: クリップボードの牌譜リンクを探し直すため（F1、E-15）。
         (MAIN_LABEL, WindowEvent::Focused(focused)) => {
             tell_main_window_focus(window.app_handle(), *focused);
+            if *focused {
+                import::commands::announce_main_window_focus(window.app_handle());
+            }
         }
         // mjai の窓が結果を見つける前に閉じられたら、検討画面に知らせる（取り込みの待ちをやめるため）。
         (import::mjai_window::MJAI_LABEL, WindowEvent::Destroyed) => {

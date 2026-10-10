@@ -22,6 +22,13 @@ use crate::widget_window::MAIN_LABEL;
 
 /// 文字認識の進み具合を知らせるイベントの名前。
 pub const EVENT_OCR_PROGRESS: &str = "ocr-progress";
+/// 検討画面が前面に来たことを、検討画面に知らせるイベントの名前（画面自身の focus の知らせの取りこぼしに備える）。
+pub const EVENT_MAIN_FOCUSED: &str = "main-window-focused";
+
+/// 検討画面が前面に来たことを、検討画面に知らせる。画面は、クリップボードの牌譜リンクを探し直す。
+pub fn announce_main_window_focus(app: &AppHandle) {
+    let _ = app.emit_to(MAIN_LABEL, EVENT_MAIN_FOCUSED, ());
+}
 
 /// クリップボードの文字を返す（文字だけ。画像などは読まない）。文字が無ければ `null`。
 /// 検討画面が前面に来たときに呼ぶ。牌譜リンクを探すのは画面側（エンジンの `detectPaipuLink`）。

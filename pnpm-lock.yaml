@@ -44,6 +44,9 @@ importers:
       '@fontsource/zen-old-mincho':
         specifier: ^5.3.0
         version: 5.3.0
+      '@jantama/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
       '@tauri-apps/api':
         specifier: ^2.12.1
         version: 2.12.1

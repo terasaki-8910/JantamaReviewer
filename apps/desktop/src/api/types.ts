@@ -82,7 +82,36 @@ export type StoredEvent = { id: number; t_ms: number } & (
   | { type: 'session_close' }
 );
 
-/** 半荘 1 つ分。取り消された記録は marks / ratings に含まれない。 */
+/** 画像 1 枚の文字認識の結果（行ごとの文字）。読めなかったときは、理由が `error` に入る。 */
+export interface OcrEntry {
+  lines: string[];
+  error?: string | null;
+}
+
+/**
+ * 半荘の画像の文字認識の結果の写し（`ocr.json`）。画像の、半荘のフォルダからの相対パス（`MarkRecord.screenshot`・
+ * `RatingEntry.screenshot`）ごとに持つ。計算は取り込みのときだけ（SPEC 2章）。
+ */
+export interface OcrCache {
+  /** 切り出しと拡大の決まりの名前。決まりが変わったら、写しは使わずに読み直す。 */
+  geometry: string;
+  entries: Record<string, OcrEntry>;
+}
+
+/**
+ * 迷いマーク・評価の結びつけ（`links.json`）。無い項目は「まだ決めていない」。
+ * - `marks`: 迷いマークの id（10 進の文字列）→ 結びつけた判断の鍵（エンジンの `DecisionRef.key`）か `"manual"`（局面を手で選ぶ）
+ * - `ratings`: 評価の id → 結びつけた局の鍵（`kyokuKey`）。空の文字列は「どの局にも結びつけない」
+ */
+export interface Links {
+  marks: Record<string, string>;
+  ratings: Record<string, string>;
+}
+
+/**
+ * 半荘 1 つ分。取り消された記録は marks / ratings に含まれない。
+ * 結果だけの半荘（記録の無いまま取り込んだもの）は、marks・ratings が空で、`report_path` がある。
+ */
 export interface SessionRecord {
   id: string;
   started_ms: number;
@@ -91,7 +120,32 @@ export interface SessionRecord {
   marks: MarkRecord[];
   ratings: RatingEntry[];
   events: StoredEvent[];
+  /** 取り込んだ結果（`report.json`）の絶対パス。まだ取り込んでいなければ null。 */
+  report_path: string | null;
+  /** 画像の文字認識の結果の写し。まだ読んでいない（または読めない）ときは null。 */
+  ocr: OcrCache | null;
+  /** 迷いマーク・評価の結びつけ。 */
+  links: Links;
 }
+
+/** 文字認識の結果の写しを、半荘ごとに返したもの（`ocr_sessions` の返り値）。 */
+export interface SessionOcr {
+  session_id: string;
+  ocr: OcrCache;
+}
+
+/** 文字認識の進み具合（`ocr-progress` のイベント）。 */
+export interface OcrProgress {
+  done: number;
+  total: number;
+}
+
+/**
+ * mjai の窓からの知らせ（`mjai-window` のイベント）。
+ * - report_found: 結果のページへ移ろうとした（移動は止めて、窓は閉じた）。`id` が結果の ID
+ * - closed: 結果が出る前に、窓が閉じられた
+ */
+export type MjaiWindowEvent = { kind: 'report_found'; id: string } | { kind: 'closed' };
 
 /** どのフックが入力を拾っているか。helper = 管理者の補助プログラム、in_process = 本体のフック、none = 拾う口が無い。 */
 export type HookSource = 'helper' | 'in_process' | 'none';

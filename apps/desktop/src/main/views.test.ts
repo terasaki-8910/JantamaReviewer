@@ -4,7 +4,7 @@ import { resolveView, START_VIEW, VIEWS } from './views';
 
 describe('N-5: 画面の名前の解決（メモリの中の状態だけで持つ）', () => {
   it('いま在る画面の名前は、そのまま画面になる', () => {
-    expect(VIEWS).toEqual(['records', 'settings']);
+    expect(VIEWS).toEqual(['records', 'settings', 'import']);
     for (const view of VIEWS) expect(resolveView(view)).toBe(view);
   });
 

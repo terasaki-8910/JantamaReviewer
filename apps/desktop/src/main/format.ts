@@ -14,6 +14,13 @@ export function formatSessionTitle(ms: number, now: number = Date.now()): string
   return `${year}${d.getMonth() + 1}月${d.getDate()}日(${weekday}) ${two(d.getHours())}:${two(d.getMinutes())}`;
 }
 
+/** 半荘の短い呼び名: 「10月9日 19:09」。今年でなければ年も付ける。取り込みの案内に使う。 */
+export function formatSessionShort(ms: number, now: number = Date.now()): string {
+  const d = new Date(ms);
+  const year = d.getFullYear() === new Date(now).getFullYear() ? '' : `${d.getFullYear()}年`;
+  return `${year}${d.getMonth() + 1}月${d.getDate()}日 ${two(d.getHours())}:${two(d.getMinutes())}`;
+}
+
 /** 迷いマーク・評価の時刻: 「16:14:32」。 */
 export function formatClock(ms: number): string {
   const d = new Date(ms);
