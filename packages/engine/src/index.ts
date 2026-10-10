@@ -31,6 +31,8 @@
  * - `summarizeHanchan(report, { gradeModel?, marks? })`: 半荘の一覧と局の表に出すまとめ（卓・Rating・段階・局ごとの結果と
  *   点の増減・Rating・段階・迷いマークの結びつけ）。段階の当てはめの既定は `DEFAULT_GRADE_MODEL`
  *   （analysis/maka-fit/dataset.csv を `fitGradeModel` で当てはめた定数）
+ * - `disagreesWithGrade(mark, grade)`（F10）: 局の自己評価（〇△✕）と AI 基準の段階が大きく食い違うか（局の表の印）。
+ *   帯（〇 = S+〜A-、△ = B+〜B-、✕ = C+〜E）が 2 つ離れたら印。暫定の規則で、直すのはこの 1 つの関数のファイルだけ
  */
 export const ENGINE_PACKAGE = '@jantama/engine' as const;
 
@@ -43,6 +45,7 @@ export * from './disagreement';
 export * from './discard-compare';
 export * from './grade';
 export * from './hanchan-summary';
+export * from './hand-rating';
 export * from './import';
 export * from './isotonic';
 export * from './kyoku';
