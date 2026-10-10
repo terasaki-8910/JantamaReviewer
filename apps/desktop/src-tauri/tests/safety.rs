@@ -1494,6 +1494,79 @@ fn s2_no_capability_reaches_remote_pages_or_the_mjai_window() {
     }
 }
 
+/// mjai の窓に評価させる JavaScript（`src/import/*.js`）。ページの中で動くので、通信・送信・移動・新しい窓には触れてはいけない。
+/// 送信（Submit）は、ユーザー自身が押す（SPEC 2 章。Cloudflare の確認もある）。
+#[test]
+fn s2_the_scripts_given_to_the_mjai_window_never_reach_the_network_or_submit() {
+    let files = files_under(&crate_dir().join("src").join("import"), &|p| {
+        has_ext(p, &["js"])
+    });
+    let names: Vec<String> = files
+        .iter()
+        .filter_map(|f| f.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .collect();
+    assert_eq!(names, vec!["mjai_native.js", "prefill.js"], "{names:?}");
+    // 送信・移動・新しい窓・書き換えの語（コメントの行は、説明の文なので数えない）。
+    let submit_words: &[&str] = &[
+        ".click(",
+        ".submit(",
+        "requestSubmit",
+        "dispatchEvent(new MouseEvent",
+        "location",
+        "window.open",
+        "document.forms",
+        "innerHTML",
+        "document.write",
+        "eval(",
+        "Function(",
+        "import(",
+        "localStorage",
+        "sessionStorage",
+        "indexedDB",
+        "cookie",
+        "postMessage",
+    ];
+    let mut violations = Vec::new();
+    for file in &files {
+        let code: String = read(file)
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for (rule, patterns) in [
+            ("S-2 通信", NETWORK_TS),
+            ("S-2 URL", URL_SCHEMES),
+            ("S-2 送信・移動", submit_words),
+        ] {
+            let hits = scan_lines(&code, patterns, false);
+            if !hits.is_empty() {
+                violations.push(report(rule, file, &hits));
+            }
+        }
+        // 雀魂のドメインも書かない。
+        let hits = scan_lines(&code, GAME_DOMAINS, true);
+        if !hits.is_empty() {
+            violations.push(report("S-2 ドメイン", file, &hits));
+        }
+    }
+    assert_no_violations(violations);
+
+    // URL 欄に入れるスクリプトは、入れる欄を 1 つだけ決め打ちし、出すイベントは input と change の 2 つだけ。
+    let prefill = read(&crate_dir().join("src").join("import").join("prefill.js"));
+    let code: String = prefill
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(
+        code.matches("input[name=\"log-url\"]").count(),
+        1,
+        "欄の指定は 1 か所"
+    );
+    assert_eq!(code.matches("dispatchEvent(").count(), 2);
+    assert!(code.contains("new Event('input'") && code.contains("new Event('change'"));
+}
+
 // ---- S-4: ウィジェットは保存と追記しかしない ----
 
 #[test]

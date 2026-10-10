@@ -10,9 +10,11 @@
 
 #![cfg(windows)]
 
-use std::path::PathBuf;
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
+use std::path::{Path, PathBuf};
 
-use jantama_ocr::OcrWorker;
+use jantama_ocr::{center_crop, OcrWorker, UPSCALE};
 
 fn fixture(number: usize) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -89,4 +91,66 @@ fn the_round_name_check_finds_only_a_real_round_name() {
     assert!(!has_round_name("北1局"));
     assert!(!has_round_name("局80833一3詈0"));
     assert!(!has_round_name(""));
+}
+
+/// 試験の素材（3 倍の切り出し）から、元の切り出しの画素を取り戻して、迷いマークの画面（1447×935）の箱の位置に貼った PNG を作る。
+///
+/// Lanczos で 3 倍にすると、出力の (3k+1) 番目の画素は、元の k 番目の画素の中心にちょうど当たる（窓つきの sinc は、整数の
+/// 位置で 1 と 0 になる）。だから、3 つおきに（1 番目から）取れば、元の画素がほぼそのまま戻る（端の画素は、少し違う）。
+/// 本物の画面は素材の元の画面で、手元の保存先の外へは出せないので、この取り戻した画面が、製品の読み取り
+/// （画面から箱を切り出して、Lanczos で 3 倍にして読む）を、素材と同じ画素で確かめる、代わりになる。
+fn recovered_screen(number: usize, dir: &Path) -> PathBuf {
+    let decoder = png::Decoder::new(BufReader::new(File::open(fixture(number)).unwrap()));
+    let mut reader = decoder.read_info().unwrap();
+    let mut buffer = vec![0u8; reader.output_buffer_size().unwrap()];
+    let info = reader.next_frame(&mut buffer).unwrap();
+    assert_eq!(info.color_type, png::ColorType::Rgb);
+    let (width, height) = (1447u32, 935u32);
+    let crop = center_crop(width, height).unwrap();
+    assert_eq!(
+        crop.scaled(UPSCALE),
+        (info.width, info.height),
+        "素材は、この箱の 3 倍"
+    );
+
+    let mut pixels = vec![0u8; (width * height * 3) as usize];
+    for chunk in pixels.chunks_exact_mut(3) {
+        chunk.copy_from_slice(&[20, 30, 60]);
+    }
+    for y in 0..crop.height {
+        for x in 0..crop.width {
+            let from = (((3 * y + 1) * info.width + (3 * x + 1)) * 3) as usize;
+            let to = (((crop.y + y) * width + (crop.x + x)) * 3) as usize;
+            pixels[to..to + 3].copy_from_slice(&buffer[from..from + 3]);
+        }
+    }
+    let path = dir.join(format!("screen{number}.png"));
+    let mut encoder =
+        png::Encoder::new(BufWriter::new(File::create(&path).unwrap()), width, height);
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&pixels)
+        .unwrap();
+    path
+}
+
+#[test]
+fn the_production_path_reads_a_whole_screen_the_same_way_as_the_fixture_of_it() {
+    // 製品の読み取り（画面 → 箱の切り出し → Lanczos で 3 倍 → 日本語の文字認識）が、素材（E-20）と同じ行を返す。
+    let dir = tempfile::tempdir().unwrap();
+    let worker = OcrWorker::start().expect("日本語の文字認識を使える");
+    for number in 1..=6 {
+        let from_fixture = worker.read_lines_uncropped(&fixture(number)).unwrap();
+        let screen = recovered_screen(number, dir.path());
+        let from_screen = worker.read_center_lines(&screen).unwrap();
+        eprintln!("迷い{number}: 素材 {from_fixture:?} / 画面 {from_screen:?}");
+        assert_eq!(
+            squeezed(&from_screen),
+            squeezed(&from_fixture),
+            "迷い{number}: 画面から読んだ結果が、素材を読んだ結果と違う"
+        );
+    }
 }
