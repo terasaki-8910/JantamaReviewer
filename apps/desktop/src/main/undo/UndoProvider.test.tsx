@@ -2,7 +2,8 @@ import { act, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { UndoProvider, undoActionOfKey, useUndo, useUndoBlocker, useUndoEvents } from './UndoProvider';
+import { useShortcutBlocker } from './shortcutGuard';
+import { UndoProvider, undoActionOfKey, useUndo, useUndoEvents } from './UndoProvider';
 import { UndoStack, type UndoCommand, type UndoEvent } from './undoStack';
 
 function counting(name = 'c') {
@@ -25,7 +26,7 @@ function counting(name = 'c') {
 /** 画面の中に、いろいろな種類の欄を置く。命令は、押したボタンで 1 つ登録する。 */
 function Harness({ command, blocked = false }: { command: UndoCommand; blocked?: boolean }) {
   const undo = useUndo();
-  useUndoBlocker(blocked);
+  useShortcutBlocker(blocked);
   return (
     <div>
       <button type="button" onClick={() => void undo.run(command)}>
@@ -123,7 +124,7 @@ describe('U-11: Ctrl+Z・Ctrl+Y（UndoProvider）', () => {
     expect(calls.undo).toBe(1);
   });
 
-  it('メニューやダイアログが開いている間（useUndoBlocker）は動かない。閉じると動く', async () => {
+  it('メニューやダイアログが開いている間（useShortcutBlocker）は動かない。閉じると動く', async () => {
     const { user, calls, view, cmd } = setup(true);
     await user.click(screen.getByRole('button', { name: '登録' }));
     await screen.findByText('取り消せる');

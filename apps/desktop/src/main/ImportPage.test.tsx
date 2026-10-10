@@ -74,14 +74,14 @@ describe('サイドバーの「検討結果を取り込む」', () => {
     const button = within(side).getByRole('button', { name: IMPORT_BUTTON });
     expect(button).toHaveClass('primary');
     expect(button).not.toHaveAttribute('aria-current');
-    // ブランドのすぐ下（記録の行き先より前）にある。
+    // ブランドと ← → のすぐ下、行き先（解き直し・ログ・週の集計）より前にある。
     const order = Array.from(side.querySelectorAll('button')).map((b) => b.getAttribute('title'));
-    expect(order.slice(0, 2)).toEqual([IMPORT_BUTTON, '記録']);
+    expect(order.slice(0, 4)).toEqual(['戻る（Alt+←）', '進む（Alt+→）', IMPORT_BUTTON, 'あとで作ります']);
 
     await user.click(button);
     expect(await screen.findByRole('heading', { level: 1, name: IMPORT_BUTTON })).toBeInTheDocument();
     expect(button).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: '記録' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: '設定' })).not.toHaveAttribute('aria-current');
   });
 });
 
@@ -241,13 +241,12 @@ describe('取り込みの流れ（結果が見つかってから）', () => {
     expect(panel.textContent).toContain('3つは局面に結びつけました。3つは選んでください');
     expect(panel.textContent).toContain('局の評価 5 件のうち、5 件を局に当てはめました');
 
-    // 取り込んだ半荘を、記録のページで開く。
+    // 取り込んだ半荘を、半荘のページで開く（サイドバーの一覧で、その半荘の行に印が付く）。
     await user.click(
       within(panel).getByRole('button', { name: `${formatSessionShort(session.started_ms)} の半荘を開く` }),
     );
-    expect(await screen.findByRole('heading', { level: 1, name: '記録' })).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { level: 2, name: /10月|\d+月/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /迷い 6/ })).toHaveAttribute('aria-current', 'true');
+    expect(await screen.findByRole('heading', { level: 1, name: /\d+月\d+日/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /迷い6/ })).toHaveAttribute('aria-current', 'true');
   });
 
   it('段階の途中は「取り込んでいます」と、いま何をしているかを出す', async () => {
@@ -441,7 +440,7 @@ describe('取り込みの流れ（結果が見つかってから）', () => {
     await user.click(
       within(done.closest('section') as HTMLElement).getByRole('button', { name: /の半荘を開く/ }),
     );
-    await screen.findByRole('heading', { level: 1, name: '記録' });
+    await screen.findByRole('heading', { level: 1, name: /\d+月\d+日/ });
     await user.click(screen.getByRole('button', { name: IMPORT_BUTTON }));
     expect(
       await screen.findByRole('heading', { name: 'コピーした牌譜リンクを見つけました' }),

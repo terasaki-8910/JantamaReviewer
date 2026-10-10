@@ -18,6 +18,7 @@ import {
   launchBrowser,
   startPageServer,
   tauriMockScript,
+  waitForMainReady,
   type PageServer,
   type Scenario,
 } from './harness';
@@ -120,8 +121,7 @@ async function open(
 
 async function openMain(): Promise<Opened> {
   const opened = await open('index.html', { width: 1280, height: 800 }, scenario('main'));
-  await opened.page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
-  await opened.page.getByRole('navigation', { name: '半荘の一覧' }).waitFor();
+  await waitForMainReady(opened.page);
   return opened;
 }
 
@@ -173,7 +173,11 @@ async function cursorViolations(page: Page): Promise<string[]> {
       if (el.matches(TEXT_FIELD)) {
         expected = (el as HTMLInputElement).disabled ? 'not-allowed' : 'text';
       } else if (owner) {
-        const disabled = (owner as HTMLButtonElement).disabled === true || (el as HTMLButtonElement).disabled === true;
+        // まだ作っていない行き先（aria-disabled）も、押せないものとして、禁止の形になる。
+        const disabled =
+          (owner as HTMLButtonElement).disabled === true ||
+          (el as HTMLButtonElement).disabled === true ||
+          owner.getAttribute('aria-disabled') === 'true';
         expected = disabled ? 'not-allowed' : 'pointer';
       } else {
         expected = 'default';
@@ -187,11 +191,11 @@ async function cursorViolations(page: Page): Promise<string[]> {
   });
 }
 
-describe('検討画面（記録ページ）', () => {
+describe('検討画面（半荘のページ）', () => {
   it('N-8: 文字は選択できない（三連クリックしても、選択範囲が空のまま）', async () => {
     const { context, page, problems } = await openMain();
     try {
-      for (const selector of ['.detail-title', '.brand .full', '.session-when', '.empty, .sec-title']) {
+      for (const selector of ['.head .title', '.brand .full', '.s-time', '.empty, .sec-title']) {
         await page.locator(selector).first().click({ clickCount: 3 });
         const selected = await page.evaluate(() => window.getSelection()?.toString() ?? '');
         expect(selected, selector).toBe('');
@@ -212,7 +216,7 @@ describe('検討画面（記録ページ）', () => {
         () => Array.from(document.querySelectorAll('button')).filter((b) => getComputedStyle(b).cursor === 'pointer').length,
       );
       expect(pointers).toBeGreaterThan(2);
-      expect(await page.evaluate(() => getComputedStyle(document.querySelector('.detail-title') as Element).cursor)).toBe(
+      expect(await page.evaluate(() => getComputedStyle(document.querySelector('.head .title') as Element).cursor)).toBe(
         'default',
       );
     } finally {
@@ -276,7 +280,7 @@ describe('検討画面（記録ページ）', () => {
   it('N-3: 文字や余白の上で右クリックしても、ブラウザのメニューを出さない（既定の動作が止められる）', async () => {
     const { context, page } = await openMain();
     try {
-      for (const selector of ['.detail-title', '.brand .full', '.session-when', '.thumb', 'main.main']) {
+      for (const selector of ['.head .title', '.brand .full', '.s-time', '.thumb', 'main.main']) {
         await clearEvents(page);
         const box = (await page.locator(selector).first().boundingBox())!;
         await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' });
@@ -292,7 +296,7 @@ describe('検討画面（記録ページ）', () => {
   it('N-9: 中ボタンを押しても、既定の動作（自動スクロール）が止められる。戻る・進むのボタンも', async () => {
     const { context, page } = await openMain();
     try {
-      const box = (await page.locator('.detail-title').boundingBox())!;
+      const box = (await page.locator('.head .title').boundingBox())!;
       await clearEvents(page);
       await page.mouse.click(box.x + 4, box.y + 4, { button: 'middle' });
       const seen = await seenEvents(page);
@@ -362,8 +366,10 @@ describe('検討画面（記録ページ）', () => {
       const before = await page.evaluate(() => ({ href: location.href, length: history.length }));
       await page.getByRole('button', { name: '設定' }).click();
       await page.getByRole('heading', { level: 1, name: '設定' }).waitFor();
-      await page.getByRole('button', { name: '記録' }).click();
-      await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+      await page.getByRole('button', { name: '戻る' }).click();
+      await page.getByRole('heading', { level: 1, name: /\d+月\d+日/ }).waitFor();
+      await page.keyboard.press('Alt+ArrowRight');
+      await page.getByRole('heading', { level: 1, name: '設定' }).waitFor();
       const after = await page.evaluate(() => ({ href: location.href, length: history.length, hash: location.hash }));
       expect(after.href).toBe(before.href);
       expect(after.length).toBe(before.length);

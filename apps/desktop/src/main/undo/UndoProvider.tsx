@@ -4,7 +4,7 @@
  *
  * キー: Ctrl+Z で取り消し、Ctrl+Y（と Ctrl+Shift+Z）でやり直す。文字を打つ欄（input・textarea・select・
  * contenteditable）にキーボードの位置があるときは、アプリの取り消しは動かさない（欄が自分の取り消しを持っているため）。
- * メニューや確認のダイアログが開いている間も動かさない（`useUndoBlocker`）。
+ * メニューや確認のダイアログが開いている間も動かさない（`useShortcutBlocker`。shortcutGuard.tsx）。
  */
 import {
   createContext,
@@ -12,13 +12,12 @@ import {
   useEffect,
   useEffectEvent,
   useMemo,
-  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
-  type RefObject,
 } from 'react';
 
+import { ShortcutGuardProvider, useShortcutsBlocked } from './shortcutGuard';
 import { UndoStack, type UndoCommand, type UndoEvent } from './undoStack';
 
 export interface UndoApi {
@@ -33,8 +32,6 @@ export interface UndoApi {
 interface UndoContextValue {
   api: UndoApi;
   stack: UndoStack;
-  /** キーの取り消しを止める印の数。0 より大きい間は、Ctrl+Z・Ctrl+Y を拾わない。 */
-  blockersRef: RefObject<number>;
 }
 
 const UndoContext = createContext<UndoContextValue | null>(null);
@@ -66,10 +63,19 @@ interface UndoProviderProps {
   stack?: UndoStack;
 }
 
-export function UndoProvider({ children, stack: given }: UndoProviderProps) {
+/** 取り消しの積み重ねと、キー操作を止める仕組み（`useShortcutBlocker`）を、子に配る。 */
+export function UndoProvider(props: UndoProviderProps) {
+  return (
+    <ShortcutGuardProvider>
+      <UndoProviderInner {...props} />
+    </ShortcutGuardProvider>
+  );
+}
+
+function UndoProviderInner({ children, stack: given }: UndoProviderProps) {
   const [owned] = useState(() => new UndoStack());
   const stack = given ?? owned;
-  const blockersRef = useRef(0);
+  const isBlocked = useShortcutsBlocked();
   const canUndo = useSyncExternalStore(stack.subscribe, () => stack.canUndo);
   const canRedo = useSyncExternalStore(stack.subscribe, () => stack.canRedo);
 
@@ -82,11 +88,10 @@ export function UndoProvider({ children, stack: given }: UndoProviderProps) {
     [stack],
   );
   const api = useMemo<UndoApi>(() => ({ ...actions, canUndo, canRedo }), [actions, canUndo, canRedo]);
-
-  const value = useMemo<UndoContextValue>(() => ({ api, stack, blockersRef }), [api, stack, blockersRef]);
+  const value = useMemo<UndoContextValue>(() => ({ api, stack }), [api, stack]);
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.isComposing || blockersRef.current > 0) return;
+    if (event.defaultPrevented || event.isComposing || isBlocked()) return;
     const action = undoActionOfKey(event);
     if (action === null || isTextEntryTarget(event.target)) return;
     event.preventDefault();
@@ -119,16 +124,4 @@ export function useUndoEvents(handler: (event: UndoEvent) => void): void {
   const { stack } = useUndoContext();
   const onEvent = useEffectEvent(handler);
   useEffect(() => stack.onEvent((event) => onEvent(event)), [stack]);
-}
-
-/** `active` の間、Ctrl+Z・Ctrl+Y を拾わない（メニューや確認のダイアログが開いている間）。 */
-export function useUndoBlocker(active: boolean): void {
-  const { blockersRef } = useUndoContext();
-  useEffect(() => {
-    if (!active) return undefined;
-    blockersRef.current += 1;
-    return () => {
-      blockersRef.current -= 1;
-    };
-  }, [active, blockersRef]);
 }

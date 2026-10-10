@@ -1,29 +1,93 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from 'react';
 
+import { api, errorMessage } from '../api/tauri';
 import { applyTheme, effectiveTheme, storeTheme, type ThemeChoice } from '../shared/theme';
 import { reportBackground, signalWindowReady } from '../shared/windowReady';
-import { Icon } from './Icon';
+import { ConfirmDialog } from './ConfirmDialog';
+import { solvedProblemCount, solvedProblemsLine } from './deleteImpact';
 import { ImportOffer } from './ImportOffer';
 import { ImportPage } from './ImportPage';
-import { RecordsPage } from './RecordsPage';
+import { SessionList, type SessionListHandle } from './SessionList';
+import { buildListRows, neighborAfterDelete } from './sessionRows';
+import { SessionPage } from './SessionPage';
 import { SettingsPage } from './SettingsPage';
+import { Sidebar } from './Sidebar';
+import { TOAST_MS, Toast, type ToastModel } from './Toast';
+import { UndoProvider, useUndo, useUndoEvents } from './undo/UndoProvider';
+import { useShortcutsBlocked } from './undo/shortcutGuard';
+import type { UndoCommand, UndoEvent } from './undo/undoStack';
 import { useImportFlow } from './useImportFlow';
-import { resolveView, START_VIEW, type View } from './views';
+import { useNarrow } from './useNarrow';
+import { useSessionSummaries, useSessions, useToday } from './useSessions';
+import { currentView, historyReducer, isViewAvailable, startHistory, stepTarget } from './viewHistory';
+import { sessionView, type View } from './views';
+
+/** 取り消したあとの「元に戻しました」の通知の長さ（ミリ秒）。 */
+const UNDONE_TOAST_MS = 3500;
+
+export interface AppProps {
+  /**
+   * 消す半荘に、解いた問題がいくつあるか（確認の文に足す）。解き直しの記録（クイズの DB）ができたら、本物を渡す。
+   * 既定は 0 を返す（まだ記録が無い）。
+   */
+  solvedProblems?: (sessionIds: readonly string[]) => number;
+}
 
 /**
- * 検討画面（メインの窓）。承認済みのシェル: 左に固定幅のサイドバー（幅 640px 未満ではアイコンだけの細い列）、
- * 上に主な操作「検討結果を取り込む」、下に設定とテーマの切り替え。今ある行き先（記録・取り込み・設定）だけを置き、
- * 未完成の機能の項目は置かない。
+ * 検討画面（メインの窓）。承認済みのシェル: 左に固定幅のサイドバー（幅 640px 未満ではアイコンだけの細い列）、右に本文。
+ * サイドバーに、主な操作「検討結果を取り込む」・半荘の一覧（日付ごと・検索・段階の絞り込み・削除）・設定とテーマの切り替え。
+ * 見た画面の履歴（← → と Alt+← / Alt+→）と、操作の取り消し（Ctrl+Z・Ctrl+Y。半荘の削除が最初の利用者）は、ここで受ける。
  */
-export function App() {
-  // どの画面を見ているかは、メモリの中だけで持つ（URL のパスや履歴は使わない）。知らない名前は最初の画面。
-  const [view, setView] = useState<View>(START_VIEW);
+export function App({ solvedProblems = solvedProblemCount }: AppProps = {}) {
+  return (
+    <UndoProvider>
+      <Shell solvedProblems={solvedProblems} />
+    </UndoProvider>
+  );
+}
+
+/** 確認を出している削除（消したい半荘と、確認を閉じたときにキーボードの位置を戻す先）。 */
+interface PendingDelete {
+  ids: string[];
+  opener: HTMLElement | null;
+}
+
+function failureText(event: Extract<UndoEvent, { type: 'failed' }>): string {
+  const reason = errorMessage(event.error);
+  switch (event.action) {
+    case 'run':
+      return `${event.command.label}ができませんでした: ${reason}`;
+    case 'undo':
+      return `元に戻せませんでした: ${reason}`;
+    case 'redo':
+      return `やり直せませんでした: ${reason}`;
+  }
+}
+
+function Shell({ solvedProblems }: Required<AppProps>) {
+  // どの画面を見ているか・見てきた画面の履歴は、メモリの中だけで持つ（URL のパスや履歴は使わない）。
+  const [nav, dispatch] = useReducer(historyReducer, undefined, () => startHistory());
+  const view = currentView(nav);
   const [theme, setTheme] = useState<ThemeChoice>(effectiveTheme);
   // 取り込みの状態は、画面を移っても保つ（mjai の窓からの知らせを、取りこぼさないため）。
   const flow = useImportFlow();
-  // 取り込んだ半荘を、記録のページで開くときに選ぶ半荘。
-  const [focusSession, setFocusSession] = useState<string | null>(null);
-  const show = useCallback((name: string) => setView(resolveView(name)), []);
+  const now = useToday();
+  const narrow = useNarrow();
+  const undo = useUndo();
+  const shortcutsBlocked = useShortcutsBlocked();
+
+  // 半荘の一覧。読めるたびに、いま見ている半荘が残っているかを確かめる（何も選んでいなければ、いちばん新しい半荘にする）。
+  const { sessions, error: loadError, reload } = useSessions((list) =>
+    dispatch({ type: 'listChanged', sessionIds: list.map((session) => session.id) }),
+  );
+  const summaries = useSessionSummaries(sessions);
+  const rows = useMemo(() => buildListRows(sessions ?? [], summaries), [sessions, summaries]);
+  const sessionIds = useMemo(() => new Set(rows.map((row) => row.id)), [rows]);
+  const available = useCallback((candidate: View) => isViewAvailable(candidate, sessionIds), [sessionIds]);
+  const canGoBack = stepTarget(nav, -1, available) !== null;
+  const canGoForward = stepTarget(nav, 1, available) !== null;
+
+  const listRef = useRef<SessionListHandle>(null);
 
   // 最初の絵を描き終えたと知らせる。窓は、それまで隠れている（N-7）。
   useEffect(() => {
@@ -46,117 +110,290 @@ export function App() {
     void reportBackground();
   }, []);
 
+  // ---- 読み上げ用の欄と、通知 ----
+
+  const [live, setLive] = useState('');
+  const liveTimer = useRef<number | null>(null);
+  const announce = useCallback((message: string) => {
+    // 同じ文でも読み上げ直されるよう、いったん空にしてから入れる。
+    setLive('');
+    if (liveTimer.current !== null) window.clearTimeout(liveTimer.current);
+    liveTimer.current = window.setTimeout(() => setLive(message), 30);
+  }, []);
+  useEffect(
+    () => () => {
+      if (liveTimer.current !== null) window.clearTimeout(liveTimer.current);
+    },
+    [],
+  );
+
+  const [toast, setToast] = useState<ToastModel | null>(null);
+  const toastCount = useRef(0);
+  const showToast = useCallback(
+    (next: Omit<ToastModel, 'id' | 'ms'> & { ms?: number }) => {
+      toastCount.current += 1;
+      setToast({ id: toastCount.current, ms: TOAST_MS, ...next });
+      announce(next.text);
+    },
+    [announce],
+  );
+  // 削除のあと、キーボードの位置を戻せる先が無い（半荘が 1 つも残らない）ときは、通知の「元に戻す」に移す。
+  const focusToastAction = useRef(false);
+
+  // 取り消しの積み重ねの知らせを、通知にする。実行とやり直しには「元に戻す」を付ける。ほかの命令が積まれたら、前の通知は消す
+  // （前の通知の「元に戻す」は、もう押せる順番ではないため）。
+  useUndoEvents((event) => {
+    if (event.type === 'failed') {
+      showToast({ text: failureText(event) });
+      return;
+    }
+    const text = event.command.messages?.[event.type];
+    if (text === undefined) {
+      setToast(null);
+      return;
+    }
+    if (event.type === 'undo') {
+      showToast({ text, ms: UNDONE_TOAST_MS });
+      return;
+    }
+    const focusAction = focusToastAction.current;
+    focusToastAction.current = false;
+    showToast({
+      text,
+      focusAction,
+      action: {
+        label: '元に戻す',
+        title: '元に戻す（Ctrl+Z）',
+        keyShortcuts: 'Control+Z',
+        onAction: () => void undo.undo().catch(() => undefined),
+      },
+    });
+  });
+
+  // ---- 見た画面の履歴（← → と Alt+← / Alt+→） ----
+
+  const step = useCallback(
+    (direction: -1 | 1) => {
+      const index = stepTarget(nav, direction, available);
+      if (index !== null) dispatch({ type: 'go', index });
+    },
+    [nav, available],
+  );
+
+  const onHistoryKey = useEffectEvent((event: KeyboardEvent) => {
+    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    // メニューやダイアログが開いている間は、そこに任せる。マウスの戻る・進むのボタンには、何も割り当てない（SPEC 3a）。
+    if (shortcutsBlocked()) return;
+    event.preventDefault();
+    step(event.key === 'ArrowLeft' ? -1 : 1);
+  });
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => onHistoryKey(event);
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  // ---- 画面の切り替え ----
+
   const { reset, acceptOffer } = flow;
   const phase = flow.state.phase;
+  const push = useCallback((next: View) => dispatch({ type: 'push', view: next }), []);
   const openImport = useCallback(() => {
     // 別のページから来たときは、取り込みの続き（途中・完了・失敗）をそのまま見せる（別のページにいる間に終わっても、
     // 結果を見逃さない）。取り込みのページを開いたまま押したときは、終わった取り込みを閉じて、新しく始める。
-    if (view === 'import' && (phase === 'done' || phase === 'error')) reset();
-    show('import');
-  }, [phase, reset, show, view]);
+    if (view.kind === 'import' && (phase === 'done' || phase === 'error')) reset();
+    push({ kind: 'import' });
+  }, [phase, push, reset, view.kind]);
   const acceptImportOffer = useCallback(() => {
     acceptOffer();
-    show('import');
-  }, [acceptOffer, show]);
-  const openRecords = useCallback(() => {
-    setFocusSession(null);
-    show('records');
-  }, [show]);
+    push({ kind: 'import' });
+  }, [acceptOffer, push]);
   const openSession = useCallback(
     (sessionId: string) => {
       // 終わった取り込みの結果は、半荘を開いたら閉じる（次に取り込みを開いたとき、古い結果が残らないように）。
       reset();
-      setFocusSession(sessionId);
-      show('records');
+      push(sessionView(sessionId));
     },
-    [reset, show],
+    [push, reset],
   );
+  const openFromList = useCallback((sessionId: string) => push(sessionView(sessionId)), [push]);
 
-  const themeLabel = theme === 'dark' ? 'ライトテーマに切り替え' : 'ダークテーマに切り替え';
+  // 取り込みが終わったら、一覧を読み直す（保存した結果の段階・Rating を出すため。Rust 側の知らせの取りこぼしにも備える）。
+  useEffect(() => {
+    if (phase === 'done') void reload();
+  }, [phase, reload]);
+
+  // ---- 半荘の削除（確認 → 実行 → 通知。取り消しの積み重ねに載る） ----
+
+  const [pending, setPending] = useState<PendingDelete | null>(null);
+  const focusAfterClose = useRef<HTMLElement | null>(null);
+  const [settleTick, setSettleTick] = useState(0);
+
+  const requestDelete = useCallback((ids: string[], opener: HTMLElement | null) => {
+    if (ids.length > 0) setPending({ ids, opener });
+  }, []);
+
+  const cancelDelete = () => {
+    focusAfterClose.current = pending?.opener ?? null;
+    setPending(null);
+  };
+
+  // 確認を閉じたあと（裏の画面が操作できるようになってから）、キーボードの位置を戻す。
+  useEffect(() => {
+    const target = focusAfterClose.current;
+    if (pending !== null || target === null) return;
+    focusAfterClose.current = null;
+    if (target.isConnected) target.focus();
+  }, [pending]);
+
+  const deleteCommand = (ids: string[]): UndoCommand => {
+    const count = ids.length;
+    // いま見ている半荘を消すなら、隣の半荘へ移す。履歴は増やさず、見ている項目を置き換える。元に戻したら、もとの半荘に戻る。
+    const here = view.kind === 'session' && ids.includes(view.id) ? view : null;
+    const neighbor = here === null ? null : neighborAfterDelete(
+      rows.map((row) => row.id),
+      new Set(ids),
+    );
+    const to: View | null = here === null ? null : neighbor === null ? { kind: 'none' } : sessionView(neighbor);
+    const swap = (from: View, into: View) => dispatch({ type: 'swap', from, to: into });
+    return {
+      label: '半荘の削除',
+      messages: {
+        run: `${count}件の半荘を削除しました`,
+        undo: `${count}件の半荘を元に戻しました`,
+        redo: `${count}件の半荘を削除しました`,
+      },
+      execute: async () => {
+        if (here !== null && to !== null) swap(here, to);
+        try {
+          await api.deleteSessions(ids);
+        } catch (error) {
+          if (here !== null && to !== null) swap(to, here);
+          throw error;
+        }
+        await reload();
+      },
+      undo: async () => {
+        await api.restoreSessions(ids);
+        await reload();
+        if (here !== null && to !== null) swap(to, here);
+      },
+    };
+  };
+
+  const confirmDelete = () => {
+    if (pending === null) return;
+    const { ids, opener } = pending;
+    setPending(null);
+    focusToastAction.current = ids.length >= rows.length;
+    undo
+      .run(deleteCommand(ids))
+      .then(() => setSettleTick((tick) => tick + 1))
+      .catch(() => {
+        // 失敗の理由は、積み重ねの知らせ（'failed'）が通知に出す。キーボードの位置は、確認を開いた所に戻す。
+        focusToastAction.current = false;
+        if (opener?.isConnected) opener.focus();
+      });
+  };
+
+  // 削除が済んで一覧が描き直されたあと（選択をやめて）、キーボードの位置を戻す。
+  useEffect(() => {
+    if (settleTick > 0) listRef.current?.settleAfterDelete();
+  }, [settleTick]);
+
+  // ---- 描く ----
+
+  const selectedSession = view.kind === 'session' ? (sessions?.find((s) => s.id === view.id) ?? null) : null;
+  const currentId = view.kind === 'session' ? view.id : null;
+  const solved = pending === null ? 0 : solvedProblems(pending.ids);
+  const solvedLine = solvedProblemsLine(solved);
 
   return (
-    <div className="app">
-      <aside className="side" aria-label="サイドバー">
-        <div className="side-in">
-          <div className="brand">
-            <span className="full">JantamaReviewer</span>
-            <span className="short" aria-hidden="true">
-              雀
-            </span>
-          </div>
-          <div className="side-top">
-            <button
-              type="button"
-              className="btn primary import"
-              aria-current={view === 'import' ? 'page' : undefined}
-              title="検討結果を取り込む"
-              onClick={openImport}
-            >
-              <Icon name="download" />
-              <span className="label">検討結果を取り込む</span>
-            </button>
-            <nav aria-label="メイン">
-              <ul className="nav">
-                <li>
-                  <NavButton
-                    label="記録"
-                    icon="log"
-                    current={view === 'records'}
-                    onClick={() => openRecords()}
-                  />
-                </li>
-              </ul>
-            </nav>
-          </div>
-          <div className="side-foot">
-            <NavButton
-              label="設定"
-              icon="settings"
-              current={view === 'settings'}
-              onClick={() => show('settings')}
+    <>
+      <div className="app" inert={pending !== null}>
+        <Sidebar
+          view={view}
+          theme={theme}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+          onGoBack={() => step(-1)}
+          onGoForward={() => step(1)}
+          onImport={openImport}
+          onSettings={() => push({ kind: 'settings' })}
+          onToggleTheme={toggleTheme}
+        >
+          <SessionList
+            ref={listRef}
+            rows={rows}
+            now={now}
+            currentId={currentId}
+            narrow={narrow}
+            loadError={loadError}
+            onOpen={openFromList}
+            onRequestDelete={requestDelete}
+            announce={announce}
+          />
+        </Sidebar>
+        <main className="main">
+          {flow.offer && view.kind !== 'import' && (
+            <ImportOffer link={flow.offer} onAccept={acceptImportOffer} onDismiss={flow.dismissOffer} />
+          )}
+          {view.kind === 'settings' && <SettingsPage />}
+          {view.kind === 'import' && <ImportPage flow={flow} onOpenSession={openSession} />}
+          {selectedSession !== null && (
+            <SessionPage
+              key={selectedSession.id}
+              session={selectedSession}
+              summary={summaries.get(selectedSession.id)}
             />
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label={themeLabel}
-              title={themeLabel}
-              onClick={toggleTheme}
-            >
-              <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-            </button>
-          </div>
-        </div>
-      </aside>
-      <main className="main">
-        {flow.offer && view !== 'import' && (
-          <ImportOffer link={flow.offer} onAccept={acceptImportOffer} onDismiss={flow.dismissOffer} />
-        )}
-        {view === 'records' && <RecordsPage focusSessionId={focusSession} />}
-        {view === 'settings' && <SettingsPage />}
-        {view === 'import' && <ImportPage flow={flow} onOpenSession={openSession} />}
-      </main>
-    </div>
+          )}
+          {sessions !== null && selectedSession === null && (view.kind === 'none' || view.kind === 'session') && (
+            <EmptyPage />
+          )}
+        </main>
+        {toast !== null && <Toast toast={toast} onClose={() => setToast(null)} />}
+      </div>
+      {pending !== null && (
+        <ConfirmDialog
+          title={`${pending.ids.length}件の半荘を削除します。`}
+          description={
+            <>
+              {solvedLine !== null && (
+                <>
+                  {solvedLine}
+                  <br />
+                </>
+              )}
+              記録とスクショも消えます。
+              <br />
+              アプリを閉じるまでは元に戻せます。
+            </>
+          }
+          confirmLabel="削除"
+          cancelLabel="キャンセル"
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
+        />
+      )}
+      {/* 読み上げ用の欄。role="status" は付けない（取り込みの案内・進み具合の role="status" と区別するため） */}
+      <p className="sr-only" aria-live="polite">
+        {live}
+      </p>
+    </>
   );
 }
 
-interface NavButtonProps {
-  label: string;
-  icon: 'log' | 'settings';
-  current: boolean;
-  onClick: () => void;
-}
-
-function NavButton({ label, icon, current, onClick }: NavButtonProps) {
+/** 半荘が 1 つも無いときの本文。 */
+function EmptyPage() {
   return (
-    <button
-      type="button"
-      className="nav-item"
-      aria-current={current ? 'page' : undefined}
-      title={label}
-      onClick={onClick}
-    >
-      <Icon name={icon} />
-      <span className="label">{label}</span>
-    </button>
+    <>
+      <header className="head">
+        <h1 className="title">半荘がありません</h1>
+      </header>
+      <div className="page">
+        <p className="empty">ウィジェットの「迷い」や〇△✕を押すと、ここに並びます。</p>
+      </div>
+    </>
   );
 }
