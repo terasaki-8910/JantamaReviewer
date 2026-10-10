@@ -109,6 +109,8 @@ export function useImportFlow(): ImportFlow {
   const announcerRef = useRef<PaipuLinkAnnouncer | null>(null);
   // 取り込みの世代。やめる・やり直す・次の取り込みを始めるたびに進めて、古い処理の結果を捨てる。
   const generationRef = useRef(0);
+  // 前面に来たときのクリップボードの確認が、いま動いているか。
+  const focusCheckBusyRef = useRef(false);
 
   const setState = useCallback((next: ImportState | ((current: ImportState) => ImportState)) => {
     const value = typeof next === 'function' ? next(stateRef.current) : next;
@@ -166,24 +168,34 @@ export function useImportFlow(): ImportFlow {
     });
   }, [patchPrompt, setLink]);
 
-  /** 検討画面が前面に来たとき: 新しい牌譜リンクなら、一度だけ「取り込みますか」と知らせる（E-15）。 */
+  /**
+   * 検討画面が前面に来たとき: 新しい牌譜リンクなら、一度だけ「取り込みますか」と知らせる（E-15）。
+   * 前面に来ると、Rust 側の知らせ・画面の focus・表示の変化が、ほぼ同時に重なって届く。読みにいくのは 1 回にまとめる
+   * （Rust 側も読み取りを 1 つずつにしてあるが、同じ答えを何度も取る必要はない）。
+   */
   const checkClipboardOnFocus = useCallback(async () => {
     const phase = stateRef.current.phase;
     // 取り込みの途中は、別の知らせで邪魔しない（次に前面に来たときに、知らせる）。
     if (phase === 'window' || phase === 'working' || phase === 'choose') return;
-    let text: string | null;
+    if (focusCheckBusyRef.current) return;
+    focusCheckBusyRef.current = true;
     try {
-      text = textOrNull(await api.readClipboardText());
-    } catch {
-      return;
+      let text: string | null;
+      try {
+        text = textOrNull(await api.readClipboardText());
+      } catch {
+        return;
+      }
+      if (text === null) return;
+      const fresh = announcer().announce(text);
+      if (fresh === null) return;
+      saveAnnouncedIds(announcer().ids());
+      setLink(fresh);
+      setOffer(fresh);
+      patchPrompt({ problem: null });
+    } finally {
+      focusCheckBusyRef.current = false;
     }
-    if (text === null) return;
-    const fresh = announcer().announce(text);
-    if (fresh === null) return;
-    saveAnnouncedIds(announcer().ids());
-    setLink(fresh);
-    setOffer(fresh);
-    patchPrompt({ problem: null });
   }, [announcer, patchPrompt, setLink]);
 
   // ---- 受け取った結果を、検査して、結びつけ、保存する ----

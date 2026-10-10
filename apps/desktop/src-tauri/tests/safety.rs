@@ -1446,6 +1446,57 @@ fn s4_the_clipboard_is_only_read_as_text_and_only_the_import_command_reads_it() 
     assert!(readers[0].ends_with("src/import/commands.rs"));
 }
 
+#[test]
+fn s4_the_clipboard_is_read_one_caller_at_a_time() {
+    // クリップボードを開いている状態はプロセス全体のもので、2 つのスレッドが同時に開ける。非同期のコマンドが 2 つ重なって読むと、
+    // 片方のデータの取っ手が、もう片方に解放され、ヒープが壊れて落ちた（実機で 0xc0000374）。読む処理は鍵の中でだけ動かす。
+    let clipboard = read(&crate_dir().join("src").join("clipboard.rs"));
+    let product = product_part(&clipboard);
+    assert!(
+        product.contains("static READ_LOCK: Mutex<()>"),
+        "プロセス全体の鍵が無い"
+    );
+    let exclusive = product
+        .split("fn exclusive<")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(
+                "
+}
+",
+            )
+            .next()
+        })
+        .expect("exclusive がある");
+    assert!(
+        exclusive.contains("READ_LOCK.lock()"),
+        "exclusive が鍵を取っていない"
+    );
+    let read_text = product
+        .split("pub fn read_text()")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(
+                "
+}
+",
+            )
+            .next()
+        })
+        .expect("read_text がある");
+    let lock_at = read_text
+        .find("exclusive(")
+        .expect("read_text が鍵の中で動かす");
+    for call in ["is_format_avail(", "get_clipboard_string()"] {
+        let at = read_text
+            .find(call)
+            .unwrap_or_else(|| panic!("{call} がある"));
+        assert!(at > lock_at, "{call} が鍵の外にある");
+    }
+    // クリップボードのクレートの読み取りを呼ぶのは、この 1 つの関数だけ。
+    assert_eq!(product.matches("get_clipboard_string()").count(), 1);
+}
+
 // ---- mjai の窓: 外のページにアプリの権限を与えない（F1・R3-3） ----
 
 #[test]

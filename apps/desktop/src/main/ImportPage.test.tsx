@@ -579,10 +579,32 @@ describe('「この半荘を取り込みますか」（E-15）', () => {
     await user.click(within(offer).getByRole('button', { name: 'あとで' }));
     expect(screen.queryByText(/この半荘を取り込みますか/)).toBeNull();
     // 同じ牌譜 ID は、もう知らせない（何度前面に来ても）。
+    const before = mock.count('read_clipboard_text');
     act(() => mock.emit('main-window-focused', null));
+    await waitFor(() => expect(mock.count('read_clipboard_text')).toBe(before + 1));
     window.dispatchEvent(new Event('focus'));
-    await waitFor(() => expect(mock.count('read_clipboard_text')).toBeGreaterThanOrEqual(3));
+    await waitFor(() => expect(mock.count('read_clipboard_text')).toBe(before + 2));
     expect(screen.queryByText(/この半荘を取り込みますか/)).toBeNull();
+  });
+
+  it('前面に来たときの 3 つの知らせ（Rust 側・画面の focus・表示の変化）が重なって届いても、クリップボードを読むのは 1 回', async () => {
+    // 読み取りが重なると、実機でヒープが壊れて落ちた（Rust 側は鍵で守ってあるが、同じ答えを何度も取らない）。
+    const mock = installTauriMock({
+      handlers: importHandlers([], { read_clipboard_text: () => null }),
+    });
+    render(<App />);
+    const before = mock.count('read_clipboard_text');
+    act(() => {
+      mock.emit('main-window-focused', null);
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await waitFor(() => expect(mock.count('read_clipboard_text')).toBe(before + 1));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(mock.count('read_clipboard_text')).toBe(before + 1);
+    // 終わったあとの次の知らせは、また読む。
+    act(() => mock.emit('main-window-focused', null));
+    await waitFor(() => expect(mock.count('read_clipboard_text')).toBe(before + 2));
   });
 
   it('「取り込む」を押すと、取り込みのページで、そのリンクの案内が出る', async () => {

@@ -6,9 +6,26 @@
 //!
 //! 読むのは文字だけ（画像・ファイル・そのほかの形式は読まない）。書き込みはしない。
 //! 牌譜リンクより明らかに長い文字（文書の丸ごとなど）は、画面に渡さない。
+//!
+//! 読む処理は、アプリの中で 1 つずつにする（`exclusive`）。クリップボードを「開いている」状態は、スレッドごとではなく
+//! プロセス全体のもので、2 つのスレッドが同時に開ける。片方が `GetClipboardData` を呼んだり閉じたりすると、もう片方が
+//! 読んでいる最中のデータの取っ手が解放され、`GlobalSize` が解放済みのメモリを触って、ヒープが壊れて落ちた
+//! （実機で、起動の直後に 0xc0000374。非同期のコマンドが 2 つ重なったとき。8 本のスレッドで読み続ける試験では、鍵なしで毎回落ち、
+//! 鍵ありでは 4 万回読んでも落ちなかった）。
+
+use std::sync::{Mutex, PoisonError};
 
 /// 画面に渡す文字の長さの上限（文字数）。牌譜リンクは数十文字で、前後の文があっても、この長さに収まる。
 pub const MAX_CHARS: usize = 16 * 1024;
+
+/// クリップボードを読む処理の鍵（プロセス全体で 1 つ）。
+static READ_LOCK: Mutex<()> = Mutex::new(());
+
+/// 同時に 2 つ入らないようにして `work` を動かす。鍵を持ったまま panic しても、次の読み取りは止めない。
+fn exclusive<T>(work: impl FnOnce() -> T) -> T {
+    let _guard = READ_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    work()
+}
 
 /// 読んだ文字を、画面に渡してよい形にする。空・空白だけ・長すぎるものは `None`。NUL 以降は捨てる。
 pub fn normalize(text: String) -> Option<String> {
@@ -28,17 +45,52 @@ pub fn normalize(text: String) -> Option<String> {
 pub fn read_text() -> Result<Option<String>, String> {
     use clipboard_win::{formats, is_format_avail};
 
-    if !is_format_avail(formats::CF_UNICODETEXT) {
-        return Ok(None);
-    }
-    let text = clipboard_win::get_clipboard_string()
-        .map_err(|e| format!("クリップボードを読めませんでした: {e}"))?;
-    Ok(normalize(text))
+    exclusive(|| {
+        if !is_format_avail(formats::CF_UNICODETEXT) {
+            return Ok(None);
+        }
+        let text = clipboard_win::get_clipboard_string()
+            .map_err(|e| format!("クリップボードを読めませんでした: {e}"))?;
+        Ok(normalize(text))
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread;
+    use std::time::Duration;
+
+    #[test]
+    fn reads_never_overlap_even_when_many_threads_ask_at_once() {
+        // 実機の落ち方（0xc0000374）の原因は、読む処理が重なったこと。重ならないことを確かめる。
+        let inside = AtomicUsize::new(0);
+        let most = AtomicUsize::new(0);
+        thread::scope(|scope| {
+            for _ in 0..16 {
+                scope.spawn(|| {
+                    for _ in 0..20 {
+                        exclusive(|| {
+                            let now = inside.fetch_add(1, Ordering::SeqCst) + 1;
+                            most.fetch_max(now, Ordering::SeqCst);
+                            thread::sleep(Duration::from_micros(200));
+                            inside.fetch_sub(1, Ordering::SeqCst);
+                        });
+                    }
+                });
+            }
+        });
+        assert_eq!(most.load(Ordering::SeqCst), 1);
+        assert_eq!(inside.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_panic_inside_a_read_does_not_stop_the_next_one() {
+        let result = thread::spawn(|| exclusive(|| panic!("読み取りの途中の失敗"))).join();
+        assert!(result.is_err());
+        assert_eq!(exclusive(|| 7), 7);
+    }
 
     #[test]
     fn normal_text_passes_through_unchanged() {
