@@ -88,6 +88,17 @@ interface LinkAreaProps {
   onChoose: (resolved: ResolvedMark, ref: DecisionRef) => Promise<void>;
 }
 
+/**
+ * カードの下の欄の、いまの見せ方。決まっていて、選び直していないとき `view`。それ以外は、候補の札（`chips`）か、
+ * 手で選ぶ欄（`pick`）。`mode` が `auto` のときは、結びつけの状態に任せる。
+ */
+function viewOf(mode: Mode, hasCandidates: boolean, resolution: ResolvedMark['resolution']): 'view' | 'chips' | 'pick' {
+  if (mode === 'chips' && hasCandidates) return 'chips';
+  if (mode === 'pick') return 'pick';
+  if (resolution.kind === 'linked') return 'view';
+  return resolution.kind === 'candidates' ? 'chips' : 'pick';
+}
+
 /** カードの下の、結びつけの欄。 */
 function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
   const { resolution, autoCandidates } = resolved;
@@ -100,17 +111,7 @@ function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
   const linked = resolution.kind === 'linked' ? resolution : null;
   const hasCandidates = autoCandidates.length >= 2;
   const labels = chipLabels(autoCandidates);
-  // いまの見せ方: 決まっていて選び直していないとき `view`。それ以外は、札か、手で選ぶ欄。
-  const view: 'view' | 'chips' | 'pick' =
-    mode === 'chips' && hasCandidates
-      ? 'chips'
-      : mode === 'pick'
-        ? 'pick'
-        : linked !== null
-          ? 'view'
-          : resolution.kind === 'candidates'
-            ? 'chips'
-            : 'pick';
+  const view = viewOf(mode, hasCandidates, resolution);
 
   // 決まって「選び直す」が出たら、選ぶのに使ったボタンの代わりに、キーボードの位置をそこへ移す。
   useEffect(() => {
@@ -185,7 +186,7 @@ function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
             手で選ぶ
           </button>
           {linked !== null && (
-            <button type="button" className="link-btn" onClick={cancel}>
+            <button type="button" className="link-btn" aria-label={`迷い${number}の選び直しをやめる`} onClick={cancel}>
               やめる
             </button>
           )}
@@ -259,12 +260,12 @@ function PickArea({ number, decisions, kyoku, current, onKyoku, onDecision, onBa
         <Icon name="chevronDown" className="sel-ic" />
       </MenuSelect>
       {onBackToChips !== null && (
-        <button type="button" className="link-btn" onClick={onBackToChips}>
+        <button type="button" className="link-btn" aria-label={`迷い${number}の候補から選ぶ`} onClick={onBackToChips}>
           候補から選ぶ
         </button>
       )}
       {onCancel !== null && (
-        <button type="button" className="link-btn" onClick={onCancel}>
+        <button type="button" className="link-btn" aria-label={`迷い${number}の選び直しをやめる`} onClick={onCancel}>
           やめる
         </button>
       )}

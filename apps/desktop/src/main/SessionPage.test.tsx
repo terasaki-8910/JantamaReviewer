@@ -337,7 +337,7 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     expect(within(card(1)).getByText('局面を手で選ぶ')).toBeInTheDocument();
     // いまの局が選んである。判断のメニューにも、いまの判断が印の付いた形で出る。
     expect(within(card(1)).getByRole('button', { name: '迷い1の局 東1局' })).toBeInTheDocument();
-    await user.click(within(card(1)).getByRole('button', { name: 'やめる' }));
+    await user.click(within(card(1)).getByRole('button', { name: '迷い1の選び直しをやめる' }));
     expect(within(card(1)).getByText('自分：打5p')).toBeInTheDocument();
     expect(within(card(1)).getByRole('button', { name: '迷い1を選び直す' })).toHaveFocus();
     expect(calls(mock, 'set_mark_link')).toEqual([]);
@@ -386,7 +386,7 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     expect(within(card(5)).queryByText('選んでください')).toBeNull();
     // 1 行目は、候補の言い方のまま（読み取れなかったのではない）。
     expect(within(card(5)).getByText('東3局1本場 · 候補が2つ')).toBeInTheDocument();
-    await user.click(within(card(5)).getByRole('button', { name: '候補から選ぶ' }));
+    await user.click(within(card(5)).getByRole('button', { name: '迷い5の候補から選ぶ' }));
     expect(within(card(5)).getByText('選んでください')).toBeInTheDocument();
     expect(calls(mock, 'set_mark_link')).toEqual([]);
   });
