@@ -19,7 +19,7 @@ use serde::Serialize;
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::window::Color;
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, Runtime, WebviewUrl, WebviewWindow,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
 
@@ -28,9 +28,10 @@ use super::mjai_nav::{
 };
 use super::report_id::ReportId;
 use crate::appearance::{parse_css_color, Rgb};
+use crate::commands::monitor_areas;
 use crate::external::download_hook;
 use crate::webview_policy::WebviewFlags;
-use crate::widget_window::MAIN_LABEL;
+use crate::widget_window::{clamp_to_monitors, Area, MAIN_LABEL};
 
 pub const MJAI_LABEL: &str = "mjai";
 /// 窓の題名（N-13）。アプリの日本語の名前。URL や localhost は入れない。
@@ -119,6 +120,63 @@ fn handle_found<R: Runtime>(app: &AppHandle<R>, session: &Session, id: &ReportId
     }
 }
 
+/// 窓を置く位置: 検討画面の真ん中に、窓の真ん中を合わせる。画面の外にはみ出すなら、その画面の内側に寄せる（物理ピクセル）。
+/// 「画面の真ん中」を OS に任せると、別のモニターに出て、窓を見失うことがある。
+fn place_over(anchor: Area, size: (i32, i32), monitors: &[Area]) -> (i32, i32) {
+    let x = anchor.x + (anchor.width - size.0) / 2;
+    let y = anchor.y + (anchor.height - size.1) / 2;
+    clamp_to_monitors((x, y), size, monitors)
+}
+
+/// 窓を、検討画面と同じ画面の、検討画面の上に置く（見せる前に呼ぶ）。
+/// 検討画面が隠れている・最小化されているときは、主画面の真ん中に置く。位置が分からなければ、OS に任せる。
+fn place_near_main<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
+    let Ok(own) = window.outer_size() else {
+        return;
+    };
+    let own_scale = window.scale_factor().unwrap_or(1.0);
+    let main_area = app.get_webview_window(MAIN_LABEL).and_then(|main| {
+        if main.is_minimized().unwrap_or(true) || !main.is_visible().unwrap_or(false) {
+            return None;
+        }
+        let position = main.outer_position().ok()?;
+        let size = main.outer_size().ok()?;
+        let area = Area {
+            x: position.x,
+            y: position.y,
+            width: i32::try_from(size.width).ok()?,
+            height: i32::try_from(size.height).ok()?,
+        };
+        Some((area, main.scale_factor().unwrap_or(1.0)))
+    });
+    let (anchor, scale) = match main_area {
+        Some(found) => found,
+        None => {
+            let Ok(Some(primary)) = window.primary_monitor() else {
+                return;
+            };
+            let work = primary.work_area();
+            let area = Area {
+                x: work.position.x,
+                y: work.position.y,
+                width: i32::try_from(work.size.width).unwrap_or(i32::MAX),
+                height: i32::try_from(work.size.height).unwrap_or(i32::MAX),
+            };
+            (area, primary.scale_factor())
+        }
+    };
+    // 窓は、作られた画面の倍率の大きさ。置く先の画面の倍率に直した大きさで、はみ出さないかを見る。
+    let ratio = scale / own_scale;
+    let size = (
+        (f64::from(own.width) * ratio).round() as i32,
+        (f64::from(own.height) * ratio).round() as i32,
+    );
+    let (x, y) = place_over(anchor, size, &monitor_areas(window));
+    if let Err(e) = window.set_position(PhysicalPosition::new(x, y)) {
+        eprintln!("mjai の窓の位置を決められませんでした: {e}");
+    }
+}
+
 /// 窓を見せる（前面に出す）。
 fn present<R: Runtime>(window: &WebviewWindow<R>) {
     let _ = window.unminimize();
@@ -153,7 +211,6 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, link: &str, background: &str) -> Res
         .title(MJAI_TITLE)
         .inner_size(WINDOW_SIZE.0, WINDOW_SIZE.1)
         .min_inner_size(WINDOW_MIN_SIZE.0, WINDOW_MIN_SIZE.1)
-        .center()
         .visible(false)
         .focused(true)
         .zoom_hotkeys_enabled(options.zoom_hotkeys_enabled)
@@ -214,6 +271,7 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, link: &str, background: &str) -> Res
         }
     };
     let _ = window.set_size(LogicalSize::new(WINDOW_SIZE.0, WINDOW_SIZE.1));
+    place_near_main(app, &window);
     #[cfg(windows)]
     crate::webview_win::harden(&window, flags);
 
@@ -308,6 +366,66 @@ mod tests {
             serde_json::to_string(&MjaiEvent::Closed).unwrap(),
             r#"{"kind":"closed"}"#
         );
+    }
+
+    const SCREEN: Area = Area {
+        x: 0,
+        y: 0,
+        width: 2560,
+        height: 1400,
+    };
+    const LEFT: Area = Area {
+        x: -1920,
+        y: 0,
+        width: 1920,
+        height: 1040,
+    };
+    /// 窓の外側の大きさ（1016 x 819 は、実機で、内側 1000 x 780 の窓がこの大きさになった）。
+    const OUTER: (i32, i32) = (1016, 819);
+
+    #[test]
+    fn the_window_is_centered_over_the_main_window() {
+        let main = Area {
+            x: 100,
+            y: 80,
+            width: 1136,
+            height: 799,
+        };
+        assert_eq!(place_over(main, OUTER, &[SCREEN]), (160, 70));
+    }
+
+    #[test]
+    fn the_window_stays_on_the_monitor_of_the_main_window() {
+        // 検討画面が左のモニターにあるなら、窓も左のモニターに出る（主画面に飛ばない）。
+        let main = Area {
+            x: -1800,
+            y: 100,
+            width: 1136,
+            height: 799,
+        };
+        assert_eq!(place_over(main, OUTER, &[SCREEN, LEFT]), (-1740, 90));
+    }
+
+    #[test]
+    fn the_window_is_pulled_inside_when_the_main_window_sits_at_an_edge() {
+        let main = Area {
+            x: 1900,
+            y: 1000,
+            width: 1136,
+            height: 799,
+        };
+        assert_eq!(place_over(main, OUTER, &[SCREEN]), (1544, 581));
+    }
+
+    #[test]
+    fn without_any_monitor_information_the_window_is_just_centered() {
+        let main = Area {
+            x: 100,
+            y: 80,
+            width: 1136,
+            height: 799,
+        };
+        assert_eq!(place_over(main, OUTER, &[]), (160, 70));
     }
 
     #[test]

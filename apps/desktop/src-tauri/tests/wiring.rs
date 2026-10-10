@@ -242,12 +242,19 @@ fn n1_to_n13_the_mjai_window_gets_every_browser_remnant_setting_and_every_naviga
         // 開くのは mjai のサイトの入り口だけ。牌譜リンクは、E-11 のスクリプトで URL 欄に入れるだけ。
         "WebviewUrl::External(start_url())",
         "prefill_script(link)",
+        // 置き場所は、検討画面と同じ画面の、検討画面の上（見せる前に決める）。
+        "place_near_main(app, &window)",
     ] {
         assert!(
             product.contains(needle),
             "mjai_window.rs に {needle} が無い"
         );
     }
+    // 「画面の真ん中」を OS に任せない（別のモニターに出て、窓を見失ったため。実機で確かめた）。
+    assert!(
+        !product.contains(".center()"),
+        "mjai の窓は、検討画面の上に置く（place_near_main）"
+    );
     // 窓を見せるのは、最初のページを読み終えたとき・見張りの時間が来たとき・開いている窓を前面に出すときだけ。
     assert_eq!(product.matches("present(&window)").count(), 3);
     // 窓を見せる呼び出しは 2 つだけ: mjai の窓を見せる `present` と、閉じたあとに検討画面を前面に出す `focus_main`。
