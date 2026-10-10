@@ -260,6 +260,14 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, link: &str, background: &str) -> Res
     if !options.drag_drop_handler {
         builder = builder.disable_drag_drop_handler();
     }
+    // mjai の窓の WebView2 のデータは、アプリの画面とは別の場所に置く（外のサイトの保存領域を混ぜず、プロセスも分ける）。
+    let local_data = app.path().app_local_data_dir().ok();
+    if let Some(dir) = crate::webview_data::mjai_webview_dir(
+        crate::webview_data::config_env(),
+        local_data.as_deref(),
+    ) {
+        builder = builder.data_directory(dir);
+    }
 
     app.state::<MjaiWindowState>()
         .set(Some(Arc::clone(&session)));

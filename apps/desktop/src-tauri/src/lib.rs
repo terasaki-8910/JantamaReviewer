@@ -30,6 +30,7 @@ pub mod recorder;
 pub mod settings;
 pub mod sound;
 pub mod store;
+pub mod webview_data;
 pub mod webview_policy;
 #[cfg(windows)]
 pub mod webview_win;

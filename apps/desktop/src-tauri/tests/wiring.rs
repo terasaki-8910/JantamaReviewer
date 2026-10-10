@@ -116,6 +116,34 @@ fn n1_to_n12_build_window_applies_every_option_and_hook() {
 }
 
 #[test]
+fn trial_runs_keep_webview_data_out_of_the_real_app_and_the_mjai_window_has_its_own() {
+    // 試しに動かすとき（JANTAMA_CONFIG_DIR）は、検討画面とウィジェットの WebView2 のデータも試しのフォルダに置く。
+    // mjai の窓は、いつもアプリの画面とは別の場所。どちらも webview_data.rs の決まりを通す。
+    let product = |name: &[&str]| {
+        let mut path = crate_dir().join("src");
+        for part in name {
+            path = path.join(part);
+        }
+        read(path)
+            .split("#[cfg(test)]")
+            .next()
+            .expect("製品の部分がある")
+            .to_string()
+    };
+    let windows = product(&["widget_window.rs"]);
+    assert!(
+        windows.contains("webview_data::app_webview_dir(crate::webview_data::config_env())")
+            && windows.contains(".data_directory(dir)"),
+        "build_window が、試しのときの WebView2 のデータの場所を使っていない"
+    );
+    let mjai = product(&["import", "mjai_window.rs"]);
+    assert!(
+        mjai.contains("webview_data::mjai_webview_dir(") && mjai.contains(".data_directory(dir)"),
+        "mjai の窓が、自分の WebView2 のデータの場所を使っていない"
+    );
+}
+
+#[test]
 fn n12_the_devtools_command_does_nothing_outside_tauri_dev() {
     let lib = read(crate_dir().join("src").join("lib.rs"));
     assert!(
