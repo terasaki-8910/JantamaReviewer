@@ -16,21 +16,30 @@ export type PopupItem =
   | { kind: 'radio'; key: string; label: string; hint?: string; checked: boolean; onSelect: () => void }
   | { kind: 'separator'; key: string };
 
+/**
+ * メニューを出す場所。
+ * `below`: 開いたボタンの下に、右端をそろえて出す（下に入らなければ上）。ふつうの「…」や、段階のボタン。
+ * `beside`: 開いた物の右隣に、上端をそろえて出す。幅の狭い物（細い列の行）の下に出すと、列からはみ出して離れて見えるため。
+ */
+export type PopupPlacement = 'below' | 'beside';
+
 interface PopupProps {
   /** メニューの名前（読み上げ用）。 */
   label: string;
   items: readonly PopupItem[];
-  /** メニューを開いたボタン。この近くに出す。閉じるときの、キーボードの位置の戻り先。 */
+  /** メニューを開いたボタン。この近くに出す。閉じるときの、キーボードの位置の戻り先。画面に出ている物でなければならない。 */
   anchor: HTMLElement;
+  /** 既定は `below`。 */
+  placement?: PopupPlacement;
   /** 閉じた。項目を選んだときは、先にこれを呼んでから、項目の `onSelect` を呼ぶ。 */
   onClose: () => void;
 }
 
-export function Popup({ label, items, anchor, onClose }: PopupProps) {
+export function Popup({ label, items, anchor, placement = 'below', onClose }: PopupProps) {
   const popRef = useRef<HTMLDivElement>(null);
   useShortcutBlocker(true);
 
-  // 開いたボタンのそばに置く（右端をそろえる。下に入らなければ上に出す。窓の中に収める）。描く前に決める。
+  // 開いたボタンのそばに置く。窓の中に収める。描く前に決める。
   useLayoutEffect(() => {
     const pop = popRef.current;
     if (pop === null) return;
@@ -39,12 +48,19 @@ export function Popup({ label, items, anchor, onClose }: PopupProps) {
     const height = pop.offsetHeight;
     const viewWidth = document.documentElement.clientWidth;
     const viewHeight = document.documentElement.clientHeight;
-    const left = Math.max(8, Math.min(rect.right - width, viewWidth - width - 8));
-    let top = rect.bottom + 4;
-    if (top + height > viewHeight - 8) top = Math.max(8, rect.top - height - 4);
+    let left: number;
+    let top: number;
+    if (placement === 'beside') {
+      left = Math.max(8, Math.min(rect.right + 8, viewWidth - width - 8));
+      top = Math.max(8, Math.min(rect.top, viewHeight - height - 8));
+    } else {
+      left = Math.max(8, Math.min(rect.right - width, viewWidth - width - 8));
+      top = rect.bottom + 4;
+      if (top + height > viewHeight - 8) top = Math.max(8, rect.top - height - 4);
+    }
     pop.style.left = `${left}px`;
     pop.style.top = `${top}px`;
-  }, [anchor]);
+  }, [anchor, placement]);
 
   // 最初の項目（選んである項目があれば、それ）に、キーボードの位置を移す。
   useEffect(() => {

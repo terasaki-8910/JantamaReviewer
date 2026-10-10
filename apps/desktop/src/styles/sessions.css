@@ -563,8 +563,11 @@
   font-size: 13.5px;
 }
 
+/* 細い列では 2 行になる。1 文字だけ次の行へ落ちないよう、句の切れ目で折り、行の長さをそろえる */
 .toast-t {
   min-width: 0;
+  text-wrap: balance;
+  word-break: auto-phrase;
 }
 
 .toast-x {

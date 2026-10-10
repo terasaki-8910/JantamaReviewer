@@ -269,10 +269,11 @@ export function SessionList({
   };
 
   // 右クリック・Menu キー・Shift+F10 でも、行のメニューを開く。
+  // 細い列では「…」が隠れている（箱が無いので、メニューを出す場所も、閉じたときにキーボードの位置を戻す先も取れない）。
+  // そのときは、行のボタンを開いた物にして、その右隣に出す。
   const onListContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const item = (event.target as HTMLElement).closest<HTMLElement>('.s-item');
-    const anchor =
-      item?.querySelector<HTMLElement>('[data-more]') ?? item?.querySelector<HTMLElement>('[data-open]');
+    const anchor = item?.querySelector<HTMLElement>(narrow ? '[data-open]' : '[data-more]');
     const id = item?.getAttribute('data-id');
     if (!item || !anchor || !id || selectMode) return;
     event.preventDefault();
@@ -514,7 +515,13 @@ export function SessionList({
         ))}
       </div>
       {popup?.kind === 'row' && (
-        <Popup label="半荘のメニュー" anchor={popup.anchor} items={rowMenuItems(popup.id, popup.anchor)} onClose={closePopup} />
+        <Popup
+          label="半荘のメニュー"
+          anchor={popup.anchor}
+          placement={narrow ? 'beside' : 'below'}
+          items={rowMenuItems(popup.id, popup.anchor)}
+          onClose={closePopup}
+        />
       )}
       {popup?.kind === 'stage' && (
         <Popup label="段階で絞り込む" anchor={popup.anchor} items={stageMenuItems()} onClose={closePopup} />

@@ -333,6 +333,43 @@ describe('U-8: 行の「…」と、細い列', () => {
     }
   });
 
+  it('幅 390px: 行のメニュー（Menu キー）は、その行の右隣に出て窓の中に収まり、Esc でその行のボタンにキーボードの位置が戻る', async () => {
+    const { context, page } = await open({ width: 390 });
+    try {
+      const menu = page.getByRole('menu');
+      const rows = page.locator('.session-scroll .srow');
+      // 真ん中あたりの行と、一覧のいちばん下の行。
+      for (const index of [3, 7]) {
+        const row = rows.nth(index);
+        await row.focus();
+        // 行を見える所へ動かすスクロールが、終わってから押す（メニューは、スクロールがあると閉じる）。
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+        await page.keyboard.press('ContextMenu');
+        await menu.waitFor();
+        await poll(() => isFocused(menu.getByRole('menuitem', { name: '開く' }))).toBe(true);
+        const rowBox = await row.boundingBox();
+        const menuBox = await menu.boundingBox();
+        expect(rowBox, `行 ${index}`).not.toBeNull();
+        expect(menuBox, `メニュー ${index}`).not.toBeNull();
+        if (rowBox === null || menuBox === null) continue;
+        // 行の右隣（細い列の外）。窓の外へ出ない。左上の隅に出ない。
+        expect(menuBox.x, `行 ${index}: 行の右隣`).toBeGreaterThanOrEqual(rowBox.x + rowBox.width);
+        expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(390);
+        expect(menuBox.y).toBeGreaterThanOrEqual(8);
+        expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(800 - 8 + 1);
+        // 縦は、その行の高さのあたり（左上の隅など、行から離れた所には出ない）。
+        expect(menuBox.y, `行 ${index}: 行より下へ離れない`).toBeLessThanOrEqual(rowBox.y + rowBox.height);
+        expect(menuBox.y + menuBox.height, `行 ${index}: 行より上へ離れない`).toBeGreaterThanOrEqual(rowBox.y);
+
+        await page.keyboard.press('Escape');
+        await menu.waitFor({ state: 'detached' });
+        expect(await isFocused(row), `行 ${index}: 閉じたあと、キーボードの位置が行に戻る`).toBe(true);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
   it('幅 390px: 本文の見出しで、卓の名前（玉の間・南）の途中では折り返さない', async () => {
     const { context, page } = await open({ width: 390 });
     try {
@@ -473,6 +510,36 @@ describe('U-9: 削除（実ブラウザ）', () => {
       expect(box).not.toBeNull();
       expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
       expect(box?.x ?? 0).toBeGreaterThanOrEqual((side?.x ?? 0) + (side?.width ?? 0));
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('幅 380px（実機は縦のスクロール バーのぶん、390px の窓がこれだけ狭い）: 通知の文が 2 行になっても、1 文字だけ次の行へ落ちない', async () => {
+    const { context, page } = await open({ width: 380 });
+    try {
+      await page.locator('.session-scroll .srow').nth(2).focus();
+      await page.keyboard.press('ContextMenu');
+      await page.getByRole('menuitem', { name: '削除' }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: '削除' }).click();
+      await toast(page).waitFor();
+      // 文の各行の幅（1 行目・2 行目）。1 行に収まれば 1 つ。
+      const lineWidths = await page.locator('.toast .toast-t').evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const byTop = new Map<number, number>();
+        for (const rect of Array.from(range.getClientRects())) {
+          const top = Math.round(rect.top);
+          byTop.set(top, (byTop.get(top) ?? 0) + rect.width);
+        }
+        return Array.from(byTop.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([, width]) => width);
+      });
+      expect(lineWidths.length, JSON.stringify(lineWidths)).toBeLessThanOrEqual(2);
+      if (lineWidths.length === 2) {
+        expect(Math.min(...lineWidths), JSON.stringify(lineWidths)).toBeGreaterThan(Math.max(...lineWidths) * 0.4);
+      }
     } finally {
       await context.close();
     }
