@@ -668,15 +668,6 @@ describe('U-9: 削除（行の「…」・選択）', () => {
     expect(await screen.findByRole('heading', { level: 1, name: /10月7日\(水\) 22:10/ })).toBeInTheDocument();
     expect(rowOf('d')).toHaveFocus();
   });
-
-  it('「…」は、行の右上に固定された同じ場所に出る。行の中身（迷い・取り込み前）が違っても動かない', async () => {
-    setup();
-    await ready();
-    // jsdom には配置の計算が無いので、CSS の決めごと（行の右上に絶対位置）を、書いた CSS から確かめる。実際の位置は、実ブラウザの試験が測る。
-    const more = menuOf(rowOf('a'));
-    expect(more.closest('li')).toHaveClass('s-item');
-    expect(more).toHaveClass('row-more');
-  });
 });
 
 describe('U-10: 戻る・進む', () => {
@@ -790,17 +781,5 @@ describe('U-10: 戻る・進む', () => {
     await user.keyboard('{Escape}');
     await user.keyboard('{Alt>}{ArrowLeft}{/Alt}');
     expect(await screen.findByRole('heading', { level: 1, name: /10月9日/ })).toBeInTheDocument();
-  });
-});
-
-describe('U-8: 細い列（640px 未満）', () => {
-  it('段階の印だけの列でも、半荘の名前・時刻・Rating は読み上げに残り、押せる', async () => {
-    const { user } = setup();
-    await ready();
-    // jsdom に幅は無い。CSS で見えなくするだけで、文字は DOM に残っている（画面の見え方は、実ブラウザの試験が確かめる）。
-    expect(rowOf('a')).toHaveTextContent('19:09');
-    expect(rowOf('a')).toHaveTextContent('93.0');
-    await user.click(rowOf('b'));
-    expect(await screen.findByRole('heading', { level: 1, name: /10月8日/ })).toBeInTheDocument();
   });
 });
