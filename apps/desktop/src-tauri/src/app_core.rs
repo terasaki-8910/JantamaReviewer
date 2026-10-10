@@ -200,6 +200,23 @@ impl Core {
         }
     }
 
+    /// 半荘を消す（フォルダを保存先の `trash/` へ移す。U-9）。ウィジェットが記録中の半荘が入っていれば、その半荘は閉じる
+    /// （次の記録は、新しい半荘を始める）。ウィジェットの表示が変わるので、新しい状態を返す。
+    pub fn delete_sessions(&mut self, ids: &[String]) -> Result<AppState, String> {
+        self.store_mut()?
+            .delete_sessions(ids)
+            .map_err(|e| e.to_string())?;
+        Ok(self.app_state())
+    }
+
+    /// 消した半荘を戻す（`trash/` から `games/` へ。U-9）。
+    pub fn restore_sessions(&mut self, ids: &[String]) -> Result<AppState, String> {
+        self.store()?
+            .restore_sessions(ids)
+            .map_err(|e| e.to_string())?;
+        Ok(self.app_state())
+    }
+
     /// 設定を変える。使えない値（割り当てられないキー・リポジトリの中の保存先）は、
     /// 何も変えずにエラーを返す（D-1）。通れば保存して、何が変わったかを返す。
     pub fn apply_settings(&mut self, new: Settings) -> Result<SettingsChange, String> {
@@ -557,5 +574,62 @@ mod tests {
         next.orientation = Orientation::Horizontal;
         let change = f.core.apply_settings(next).unwrap();
         assert!(change.orientation && !change.sound);
+    }
+
+    #[test]
+    fn u9_deleting_the_recorded_session_resets_the_widget_numbers_and_restoring_does_not_resume_it()
+    {
+        let mut f = fixture();
+        f.core.rate(T0, Rating::Good).unwrap();
+        let state = f.core.mark(T0 + 1).unwrap();
+        let id = state.session_id.clone().unwrap();
+        assert_eq!(state.mark_count, 1);
+
+        let state = f.core.delete_sessions(std::slice::from_ref(&id)).unwrap();
+        assert_eq!(state.status, Status::Idle, "記録中の半荘が消えた");
+        assert_eq!(state.session_id, None);
+        assert_eq!(state.mark_count, 0);
+        assert!(state.ratings.is_empty());
+        assert_eq!(state.next_hand, 1);
+        assert!(!state.can_undo);
+        assert!(f.core.list_sessions().unwrap().is_empty());
+
+        let state = f.core.restore_sessions(std::slice::from_ref(&id)).unwrap();
+        assert_eq!(state.status, Status::Idle, "戻しても、記録中にはならない");
+        let listed = f.core.list_sessions().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, id);
+        assert_eq!(listed[0].mark_count, 1);
+        assert_eq!(listed[0].rating_count, 1);
+    }
+
+    #[test]
+    fn u9_the_next_record_after_deleting_starts_a_new_session_and_the_deleted_folder_stays_untouched(
+    ) {
+        let mut f = fixture();
+        let id = f.core.mark(T0).unwrap().session_id.unwrap();
+        f.core.delete_sessions(std::slice::from_ref(&id)).unwrap();
+        let state = f.core.mark(T0 + 5_000).unwrap();
+        assert_ne!(state.session_id.unwrap(), id);
+        assert_eq!(state.mark_count, 1, "新しい半荘の数字は 1 から");
+        let moved = f.data_dir().join("trash").join(&id).join("events.jsonl");
+        assert_eq!(fs::read_to_string(moved).unwrap().lines().count(), 2);
+    }
+
+    #[test]
+    fn u9_deleting_or_restoring_a_name_that_does_not_exist_is_an_error_with_a_message() {
+        let mut f = fixture();
+        f.core.mark(T0).unwrap();
+        let err = f
+            .core
+            .delete_sessions(&["19990101-000000".to_string()])
+            .unwrap_err();
+        assert!(err.contains("半荘が見つかりません"), "{err}");
+        let err = f
+            .core
+            .restore_sessions(&["19990101-000000".to_string()])
+            .unwrap_err();
+        assert!(err.contains("消した半荘の中に見つからない"), "{err}");
+        assert_eq!(f.core.list_sessions().unwrap().len(), 1, "何も消えていない");
     }
 }

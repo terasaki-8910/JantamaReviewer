@@ -1,0 +1,435 @@
+//! 消した半荘の置き場（`<保存先>/trash/`）と、Windows のごみ箱への移し替え（U-9、R8-3）。
+//!
+//! 半荘を消すと、半荘のフォルダは `games/<名前>` から `trash/<名前>` へ移る（同じボリュームなので一瞬。`store.rs`）。
+//! 半荘の一覧（`list_sessions`）と、起動したときの続きの記録（`resume_recent`）は `games/` だけを見るので、trash の中は見えない。
+//! 「元に戻す」は、フォルダを `games/` へ戻すだけ。アプリを閉じるとき（落ちたときは、次の起動のとき）に、
+//! trash の中身を、すべて Windows のごみ箱へ送る。
+//!
+//! 送る相手は、`<保存先>/trash` の直下の項目だけ。リンク（シンボリックリンク・ジャンクション）は、中身を見ずに触らない。
+//! 実体の場所が trash の外を指す項目も触らない。ごみ箱へ送る部分（`Recycler`）は差し替えられる。試験は偽物を使い、
+//! 本物のごみ箱には触れない。
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+pub use crate::store::TRASH_DIR;
+
+/// フォルダや項目を、Windows のごみ箱へ送る口。
+pub trait Recycler: Send + Sync {
+    /// `path` の項目（フォルダならその中身ごと）をごみ箱へ送る。送れなかったときは、その理由。
+    fn recycle(&self, path: &Path) -> Result<(), String>;
+}
+
+/// ごみ箱へ送った結果。
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct RecycleReport {
+    /// ごみ箱へ送った項目の名前（名前順）。
+    pub recycled: Vec<String>,
+    /// 触らなかった項目の名前と、理由（リンク・trash の外を指している、など）。
+    pub skipped: Vec<(String, String)>,
+    /// 送ろうとして、できなかった項目の名前と、理由。
+    pub failed: Vec<(String, String)>,
+}
+
+impl RecycleReport {
+    /// 画面（標準エラー）に出す、1 行ずつの問題。何も無ければ空。
+    pub fn problems(&self) -> Vec<String> {
+        self.skipped
+            .iter()
+            .map(|(name, why)| format!("ごみ箱へ送らずに残しました: {name}（{why}）"))
+            .chain(
+                self.failed
+                    .iter()
+                    .map(|(name, why)| format!("ごみ箱へ送れませんでした: {name}（{why}）")),
+            )
+            .collect()
+    }
+}
+
+/// 保存先の中の、消した半荘の置き場。
+pub fn trash_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join(TRASH_DIR)
+}
+
+/// `path`（実体のパス）が、`trash`（実体のパス）の中の、直下ではないもの以外か。つまり trash の中にあって trash 自身ではない。
+fn is_strictly_inside(trash: &Path, path: &Path) -> bool {
+    path != trash && path.starts_with(trash)
+}
+
+/// trash の直下の項目を、すべてごみ箱へ送る。送る相手は `<保存先>/trash` の中だけ。
+///
+/// 全部を送れたら、空になった trash のフォルダも片づける（中身が残っていれば、片づけない）。
+/// 1 つが失敗しても、残りは続ける。trash が無ければ何もしない。
+pub fn recycle_trash(data_dir: &Path, recycler: &dyn Recycler) -> RecycleReport {
+    let mut report = RecycleReport::default();
+    // 相対パスの保存先でも、ごみ箱へ送る口には、完全なパスを渡す（相対パスだと、ごみ箱を使わず消えることがある）。
+    let Ok(data_dir) = std::path::absolute(data_dir) else {
+        return report;
+    };
+    let dir = trash_dir(&data_dir);
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return report;
+    };
+    let Ok(canonical_dir) = dir.canonicalize() else {
+        return report;
+    };
+
+    let mut found: Vec<(String, PathBuf, fs::FileType)> = Vec::new();
+    for entry in entries {
+        let Ok(entry) = entry else { continue };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        match entry.file_type() {
+            Ok(kind) => found.push((name, entry.path(), kind)),
+            Err(e) => report
+                .failed
+                .push((name, format!("種類を調べられませんでした: {e}"))),
+        }
+    }
+    found.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (name, path, kind) in found {
+        if kind.is_symlink() {
+            report
+                .skipped
+                .push((name, "リンクなので、中を見ずに触りません".to_string()));
+            continue;
+        }
+        let inside = path
+            .canonicalize()
+            .is_ok_and(|real| is_strictly_inside(&canonical_dir, &real));
+        if !inside {
+            report
+                .skipped
+                .push((name, "置き場の外を指しているので触りません".to_string()));
+            continue;
+        }
+        match recycler.recycle(&path) {
+            Ok(()) => report.recycled.push(name),
+            Err(why) => report.failed.push((name, why)),
+        }
+    }
+
+    // 空のときだけ消える（`remove_dir` は、中身があれば何もしない）。
+    let _ = fs::remove_dir(&dir);
+    report
+}
+
+/// 置き場に残っている「消した半荘」を、本物のごみ箱へ送る。アプリを閉じるとき・起動したとき（落ちたあと）・保存先を
+/// 変えたときに呼ぶ。問題があれば標準エラーに書く（閉じる・起動を止めない）。本物の `WindowsRecycler` を作るのは、ここだけ。
+pub fn recycle_pending(data_dir: &Path) {
+    for line in recycle_trash(data_dir, &WindowsRecycler).problems() {
+        eprintln!("{line}");
+    }
+}
+
+/// 本物のごみ箱へ送る（Windows の `SHFileOperationW`）。ごみ箱へ送る口は、ここだけ。
+pub use win::WindowsRecycler;
+
+mod win {
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Shell::{
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE,
+        SHFILEOPSTRUCTW,
+    };
+
+    use super::Recycler;
+
+    /// ごみ箱へ送る（元に戻せる削除）・確認を出さない・進み具合を出さない・エラーの窓を出さない。
+    pub const RECYCLE_FLAGS: u16 =
+        (FOF_ALLOWUNDO.0 | FOF_NOCONFIRMATION.0 | FOF_SILENT.0 | FOF_NOERRORUI.0) as u16;
+
+    /// `SHFileOperationW` に渡す、削除の頼み。
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct DeleteRequest {
+        /// 削除する項目のパス。UTF-16 で、終わりに NUL が 2 つ付く（項目の並びの終わりの印）。
+        pub from: Vec<u16>,
+        pub flags: u16,
+    }
+
+    /// 項目 1 つを、ごみ箱へ送る頼みにする。完全なパス（ドライブ文字から始まる）だけを受け付ける。
+    /// 相対パスだと、ごみ箱へ送らずに消してしまうことがあるため。`\\?\` の長いパスの書き方も、この関数は扱えない。
+    pub fn delete_request(path: &Path) -> Result<DeleteRequest, String> {
+        if !path.is_absolute() {
+            return Err(format!("完全なパスではありません: {}", path.display()));
+        }
+        let text = path.as_os_str();
+        let mut from: Vec<u16> = text.encode_wide().collect();
+        if from.starts_with(&[b'\\' as u16, b'\\' as u16, b'?' as u16, b'\\' as u16]) {
+            return Err(format!("長いパスの書き方は使えません: {}", path.display()));
+        }
+        if from.contains(&0) {
+            return Err(format!("パスに NUL が入っています: {}", path.display()));
+        }
+        from.push(0);
+        from.push(0);
+        Ok(DeleteRequest {
+            from,
+            flags: RECYCLE_FLAGS,
+        })
+    }
+
+    /// 本物のごみ箱へ送る。
+    pub struct WindowsRecycler;
+
+    impl Recycler for WindowsRecycler {
+        fn recycle(&self, path: &Path) -> Result<(), String> {
+            let request = delete_request(path)?;
+            let mut op = SHFILEOPSTRUCTW {
+                hwnd: HWND::default(),
+                wFunc: FO_DELETE,
+                pFrom: PCWSTR(request.from.as_ptr()),
+                pTo: PCWSTR::null(),
+                fFlags: request.flags,
+                ..Default::default()
+            };
+            // SAFETY: `op` は、この呼び出しの間だけ有効な、正しく作った構造体。`pFrom` は、終わりに NUL が 2 つ付いた
+            // UTF-16 の並びで、`request.from` が呼び出しのあとまで生きている。
+            let code = unsafe { SHFileOperationW(&mut op) };
+            if code != 0 {
+                return Err(format!("Windows のエラーコード {code:#x}"));
+            }
+            if op.fAnyOperationsAborted.as_bool() {
+                return Err("中断されました".to_string());
+            }
+            Ok(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    use super::win::{delete_request, RECYCLE_FLAGS};
+    use super::*;
+
+    /// ごみ箱へ送る代わりに、頼まれたパスを覚えて、フォルダを消す（本物のごみ箱には触れない）。
+    struct FakeRecycler {
+        asked: Mutex<Vec<PathBuf>>,
+        fail_on: Option<&'static str>,
+    }
+
+    impl FakeRecycler {
+        fn new() -> FakeRecycler {
+            FakeRecycler {
+                asked: Mutex::new(Vec::new()),
+                fail_on: None,
+            }
+        }
+
+        fn failing_on(name: &'static str) -> FakeRecycler {
+            FakeRecycler {
+                asked: Mutex::new(Vec::new()),
+                fail_on: Some(name),
+            }
+        }
+
+        fn asked(&self) -> Vec<PathBuf> {
+            self.asked.lock().unwrap().clone()
+        }
+    }
+
+    impl Recycler for FakeRecycler {
+        fn recycle(&self, path: &Path) -> Result<(), String> {
+            self.asked.lock().unwrap().push(path.to_path_buf());
+            if self.fail_on == path.file_name().and_then(|n| n.to_str()) {
+                return Err("送れません".to_string());
+            }
+            // 本物のごみ箱は、項目を trash から取り除く。偽物も、同じように取り除く。
+            if path.is_dir() {
+                fs::remove_dir_all(path).map_err(|e| e.to_string())
+            } else {
+                fs::remove_file(path).map_err(|e| e.to_string())
+            }
+        }
+    }
+
+    fn make_session(data: &Path, name: &str) -> PathBuf {
+        let dir = trash_dir(data).join(name);
+        fs::create_dir_all(dir.join("marks")).unwrap();
+        fs::write(dir.join("events.jsonl"), "{}\n").unwrap();
+        fs::write(dir.join("marks").join("a.png"), [1u8, 2, 3]).unwrap();
+        dir
+    }
+
+    #[test]
+    fn u9_everything_directly_under_trash_goes_to_the_recycler_and_the_empty_trash_folder_goes_away(
+    ) {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data");
+        let a = make_session(&data, "20261009-190953");
+        let b = make_session(&data, "20261010-100000");
+        fs::write(trash_dir(&data).join("stray.txt"), "x").unwrap();
+        // games/ は触らない。
+        let games_session = data.join("games").join("20261001-000000");
+        fs::create_dir_all(&games_session).unwrap();
+
+        let recycler = FakeRecycler::new();
+        let report = recycle_trash(&data, &recycler);
+
+        assert_eq!(
+            report.recycled,
+            vec!["20261009-190953", "20261010-100000", "stray.txt"]
+        );
+        assert!(
+            report.skipped.is_empty() && report.failed.is_empty(),
+            "{report:?}"
+        );
+        assert!(report.problems().is_empty());
+        let asked = recycler.asked();
+        assert_eq!(asked, vec![a, b, trash_dir(&data).join("stray.txt")]);
+        for path in &asked {
+            assert_eq!(path.parent(), Some(trash_dir(&data).as_path()));
+        }
+        assert!(!trash_dir(&data).exists(), "空になった置き場は片づける");
+        assert!(games_session.exists(), "games の中は、ごみ箱へ送らない");
+    }
+
+    #[test]
+    fn u9_without_a_trash_folder_nothing_happens() {
+        let tmp = tempfile::tempdir().unwrap();
+        let recycler = FakeRecycler::new();
+        let report = recycle_trash(&tmp.path().join("data"), &recycler);
+        assert_eq!(report, RecycleReport::default());
+        assert!(recycler.asked().is_empty());
+        std::fs::create_dir_all(tmp.path().join("data")).unwrap();
+        let report = recycle_trash(&tmp.path().join("data"), &recycler);
+        assert_eq!(report, RecycleReport::default());
+    }
+
+    #[test]
+    fn u9_one_failure_does_not_stop_the_others_and_keeps_the_trash_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data");
+        make_session(&data, "20261009-190953");
+        let stuck = make_session(&data, "20261010-100000");
+        make_session(&data, "20261011-100000");
+
+        let recycler = FakeRecycler::failing_on("20261010-100000");
+        let report = recycle_trash(&data, &recycler);
+
+        assert_eq!(report.recycled, vec!["20261009-190953", "20261011-100000"]);
+        assert_eq!(
+            report.failed,
+            vec![("20261010-100000".to_string(), "送れません".to_string())]
+        );
+        assert!(report.problems()[0].contains("20261010-100000"));
+        assert!(stuck.exists(), "送れなかったものは、そのまま残る");
+        assert!(
+            trash_dir(&data).exists(),
+            "中身が残っているので、置き場は片づけない"
+        );
+    }
+
+    #[test]
+    fn u9_the_inside_check_accepts_only_things_strictly_under_the_trash_folder() {
+        let trash = Path::new(r"C:\data\trash");
+        assert!(is_strictly_inside(trash, Path::new(r"C:\data\trash\a")));
+        assert!(is_strictly_inside(trash, Path::new(r"C:\data\trash\a\b")));
+        assert!(!is_strictly_inside(trash, Path::new(r"C:\data\trash")));
+        assert!(!is_strictly_inside(trash, Path::new(r"C:\data\games\a")));
+        assert!(!is_strictly_inside(trash, Path::new(r"C:\data\trash2\a")));
+        assert!(!is_strictly_inside(trash, Path::new(r"C:\data")));
+    }
+
+    #[test]
+    fn u9_a_junction_inside_trash_that_points_outside_is_never_recycled() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data");
+        make_session(&data, "20261009-190953");
+        let outside = tmp.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("precious.txt"), "do not touch").unwrap();
+        let link = trash_dir(&data).join("link");
+        // ジャンクションは、管理者の権限が無くても作れる。
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&outside)
+            .output()
+            .expect("cmd を動かせる");
+        assert!(
+            made.status.success(),
+            "ジャンクションを作れなかった: {}",
+            String::from_utf8_lossy(&made.stdout)
+        );
+
+        let recycler = FakeRecycler::new();
+        let report = recycle_trash(&data, &recycler);
+
+        assert_eq!(report.recycled, vec!["20261009-190953"]);
+        assert_eq!(report.skipped.len(), 1, "{report:?}");
+        assert_eq!(report.skipped[0].0, "link");
+        assert!(
+            recycler
+                .asked()
+                .iter()
+                .all(|p| p.file_name().unwrap() != "link"),
+            "リンクをごみ箱へ送る口に渡さない"
+        );
+        assert!(outside.join("precious.txt").exists(), "リンクの先は無傷");
+        assert!(
+            trash_dir(&data).exists(),
+            "リンクが残るので、置き場は片づけない"
+        );
+        // 後片づけ: ジャンクションそのものを外す（中身は消えない）。
+        fs::remove_dir(&link).unwrap();
+    }
+
+    #[test]
+    fn u9_the_windows_request_is_built_exactly_as_the_recycle_bin_needs() {
+        // 試験は、本物のごみ箱を呼ばない。頼みの組み立て（パスの終わりの NUL 2 つ・旗）だけを確かめる。
+        let request = delete_request(Path::new(
+            r"C:\Users\me\JantamaReviewerData\trash\20261009-190953",
+        ))
+        .expect("完全なパスは通る");
+        assert_eq!(
+            &request.from[request.from.len() - 2..],
+            &[0u16, 0u16],
+            "NUL が 2 つで終わる"
+        );
+        assert!(
+            !request.from[..request.from.len() - 2].contains(&0),
+            "途中に NUL が無い"
+        );
+        let text = String::from_utf16(&request.from[..request.from.len() - 2]).unwrap();
+        assert_eq!(
+            text,
+            r"C:\Users\me\JantamaReviewerData\trash\20261009-190953"
+        );
+        // 旗: ごみ箱へ送る（元に戻せる）・確認を出さない・進み具合を出さない・エラーの窓を出さない。
+        // FOF_SILENT 4 + FOF_NOCONFIRMATION 16 + FOF_ALLOWUNDO 64 + FOF_NOERRORUI 1024
+        assert_eq!(request.flags, 4 + 16 + 64 + 1024);
+        assert_eq!(request.flags, RECYCLE_FLAGS);
+        assert_ne!(
+            request.flags & 64,
+            0,
+            "ごみ箱へ送る旗（FOF_ALLOWUNDO）が立っている"
+        );
+    }
+
+    #[test]
+    fn u9_the_windows_request_refuses_relative_long_form_and_nul_paths() {
+        assert!(
+            delete_request(Path::new(r"data\trash\a")).is_err(),
+            "相対パス"
+        );
+        assert!(
+            delete_request(Path::new(r"\trash\a")).is_err(),
+            "ドライブ文字が無い"
+        );
+        assert!(
+            delete_request(Path::new(r"\\?\C:\data\trash\a")).is_err(),
+            "長いパスの書き方"
+        );
+        assert!(
+            delete_request(Path::new("C:\\data\\tra\0sh")).is_err(),
+            "NUL"
+        );
+    }
+}

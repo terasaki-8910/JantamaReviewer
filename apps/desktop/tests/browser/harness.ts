@@ -132,7 +132,13 @@ export interface Scenario {
   settings: unknown;
   /** `get_input_status` が返す、ボタンの登録・テスト・補助プログラムの状態。無ければ null。 */
   inputStatus?: unknown;
+  /** 半荘の一覧。`delete_sessions`・`restore_sessions` で、消す・戻すと、`list_sessions` の答えが変わる（Rust 側と同じ決まり）。 */
   sessions: unknown[];
+  /** 取り込んだ結果（半荘の名前 → 結果の JSON の文字）。`read_report` が返す。無い半荘は null。 */
+  reports?: Record<string, string>;
+  /** 次の `delete_sessions`・`restore_sessions` を失敗させる理由（失敗の通知を見るため）。 */
+  failDelete?: string;
+  failRestore?: string;
   /** `convertFileSrc` が返す画像（データ URL）。 */
   thumb: string;
   /** 取り込みの流れへの答え。無ければ、クリップボードは空。 */
@@ -154,8 +160,48 @@ export function tauriMockScript(scenario: Scenario): string {
   var callbacks = {};
   var listeners = {};
   var importing = scenario.importing || {};
+  var sessions = scenario.sessions.slice();
+  var trash = [];
+  var reports = scenario.reports || {};
+  var failDelete = scenario.failDelete || null;
+  var failRestore = scenario.failRestore || null;
+  window.__jrCalls = [];
+  function sortedSessions() {
+    return sessions.slice().sort(function (a, b) {
+      return b.started_ms - a.started_ms || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+    });
+  }
+  function announceChange() {
+    setTimeout(function () { window.__jrEmit('state-changed', {}); }, 0);
+  }
   function reply(cmd, args) {
+    window.__jrCalls.push({ cmd: cmd, args: args });
     switch (cmd) {
+      case 'delete_sessions': {
+        if (failDelete) { var why = failDelete; failDelete = null; throw why; }
+        args.ids.forEach(function (id) {
+          if (!sessions.some(function (s) { return s.id === id; })) throw '半荘が見つかりません: ' + id;
+        });
+        args.ids.forEach(function (id) {
+          var found = sessions.filter(function (s) { return s.id === id; })[0];
+          sessions = sessions.filter(function (s) { return s.id !== id; });
+          trash.push(found);
+        });
+        announceChange();
+        return null;
+      }
+      case 'restore_sessions': {
+        if (failRestore) { var reason = failRestore; failRestore = null; throw reason; }
+        args.ids.forEach(function (id) {
+          var found = trash.filter(function (s) { return s.id === id; })[0];
+          if (!found) throw '消した半荘の中に見つからないため、戻せません: ' + id;
+          trash = trash.filter(function (s) { return s.id !== id; });
+          sessions.push(found);
+        });
+        announceChange();
+        return null;
+      }
+      case 'read_report': return reports[args.sessionId] === undefined ? null : reports[args.sessionId];
       case 'plugin:event|listen':
         (listeners[args.event] = listeners[args.event] || []).push(args.handler);
         return nextEvent++;
@@ -175,7 +221,7 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'set_settings': return args.settings;
       case 'set_orientation': return Object.assign({}, scenario.settings, { orientation: args.orientation });
       case 'get_input_status': return scenario.inputStatus === undefined ? null : scenario.inputStatus;
-      case 'list_sessions': return scenario.sessions;
+      case 'list_sessions': return sortedSessions();
       case 'get_startup_note': return null;
       default: return null;
     }
@@ -201,6 +247,12 @@ export function tauriMockScript(scenario: Scenario): string {
     });
   };
 })(${JSON.stringify(scenario)});`;
+}
+
+/** 検討画面が最初の絵を描き終えるまで待つ（サイドバーの半荘の一覧と、本文の見出し）。 */
+export async function waitForMainReady(page: Page): Promise<void> {
+  await page.getByRole('navigation', { name: '半荘の一覧' }).waitFor();
+  await page.getByRole('heading', { level: 1 }).first().waitFor();
 }
 
 export interface AxeViolation {

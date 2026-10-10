@@ -20,6 +20,7 @@ import {
   startPageServer,
   tauriMockScript,
   unreachableByTab,
+  waitForMainReady,
   type PageServer,
   type Scenario,
 } from './harness';
@@ -117,6 +118,8 @@ function scenario(label: Scenario['label'], overrides: Partial<Scenario> = {}): 
     settings,
     inputStatus,
     sessions: makeSessions(),
+    // 2 つめの半荘は、結果を取り込んである（一覧に段階の印と Rating が出る）。
+    reports: { '20261008-210000': FX4_TEXT },
     thumb: TINY_PNG,
     ...overrides,
   };
@@ -196,7 +199,7 @@ const MAIN_WIDTHS = [390, 768, 1280] as const;
 describe('検討画面（メインの窓）', () => {
   for (const scheme of SCHEMES) {
     for (const width of MAIN_WIDTHS) {
-      for (const pageName of ['記録', '設定'] as const) {
+      for (const pageName of ['半荘', '設定'] as const) {
         const title = `${pageName}ページ 幅${width}px ${scheme}`;
 
         it(`${title}: 横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届き、外へ通信しない`, async () => {
@@ -207,7 +210,7 @@ describe('検討画面（メインの窓）', () => {
             scenario('main'),
           );
           try {
-            await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+            await waitForMainReady(page);
             if (pageName === '設定') {
               await page.getByRole('button', { name: '設定' }).click();
               await page.getByRole('heading', { level: 1, name: '設定' }).waitFor();
@@ -300,7 +303,7 @@ describe('検討画面（メインの窓）', () => {
             }),
           );
           try {
-            await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+            await waitForMainReady(page);
             await page.getByRole('button', { name: '設定' }).click();
             await page.getByRole('heading', { level: 1, name: '設定' }).waitFor();
             await page.getByText(variant.ready).first().waitFor();
@@ -334,7 +337,7 @@ describe('検討画面（メインの窓）', () => {
       }),
     );
     try {
-      await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+      await waitForMainReady(page);
       await page.getByRole('button', { name: '設定' }).click();
       await page.getByText('受け取りました').first().waitFor();
       const gap = await page.evaluate(() => {
@@ -357,7 +360,7 @@ describe('検討画面（メインの窓）', () => {
   it('幅 390px では、サイドバーがアイコンだけの細い列になり、行き先の名前は読み上げに残る', async () => {
     const { context, page } = await open('index.html', { width: 390, height: 800 }, 'light', scenario('main'));
     try {
-      await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+      await waitForMainReady(page);
       const side = await page.locator('.side').boundingBox();
       expect(side?.width).toBeLessThanOrEqual(61);
       // 文字は見えないが、アクセシブルな名前は残っている。
@@ -370,12 +373,12 @@ describe('検討画面（メインの窓）', () => {
     }
   });
 
-  it('幅 1280px では、サイドバーは固定幅（224px）で、文字が見える', async () => {
+  it('幅 1280px では、サイドバーは固定幅（248px）で、文字が見える', async () => {
     const { context, page } = await open('index.html', { width: 1280, height: 800 }, 'light', scenario('main'));
     try {
-      await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+      await waitForMainReady(page);
       const side = await page.locator('.side').boundingBox();
-      expect(Math.round(side?.width ?? 0)).toBe(224);
+      expect(Math.round(side?.width ?? 0)).toBe(248);
       expect((await page.locator('.nav-item .label').first().boundingBox())?.width ?? 0).toBeGreaterThan(20);
     } finally {
       await context.close();
@@ -385,7 +388,7 @@ describe('検討画面（メインの窓）', () => {
   it('テーマの切り替えボタンで、ライトとダークが入れ替わり、本文の色が変わる', async () => {
     const { context, page } = await open('index.html', { width: 1280, height: 800 }, 'light', scenario('main'));
     try {
-      await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+      await waitForMainReady(page);
       const colorOf = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       const light = await colorOf();
       await page.getByRole('button', { name: 'ダークテーマに切り替え' }).click();
@@ -425,7 +428,7 @@ async function emitEvent(page: Page, event: string, payload: unknown) {
 
 /** サイドバーの「検討結果を取り込む」を押して、取り込みのページを開く。 */
 async function openImportPage(page: Page) {
-  await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+  await waitForMainReady(page);
   await page.getByRole('button', { name: '検討結果を取り込む' }).click();
   await page.getByRole('heading', { level: 1, name: '検討結果を取り込む' }).waitFor();
 }
@@ -502,7 +505,7 @@ const IMPORT_VIEWS: ImportView[] = [
     name: '「この半荘を取り込みますか」の帯（記録のページ）',
     scenario: { importing: { clipboard: COPIED_LINK } },
     drive: async (page) => {
-      await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+      await waitForMainReady(page);
       await emitEvent(page, 'main-window-focused', null);
     },
     ready: { text: 'この半荘を取り込みますか' },
@@ -557,12 +560,12 @@ describe('取り込みのページ', () => {
     ] as const) {
       const { context, page } = await open('index.html', { width, height: 800 }, 'light', scenario('main'));
       try {
-        await page.getByRole('heading', { level: 1, name: '記録' }).waitFor();
+        await waitForMainReady(page);
         const button = page.getByRole('button', { name: '検討結果を取り込む' });
         const box = await button.boundingBox();
-        const records = await page.getByRole('button', { name: '記録' }).first().boundingBox();
-        // ブランドの下、記録の行き先より上。
-        expect(box !== null && records !== null && box.y < records.y).toBe(true);
+        const next = await page.getByRole('button', { name: '解き直し' }).first().boundingBox();
+        // ブランドの下、行き先（解き直し・ログ・週の集計）より上。
+        expect(box !== null && next !== null && box.y < next.y).toBe(true);
         const label = await page.locator('.import .label').boundingBox();
         if (withLabel) {
           expect(label?.width ?? 0).toBeGreaterThan(40);

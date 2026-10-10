@@ -550,85 +550,11 @@ fieldset.setting:not(:first-child) {
   flex: 1 1 14em;
 }
 
-/* ---------- 記録ページ ---------- */
-.records {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--s5);
-  align-items: start;
-}
-
-@container main (width >= 760px) {
-  .records {
-    grid-template-columns: 280px minmax(0, 1fr);
-    gap: 28px;
-  }
-}
-
-.session-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.session-row {
-  display: grid;
-  gap: 2px;
-  width: 100%;
-  padding: 8px 12px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--r2);
-  color: var(--ink);
-  text-align: left;
-  transition: background-color 120ms ease;
-}
-
-.session-row:hover {
-  background: var(--hover);
-}
-
-.session-row[aria-current="true"] {
-  background: var(--accent-fill);
-}
-
-.session-when {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.session-counts {
-  display: flex;
-  gap: var(--s3);
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.session-counts b {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  color: var(--ink);
-}
-
+/* ---------- 半荘のページ（一覧は sessions.css のサイドバー） ---------- */
 .detail {
   display: grid;
   gap: var(--s5);
   min-width: 0;
-}
-
-.detail-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--s2) var(--s4);
-}
-
-.detail-title {
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.4;
 }
 
 .sec-title {

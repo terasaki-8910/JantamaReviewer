@@ -1,0 +1,831 @@
+/*
+  sessions.css: 半荘の一覧（サイドバー）・段階の印・メニュー・確認のダイアログ・取り消しの通知・半荘のページの見出し。
+  承認済みのサンプル（8回目のシートの round8.css）を、実際の画面の部品に合わせて移したもの。
+  方針:
+  - アプリのシェル（細いサイドバー、罫線で区切る面、accent は「選択・主な操作・フォーカス」だけ）はそのまま。
+  - 新しい部品は、既存の部品（.btn、.icon-btn、.input、.pill、メニュー）を言い換えて作る。新しい見た目は足さない。
+  - 行ごとの操作（…）は行の右上に固定する。行の中身がどう変わっても動かない。
+  - ここでは色を書かない。すべて tokens.css のトークンから。
+*/
+
+/*
+  ================= 段階の印（14 段階） =================
+  S+ から B- までの 9 段階は、卓の緑 1 色の濃さ（tokens.css の --gr1 から --gr9）。強いほど表面から離れる:
+  ライトテーマでは濃い緑、ダークテーマでは淡い緑。C+ から E は線だけ。
+*/
+.grade {
+  --g-bg: var(--grn-bg);
+  --g-fg: var(--grn-fg);
+  --g-bd: var(--grn-bd);
+
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 30px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--g-bd);
+  border-radius: var(--r1);
+  background: var(--g-bg);
+  color: var(--g-fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.grade[data-grade="S+"] {
+  --g-bg: var(--gr1-bg);
+  --g-fg: var(--gr1-fg);
+  --g-bd: var(--gr1-bg);
+}
+
+.grade[data-grade="S"] {
+  --g-bg: var(--gr2-bg);
+  --g-fg: var(--gr2-fg);
+  --g-bd: var(--gr2-bg);
+}
+
+.grade[data-grade="S-"] {
+  --g-bg: var(--gr3-bg);
+  --g-fg: var(--gr3-fg);
+  --g-bd: var(--gr3-bg);
+}
+
+.grade[data-grade="A+"] {
+  --g-bg: var(--gr4-bg);
+  --g-fg: var(--gr4-fg);
+  --g-bd: var(--gr4-bg);
+}
+
+.grade[data-grade="A"] {
+  --g-bg: var(--gr5-bg);
+  --g-fg: var(--gr5-fg);
+  --g-bd: var(--gr5-bg);
+}
+
+.grade[data-grade="A-"] {
+  --g-bg: var(--gr6-bg);
+  --g-fg: var(--gr6-fg);
+  --g-bd: var(--gr6-bg);
+}
+
+.grade[data-grade="B+"] {
+  --g-bg: var(--gr7-bg);
+  --g-fg: var(--gr7-fg);
+  --g-bd: var(--gr7-bg);
+}
+
+.grade[data-grade="B"] {
+  --g-bg: var(--gr8-bg);
+  --g-fg: var(--gr8-fg);
+  --g-bd: var(--gr8-bg);
+}
+
+.grade[data-grade="B-"] {
+  --g-bg: var(--gr9-bg);
+  --g-fg: var(--gr9-fg);
+  --g-bd: var(--gr9-bg);
+}
+
+.grade.lg {
+  min-width: 42px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r2);
+  font-size: 15px;
+}
+
+/* まだ段階が無い行（取り込み前・読み込み中・読めない）に、同じ大きさの点線の枠を置く。行の中身が動かないように。 */
+.grade.ghost {
+  --g-bd: var(--line-strong);
+
+  border-style: dashed;
+}
+
+/* ================= サイドバー ================= */
+@media (width >= 640px) {
+  .app {
+    --side-w: 248px;
+  }
+}
+
+.side-in {
+  gap: var(--s4);
+  padding-top: var(--s4);
+}
+
+.nav-item[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.nav-item[aria-disabled="true"]:hover {
+  background: transparent;
+}
+
+/* ---- 名前と、戻る・進む（画面の履歴） ---- */
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  min-height: 32px;
+}
+
+.side-head .brand {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.side-hist {
+  display: flex;
+  flex: none;
+}
+
+.hist-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--ink);
+}
+
+.hist-btn:disabled {
+  color: var(--muted);
+  opacity: 0.45;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+/* ---- 半荘の一覧 ---- */
+.sessions {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sessions .sec-title {
+  margin: 0;
+  padding: 0 var(--s2);
+}
+
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  min-height: 28px;
+}
+
+.link-btn {
+  min-height: 28px;
+  padding: 0 var(--s2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r1);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.link-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.filter {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--s2);
+}
+
+.search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-ic {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.search-in {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px 0 30px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  font-size: 13px;
+  transition: border-color 120ms ease;
+}
+
+.search-in::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.search-in::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-in:hover {
+  border-color: var(--ink);
+}
+
+.search-in:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+
+.search.has-clear .search-in {
+  padding-right: 28px;
+}
+
+.search-x {
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r1);
+  color: var(--muted);
+}
+
+.search-x:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.search-x:focus-visible {
+  outline-offset: -2px;
+}
+
+.search-x .ic {
+  width: 14px;
+  height: 14px;
+}
+
+.stage-btn {
+  min-height: 32px;
+  gap: 4px;
+  padding: 0 8px 0 10px;
+}
+
+.stage-btn .stage-ic {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+/* 絞り込み中は、ボタンも accent の淡い塗りにして「かかっている」ことを示す */
+.stage-btn[data-on="true"] {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.stage-btn[aria-expanded="true"] {
+  border-color: var(--ink);
+}
+
+.fstat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  min-height: 28px;
+  margin: 2px 0 0;
+  padding-left: var(--s2);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.fstat .link-btn {
+  min-height: 24px;
+}
+
+.empty-note {
+  margin: 0;
+  padding: var(--s4) var(--s2);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.session-scroll {
+  min-height: 0;
+  scroll-padding-top: 36px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin-inline: calc(-1 * var(--s1));
+  padding: 0 var(--s1) var(--s1);
+}
+
+.date-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 12px 10px 4px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.session-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-row {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r2);
+  color: var(--ink);
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+
+.session-row:hover {
+  background: var(--hover);
+}
+
+.session-row[aria-current="true"] {
+  background: var(--accent-fill);
+}
+
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+/* 内側に描く。スクロールの枠と、貼り付く日付の見出しに、外側の輪が隠されるため */
+.srow:focus-visible {
+  outline-offset: -2px;
+}
+
+.s-time {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.s-rate {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.s-doubt {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.s-pending {
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.narrow-only {
+  display: none;
+}
+
+/* 行ごとのメニュー（…）: 行の右上に固定。行の高さや中身が変わっても位置は変わらない */
+.s-item {
+  position: relative;
+}
+
+.row-more {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r1);
+  color: var(--muted);
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease;
+}
+
+.row-more .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.row-more:hover,
+.row-more[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.row-more:focus-visible {
+  outline-offset: -2px;
+}
+
+.s-item:hover .row-more,
+.s-item:focus-within .row-more,
+.row-more[aria-expanded="true"] {
+  opacity: 1;
+}
+
+/* ボタンが出ている間は、同じ場所の「迷い6」を薄くして重ならないようにする */
+.s-item:hover .s-doubt,
+.s-item:focus-within .s-doubt,
+.s-item:has(.row-more[aria-expanded="true"]) .s-doubt {
+  opacity: 0;
+}
+
+.s-item:has(.row-more[aria-expanded="true"]) .session-row {
+  background: var(--hover);
+}
+
+/* 選択モード: 行の左にチェック。選んだ行は accent の淡い塗り */
+.s-cb {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.session-row.is-sel {
+  background: var(--accent-fill);
+}
+
+.selbar {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s2) 10px 10px;
+  background: var(--accent-fill);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+
+.selbar-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.selbar-act {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.selbar-act .btn {
+  min-width: 0;
+  padding: 0 var(--s2);
+}
+
+/* 削除の確定: accent は「選ぶ・進む」に取っておき、取り返しのつかない操作は中立の反転色にする（赤は「自分の手」の印） */
+.btn.danger {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+  font-weight: 700;
+}
+
+.btn.danger:disabled {
+  background: var(--hover);
+  border-color: var(--line);
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.btn.danger:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+/* ================= メニュー・確認のダイアログ・取り消しの通知 ================= */
+.toast {
+  position: fixed;
+  z-index: 80;
+  bottom: var(--s5);
+  left: calc(var(--side-w) + var(--s5));
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  max-width: calc(100vw - var(--side-w) - 2 * var(--s5));
+  min-height: 48px;
+  padding: 6px 6px 6px var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  box-shadow: 0 8px 20px var(--menu-shadow);
+  font-size: 13.5px;
+}
+
+/* 細い列では 2 行になる。1 文字だけ次の行へ落ちないよう、句の切れ目で折り、行の長さをそろえる */
+.toast-t {
+  min-width: 0;
+  text-wrap: balance;
+  word-break: auto-phrase;
+}
+
+.toast-x {
+  width: 32px;
+  height: 32px;
+}
+
+.toast-x .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.pop {
+  position: fixed;
+  z-index: 60;
+  min-width: 156px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  box-shadow: 0 8px 20px var(--menu-shadow);
+  font-size: 13px;
+}
+
+.pi {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px 0 4px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r1);
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pi:hover,
+.pi:focus-visible {
+  background: var(--hover);
+}
+
+.pi:focus-visible {
+  outline-offset: -2px;
+}
+
+.pi .tick {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+}
+
+.pi .tick .ic {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
+  color: var(--accent);
+  visibility: hidden;
+}
+
+.pi[aria-checked="true"] .tick .ic {
+  visibility: visible;
+}
+
+.pi.plain {
+  padding-left: 10px;
+}
+
+.pi .pi-r {
+  margin-left: auto;
+  padding-left: var(--s4);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.psep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--line);
+}
+
+.dlg-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: var(--s4);
+  background: var(--scrim-soft);
+}
+
+.dlg {
+  width: min(400px, 100%);
+  padding: var(--s5) var(--s5) var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  box-shadow: 0 12px 32px var(--menu-shadow);
+}
+
+.dlg:focus {
+  outline: none;
+}
+
+.dlg-t {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.dlg-d {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.dlg-act {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
+  margin-top: var(--s5);
+}
+
+body.dlg-open {
+  overflow: hidden;
+}
+
+/* ================= 半荘のページの見出し ================= */
+.head.session-head {
+  align-items: flex-end;
+}
+
+.head-l {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.head-l .title {
+  margin: 0;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.head-score {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 2px;
+}
+
+.rate-num {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.rate-lbl {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.page > .detail {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s6);
+}
+
+.detail .sec-title {
+  margin-bottom: var(--s3);
+}
+
+/* ================= 狭いとき（640px 未満）: 細い列。半荘は段階の印だけ ================= */
+@media (width < 640px) {
+  .side-head {
+    flex-direction: column;
+    gap: var(--s2);
+  }
+
+  .side-hist {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .hist-btn {
+    width: 44px;
+    height: 36px;
+  }
+
+  .list-head,
+  .filter,
+  .fstat,
+  .selbar,
+  .empty-note,
+  .row-more {
+    display: none;
+  }
+
+  .sessions {
+    align-items: center;
+    width: 100%;
+  }
+
+  .sessions .sec-title,
+  .date-head {
+    display: none;
+  }
+
+  .session-scroll {
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .srow {
+    position: relative;
+    width: 44px;
+    min-height: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* 時刻・Rating・迷いの数・取り込み前の文字は、見えない所へ寄せる（読み上げには残る） */
+  .srow .s-time,
+  .srow .s-rate,
+  .srow .s-doubt,
+  .srow .s-pending {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .narrow-only {
+    display: inline-grid;
+  }
+
+  .head.session-head {
+    align-items: flex-start;
+  }
+
+  .toast {
+    right: var(--s3);
+    left: calc(var(--side-w) + var(--s3));
+    gap: var(--s2);
+    max-width: none;
+    padding-left: var(--s3);
+  }
+}

@@ -26,6 +26,7 @@ use crate::input_flow::{page_key_input, HelperOp, Input, InputService, InputStat
 use crate::ready::ShowGate;
 use crate::settings::{Orientation, Settings, WidgetPosition};
 use crate::store::{Rating, SessionRecord};
+use crate::trash;
 use crate::widget_window::{
     clamp_to_monitors, default_widget_position, move_window, widget_size, Area, MAIN_LABEL,
     WIDGET_LABEL,
@@ -43,6 +44,26 @@ impl SharedCore {
     /// 別のスレッドが途中で止まっていても、記録を続けられるよう、毒された錠は使い続ける。
     pub fn lock(&self) -> MutexGuard<'_, Core> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// 錠を、`wait` の間だけ待って取る。取れなければ `None`（アプリを閉じるときに、ほかの処理に待たされて、
+    /// 閉じられなくならないため）。
+    pub fn lock_within(&self, wait: Duration) -> Option<MutexGuard<'_, Core>> {
+        let deadline = std::time::Instant::now() + wait;
+        loop {
+            match self.0.try_lock() {
+                Ok(guard) => return Some(guard),
+                Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+                    return Some(poisoned.into_inner())
+                }
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    if std::time::Instant::now() >= deadline {
+                        return None;
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+            }
+        }
     }
 }
 
@@ -220,11 +241,21 @@ pub fn set_settings_now<R: Runtime>(
     settings: Settings,
 ) -> Result<Settings, String> {
     let shared = app.state::<SharedCore>();
-    let (applied, change, state) = {
+    let (applied, change, state, previous_data_dir) = {
         let mut core = shared.lock();
+        let previous_data_dir = core.settings().data_dir.clone();
         let change = core.apply_settings(settings)?;
-        (core.settings().clone(), change, core.app_state())
+        (
+            core.settings().clone(),
+            change,
+            core.app_state(),
+            previous_data_dir,
+        )
     };
+    if change.data_dir {
+        // 保存先を変えると、前の保存先の置き場は、もう誰も見ない。消した半荘が残っていたら、いまごみ箱へ送る。
+        trash::recycle_pending(&previous_data_dir);
+    }
     apply_side_effects(app, &applied, change);
     emit_settings(app, &applied);
     if change.data_dir {
@@ -429,6 +460,31 @@ pub async fn open_main_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn list_sessions(core: State<'_, SharedCore>) -> Result<Vec<SessionRecord>, String> {
     core.lock().list_sessions()
+}
+
+/// 半荘を消す（U-9）。半荘のフォルダを、保存先の `trash/` へ移す（一瞬）。アプリを閉じるとき（落ちたときは、次の起動のとき）に、
+/// Windows のごみ箱へ送る。それまでは `restore_sessions` で戻せる。ウィジェットが記録中の半荘も、消せる（その半荘は閉じる）。
+#[tauri::command]
+pub async fn delete_sessions(
+    app: AppHandle,
+    core: State<'_, SharedCore>,
+    ids: Vec<String>,
+) -> Result<(), String> {
+    let state = core.lock().delete_sessions(&ids)?;
+    emit_state(&app, &state);
+    Ok(())
+}
+
+/// 消した半荘を戻す（U-9。「元に戻す」と Ctrl+Z）。
+#[tauri::command]
+pub async fn restore_sessions(
+    app: AppHandle,
+    core: State<'_, SharedCore>,
+    ids: Vec<String>,
+) -> Result<(), String> {
+    let state = core.lock().restore_sessions(&ids)?;
+    emit_state(&app, &state);
+    Ok(())
 }
 
 /// 起動時に伝えたいこと（壊れた設定ファイルを退避した、など）。

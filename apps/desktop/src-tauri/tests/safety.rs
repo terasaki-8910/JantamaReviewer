@@ -2130,3 +2130,112 @@ fn w9_the_helper_is_built_without_a_console_and_every_scan_covers_its_sources() 
         );
     }
 }
+
+// ---- U-9: 消した半荘は、ごみ箱へ送る。ごみ箱の口は 1 か所で、送る相手は置き場（trash）の中だけ ----
+
+/// 本物のごみ箱へ送る Windows の API。
+const RECYCLE_API: &str = "SHFileOperationW";
+
+/// 製品のソース（試験を除く）のうち、`needle` を含むファイルの（`src` からの）名前。
+fn product_files_containing(needle: &str) -> Vec<String> {
+    let mut found: Vec<String> = rust_sources()
+        .iter()
+        .filter(|file| product_part(&read(file)).contains(needle))
+        .map(|file| file.to_string_lossy().replace('\\', "/"))
+        .collect();
+    found.sort();
+    found
+}
+
+#[test]
+fn u9_the_recycle_bin_api_is_called_from_one_place_and_with_the_undo_flag() {
+    let users = product_files_containing(RECYCLE_API);
+    assert_eq!(
+        users.len(),
+        1,
+        "ごみ箱の API を呼ぶファイルが 1 つではない: {users:?}"
+    );
+    assert!(users[0].ends_with("src/trash.rs"), "{users:?}");
+
+    let trash = read(&crate_dir().join("src").join("trash.rs"));
+    let product = product_part(&trash);
+    assert_eq!(
+        product.matches(&format!("{RECYCLE_API}(&mut op)")).count(),
+        1,
+        "呼ぶのは 1 回だけ"
+    );
+    // 削除（FO_DELETE）を、元に戻せる形（FOF_ALLOWUNDO）で、確認も窓も出さずに頼む。
+    for needed in [
+        "wFunc: FO_DELETE",
+        "FOF_ALLOWUNDO",
+        "FOF_NOCONFIRMATION",
+        "FOF_SILENT",
+        "FOF_NOERRORUI",
+    ] {
+        assert!(product.contains(needed), "{needed} が無い");
+    }
+    // ごみ箱を使わずに消してしまう頼み方（旗が足りない・別の関数）を入れない。
+    for banned in [
+        "FO_MOVE",
+        "FO_COPY",
+        "FO_RENAME",
+        "DeleteFile",
+        "RemoveDirectory",
+    ] {
+        assert!(!product.contains(banned), "{banned} がある");
+    }
+}
+
+#[test]
+fn u9_the_real_recycler_is_made_in_one_function_and_nothing_deletes_folders_in_place() {
+    // 本物のごみ箱の道具を作るのは、置き場を片づける 1 つの関数だけ。ほかは、その関数を呼ぶ。
+    let makers = product_files_containing("WindowsRecycler");
+    assert_eq!(makers.len(), 1, "{makers:?}");
+    assert!(makers[0].ends_with("src/trash.rs"), "{makers:?}");
+    let trash = read(&crate_dir().join("src").join("trash.rs"));
+    assert_eq!(
+        product_part(&trash).matches("&WindowsRecycler").count(),
+        1,
+        "recycle_pending の 1 か所だけ"
+    );
+
+    // フォルダを、ごみ箱を通さずに、中身ごと消すコードが、製品に無い。
+    let recursive = product_files_containing("remove_dir_all");
+    assert!(
+        recursive.is_empty(),
+        "remove_dir_all を使っている: {recursive:?}"
+    );
+}
+
+#[test]
+fn u9_the_trash_is_emptied_when_the_app_exits_when_it_starts_and_when_the_data_dir_changes() {
+    let lib = read(&crate_dir().join("src").join("lib.rs"));
+    let lib = product_part(&lib);
+    // 閉じるとき（RunEvent::Exit）。
+    assert!(
+        lib.contains("tauri::RunEvent::Exit"),
+        "終了の知らせを受けていない"
+    );
+    assert!(lib.contains("recycle_deleted_sessions(app)"));
+    // 起動のとき（落ちたあとの片づけ）。置き場を片づけてから、記録の担当を作る前ではなく、設定を読んだあと。
+    let setup_at = lib.find("fn setup(").expect("setup がある");
+    let load_at = lib[setup_at..].find("Core::load(").expect("設定を読む");
+    let startup_at = lib[setup_at..]
+        .find("trash::recycle_pending(&settings.data_dir)")
+        .expect("起動のときに、置き場を片づけている");
+    assert!(startup_at > load_at, "設定を読んだあとに片づける");
+    // 保存先を変えたとき（前の保存先の置き場）。
+    let commands = read(&crate_dir().join("src").join("commands.rs"));
+    assert!(product_part(&commands).contains("trash::recycle_pending(&previous_data_dir)"));
+    // ほかの場所からは呼ばない。
+    let callers = product_files_containing("recycle_pending(");
+    let names: Vec<&str> = callers
+        .iter()
+        .map(|p| p.rsplit("src/").next().unwrap_or(p))
+        .collect();
+    assert_eq!(
+        names,
+        vec!["commands.rs", "lib.rs", "trash.rs"],
+        "{callers:?}"
+    );
+}

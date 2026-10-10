@@ -4,6 +4,10 @@
   --you (red) is semantic only: "your move" against the AI.
   Added on top of the sheet palette: --on-accent (text on a filled accent button),
   plus non-color scale tokens and --hover, which is derived from --ink so it follows the theme.
+
+  Round 8: the grade badges (style A, chosen in round 7) have three strengths for each of S, A and B (nine filled steps);
+  --scrim-soft is the backdrop of the small confirm dialog and --menu-shadow the drop shadow of menus, dialog and toast.
+  The values are the ones approved in round 8 (R8-2); they are copied as they are.
 */
 :root {
   --bg: #F4F4F4;
@@ -37,6 +41,48 @@
   --hover: color-mix(in srgb, var(--ink) 7%, transparent);
   --accent-strong: color-mix(in srgb, var(--accent) 86%, var(--ink));
 
+  /*
+    --scrim-soft  : the backdrop of a small confirm dialog.
+    --menu-shadow : the drop shadow of menus, the confirm dialog and the toast.
+  */
+  --scrim-soft: rgba(0, 0, 0, 0.42);
+  --menu-shadow: rgba(0, 0, 0, 0.22);
+
+  /*
+    Grade badges. One hue (the accent's, OKLCH hue 161), nine filled steps, strictly decreasing in strength:
+      1 S+  2 S  3 S-   4 A+  5 A  6 A-   7 B+  8 B  9 B-      then C+ C C- D E as an outline only.
+    Strength = how far the fill is from the surface: the darkest green on the light theme, the palest green on the dark theme.
+    OKLCH lightness steps are >= 0.06 apart; text is pure white on the deep fills and pure black on the pale fills
+    (the one pair that has no unreadable middle), >= 4.9:1 on every step, in both themes.
+    tests/grade-tokens.test.ts and tests/browser/grade-badge.browser.test.ts check all of this. Nothing else in the UI should use these.
+  */
+  --grade-on-deep: #FFFFFF;
+  --grade-on-pale: #000000;
+
+  --gr1-bg: #072014;
+  --gr2-bg: #063221;
+  --gr3-bg: #0F442E;
+  --gr4-bg: #0C583A;
+  --gr5-bg: #136C47;
+  --gr6-bg: #277F5B;
+  --gr7-bg: #3C956C;
+  --gr8-bg: #4FA97E;
+  --gr9-bg: #63BD93;
+  --gr1-fg: var(--grade-on-deep);
+  --gr2-fg: var(--grade-on-deep);
+  --gr3-fg: var(--grade-on-deep);
+  --gr4-fg: var(--grade-on-deep);
+  --gr5-fg: var(--grade-on-deep);
+  --gr6-fg: var(--grade-on-deep);
+  --gr7-fg: var(--grade-on-pale);
+  --gr8-fg: var(--grade-on-pale);
+  --gr9-fg: var(--grade-on-pale);
+
+  /* C+ C C- D E: no fill, a hairline and the quiet text color */
+  --grn-bg: transparent;
+  --grn-fg: var(--muted);
+  --grn-bd: var(--line-strong);
+
   color-scheme: light;
 }
 
@@ -55,6 +101,27 @@
     --you-fill: rgba(242, 164, 158, 0.14);
     --focus: #6CC79A;
     --on-accent: #121212;
+    --scrim-soft: rgba(0, 0, 0, 0.60);
+    --menu-shadow: rgba(0, 0, 0, 0.55);
+
+    --gr1-bg: #A2F6CA;
+    --gr2-bg: #8AE2B7;
+    --gr3-bg: #74CEA3;
+    --gr4-bg: #65B990;
+    --gr5-bg: #4DA67D;
+    --gr6-bg: #36936A;
+    --gr7-bg: #277F5B;
+    --gr8-bg: #186C48;
+    --gr9-bg: #0B5939;
+    --gr1-fg: var(--grade-on-pale);
+    --gr2-fg: var(--grade-on-pale);
+    --gr3-fg: var(--grade-on-pale);
+    --gr4-fg: var(--grade-on-pale);
+    --gr5-fg: var(--grade-on-pale);
+    --gr6-fg: var(--grade-on-pale);
+    --gr7-fg: var(--grade-on-deep);
+    --gr8-fg: var(--grade-on-deep);
+    --gr9-fg: var(--grade-on-deep);
     color-scheme: dark;
   }
 }
@@ -73,6 +140,27 @@
   --you-fill: rgba(242, 164, 158, 0.14);
   --focus: #6CC79A;
   --on-accent: #121212;
+  --scrim-soft: rgba(0, 0, 0, 0.60);
+  --menu-shadow: rgba(0, 0, 0, 0.55);
+
+  --gr1-bg: #A2F6CA;
+  --gr2-bg: #8AE2B7;
+  --gr3-bg: #74CEA3;
+  --gr4-bg: #65B990;
+  --gr5-bg: #4DA67D;
+  --gr6-bg: #36936A;
+  --gr7-bg: #277F5B;
+  --gr8-bg: #186C48;
+  --gr9-bg: #0B5939;
+  --gr1-fg: var(--grade-on-pale);
+  --gr2-fg: var(--grade-on-pale);
+  --gr3-fg: var(--grade-on-pale);
+  --gr4-fg: var(--grade-on-pale);
+  --gr5-fg: var(--grade-on-pale);
+  --gr6-fg: var(--grade-on-pale);
+  --gr7-fg: var(--grade-on-deep);
+  --gr8-fg: var(--grade-on-deep);
+  --gr9-fg: var(--grade-on-deep);
   color-scheme: dark;
 }
 
