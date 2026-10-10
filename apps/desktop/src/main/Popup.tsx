@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, type ReactNode } from 'react';
 
 import { Icon } from './Icon';
 import { useShortcutBlocker } from './undo/shortcutGuard';
@@ -13,7 +13,17 @@ import { useShortcutBlocker } from './undo/shortcutGuard';
 
 export type PopupItem =
   | { kind: 'item'; key: string; label: string; onSelect: () => void }
-  | { kind: 'radio'; key: string; label: string; hint?: string; checked: boolean; onSelect: () => void }
+  | {
+      kind: 'radio';
+      key: string;
+      label: string;
+      hint?: string;
+      /** 文字の前に置く図（〇△✕の形など）。図だけで意味が伝わるときは、`hideLabel` で文字を読み上げだけにする。 */
+      icon?: ReactNode;
+      hideLabel?: boolean;
+      checked: boolean;
+      onSelect: () => void;
+    }
   | { kind: 'separator'; key: string };
 
 /**
@@ -137,7 +147,12 @@ export function Popup({ label, items, anchor, placement = 'below', onClose }: Po
             <span className="tick">
               <Icon name="check" />
             </span>
-            <span>{item.label}</span>
+            {item.icon !== undefined && (
+              <span className="pi-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+            )}
+            <span className={item.hideLabel ? 'sr-only' : undefined}>{item.label}</span>
             {item.hint !== undefined && <span className="pi-r">{item.hint}</span>}
           </button>
         ) : (

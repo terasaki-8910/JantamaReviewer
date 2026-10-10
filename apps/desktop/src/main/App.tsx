@@ -7,6 +7,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { solvedProblemCount, solvedProblemsLine } from './deleteImpact';
 import { ImportOffer } from './ImportOffer';
 import { ImportPage } from './ImportPage';
+import { Lightbox, type ViewerRequest } from './Lightbox';
 import { SessionList, type SessionListHandle } from './SessionList';
 import { buildListRows, neighborAfterDelete } from './sessionRows';
 import { SessionPage } from './SessionPage';
@@ -308,6 +309,24 @@ function Shell({ solvedProblems }: Required<AppProps>) {
     if (settleTick > 0) listRef.current?.settleAfterDelete();
   }, [settleTick]);
 
+  // ---- 迷いの画像の大きな表示（開く・閉じる。裏の画面は操作できなくなる。閉じたら、押したカードへキーボードの位置を戻す） ----
+
+  const [viewer, setViewer] = useState<ViewerRequest | null>(null);
+  const focusAfterViewer = useRef<HTMLElement | null>(null);
+
+  const closeViewer = () => {
+    focusAfterViewer.current = viewer?.opener ?? null;
+    setViewer(null);
+  };
+
+  // 閉じたあと（裏の画面が操作できるようになってから）、キーボードの位置を戻す。
+  useEffect(() => {
+    const target = focusAfterViewer.current;
+    if (viewer !== null || target === null) return;
+    focusAfterViewer.current = null;
+    if (target.isConnected) target.focus();
+  }, [viewer]);
+
   // ---- 描く ----
 
   const selectedSession = view.kind === 'session' ? (sessions?.find((s) => s.id === view.id) ?? null) : null;
@@ -317,7 +336,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
 
   return (
     <>
-      <div className="app" inert={pending !== null}>
+      <div className="app" inert={pending !== null || viewer !== null}>
         <Sidebar
           view={view}
           theme={theme}
@@ -353,6 +372,8 @@ function Shell({ solvedProblems }: Required<AppProps>) {
               key={selectedSession.id}
               session={selectedSession}
               summary={summaries.get(selectedSession.id)}
+              onChanged={reload}
+              onOpenImage={setViewer}
             />
           )}
           {sessions !== null && selectedSession === null && (view.kind === 'none' || view.kind === 'session') && (
@@ -361,6 +382,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
         </main>
         {toast !== null && <Toast toast={toast} onClose={() => setToast(null)} />}
       </div>
+      {viewer !== null && <Lightbox items={viewer.items} start={viewer.start} onClose={closeViewer} />}
       {pending !== null && (
         <ConfirmDialog
           title={`${pending.ids.length}件の半荘を削除します。`}

@@ -8,6 +8,8 @@
   Round 8: the grade badges (style A, chosen in round 7) have three strengths for each of S, A and B (nine filled steps);
   --scrim-soft is the backdrop of the small confirm dialog and --menu-shadow the drop shadow of menus, dialog and toast.
   The values are the ones approved in round 8 (R8-2); they are copied as they are.
+  The hanchan page adds --scrim / --on-scrim, the image viewer's backdrop and the text and controls drawn on it
+  (round 7, R7-4; the values of the approved sample's tokens.css, copied as they are).
 */
 :root {
   --bg: #F4F4F4;
@@ -41,12 +43,18 @@
   --hover: color-mix(in srgb, var(--ink) 7%, transparent);
   --accent-strong: color-mix(in srgb, var(--accent) 86%, var(--ink));
 
+  /* the image viewer's round buttons: a veil of --on-scrim, and a stronger one on hover (as in the approved sample) */
+  --on-scrim-soft: color-mix(in srgb, var(--on-scrim) 14%, transparent);
+  --on-scrim-hover: color-mix(in srgb, var(--on-scrim) 26%, transparent);
+
   /*
     --scrim-soft  : the backdrop of a small confirm dialog.
     --menu-shadow : the drop shadow of menus, the confirm dialog and the toast.
   */
   --scrim-soft: rgba(0, 0, 0, 0.42);
   --menu-shadow: rgba(0, 0, 0, 0.22);
+  --scrim: rgba(0, 0, 0, 0.80);
+  --on-scrim: #F4F4F4;
 
   /*
     Grade badges. One hue (the accent's, OKLCH hue 161), nine filled steps, strictly decreasing in strength:
@@ -103,6 +111,8 @@
     --on-accent: #121212;
     --scrim-soft: rgba(0, 0, 0, 0.60);
     --menu-shadow: rgba(0, 0, 0, 0.55);
+    --scrim: rgba(0, 0, 0, 0.86);
+    --on-scrim: #ECECEC;
 
     --gr1-bg: #A2F6CA;
     --gr2-bg: #8AE2B7;
@@ -142,6 +152,8 @@
   --on-accent: #121212;
   --scrim-soft: rgba(0, 0, 0, 0.60);
   --menu-shadow: rgba(0, 0, 0, 0.55);
+  --scrim: rgba(0, 0, 0, 0.86);
+  --on-scrim: #ECECEC;
 
   --gr1-bg: #A2F6CA;
   --gr2-bg: #8AE2B7;

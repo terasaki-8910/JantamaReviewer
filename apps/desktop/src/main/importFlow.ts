@@ -73,7 +73,7 @@ function linesOf(ocr: OcrCache | null | undefined, relative: string | null | und
 }
 
 /** 半荘の迷いマークと、そのスクショの読み取り（記録の順）。 */
-export function markReadings(session: SessionRecord, ocr: OcrCache | null | undefined): MarkReading[] {
+export function markReadings(session: Pick<SessionRecord, 'marks'>, ocr: OcrCache | null | undefined): MarkReading[] {
   return session.marks.map((mark) => ({
     id: mark.id,
     t_ms: mark.t_ms,
@@ -82,7 +82,7 @@ export function markReadings(session: SessionRecord, ocr: OcrCache | null | unde
 }
 
 /** 半荘の評価と、そのスクショの読み取り（押した順）。 */
-export function ratingReadings(session: SessionRecord, ocr: OcrCache | null | undefined): RatingReading[] {
+export function ratingReadings(session: Pick<SessionRecord, 'ratings'>, ocr: OcrCache | null | undefined): RatingReading[] {
   return session.ratings.map((rating) => ({
     id: rating.id,
     t_ms: rating.t_ms,

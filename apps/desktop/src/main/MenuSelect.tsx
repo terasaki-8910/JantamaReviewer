@@ -1,0 +1,71 @@
+import { useState, type ReactNode } from 'react';
+
+import { Popup, type PopupItem } from './Popup';
+
+/**
+ * 「ボタンを押すと、選択肢のメニューが開き、1 つ選ぶ」部品（WAI-ARIA の menu button）。選択肢の見た目は `Popup`（段階の絞り込みと同じ）。
+ *
+ * 文字を打つ欄の `<select>` を使わないのは、キーボードで矢印を押すだけで選びが決まってしまう（そのたびに保存され、取り消しの
+ * 積み重ねにも載る）のを避けるため。ここでは、Enter か押下で選んだときだけ決まる。選んだあとは、キーボードの位置をこのボタンへ戻す。
+ */
+export interface MenuSelectItem {
+  key: string;
+  label: string;
+  /** 文字の前に置く図。 */
+  icon?: ReactNode;
+  /** true なら、文字は読み上げだけにする（図だけで意味が伝わるとき）。 */
+  hideLabel?: boolean;
+  /** いま選ばれているもの。 */
+  checked: boolean;
+  onSelect: () => void;
+}
+
+interface MenuSelectProps {
+  /** ボタンの名前（読み上げ用。何の選択か・いまの値を含める）。 */
+  label: string;
+  /** 開いたメニューの名前（読み上げ用）。 */
+  menuLabel: string;
+  items: readonly MenuSelectItem[];
+  className?: string;
+  disabled?: boolean;
+  /** ボタンの中身（いまの値の見た目）。 */
+  children: ReactNode;
+}
+
+export function MenuSelect({ label, menuLabel, items, className, disabled, children }: MenuSelectProps) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+
+  const popupItems = (trigger: HTMLElement): PopupItem[] =>
+    items.map((item) => ({
+      kind: 'radio',
+      key: item.key,
+      label: item.label,
+      icon: item.icon,
+      hideLabel: item.hideLabel,
+      checked: item.checked,
+      onSelect: () => {
+        // 選んだあと、キーボードの位置はこのボタンに戻す（メニューの項目は、閉じると消えるため）。
+        trigger.focus();
+        item.onSelect();
+      },
+    }));
+
+  return (
+    <>
+      <button
+        type="button"
+        className={className}
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        aria-label={label}
+        disabled={disabled}
+        onClick={(event) => setAnchor(anchor === null ? event.currentTarget : null)}
+      >
+        {children}
+      </button>
+      {anchor !== null && (
+        <Popup label={menuLabel} anchor={anchor} items={popupItems(anchor)} onClose={() => setAnchor(null)} />
+      )}
+    </>
+  );
+}
