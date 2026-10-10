@@ -155,6 +155,28 @@ describe('U-8: 半荘の一覧', () => {
     expect(within(main).queryByText('Rating')).toBeNull();
   });
 
+  it('一覧を読み終えるまでは、「半荘がありません」と出さない（読んだあとに半荘があるのに、一瞬そう見えないように）', async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    const store = new FakeSessionStore(seeds());
+    installTauriMock({
+      handlers: {
+        ...store.handlers,
+        list_sessions: () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      },
+    });
+    render(<App />);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(screen.queryByText('半荘がありません')).toBeNull();
+    expect(screen.queryByRole('heading', { level: 1, name: '半荘がありません' })).toBeNull();
+    expect(within(listNav()).queryByRole('searchbox')).toBeNull();
+    finish(store.handlers.list_sessions?.(undefined));
+    await screen.findByRole('heading', { level: 1, name: /10月9日/ });
+    expect(screen.queryByText('半荘がありません')).toBeNull();
+  });
+
   it('結果を読めなかった半荘は、その行に「結果を読めません」と出す（一覧は止まらない）', async () => {
     const store = new FakeSessionStore(seeds());
     installTauriMock({
@@ -414,8 +436,9 @@ describe('U-9: 削除（行の「…」・選択）', () => {
     await toastShows('1件の半荘を元に戻しました');
     await waitFor(() => expect(visibleTimes()).toEqual(['19:09', '21:40', '20:55', '22:10', '21:15', '20:12', '19:30', '22:48']));
     expect(store.log).toEqual([`delete:${idOf('c')}`, `restore:${idOf('c')}`]);
-    // 取り消したあとの通知には、「元に戻す」は出ない。
+    // 取り消したあとの通知には、「元に戻す」は出ない。押して消えたボタンから、キーボードの位置が消えず、「選択」に移る。
     expect(screen.queryByRole('button', { name: '元に戻す' })).toBeNull();
+    await waitFor(() => expect(within(listNav()).getByRole('button', { name: '選択' })).toHaveFocus());
   });
 
   it('Ctrl+Z でも元に戻り、Ctrl+Y でやり直せる。通知を閉じたあとも、Ctrl+Z は効く（アプリを閉じるまで戻せる）', async () => {

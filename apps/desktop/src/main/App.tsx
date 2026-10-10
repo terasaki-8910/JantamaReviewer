@@ -88,6 +88,8 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const canGoForward = stepTarget(nav, 1, available) !== null;
 
   const listRef = useRef<SessionListHandle>(null);
+  // 操作が済んで一覧が描き直されたあとに、キーボードの位置を一覧へ戻すための合図（増えるたびに、戻す）。
+  const [settleTick, setSettleTick] = useState(0);
 
   // 最初の絵を描き終えたと知らせる。窓は、それまで隠れている（N-7）。
   useEffect(() => {
@@ -165,7 +167,12 @@ function Shell({ solvedProblems }: Required<AppProps>) {
         label: '元に戻す',
         title: '元に戻す（Ctrl+Z）',
         keyShortcuts: 'Control+Z',
-        onAction: () => void undo.undo().catch(() => undefined),
+        // 通知の「元に戻す」は、押すと消える。キーボードの位置が消えないよう、一覧の「選択」か検索欄に移す。
+        onAction: () =>
+          void undo
+            .undo()
+            .then(() => setSettleTick((tick) => tick + 1))
+            .catch(() => undefined),
       },
     });
   });
@@ -228,7 +235,6 @@ function Shell({ solvedProblems }: Required<AppProps>) {
 
   const [pending, setPending] = useState<PendingDelete | null>(null);
   const focusAfterClose = useRef<HTMLElement | null>(null);
-  const [settleTick, setSettleTick] = useState(0);
 
   const requestDelete = useCallback((ids: string[], opener: HTMLElement | null) => {
     if (ids.length > 0) setPending({ ids, opener });
@@ -329,6 +335,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
             now={now}
             currentId={currentId}
             narrow={narrow}
+            loaded={sessions !== null}
             loadError={loadError}
             onOpen={openFromList}
             onRequestDelete={requestDelete}

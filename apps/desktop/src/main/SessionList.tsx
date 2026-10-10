@@ -54,6 +54,8 @@ interface SessionListProps {
   currentId: string | null;
   /** 640px 未満（アイコンだけの細い列）か。細い列では、選択と削除は出さない。 */
   narrow: boolean;
+  /** 一覧を読み終えたか。読む前に「半荘がありません」と出さないため。 */
+  loaded: boolean;
   /** 一覧を読めなかった理由。 */
   loadError: string | null;
   onOpen: (id: string) => void;
@@ -80,6 +82,7 @@ export function SessionList({
   now,
   currentId,
   narrow,
+  loaded,
   loadError,
   onOpen,
   onRequestDelete,
@@ -460,7 +463,7 @@ export function SessionList({
             {loadError}
           </p>
         )}
-        {loadError === null && empty && <p className="empty-note">半荘がありません</p>}
+        {loadError === null && loaded && empty && <p className="empty-note">半荘がありません</p>}
         {!empty && visible.length === 0 && <p className="empty-note">一致する半荘がありません</p>}
         {groups.map((group) => (
           <section key={group.key} aria-labelledby={`${listId}-${group.key}`}>
