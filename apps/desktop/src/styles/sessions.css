@@ -1,0 +1,98 @@
+/*
+  sessions.css: 半荘の一覧（サイドバー）・段階の印・メニュー・確認のダイアログ・取り消しの通知・半荘のページの見出し。
+  承認済みのサンプル（8回目のシートの round8.css）を、実際の画面の部品に合わせて移したもの。
+  方針:
+  - アプリのシェル（細いサイドバー、罫線で区切る面、accent は「選択・主な操作・フォーカス」だけ）はそのまま。
+  - 新しい部品は、既存の部品（.btn、.icon-btn、.input、.pill、メニュー）を言い換えて作る。新しい見た目は足さない。
+  - 行ごとの操作（…）は行の右上に固定する。行の中身がどう変わっても動かない。
+  - ここでは色を書かない。すべて tokens.css のトークンから。
+*/
+
+/*
+  ================= 段階の印（14 段階） =================
+  S+ から B- までの 9 段階は、卓の緑 1 色の濃さ（tokens.css の --gr1 から --gr9）。強いほど表面から離れる:
+  ライトテーマでは濃い緑、ダークテーマでは淡い緑。C+ から E は線だけ。
+*/
+.grade {
+  --g-bg: var(--grn-bg);
+  --g-fg: var(--grn-fg);
+  --g-bd: var(--grn-bd);
+
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 30px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--g-bd);
+  border-radius: var(--r1);
+  background: var(--g-bg);
+  color: var(--g-fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.grade[data-grade="S+"] {
+  --g-bg: var(--gr1-bg);
+  --g-fg: var(--gr1-fg);
+  --g-bd: var(--gr1-bg);
+}
+
+.grade[data-grade="S"] {
+  --g-bg: var(--gr2-bg);
+  --g-fg: var(--gr2-fg);
+  --g-bd: var(--gr2-bg);
+}
+
+.grade[data-grade="S-"] {
+  --g-bg: var(--gr3-bg);
+  --g-fg: var(--gr3-fg);
+  --g-bd: var(--gr3-bg);
+}
+
+.grade[data-grade="A+"] {
+  --g-bg: var(--gr4-bg);
+  --g-fg: var(--gr4-fg);
+  --g-bd: var(--gr4-bg);
+}
+
+.grade[data-grade="A"] {
+  --g-bg: var(--gr5-bg);
+  --g-fg: var(--gr5-fg);
+  --g-bd: var(--gr5-bg);
+}
+
+.grade[data-grade="A-"] {
+  --g-bg: var(--gr6-bg);
+  --g-fg: var(--gr6-fg);
+  --g-bd: var(--gr6-bg);
+}
+
+.grade[data-grade="B+"] {
+  --g-bg: var(--gr7-bg);
+  --g-fg: var(--gr7-fg);
+  --g-bd: var(--gr7-bg);
+}
+
+.grade[data-grade="B"] {
+  --g-bg: var(--gr8-bg);
+  --g-fg: var(--gr8-fg);
+  --g-bd: var(--gr8-bg);
+}
+
+.grade[data-grade="B-"] {
+  --g-bg: var(--gr9-bg);
+  --g-fg: var(--gr9-fg);
+  --g-bd: var(--gr9-bg);
+}
+
+.grade.lg {
+  min-width: 42px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r2);
+  font-size: 15px;
+}
