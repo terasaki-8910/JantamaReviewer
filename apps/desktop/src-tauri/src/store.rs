@@ -47,6 +47,14 @@ pub const LINKS_FILE: &str = "links.json";
 pub const LINK_MANUAL: &str = "manual";
 /// 結びつけの値（局面の鍵・局の鍵）の長さの上限（バイト）。
 const MAX_LINK_VALUE_LEN: usize = 64;
+/// 局の自己評価（〇△✕）の上書きのファイル名（半荘のフォルダの中。F10）。ウィジェットの記録（events.jsonl）は書き換えない。
+pub const SELF_RATINGS_FILE: &str = "self-ratings.json";
+/// MAKA の評価（局ごと・半荘全体。任意の入力）のファイル名（半荘のフォルダの中。F10）。
+pub const MAKA_FILE: &str = "maka.json";
+/// MAKA の評価の段階（14 段階。強い順）。エンジンの `GRADES` と同じ並びの名前。
+pub const MAKA_GRADES: [&str; 14] = [
+    "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "E",
+];
 
 /// 局の評価。〇 = good、△ = fair、✕ = bad。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -307,6 +315,37 @@ pub struct Links {
     pub ratings: BTreeMap<String, String>,
 }
 
+/// 局の自己評価の上書きの値（`self-ratings.json`）。〇 = good、△ = fair、✕ = bad。
+/// `none` は「評価なし」: ウィジェットで付けた評価があっても、この局には付けていないものとして見せる。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelfRating {
+    Good,
+    Fair,
+    Bad,
+    #[serde(rename = "none")]
+    Unrated,
+}
+
+/// 局の自己評価の上書き（`self-ratings.json`）。局の鍵（`k<局の通し番号>h<本場>`）→ 値。
+/// ここに無い局は、ウィジェットで付けた評価（events.jsonl と結びつけから決まる）のまま。
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct SelfRatings {
+    #[serde(default)]
+    pub kyokus: BTreeMap<String, SelfRating>,
+}
+
+/// MAKA の評価（`maka.json`。任意の入力）。段階の名前は `MAKA_GRADES` のどれか。
+/// - `kyokus`: 局の鍵 → 段階
+/// - `hanchan`: 半荘全体の段階
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Maka {
+    #[serde(default)]
+    pub kyokus: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hanchan: Option<String>,
+}
+
 /// 半荘 1 つ分の一覧用の情報。記録（迷いマークか評価）も結果も無い半荘は、一覧に入れない（W-14）。
 /// 結果だけの半荘（記録の無いまま取り込んだもの）は入れる。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -324,6 +363,10 @@ pub struct SessionRecord {
     pub ocr: Option<OcrCache>,
     /// 迷いマーク・評価の結びつけ。
     pub links: Links,
+    /// 局の自己評価の上書き（局の評価の表で付け直したもの）。
+    pub self_ratings: SelfRatings,
+    /// MAKA の評価（局の評価の表で入れたもの）。
+    pub maka: Maka,
 }
 
 #[derive(Debug)]
@@ -348,6 +391,8 @@ pub enum StoreError {
     },
     /// 結びつけの値が正しくない。
     InvalidLink(String),
+    /// 局の評価（自己評価の上書き・MAKA の評価）の値が正しくない。
+    InvalidEvaluation(String),
     /// 消した半荘の置き場に、同じ名前の半荘が残っている（消せない。置き場は、アプリを開き直すと片づく）。
     TrashOccupied(String),
     /// 消した半荘の中に、その名前が無い（戻せない）。
@@ -384,6 +429,9 @@ impl fmt::Display for StoreError {
                 write!(f, "結びつける{kind}がこの半荘にありません（番号 {id}）。")
             }
             StoreError::InvalidLink(reason) => write!(f, "結びつけの値が正しくありません: {reason}"),
+            StoreError::InvalidEvaluation(reason) => {
+                write!(f, "局の評価の値が正しくありません: {reason}")
+            }
             StoreError::TrashOccupied(id) => write!(
                 f,
                 "消した半荘の置き場に、同じ名前の半荘が残っているため、消せません: {id}。アプリを開き直すと片づきます。"
@@ -815,6 +863,9 @@ impl Store {
                 report_path: has_report.then(|| report_file.to_string_lossy().into_owned()),
                 ocr: read_json_file::<OcrCache>(&dir.join(OCR_FILE)),
                 links: read_json_file::<Links>(&dir.join(LINKS_FILE)).unwrap_or_default(),
+                self_ratings: read_json_file::<SelfRatings>(&dir.join(SELF_RATINGS_FILE))
+                    .unwrap_or_default(),
+                maka: read_json_file::<Maka>(&dir.join(MAKA_FILE)).unwrap_or_default(),
             });
         }
         sessions.sort_by(|a, b| {
@@ -1074,6 +1125,96 @@ impl Store {
         change(&mut links, &view)?;
         write_links(&dir, &links)
     }
+
+    // ---- 局の評価の表の保存（F10）: 自己評価の上書き・MAKA の評価。events.jsonl は書き換えない ----
+
+    /// 局の自己評価の上書き。まだ無い・読めないときは空。
+    pub fn load_self_ratings(&self, session_id: &str) -> Result<SelfRatings, StoreError> {
+        let dir = self.session_path(session_id)?;
+        Ok(read_json_file::<SelfRatings>(&dir.join(SELF_RATINGS_FILE)).unwrap_or_default())
+    }
+
+    /// 局の自己評価を、上書きする。`kyoku` は局の鍵（`k<局の通し番号>h<本場>`）。選び直しにも使う。
+    pub fn set_self_rating(
+        &self,
+        session_id: &str,
+        kyoku: &str,
+        rating: SelfRating,
+    ) -> Result<(), StoreError> {
+        check_kyoku_key(kyoku)?;
+        self.update_json::<SelfRatings>(session_id, SELF_RATINGS_FILE, |ratings| {
+            ratings.kyokus.insert(kyoku.to_string(), rating);
+        })
+    }
+
+    /// 局の自己評価の上書きを消す（ウィジェットで付けた評価に戻す。取り消しにも使う）。無い上書きを消してもエラーにならない。
+    pub fn clear_self_rating(&self, session_id: &str, kyoku: &str) -> Result<(), StoreError> {
+        check_kyoku_key(kyoku)?;
+        self.update_json::<SelfRatings>(session_id, SELF_RATINGS_FILE, |ratings| {
+            ratings.kyokus.remove(kyoku);
+        })
+    }
+
+    /// MAKA の評価。まだ無い・読めないときは空。
+    pub fn load_maka(&self, session_id: &str) -> Result<Maka, StoreError> {
+        let dir = self.session_path(session_id)?;
+        Ok(read_json_file::<Maka>(&dir.join(MAKA_FILE)).unwrap_or_default())
+    }
+
+    /// 局の MAKA の評価を入れる。`grade` は `MAKA_GRADES` のどれか。
+    pub fn set_maka_grade(
+        &self,
+        session_id: &str,
+        kyoku: &str,
+        grade: &str,
+    ) -> Result<(), StoreError> {
+        check_kyoku_key(kyoku)?;
+        check_maka_grade(grade)?;
+        self.update_json::<Maka>(session_id, MAKA_FILE, |maka| {
+            maka.kyokus.insert(kyoku.to_string(), grade.to_string());
+        })
+    }
+
+    /// 局の MAKA の評価を消す（入れていない状態に戻す。取り消しにも使う）。
+    pub fn clear_maka_grade(&self, session_id: &str, kyoku: &str) -> Result<(), StoreError> {
+        check_kyoku_key(kyoku)?;
+        self.update_json::<Maka>(session_id, MAKA_FILE, |maka| {
+            maka.kyokus.remove(kyoku);
+        })
+    }
+
+    /// 半荘全体の MAKA の評価を入れる。
+    pub fn set_maka_hanchan(&self, session_id: &str, grade: &str) -> Result<(), StoreError> {
+        check_maka_grade(grade)?;
+        self.update_json::<Maka>(session_id, MAKA_FILE, |maka| {
+            maka.hanchan = Some(grade.to_string());
+        })
+    }
+
+    /// 半荘全体の MAKA の評価を消す。
+    pub fn clear_maka_hanchan(&self, session_id: &str) -> Result<(), StoreError> {
+        self.update_json::<Maka>(session_id, MAKA_FILE, |maka| {
+            maka.hanchan = None;
+        })
+    }
+
+    /// 半荘のフォルダの JSON のファイルを読んで（無い・読めないときは空）、`change` で書き換えて、書き戻す。
+    fn update_json<T>(
+        &self,
+        session_id: &str,
+        file: &str,
+        change: impl FnOnce(&mut T),
+    ) -> Result<(), StoreError>
+    where
+        T: Default + Serialize + serde::de::DeserializeOwned,
+    {
+        let dir = self.session_path(session_id)?;
+        let mut value = read_json_file::<T>(&dir.join(file)).unwrap_or_default();
+        change(&mut value);
+        let text = serde_json::to_string_pretty(&value)?;
+        write_atomic(&dir.join(file), text.as_bytes())?;
+        Ok(())
+    }
 }
 
 /// 名前の並びから、重なりを除く（最初に出た順）。
@@ -1143,6 +1284,33 @@ fn check_link_value(value: &str, allow_empty: bool) -> Result<(), StoreError> {
         )));
     }
     Ok(())
+}
+
+/// 局の鍵（`k<局の通し番号>h<本場>`。例: `k1h1`）の形か。画面（エンジン）が決める鍵で、ここでは形だけを確かめる。
+fn check_kyoku_key(key: &str) -> Result<(), StoreError> {
+    let digits = |s: &str| !s.is_empty() && s.len() <= 6 && s.bytes().all(|b| b.is_ascii_digit());
+    let valid = key
+        .strip_prefix('k')
+        .and_then(|rest| rest.split_once('h'))
+        .is_some_and(|(kyoku, honba)| digits(kyoku) && digits(honba));
+    if valid {
+        Ok(())
+    } else {
+        Err(StoreError::InvalidEvaluation(format!(
+            "局の鍵の形ではありません: {key:?}（例: k1h1）"
+        )))
+    }
+}
+
+/// MAKA の評価の段階が、14 段階のどれかか。
+fn check_maka_grade(grade: &str) -> Result<(), StoreError> {
+    if MAKA_GRADES.contains(&grade) {
+        Ok(())
+    } else {
+        Err(StoreError::InvalidEvaluation(format!(
+            "MAKA の段階ではありません: {grade:?}（S+ から E の 14 段階）"
+        )))
+    }
 }
 
 /// 結びつけの鍵（10 進の文字列にした番号）が、その半荘の取り消されていない記録の番号か。
@@ -2579,6 +2747,396 @@ mod tests {
         // 記録の続きも、これまでどおり同じ半荘に入る。
         store.add_mark(T0 + 5, shot()).unwrap();
         assert_eq!(store.current_session_id(), Some(id.as_str()));
+    }
+
+    // ---- F10: 局の評価の表の保存（self-ratings.json・maka.json） ----
+
+    fn session_dir_of(store: &Store, id: &str) -> PathBuf {
+        store.root().join(GAMES_DIR).join(id)
+    }
+
+    #[test]
+    fn self_ratings_can_be_set_changed_and_cleared_and_come_back_in_the_list() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        assert_eq!(
+            store.load_self_ratings(&id).unwrap(),
+            SelfRatings::default()
+        );
+        assert_eq!(only_session(&store).self_ratings, SelfRatings::default());
+
+        store
+            .set_self_rating(&id, "k0h0", SelfRating::Good)
+            .unwrap();
+        store
+            .set_self_rating(&id, "k1h0", SelfRating::Unrated)
+            .unwrap();
+        let loaded = store.load_self_ratings(&id).unwrap();
+        assert_eq!(loaded.kyokus.get("k0h0"), Some(&SelfRating::Good));
+        assert_eq!(
+            loaded.kyokus.get("k1h0"),
+            Some(&SelfRating::Unrated),
+            "「評価なし」も、上書きの 1 つ（消した状態とは別）"
+        );
+
+        // 付け直し: 同じ局に別の値を入れると、置き換わる。
+        store.set_self_rating(&id, "k0h0", SelfRating::Bad).unwrap();
+        assert_eq!(
+            store.load_self_ratings(&id).unwrap().kyokus.get("k0h0"),
+            Some(&SelfRating::Bad)
+        );
+        // 消すと、上書きが無くなる（ほかの局は残る）。無い上書きを消してもエラーにならない。
+        store.clear_self_rating(&id, "k0h0").unwrap();
+        store.clear_self_rating(&id, "k0h0").unwrap();
+        store.clear_self_rating(&id, "k9h9").unwrap();
+        let after = store.load_self_ratings(&id).unwrap();
+        assert!(!after.kyokus.contains_key("k0h0"));
+        assert!(after.kyokus.contains_key("k1h0"));
+        // 一覧にも出る。
+        assert_eq!(only_session(&store).self_ratings, after);
+    }
+
+    #[test]
+    fn the_self_ratings_file_has_a_stable_json_shape() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        store
+            .set_self_rating(&id, "k0h0", SelfRating::Good)
+            .unwrap();
+        store
+            .set_self_rating(&id, "k1h2", SelfRating::Fair)
+            .unwrap();
+        store.set_self_rating(&id, "k2h0", SelfRating::Bad).unwrap();
+        store
+            .set_self_rating(&id, "k3h0", SelfRating::Unrated)
+            .unwrap();
+        let text = fs::read_to_string(session_dir_of(&store, &id).join(SELF_RATINGS_FILE)).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"kyokus": {
+                "k0h0": "good", "k1h2": "fair", "k2h0": "bad", "k3h0": "none"
+            }})
+        );
+        // 一覧を画面に渡す形も同じ（`none` のまま）。
+        let sent = serde_json::to_value(only_session(&store).self_ratings).unwrap();
+        assert_eq!(sent, value);
+    }
+
+    #[test]
+    fn self_rating_and_maka_keys_must_look_like_kyoku_keys() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        for bad in [
+            "",
+            "k",
+            "k1",
+            "kh1",
+            "k1h",
+            "1h1",
+            "K1H1",
+            "k1h1x",
+            "k-1h0",
+            "k1 h0",
+            "k1h0\n",
+            "kah1",
+            "k1234567h0",
+            "k1:d7",
+            "../k1h1",
+        ] {
+            assert!(
+                matches!(
+                    store.set_self_rating(&id, bad, SelfRating::Good),
+                    Err(StoreError::InvalidEvaluation(_))
+                ),
+                "{bad:?}"
+            );
+            assert!(
+                matches!(
+                    store.clear_self_rating(&id, bad),
+                    Err(StoreError::InvalidEvaluation(_))
+                ),
+                "{bad:?}"
+            );
+            assert!(
+                matches!(
+                    store.set_maka_grade(&id, bad, "S"),
+                    Err(StoreError::InvalidEvaluation(_))
+                ),
+                "{bad:?}"
+            );
+        }
+        // 形の悪い鍵では、何も書かない。
+        let dir = session_dir_of(&store, &id);
+        assert!(!dir.join(SELF_RATINGS_FILE).exists());
+        assert!(!dir.join(MAKA_FILE).exists());
+        for good in ["k0h0", "k12h3", "k8h0", "k123456h123456"] {
+            assert!(store.set_self_rating(&id, good, SelfRating::Good).is_ok());
+        }
+    }
+
+    #[test]
+    fn maka_grades_can_be_set_for_each_kyoku_and_the_hanchan_and_cleared() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        assert_eq!(store.load_maka(&id).unwrap(), Maka::default());
+        assert_eq!(only_session(&store).maka, Maka::default());
+
+        // 14 段階のすべてが入れられる。
+        for (i, grade) in MAKA_GRADES.iter().enumerate() {
+            store
+                .set_maka_grade(&id, &format!("k{i}h0"), grade)
+                .unwrap();
+        }
+        let maka = store.load_maka(&id).unwrap();
+        assert_eq!(maka.kyokus.len(), 14);
+        assert_eq!(maka.kyokus.get("k0h0").map(String::as_str), Some("S+"));
+        assert_eq!(maka.kyokus.get("k13h0").map(String::as_str), Some("E"));
+        assert_eq!(maka.hanchan, None);
+
+        // 入れ直し・半荘全体・消す。
+        store.set_maka_grade(&id, "k0h0", "C-").unwrap();
+        store.set_maka_hanchan(&id, "A+").unwrap();
+        let maka = store.load_maka(&id).unwrap();
+        assert_eq!(maka.kyokus.get("k0h0").map(String::as_str), Some("C-"));
+        assert_eq!(maka.hanchan.as_deref(), Some("A+"));
+        store.clear_maka_grade(&id, "k0h0").unwrap();
+        store.clear_maka_grade(&id, "k0h0").unwrap();
+        store.clear_maka_hanchan(&id).unwrap();
+        store.clear_maka_hanchan(&id).unwrap();
+        let maka = store.load_maka(&id).unwrap();
+        assert!(!maka.kyokus.contains_key("k0h0"));
+        assert_eq!(maka.kyokus.len(), 13, "ほかの局は残る");
+        assert_eq!(maka.hanchan, None);
+        assert_eq!(only_session(&store).maka, maka);
+    }
+
+    #[test]
+    fn maka_grades_outside_the_fourteen_are_refused_and_write_nothing() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        for bad in [
+            "", "s", "s+", "A++", "A +", "F", "SS", "S+ ", "Ａ", "A\n", "あ", "+S",
+        ] {
+            assert!(
+                matches!(
+                    store.set_maka_grade(&id, "k0h0", bad),
+                    Err(StoreError::InvalidEvaluation(_))
+                ),
+                "{bad:?}"
+            );
+            assert!(
+                matches!(
+                    store.set_maka_hanchan(&id, bad),
+                    Err(StoreError::InvalidEvaluation(_))
+                ),
+                "{bad:?}"
+            );
+        }
+        assert!(!session_dir_of(&store, &id).join(MAKA_FILE).exists());
+        // 悪い値のあとも、正しい値は入る。
+        store.set_maka_grade(&id, "k0h0", "B+").unwrap();
+        assert_eq!(store.load_maka(&id).unwrap().kyokus.len(), 1);
+    }
+
+    #[test]
+    fn the_maka_file_has_a_stable_json_shape_and_leaves_out_an_empty_hanchan() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        store.set_maka_grade(&id, "k0h0", "S+").unwrap();
+        store.set_maka_grade(&id, "k1h0", "A-").unwrap();
+        let path = session_dir_of(&store, &id).join(MAKA_FILE);
+        let value: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"kyokus": {"k0h0": "S+", "k1h0": "A-"}})
+        );
+        store.set_maka_hanchan(&id, "A+").unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"kyokus": {"k0h0": "S+", "k1h0": "A-"}, "hanchan": "A+"})
+        );
+        // 一覧を画面に渡す形も、半荘全体が無ければ、その項目は出さない。
+        store.clear_maka_hanchan(&id).unwrap();
+        let sent = serde_json::to_value(only_session(&store).maka).unwrap();
+        assert_eq!(
+            sent,
+            serde_json::json!({"kyokus": {"k0h0": "S+", "k1h0": "A-"}})
+        );
+    }
+
+    #[test]
+    fn broken_evaluation_files_do_not_stop_the_list_and_the_next_write_replaces_them() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let dir = session_dir_of(&store, &id);
+        // 壊れた JSON・形の違う JSON は、「まだ無い」として読む（一覧は止めない）。
+        for broken in ["{broken", "[]", "42", "", r#"{"kyokus": 7}"#] {
+            fs::write(dir.join(SELF_RATINGS_FILE), broken).unwrap();
+            fs::write(dir.join(MAKA_FILE), broken).unwrap();
+            let session = only_session(&store);
+            assert_eq!(session.self_ratings, SelfRatings::default(), "{broken:?}");
+            assert_eq!(session.maka, Maka::default(), "{broken:?}");
+            assert_eq!(
+                store.load_self_ratings(&id).unwrap(),
+                SelfRatings::default()
+            );
+            assert_eq!(store.load_maka(&id).unwrap(), Maka::default());
+        }
+        // 自己評価の知らない値（将来の版が足した値など）を含むファイルも、「まだ無い」として読む。
+        // MAKA の段階の名前は文字のまま読み（画面が、14 段階にない文字を無いものとして扱う）、一覧は止めない。
+        fs::write(
+            dir.join(SELF_RATINGS_FILE),
+            r#"{"kyokus": {"k0h0": "great"}}"#,
+        )
+        .unwrap();
+        fs::write(dir.join(MAKA_FILE), r#"{"kyokus": {"k0h0": "great"}}"#).unwrap();
+        let session = only_session(&store);
+        assert_eq!(session.self_ratings, SelfRatings::default());
+        assert_eq!(
+            session.maka.kyokus.get("k0h0").map(String::as_str),
+            Some("great")
+        );
+        // 次の書き込みは、壊れたファイルを置き換える。
+        fs::write(dir.join(SELF_RATINGS_FILE), "{broken").unwrap();
+        fs::write(dir.join(MAKA_FILE), "{broken").unwrap();
+        store
+            .set_self_rating(&id, "k0h0", SelfRating::Fair)
+            .unwrap();
+        store.set_maka_grade(&id, "k0h0", "B").unwrap();
+        assert_eq!(
+            store.load_self_ratings(&id).unwrap().kyokus.get("k0h0"),
+            Some(&SelfRating::Fair)
+        );
+        assert_eq!(
+            store
+                .load_maka(&id)
+                .unwrap()
+                .kyokus
+                .get("k0h0")
+                .map(String::as_str),
+            Some("B")
+        );
+    }
+
+    #[test]
+    fn evaluation_files_ignore_unknown_fields_so_a_later_version_can_add_some() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let dir = session_dir_of(&store, &id);
+        fs::write(
+            dir.join(SELF_RATINGS_FILE),
+            r#"{"kyokus": {"k0h0": "bad"}, "later": {"x": 1}}"#,
+        )
+        .unwrap();
+        fs::write(
+            dir.join(MAKA_FILE),
+            r#"{"kyokus": {"k0h0": "S"}, "hanchan": "A", "later": [1]}"#,
+        )
+        .unwrap();
+        let session = only_session(&store);
+        assert_eq!(
+            session.self_ratings.kyokus.get("k0h0"),
+            Some(&SelfRating::Bad)
+        );
+        assert_eq!(session.maka.hanchan.as_deref(), Some("A"));
+    }
+
+    #[test]
+    fn evaluation_writes_are_atomic_and_never_touch_the_recording() {
+        // 自己評価・MAKA を書いても、記録（events.jsonl）は 1 行も増えず、ウィジェットの数字も変わらない。
+        // 一時ファイルも残らない。記録の続きは、これまでどおり同じ半荘に入る。
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let before = event_lines(&store);
+        let view_before = store.view();
+        store.set_self_rating(&id, "k0h0", SelfRating::Bad).unwrap();
+        store
+            .set_self_rating(&id, "k0h0", SelfRating::Unrated)
+            .unwrap();
+        store.clear_self_rating(&id, "k0h0").unwrap();
+        store.set_maka_grade(&id, "k0h0", "S").unwrap();
+        store.set_maka_hanchan(&id, "A+").unwrap();
+        assert_eq!(event_lines(&store), before);
+        assert_eq!(store.view(), view_before);
+        let dir = session_dir_of(&store, &id);
+        assert!(!dir.join("self-ratings.json.tmp").exists());
+        assert!(!dir.join("maka.json.tmp").exists());
+        store.add_mark(T0 + 5, shot()).unwrap();
+        assert_eq!(store.current_session_id(), Some(id.as_str()));
+        // 迷いの結びつけのファイルとは別のファイルで、互いに書き換えない。
+        store.set_mark_link(&id, 1, "k0h0e1").unwrap();
+        assert_eq!(
+            store
+                .load_links(&id)
+                .unwrap()
+                .marks
+                .get("1")
+                .map(String::as_str),
+            Some("k0h0e1")
+        );
+        assert_eq!(store.load_maka(&id).unwrap().hanchan.as_deref(), Some("A+"));
+        assert!(store.load_self_ratings(&id).unwrap().kyokus.is_empty());
+    }
+
+    #[test]
+    fn evaluation_commands_refuse_a_session_that_is_not_a_plain_existing_folder() {
+        let (_tmp, store) = open_store();
+        for bad in [
+            "",
+            "..",
+            "../x",
+            "a/b",
+            "a\\b",
+            "x y",
+            "あ",
+            "20991231-235959",
+        ] {
+            assert!(
+                matches!(
+                    store.set_self_rating(bad, "k0h0", SelfRating::Good),
+                    Err(StoreError::UnknownSession(_))
+                ),
+                "{bad:?}"
+            );
+            assert!(store.clear_self_rating(bad, "k0h0").is_err(), "{bad:?}");
+            assert!(store.set_maka_grade(bad, "k0h0", "S").is_err(), "{bad:?}");
+            assert!(store.clear_maka_grade(bad, "k0h0").is_err(), "{bad:?}");
+            assert!(store.set_maka_hanchan(bad, "S").is_err(), "{bad:?}");
+            assert!(store.clear_maka_hanchan(bad).is_err(), "{bad:?}");
+            assert!(store.load_self_ratings(bad).is_err(), "{bad:?}");
+            assert!(store.load_maka(bad).is_err(), "{bad:?}");
+        }
+        assert!(!store
+            .root()
+            .join(GAMES_DIR)
+            .join("20991231-235959")
+            .exists());
+    }
+
+    #[test]
+    fn evaluation_files_move_with_the_session_folder_when_it_is_deleted_and_restored() {
+        let (_tmp, mut store) = open_store();
+        let (older, _newer) = two_sessions(&mut store);
+        store
+            .set_self_rating(&older, "k0h0", SelfRating::Bad)
+            .unwrap();
+        store.set_maka_grade(&older, "k0h0", "C+").unwrap();
+        store.set_maka_hanchan(&older, "B").unwrap();
+        store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+        store
+            .restore_sessions(std::slice::from_ref(&older))
+            .unwrap();
+        assert_eq!(
+            store.load_self_ratings(&older).unwrap().kyokus.get("k0h0"),
+            Some(&SelfRating::Bad)
+        );
+        let maka = store.load_maka(&older).unwrap();
+        assert_eq!(maka.kyokus.get("k0h0").map(String::as_str), Some("C+"));
+        assert_eq!(maka.hanchan.as_deref(), Some("B"));
     }
 
     // ---- U-9: 半荘の削除（trash/ へ移す）と、元に戻す ----

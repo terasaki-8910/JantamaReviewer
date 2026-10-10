@@ -15,6 +15,7 @@ pub mod capture_win;
 pub mod clipboard;
 pub mod clock;
 pub mod commands;
+pub mod evaluation;
 pub mod external;
 #[cfg(windows)]
 pub mod helper_link;
@@ -108,6 +109,12 @@ pub fn run() {
             import::commands::set_rating_link,
             import::commands::clear_rating_link,
             import::commands::replace_links,
+            evaluation::set_self_rating,
+            evaluation::clear_self_rating,
+            evaluation::set_maka_grade,
+            evaluation::clear_maka_grade,
+            evaluation::set_maka_hanchan,
+            evaluation::clear_maka_hanchan,
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)

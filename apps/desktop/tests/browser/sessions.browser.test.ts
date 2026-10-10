@@ -63,6 +63,8 @@ function sessionOf(seed: Seed) {
     report_path: seed.report ? `C:\\data\\games\\${id}\\report.json` : null,
     ocr: null,
     links: { marks: {}, ratings: {} },
+    self_ratings: { kyokus: {} },
+    maka: { kyokus: {} },
   };
 }
 
@@ -243,7 +245,45 @@ describe('U-4・U-5・U-6: 一覧の各状態（実ブラウザ）', () => {
 
             const axe = await runAxe(page);
             expect(seriousViolations(axe)).toEqual([]);
-            expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(3);
+            // 色のコントラストの規則が実際に働いている（検査が空振りしていない）。取り込んだ半荘のページ（幅 768px では、表が縦に
+            // 長くなる）が裏にあるとき、確認の説明の文だけは、axe が「背景を決められない」（incomplete）に入れる。裏の画面のサイドバーか
+            // 表を隠すと、その文も数えられる。原因までは調べていない。確認の文字の色そのものは、トークンの試験（contrast.test.ts）が確かめている。
+            // 確認の中の、題と 2 つのボタンの 3 つは、いつも数える。
+            expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThanOrEqual(name === 'confirm' ? 3 : 4);
+            if (name === 'confirm') {
+              // axe が数えられない確認の説明の文は、描いた色を読んで、ここで直接コントラストを確かめる
+              // （文字の色と、いちばん近い不透明な背景の色。AA の 4.5 以上）。
+              const ratio = await page.evaluate(() => {
+                const dialog = document.querySelector('[role="alertdialog"]');
+                const describedBy = dialog?.getAttribute('aria-describedby');
+                const desc = describedBy ? document.getElementById(describedBy) : null;
+                if (!desc) return 0;
+                const rgba = (css: string): [number, number, number, number] => {
+                  const [r = 0, g = 0, b = 0, a = 1] = (css.match(/[\d.]+/g) ?? []).map(Number);
+                  return [r, g, b, a];
+                };
+                let background: [number, number, number, number] | null = null;
+                for (let el: Element | null = desc; el && !background; el = el.parentElement) {
+                  const color = rgba(getComputedStyle(el).backgroundColor);
+                  if (color[3] >= 1) background = color;
+                }
+                if (!background) return 0;
+                const [fr, fg, fb, fa] = rgba(getComputedStyle(desc).color);
+                const [br, bg, bb] = background;
+                // 文字の色に透明度があれば、背景の上に重ねた色にする。
+                const mix = (f: number, b: number) => f * fa + b * (1 - fa);
+                const channel = (v: number) => {
+                  const s = v / 255;
+                  return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+                };
+                const luminance = (r: number, g: number, b: number) =>
+                  0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+                const text = luminance(mix(fr, br), mix(fg, bg), mix(fb, bb));
+                const back = luminance(br, bg, bb);
+                return (Math.max(text, back) + 0.05) / (Math.min(text, back) + 0.05);
+              });
+              expect(ratio, '確認の説明の文のコントラスト').toBeGreaterThanOrEqual(4.5);
+            }
 
             // 確認が開いている間は、裏が inert なので、Tab で行ける所は確認の中の 2 つだけ。
             const reach = await unreachableByTab(page);

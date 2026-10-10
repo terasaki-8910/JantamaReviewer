@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { SessionRecord } from '../src/api/types';
+import type { SelfRatingValue, SessionRecord } from '../src/api/types';
 
 const REPORTS_DIR = resolve(import.meta.dirname, '../../../packages/engine/tests/fixtures/reports');
 
@@ -69,6 +69,8 @@ export function seedSession(startedMs: number, options: SeedOptions = {}): { ses
     report_path: options.report ? `C:\\data\\games\\${id}\\report.json` : null,
     ocr: null,
     links: { marks: {}, ratings: {} },
+    self_ratings: { kyokus: {} },
+    maka: { kyokus: {} },
   };
   return options.report ? { session, report: options.report } : { session };
 }
@@ -111,7 +113,81 @@ export class FakeSessionStore {
     if (seed.report) this.reports.set(seed.session.id, REPORT_TEXTS[seed.report]);
   }
 
+  /** 半荘 1 つを、書き換えた新しい値に置き換える（画面が、新しい値で描き直せるように、元の値は変えない）。 */
+  private update(id: string, change: (session: SessionRecord) => SessionRecord): void {
+    const at = this.active.findIndex((s) => s.id === id);
+    if (at < 0) throw `半荘が見つかりません: ${id}`;
+    this.active[at] = change(this.active[at] as SessionRecord);
+  }
+
+  /** 半荘の今の中身（試験の確かめ用）。 */
+  session(id: string): SessionRecord {
+    const found = this.active.find((s) => s.id === id);
+    if (!found) throw new Error(`半荘が無い: ${id}`);
+    return found;
+  }
+
+  /** 保存の命令（結びつけ・自己評価・MAKA）。Rust 側と同じく、値を保存して、一覧に反映する。 */
+  private readonly saving: Record<string, (args: unknown) => unknown> = {
+    set_mark_link: (args) => {
+      const { sessionId, markId, decision } = args as { sessionId: string; markId: number; decision: string };
+      this.update(sessionId, (s) => ({
+        ...s,
+        links: { ...s.links, marks: { ...s.links.marks, [String(markId)]: decision } },
+      }));
+      return undefined;
+    },
+    clear_mark_link: (args) => {
+      const { sessionId, markId } = args as { sessionId: string; markId: number };
+      this.update(sessionId, (s) => {
+        const marks = { ...s.links.marks };
+        delete marks[String(markId)];
+        return { ...s, links: { ...s.links, marks } };
+      });
+      return undefined;
+    },
+    set_self_rating: (args) => {
+      const { sessionId, kyoku, rating } = args as { sessionId: string; kyoku: string; rating: SelfRatingValue };
+      this.update(sessionId, (s) => ({ ...s, self_ratings: { kyokus: { ...s.self_ratings.kyokus, [kyoku]: rating } } }));
+      return undefined;
+    },
+    clear_self_rating: (args) => {
+      const { sessionId, kyoku } = args as { sessionId: string; kyoku: string };
+      this.update(sessionId, (s) => {
+        const kyokus = { ...s.self_ratings.kyokus };
+        delete kyokus[kyoku];
+        return { ...s, self_ratings: { kyokus } };
+      });
+      return undefined;
+    },
+    set_maka_grade: (args) => {
+      const { sessionId, kyoku, grade } = args as { sessionId: string; kyoku: string; grade: string };
+      this.update(sessionId, (s) => ({ ...s, maka: { ...s.maka, kyokus: { ...s.maka.kyokus, [kyoku]: grade } } }));
+      return undefined;
+    },
+    clear_maka_grade: (args) => {
+      const { sessionId, kyoku } = args as { sessionId: string; kyoku: string };
+      this.update(sessionId, (s) => {
+        const kyokus = { ...s.maka.kyokus };
+        delete kyokus[kyoku];
+        return { ...s, maka: { ...s.maka, kyokus } };
+      });
+      return undefined;
+    },
+    set_maka_hanchan: (args) => {
+      const { sessionId, grade } = args as { sessionId: string; grade: string };
+      this.update(sessionId, (s) => ({ ...s, maka: { ...s.maka, hanchan: grade } }));
+      return undefined;
+    },
+    clear_maka_hanchan: (args) => {
+      const { sessionId } = args as { sessionId: string };
+      this.update(sessionId, (s) => ({ ...s, maka: { kyokus: s.maka.kyokus } }));
+      return undefined;
+    },
+  };
+
   readonly handlers: Record<string, (args: unknown) => unknown> = {
+    ...this.saving,
     list_sessions: () => this.sorted(),
     read_report: (args) => this.reports.get((args as { sessionId: string }).sessionId) ?? null,
     delete_sessions: (args) => {

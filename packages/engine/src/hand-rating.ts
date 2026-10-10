@@ -1,0 +1,48 @@
+/**
+ * 局の自己評価（〇△✕）と、AI 基準の段階の食い違い（F10）。
+ *
+ * 「結果が悪かった局を、内容を見ずに低く付けていないか」を確かめるための印を付ける規則。
+ * 段階（S+〜E の14段階）を、〇△✕に合わせた 3 つの帯に分けて、自己評価の帯と段階の帯が 2 つ離れているときに印を付ける。
+ * - 〇の帯: S+ から A- まで
+ * - △の帯: B+ から B- まで
+ * - ✕の帯: C+ から E まで
+ * 例: ✕と付けたのに AI 基準が S・A の帯、または〇と付けたのに AI 基準が C 以下の帯。△は、どの帯とも 1 つ以内なので、印は付かない。
+ *
+ * この規則は暫定（既定。利用者に確かめてもらう前）。区切りを変えるときは、この 1 つのファイルだけを直す。
+ */
+import { GRADES, type Grade } from './grade';
+import type { HandMark } from './outcome';
+
+/** 帯の番号。0 = 〇の帯、1 = △の帯、2 = ✕の帯。 */
+export type HandBand = 0 | 1 | 2;
+
+/** 〇の帯の下限（A-）の、段階の添字。これ以上が〇の帯。 */
+const GOOD_BAND_FROM = GRADES.indexOf('A-');
+/** △の帯の下限（B-）の、段階の添字。これ以上、〇の帯の手前までが△の帯。それより下は✕の帯。 */
+const FAIR_BAND_FROM = GRADES.indexOf('B-');
+
+/** 印を付ける、帯の離れ方（これ以上離れたら印）。 */
+export const FLAG_BAND_GAP = 2;
+
+/** 段階を、〇△✕の帯にする。 */
+export function gradeBand(grade: Grade): HandBand {
+  const index = GRADES.indexOf(grade);
+  if (index >= GOOD_BAND_FROM) return 0;
+  if (index >= FAIR_BAND_FROM) return 1;
+  return 2;
+}
+
+/** 自己評価（〇△✕）を、帯の番号にする。 */
+export function markBand(mark: HandMark): HandBand {
+  if (mark === 'good') return 0;
+  return mark === 'fair' ? 1 : 2;
+}
+
+/**
+ * 自己評価と AI 基準の段階が、大きく食い違っているか（印を付けるか）。
+ * 自己評価が無い・段階が無い局は、比べられないので印を付けない。
+ */
+export function disagreesWithGrade(mark: HandMark | null, grade: Grade | null): boolean {
+  if (mark === null || grade === null) return false;
+  return Math.abs(markBand(mark) - gradeBand(grade)) >= FLAG_BAND_GAP;
+}

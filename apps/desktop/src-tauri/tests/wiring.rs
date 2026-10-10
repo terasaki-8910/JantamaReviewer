@@ -339,3 +339,47 @@ fn every_import_command_is_registered_and_the_mjai_window_is_wired_into_the_app(
     assert!(lib.contains("(import::mjai_window::MJAI_LABEL, WindowEvent::Destroyed)"));
     assert!(lib.contains("import::mjai_window::on_destroyed("));
 }
+
+#[test]
+fn every_evaluation_command_is_registered_and_none_of_them_writes_the_recording() {
+    // evaluation.rs（局の評価の表の保存）の `#[tauri::command]` が、すべて登録されている（登録の忘れを防ぐ）。
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    let source = read(crate_dir().join("src").join("evaluation.rs"));
+    let mut names = Vec::new();
+    let mut lines = source.lines();
+    while let Some(line) = lines.next() {
+        if line.trim() == "#[tauri::command]" {
+            let signature = lines.next().expect("関数が続く");
+            let name = signature
+                .trim_start_matches("pub async fn ")
+                .split('(')
+                .next()
+                .expect("関数名");
+            names.push(name.to_string());
+        }
+    }
+    assert_eq!(
+        names,
+        [
+            "set_self_rating",
+            "clear_self_rating",
+            "set_maka_grade",
+            "clear_maka_grade",
+            "set_maka_hanchan",
+            "clear_maka_hanchan",
+        ]
+    );
+    for name in &names {
+        assert!(
+            lib.contains(&format!("evaluation::{name},")),
+            "{name} を generate_handler に登録していない"
+        );
+    }
+    // ウィジェットの記録（追記だけの events.jsonl）は、ここからは書き換えない。
+    for forbidden in ["add_mark", "add_rating", "undo(", "append", "EVENTS_FILE"] {
+        assert!(
+            !source.contains(forbidden),
+            "evaluation.rs に {forbidden} がある"
+        );
+    }
+}

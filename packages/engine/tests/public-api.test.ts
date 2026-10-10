@@ -96,6 +96,13 @@ describe('公開 API（src/index.ts）', () => {
     expect(engine.DEFAULT_GRADE_MODEL.recordCount).toBe(67);
   });
 
+  it('F10 局の自己評価と AI 基準の食い違い（印）の入口が使える', () => {
+    for (const name of ['disagreesWithGrade', 'gradeBand', 'markBand'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+    expect(engine.FLAG_BAND_GAP).toBe(2);
+  });
+
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
   });

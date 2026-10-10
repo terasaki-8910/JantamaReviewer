@@ -246,7 +246,9 @@ describe('取り込みの流れ（結果が見つかってから）', () => {
       within(panel).getByRole('button', { name: `${formatSessionShort(session.started_ms)} の半荘を開く` }),
     );
     expect(await screen.findByRole('heading', { level: 1, name: /\d+月\d+日/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /迷い6/ })).toHaveAttribute('aria-current', 'true');
+    expect(
+      within(screen.getByRole('navigation', { name: '半荘の一覧' })).getByRole('button', { name: /迷い6/ }),
+    ).toHaveAttribute('aria-current', 'true');
   });
 
   it('段階の途中は「取り込んでいます」と、いま何をしているかを出す', async () => {

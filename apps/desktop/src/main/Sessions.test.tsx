@@ -123,13 +123,17 @@ describe('U-8: 半荘の一覧', () => {
     expect(within(rowOf('d')).queryByText(/^[SABCDE][+-]?$/)).toBeNull();
   });
 
-  it('結果は、取り込んだ半荘だけを、1 回ずつ読む。一覧が読み直されても、読み直さない', async () => {
+  it('結果は、取り込んだ半荘だけを、1 回ずつ読む（見ている半荘のページだけ、自分の分をもう 1 回）。一覧が読み直されても、読み直さない', async () => {
     const { mock } = setup();
     await ready();
+    await waitFor(() => expect(mock.count('read_report')).toBe(SEED.filter((s) => s.report).length + 1));
     const reads = mock.calls().filter((c) => c.cmd === 'read_report');
-    expect(reads.map((c) => (c.args as { sessionId: string }).sessionId).sort()).toEqual(
-      SEED.filter((s) => s.report).map((s) => idOf(s.key)).sort(),
-    );
+    const ids = reads.map((c) => (c.args as { sessionId: string }).sessionId);
+    const importedIds = SEED.filter((s) => s.report).map((s) => idOf(s.key));
+    expect([...new Set(ids)].sort()).toEqual([...importedIds].sort());
+    // 一覧が、取り込んだ半荘ごとに 1 回。見ている半荘（最初は a）のページが、迷いの結びつけと局の評価の表のために、自分の分を 1 回。
+    expect(ids.filter((id) => id !== idOf('a'))).toHaveLength(importedIds.length - 1);
+    expect(ids.filter((id) => id === idOf('a'))).toHaveLength(2);
     const before = mock.count('read_report');
     mock.emit('state-changed', {});
     await waitFor(() => expect(mock.count('list_sessions')).toBeGreaterThanOrEqual(2));
@@ -146,7 +150,7 @@ describe('U-8: 半荘の一覧', () => {
     expect(rowOf('b')).toHaveAttribute('aria-current', 'true');
     expect(rowOf('a')).not.toHaveAttribute('aria-current');
     const main = screen.getByRole('main');
-    expect(within(main).getByText('86.7')).toBeInTheDocument();
+    expect(within(main).getByText('86.7', { selector: '.rate-num' })).toBeInTheDocument();
     expect(within(main).getByText('Rating')).toBeInTheDocument();
     // 取り込み前の半荘。
     await user.click(rowOf('d'));

@@ -14,6 +14,7 @@ import type {
   Orientation,
   PageKeyEvent,
   Rating,
+  SelfRatingValue,
   SessionOcr,
   SessionRecord,
   Settings,
@@ -126,6 +127,25 @@ export const api = {
   /** 結びつけをまるごと置き換える（取り込みのときに、自動で決めた結びつけを一度に書く）。 */
   replaceLinks: (sessionId: string, links: Links) =>
     invoke<void>('replace_links', { sessionId, links }),
+
+  // ---- 局の評価の表（F10）。ウィジェットの記録（events.jsonl）は書き換えず、別のファイルに保存する ----
+  /** 局の自己評価を上書きする（`kyoku` は局の鍵。`none` は「評価なし」）。付け直しにも使う。 */
+  setSelfRating: (sessionId: string, kyoku: string, rating: SelfRatingValue) =>
+    invoke<void>('set_self_rating', { sessionId, kyoku, rating }),
+  /** 局の自己評価の上書きを消す（ウィジェットで付けた評価に戻す。取り消しに使う）。 */
+  clearSelfRating: (sessionId: string, kyoku: string) =>
+    invoke<void>('clear_self_rating', { sessionId, kyoku }),
+  /** 局の MAKA の評価を入れる（S+ から E の 14 段階）。 */
+  setMakaGrade: (sessionId: string, kyoku: string, grade: string) =>
+    invoke<void>('set_maka_grade', { sessionId, kyoku, grade }),
+  /** 局の MAKA の評価を消す。 */
+  clearMakaGrade: (sessionId: string, kyoku: string) =>
+    invoke<void>('clear_maka_grade', { sessionId, kyoku }),
+  /** 半荘全体の MAKA の評価を入れる。 */
+  setMakaHanchan: (sessionId: string, grade: string) =>
+    invoke<void>('set_maka_hanchan', { sessionId, grade }),
+  /** 半荘全体の MAKA の評価を消す。 */
+  clearMakaHanchan: (sessionId: string) => invoke<void>('clear_maka_hanchan', { sessionId }),
 };
 
 export function onStateChanged(handler: (state: AppState) => void): Promise<UnlistenFn> {

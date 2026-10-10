@@ -566,57 +566,6 @@ fieldset.setting:not(:first-child) {
   line-height: 1.4;
 }
 
-.marks {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--s4) var(--s3);
-}
-
-.mark {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-}
-
-.thumb {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  background: var(--hover);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-}
-
-.thumb-empty {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: var(--hover);
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r2);
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.mark-cap {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s2);
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.mark-cap .mono {
-  color: var(--ink);
-  font-size: 13px;
-}
-
 .rating-list {
   list-style: none;
   margin: 0;

@@ -1,10 +1,11 @@
-import { useEffect, useEffectEvent, useLayoutEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, type ReactNode } from 'react';
 
 import { Icon } from './Icon';
 import { useShortcutBlocker } from './undo/shortcutGuard';
 
 /**
- * 小さなメニュー（行の「…」と、段階の絞り込み）。WAI-ARIA の menu button の形:
+ * 小さなメニュー（行の「…」・段階の絞り込み、そして半荘のページの、局面を手で選ぶ・自分の評価・MAKA の段階。最後の 3 つは
+ * `MenuSelect` が使う）。WAI-ARIA の menu button の形:
  * 開くと最初の項目（選んである項目があればそれ）にキーボードの位置が移り、↑ ↓ Home End で動き、Esc で閉じて、
  * キーボードの位置を開いたボタンに戻す。Tab でも閉じる（ボタンに戻してから、ふつうの Tab に任せる）。
  * 外を押す・窓の大きさが変わる・どこかがスクロールすると、キーボードの位置は動かさずに閉じる。
@@ -13,7 +14,17 @@ import { useShortcutBlocker } from './undo/shortcutGuard';
 
 export type PopupItem =
   | { kind: 'item'; key: string; label: string; onSelect: () => void }
-  | { kind: 'radio'; key: string; label: string; hint?: string; checked: boolean; onSelect: () => void }
+  | {
+      kind: 'radio';
+      key: string;
+      label: string;
+      hint?: string;
+      /** 文字の前に置く図（〇△✕の形など）。図だけで意味が伝わるときは、`hideLabel` で文字を読み上げだけにする。 */
+      icon?: ReactNode;
+      hideLabel?: boolean;
+      checked: boolean;
+      onSelect: () => void;
+    }
   | { kind: 'separator'; key: string };
 
 /**
@@ -137,7 +148,12 @@ export function Popup({ label, items, anchor, placement = 'below', onClose }: Po
             <span className="tick">
               <Icon name="check" />
             </span>
-            <span>{item.label}</span>
+            {item.icon !== undefined && (
+              <span className="pi-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+            )}
+            <span className={item.hideLabel ? 'sr-only' : undefined}>{item.label}</span>
             {item.hint !== undefined && <span className="pi-r">{item.hint}</span>}
           </button>
         ) : (

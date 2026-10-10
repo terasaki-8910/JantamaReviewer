@@ -6,6 +6,7 @@ import '../styles/native.css';
 import '../styles/error-screen.css';
 import '../styles/app.css';
 import '../styles/sessions.css';
+import '../styles/hanchan.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
