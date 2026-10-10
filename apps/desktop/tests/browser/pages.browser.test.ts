@@ -83,6 +83,8 @@ function makeSessions(): unknown[] {
       report_path: null,
       ocr: null,
       links: { marks: {}, ratings: {} },
+      self_ratings: { kyokus: {} },
+      maka: { kyokus: {} },
     },
     {
       id: '20261008-210000',
@@ -95,6 +97,8 @@ function makeSessions(): unknown[] {
       report_path: 'C:\\data\\games\\20261008-210000\\report.json',
       ocr: null,
       links: { marks: {}, ratings: {} },
+      self_ratings: { kyokus: {} },
+      maka: { kyokus: {} },
     },
     {
       id: '20250101-090000',
@@ -107,6 +111,8 @@ function makeSessions(): unknown[] {
       report_path: null,
       ocr: null,
       links: { marks: {}, ratings: {} },
+      self_ratings: { kyokus: {} },
+      maka: { kyokus: {} },
     },
   ];
 }

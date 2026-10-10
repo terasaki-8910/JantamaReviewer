@@ -63,6 +63,11 @@ const sessions = [
       { id: 101, t_ms: at(16, 24), rating: 'bad', hand: 2 },
     ],
     events: [],
+    report_path: null,
+    ocr: null,
+    links: { marks: {}, ratings: {} },
+    self_ratings: { kyokus: {} },
+    maka: { kyokus: {} },
   },
 ];
 

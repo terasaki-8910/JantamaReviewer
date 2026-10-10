@@ -63,6 +63,8 @@ export function fx4Session(
     report_path: null,
     ocr: null,
     links: { marks: {}, ratings: {} },
+    self_ratings: { kyokus: {} },
+    maka: { kyokus: {} },
     ...overrides,
   };
 }

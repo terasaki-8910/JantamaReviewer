@@ -109,6 +109,29 @@ export interface Links {
 }
 
 /**
+ * 局の自己評価の上書きの値（`self-ratings.json`）。`none` は「評価なし」: ウィジェットで付けた評価があっても、
+ * この局には付けていないものとして見せる。
+ */
+export type SelfRatingValue = Rating | 'none';
+
+/**
+ * 局の自己評価の上書き（`self-ratings.json`）。`kyokus` は局の鍵（`kyokuKey`。`k<局の通し番号>h<本場>`）→ 値。
+ * ここに無い局は、ウィジェットで付けた評価（記録と結びつけから決まる）のまま。ウィジェットの記録そのものは書き換えない。
+ */
+export interface SelfRatings {
+  kyokus: Record<string, SelfRatingValue>;
+}
+
+/**
+ * MAKA の評価（`maka.json`。任意の入力）。段階の名前は S+ から E の 14 段階（エンジンの `Grade`）。
+ * `kyokus` は局の鍵 → 段階、`hanchan` は半荘全体の段階（無ければ出てこない）。
+ */
+export interface MakaGrades {
+  kyokus: Record<string, string>;
+  hanchan?: string;
+}
+
+/**
  * 半荘 1 つ分。取り消された記録は marks / ratings に含まれない。
  * 結果だけの半荘（記録の無いまま取り込んだもの）は、marks・ratings が空で、`report_path` がある。
  */
@@ -126,6 +149,10 @@ export interface SessionRecord {
   ocr: OcrCache | null;
   /** 迷いマーク・評価の結びつけ。 */
   links: Links;
+  /** 局の自己評価の上書き（局の評価の表で付け直したもの）。 */
+  self_ratings: SelfRatings;
+  /** MAKA の評価（局の評価の表で入れたもの）。 */
+  maka: MakaGrades;
 }
 
 /** 文字認識の結果の写しを、半荘ごとに返したもの（`ocr_sessions` の返り値）。 */

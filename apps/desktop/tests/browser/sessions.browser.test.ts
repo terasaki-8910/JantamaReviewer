@@ -63,6 +63,8 @@ function sessionOf(seed: Seed) {
     report_path: seed.report ? `C:\\data\\games\\${id}\\report.json` : null,
     ocr: null,
     links: { marks: {}, ratings: {} },
+    self_ratings: { kyokus: {} },
+    maka: { kyokus: {} },
   };
 }
 
