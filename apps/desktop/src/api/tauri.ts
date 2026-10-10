@@ -45,6 +45,14 @@ export const api = {
     invoke<Settings>('set_orientation', { orientation }),
   openMainWindow: () => invoke<void>('open_main_window'),
   listSessions: () => invoke<SessionRecord[]>('list_sessions'),
+  /**
+   * 半荘を消す（U-9）。半荘のフォルダを保存先の trash へ移す（一瞬）。一覧には出なくなる。アプリを閉じるとき
+   * （落ちたときは次の起動のとき）に、Windows のごみ箱へ送る。それまでは `restoreSessions` で戻せる。
+   * ウィジェットが記録中の半荘も消せる（その半荘は閉じる）。
+   */
+  deleteSessions: (ids: string[]) => invoke<void>('delete_sessions', { ids }),
+  /** 消した半荘を戻す（「元に戻す」・Ctrl+Z）。 */
+  restoreSessions: (ids: string[]) => invoke<void>('restore_sessions', { ids }),
   getStartupNote: () => invoke<string | null>('get_startup_note'),
   showWidgetMenu: () => invoke<void>('show_widget_menu'),
   /**

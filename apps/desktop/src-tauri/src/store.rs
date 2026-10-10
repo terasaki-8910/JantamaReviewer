@@ -27,6 +27,8 @@ use crate::capture::{CaptureError, CaptureTarget, Screenshot};
 
 /// 半荘のフォルダを入れるフォルダ名。
 pub const GAMES_DIR: &str = "games";
+/// 消した半荘のフォルダを、アプリを閉じるまで置いておくフォルダ名（保存先の直下。`trash.rs`）。
+pub const TRASH_DIR: &str = "trash";
 /// 迷いマークの画像を入れるフォルダ名（半荘のフォルダの中）。
 pub const MARKS_DIR: &str = "marks";
 /// 評価の画像を入れるフォルダ名（半荘のフォルダの中。W-13）。
@@ -346,6 +348,17 @@ pub enum StoreError {
     },
     /// 結びつけの値が正しくない。
     InvalidLink(String),
+    /// 消した半荘の置き場に、同じ名前の半荘が残っている（消せない。置き場は、アプリを開き直すと片づく）。
+    TrashOccupied(String),
+    /// 消した半荘の中に、その名前が無い（戻せない）。
+    NotInTrash(String),
+    /// 戻す場所に、同じ名前の半荘がすでにある（戻せない）。
+    RestoreBlocked(String),
+    /// 半荘のフォルダを移せなかった（開いているファイルがあるなど）。
+    Move {
+        id: String,
+        reason: String,
+    },
     Io(io::Error),
     Encode(serde_json::Error),
 }
@@ -371,6 +384,20 @@ impl fmt::Display for StoreError {
                 write!(f, "結びつける{kind}がこの半荘にありません（番号 {id}）。")
             }
             StoreError::InvalidLink(reason) => write!(f, "結びつけの値が正しくありません: {reason}"),
+            StoreError::TrashOccupied(id) => write!(
+                f,
+                "消した半荘の置き場に、同じ名前の半荘が残っているため、消せません: {id}。アプリを開き直すと片づきます。"
+            ),
+            StoreError::NotInTrash(id) => {
+                write!(f, "消した半荘の中に見つからないため、戻せません: {id}")
+            }
+            StoreError::RestoreBlocked(id) => {
+                write!(f, "元の場所に同じ名前の半荘があるため、戻せません: {id}")
+            }
+            StoreError::Move { id, reason } => write!(
+                f,
+                "半荘 {id} のフォルダを移せませんでした（開いているファイルが無いか、確かめてください）: {reason}"
+            ),
             StoreError::Io(e) => write!(f, "ファイルを書けませんでした: {e}"),
             StoreError::Encode(e) => write!(f, "記録を書き出せませんでした: {e}"),
         }
@@ -798,6 +825,72 @@ impl Store {
         Ok(sessions)
     }
 
+    // ---- 半荘の削除（U-9）: フォルダを `trash/` へ移す。アプリを閉じるまで、戻せる ----
+
+    /// 半荘のフォルダを、保存先の `trash/` へ移す（同じボリュームなので一瞬）。消した半荘は、一覧にも、起動したときの
+    /// 続きの記録にも出ない。アプリを閉じるとき、置き場の中身は Windows のごみ箱へ送られる（`trash.rs`）。それまでは
+    /// `restore_sessions` で戻せる。
+    ///
+    /// 先に全部を確かめて（名前の形・フォルダがあること・置き場に同じ名前が無いこと）から移す。途中で移せなくなったら、
+    /// 移した分を戻して、何も変えない。ウィジェットが記録中の半荘が入っていれば、移したあとにその半荘を閉じる
+    /// （移した先のフォルダに、記録を追記しない。呼ぶ側が記録の錠を持っているので、移す間に追記は起きない）。
+    pub fn delete_sessions(&mut self, ids: &[String]) -> Result<(), StoreError> {
+        let ids = unique_ids(ids);
+        let trash = self.root.join(TRASH_DIR);
+        let mut moves = Vec::new();
+        for id in &ids {
+            let from = self.session_path(id)?;
+            let to = trash.join(id);
+            if to.exists() {
+                return Err(StoreError::TrashOccupied(id.clone()));
+            }
+            moves.push((id.clone(), from, to));
+        }
+        if moves.is_empty() {
+            return Ok(());
+        }
+        fs::create_dir_all(&trash)?;
+        move_all(&moves, &mut |from, to| fs::rename(from, to))?;
+        if self
+            .current
+            .as_ref()
+            .is_some_and(|current| ids.contains(&current.id))
+        {
+            self.current = None;
+        }
+        Ok(())
+    }
+
+    /// 消した半荘を、元の場所（`games/`）へ戻す。戻す場所に同じ名前があるとき・置き場に無いときは、何も戻さない。
+    /// 戻しても、その半荘は「記録中」にはならない（次に記録を押したときは、新しい半荘になる）。
+    pub fn restore_sessions(&self, ids: &[String]) -> Result<(), StoreError> {
+        let trash = self.root.join(TRASH_DIR);
+        let games = self.root.join(GAMES_DIR);
+        let mut moves = Vec::new();
+        for id in unique_ids(ids) {
+            if !valid_session_id(&id) {
+                return Err(StoreError::UnknownSession(id));
+            }
+            let from = trash.join(&id);
+            if !from.is_dir() {
+                return Err(StoreError::NotInTrash(id));
+            }
+            let to = games.join(&id);
+            if to.exists() {
+                return Err(StoreError::RestoreBlocked(id));
+            }
+            moves.push((id, from, to));
+        }
+        if moves.is_empty() {
+            return Ok(());
+        }
+        fs::create_dir_all(&games)?;
+        move_all(&moves, &mut |from, to| fs::rename(from, to))?;
+        // 空になったら、置き場のフォルダも片づける（中身があれば、何もしない）。
+        let _ = fs::remove_dir(&trash);
+        Ok(())
+    }
+
     // ---- 取り込み（F1・F9・F11）: 結果・文字認識の写し・結びつけ。半荘のフォルダに、別のファイルとして置く ----
 
     /// 半荘の名前から、そのフォルダの場所を求める。名前の形（英数字と `-` だけ）と、フォルダがあることを確かめる。
@@ -981,6 +1074,37 @@ impl Store {
         change(&mut links, &view)?;
         write_links(&dir, &links)
     }
+}
+
+/// 名前の並びから、重なりを除く（最初に出た順）。
+fn unique_ids(ids: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for id in ids {
+        if !out.contains(id) {
+            out.push(id.clone());
+        }
+    }
+    out
+}
+
+/// 半荘のフォルダを、1 つずつ移す（名前、元、先）。途中で移せなくなったら、移した分を逆の順に戻してから、その理由を返す。
+/// 移し方（`mover`）は、試験で差し替えられる。
+fn move_all(
+    moves: &[(String, PathBuf, PathBuf)],
+    mover: &mut dyn FnMut(&Path, &Path) -> io::Result<()>,
+) -> Result<(), StoreError> {
+    for (index, (id, from, to)) in moves.iter().enumerate() {
+        if let Err(e) = mover(from, to) {
+            for (_, done_from, done_to) in moves[..index].iter().rev() {
+                let _ = mover(done_to, done_from);
+            }
+            return Err(StoreError::Move {
+                id: id.clone(),
+                reason: e.to_string(),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn write_links(dir: &Path, links: &Links) -> Result<(), StoreError> {
@@ -2455,5 +2579,272 @@ mod tests {
         // 記録の続きも、これまでどおり同じ半荘に入る。
         store.add_mark(T0 + 5, shot()).unwrap();
         assert_eq!(store.current_session_id(), Some(id.as_str()));
+    }
+
+    // ---- U-9: 半荘の削除（trash/ へ移す）と、元に戻す ----
+
+    /// 30 分より離して 2 つの半荘を作る。（古いほう、新しいほう）の名前を返す。
+    fn two_sessions(store: &mut Store) -> (String, String) {
+        store.add_mark(T0, shot()).unwrap();
+        let older = store.current_session_id().unwrap().to_string();
+        store.close_session(T0 + 1).unwrap();
+        store.add_mark(T0 + SESSION_GAP_MS * 2, shot()).unwrap();
+        let newer = store.current_session_id().unwrap().to_string();
+        (older, newer)
+    }
+
+    fn ids_in_list(store: &Store) -> Vec<String> {
+        store
+            .list_sessions()
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id)
+            .collect()
+    }
+
+    fn games(store: &Store) -> PathBuf {
+        store.root().join(GAMES_DIR)
+    }
+
+    fn trash(store: &Store) -> PathBuf {
+        store.root().join(TRASH_DIR)
+    }
+
+    #[test]
+    fn u9_deleting_moves_the_whole_session_folder_into_trash_and_the_list_no_longer_shows_it() {
+        let (_tmp, mut store) = open_store();
+        let (older, newer) = two_sessions(&mut store);
+        store
+            .add_rating(T0 + SESSION_GAP_MS * 2 + 5, Rating::Good, shot())
+            .unwrap();
+        assert_eq!(ids_in_list(&store), vec![newer.clone(), older.clone()]);
+
+        store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+
+        assert!(!games(&store).join(&older).exists(), "元の場所からは消える");
+        let moved = trash(&store).join(&older);
+        assert!(moved.join(EVENTS_FILE).is_file(), "記録ごと移る");
+        assert!(moved.join(MARKS_DIR).is_dir(), "画像ごと移る");
+        assert_eq!(fs::read_dir(moved.join(MARKS_DIR)).unwrap().count(), 1);
+        assert_eq!(ids_in_list(&store), vec![newer.clone()], "一覧に出ない");
+        assert!(
+            games(&store).join(&newer).is_dir(),
+            "ほかの半荘は、そのまま"
+        );
+    }
+
+    #[test]
+    fn u9_a_deleted_session_is_not_continued_after_a_restart_either() {
+        let (tmp, mut store) = open_store();
+        store.add_mark(T0, shot()).unwrap();
+        let id = store.current_session_id().unwrap().to_string();
+        store.delete_sessions(std::slice::from_ref(&id)).unwrap();
+        let mut again = Store::open(tmp.path().join("data")).unwrap();
+        again.resume_recent(T0 + 60_000);
+        assert_eq!(
+            again.current_session_id(),
+            None,
+            "置き場の中の半荘に、続けて記録しない"
+        );
+        assert!(again.list_sessions().unwrap().is_empty());
+    }
+
+    #[test]
+    fn u9_deleting_the_session_being_recorded_closes_it_and_never_appends_into_the_moved_folder() {
+        let (_tmp, mut store) = open_store();
+        store.add_mark(T0, shot()).unwrap();
+        let id = store.current_session_id().unwrap().to_string();
+        let moved_events = trash(&store).join(&id).join(EVENTS_FILE);
+        let lines_before = event_lines(&store).len();
+
+        store.delete_sessions(std::slice::from_ref(&id)).unwrap();
+        assert_eq!(store.current_session_id(), None, "記録中の半荘は閉じる");
+        assert_eq!(store.view(), SessionView::default());
+
+        // 30 分以内の次の記録でも、新しい半荘（新しいフォルダ）になる。移したフォルダには、1 行も増えない。
+        store.add_mark(T0 + 1_000, shot()).unwrap();
+        let fresh = store.current_session_id().unwrap().to_string();
+        assert_ne!(fresh, id);
+        assert!(games(&store).join(&fresh).is_dir());
+        assert_eq!(
+            fs::read_to_string(&moved_events).unwrap().lines().count(),
+            lines_before
+        );
+        assert_eq!(ids_in_list(&store), vec![fresh]);
+    }
+
+    #[test]
+    fn u9_deleting_another_session_does_not_close_the_one_being_recorded() {
+        let (_tmp, mut store) = open_store();
+        let (older, newer) = two_sessions(&mut store);
+        store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+        assert_eq!(store.current_session_id(), Some(newer.as_str()));
+        store
+            .add_mark(T0 + SESSION_GAP_MS * 2 + 10, shot())
+            .unwrap();
+        assert_eq!(store.current_session_id(), Some(newer.as_str()));
+    }
+
+    #[test]
+    fn u9_restoring_puts_the_folder_back_where_it_was_and_removes_the_empty_trash() {
+        let (_tmp, mut store) = open_store();
+        let (older, newer) = two_sessions(&mut store);
+        let before = fs::read_to_string(games(&store).join(&older).join(EVENTS_FILE)).unwrap();
+
+        store
+            .delete_sessions(&[older.clone(), newer.clone()])
+            .unwrap();
+        assert!(ids_in_list(&store).is_empty());
+        assert_eq!(store.current_session_id(), None);
+        store
+            .restore_sessions(&[older.clone(), newer.clone()])
+            .unwrap();
+
+        assert_eq!(
+            ids_in_list(&store),
+            vec![newer.clone(), older.clone()],
+            "元の位置（新しい順）に戻る"
+        );
+        assert_eq!(
+            fs::read_to_string(games(&store).join(&older).join(EVENTS_FILE)).unwrap(),
+            before,
+            "中身は、そのまま"
+        );
+        assert!(!trash(&store).exists(), "空になった置き場は片づける");
+        // 戻しても、記録中にはならない（次の記録は、新しい半荘）。
+        assert_eq!(store.current_session_id(), None);
+    }
+
+    #[test]
+    fn u9_a_session_can_be_deleted_restored_and_deleted_again() {
+        let (_tmp, mut store) = open_store();
+        let (older, _newer) = two_sessions(&mut store);
+        for _ in 0..3 {
+            store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+            assert!(trash(&store).join(&older).is_dir());
+            store
+                .restore_sessions(std::slice::from_ref(&older))
+                .unwrap();
+            assert!(games(&store).join(&older).is_dir());
+        }
+    }
+
+    #[test]
+    fn u9_deleting_checks_everything_first_so_a_bad_name_moves_nothing() {
+        let (_tmp, mut store) = open_store();
+        let (older, newer) = two_sessions(&mut store);
+        for bad in ["..", "../x", "a/b", "", "no-such-session", "nul\0"] {
+            let err = store
+                .delete_sessions(&[older.clone(), bad.to_string()])
+                .unwrap_err();
+            assert!(matches!(err, StoreError::UnknownSession(_)), "{bad}: {err}");
+        }
+        assert!(
+            games(&store).join(&older).is_dir(),
+            "ほかの名前が正しくても、何も移さない"
+        );
+        assert!(!trash(&store).exists());
+        assert_eq!(store.current_session_id(), Some(newer.as_str()));
+        // 重なった名前は、1 つとして扱う。
+        store
+            .delete_sessions(&[older.clone(), older.clone()])
+            .unwrap();
+        assert_eq!(ids_in_list(&store), vec![newer]);
+    }
+
+    #[test]
+    fn u9_an_occupied_trash_name_refuses_the_whole_deletion() {
+        let (_tmp, mut store) = open_store();
+        let (older, newer) = two_sessions(&mut store);
+        fs::create_dir_all(trash(&store).join(&older)).unwrap();
+        let err = store
+            .delete_sessions(&[newer.clone(), older.clone()])
+            .unwrap_err();
+        assert!(
+            matches!(err, StoreError::TrashOccupied(ref id) if *id == older),
+            "{err}"
+        );
+        assert!(err.to_string().contains("アプリを開き直すと片づきます"));
+        assert!(games(&store).join(&newer).is_dir(), "newer も移していない");
+        assert_eq!(
+            store.current_session_id(),
+            Some(newer.as_str()),
+            "記録中の半荘も閉じない"
+        );
+    }
+
+    #[test]
+    fn u9_restoring_refuses_when_the_name_is_not_in_trash_or_the_place_is_taken() {
+        let (_tmp, mut store) = open_store();
+        let (older, newer) = two_sessions(&mut store);
+        store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+        assert!(matches!(
+            store.restore_sessions(&[older.clone(), newer.clone()]),
+            Err(StoreError::NotInTrash(ref id)) if *id == newer
+        ));
+        assert!(trash(&store).join(&older).is_dir(), "どれも戻していない");
+        assert!(matches!(
+            store.restore_sessions(&["../x".to_string()]),
+            Err(StoreError::UnknownSession(_))
+        ));
+        // 元の場所に、同じ名前の半荘ができていたら、戻さない。
+        fs::create_dir_all(games(&store).join(&older)).unwrap();
+        assert!(matches!(
+            store.restore_sessions(std::slice::from_ref(&older)),
+            Err(StoreError::RestoreBlocked(ref id)) if *id == older
+        ));
+        assert!(trash(&store).join(&older).is_dir());
+    }
+
+    #[test]
+    fn u9_a_failing_move_puts_back_what_was_already_moved() {
+        let tmp = tempfile::tempdir().unwrap();
+        let moves: Vec<(String, PathBuf, PathBuf)> = ["a", "b", "c"]
+            .iter()
+            .map(|n| {
+                (
+                    n.to_string(),
+                    tmp.path().join("from").join(n),
+                    tmp.path().join("to").join(n),
+                )
+            })
+            .collect();
+        for (_, from, _) in &moves {
+            fs::create_dir_all(from).unwrap();
+        }
+        fs::create_dir_all(tmp.path().join("to")).unwrap();
+        // 2 つ目の移しで失敗する移し方。
+        let mut calls = 0;
+        let mut mover = |from: &Path, to: &Path| -> io::Result<()> {
+            calls += 1;
+            if calls == 2 {
+                return Err(io::Error::other("開いているファイルがあります"));
+            }
+            fs::rename(from, to)
+        };
+        let err = move_all(&moves, &mut mover).unwrap_err();
+        assert!(
+            matches!(err, StoreError::Move { ref id, .. } if id == "b"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("開いているファイル"));
+        for (_, from, to) in &moves {
+            assert!(from.is_dir(), "{} は元の場所に戻っている", from.display());
+            assert!(!to.exists());
+        }
+    }
+
+    #[test]
+    fn u9_trash_never_appears_in_the_list_even_when_it_holds_a_valid_looking_session() {
+        let (_tmp, mut store) = open_store();
+        let (older, _newer) = two_sessions(&mut store);
+        store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+        // 置き場の中の半荘は、フォルダの名前も記録も正しい。それでも一覧には出ない。
+        assert!(trash(&store).join(&older).join(EVENTS_FILE).is_file());
+        assert!(!ids_in_list(&store).contains(&older));
+        assert!(
+            store.read_report(&older).is_err(),
+            "取り込みの操作も、消した半荘には届かない"
+        );
     }
 }

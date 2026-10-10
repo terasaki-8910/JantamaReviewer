@@ -30,6 +30,7 @@ pub mod recorder;
 pub mod settings;
 pub mod sound;
 pub mod store;
+pub mod trash;
 pub mod webview_data;
 pub mod webview_policy;
 #[cfg(windows)]
@@ -65,7 +66,7 @@ pub const CONFIG_DIR_ENV: &str = "JANTAMA_CONFIG_DIR";
 pub const SHOW_MAIN_ARG: &str = "--show-main";
 
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_state,
@@ -78,6 +79,8 @@ pub fn run() {
             commands::set_orientation,
             commands::open_main_window,
             commands::list_sessions,
+            commands::delete_sessions,
+            commands::restore_sessions,
             commands::get_startup_note,
             commands::show_widget_menu,
             commands::window_ready,
@@ -109,8 +112,30 @@ pub fn run() {
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)
         .setup(setup)
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("アプリを起動できませんでした");
+    app.run(|app, event| {
+        // アプリを閉じるとき: 消した半荘のフォルダを、Windows のごみ箱へ送る（U-9）。落ちたときは、次の起動で送る。
+        if let tauri::RunEvent::Exit = event {
+            recycle_deleted_sessions(app);
+        }
+    });
+}
+
+/// 消した半荘の置き場を、ごみ箱へ送る。保存先は、設定から読む（記録の錠を取れなければ、あきらめる。次の起動で送る）。
+fn recycle_deleted_sessions(app: &tauri::AppHandle) {
+    let Some(core) = app.try_state::<SharedCore>() else {
+        return;
+    };
+    let data_dir = core
+        .lock_within(std::time::Duration::from_secs(1))
+        .map(|core| core.settings().data_dir.clone());
+    match data_dir {
+        Some(dir) => trash::recycle_pending(&dir),
+        None => {
+            eprintln!("記録の錠を取れなかったので、消した半荘は、次の起動のときにごみ箱へ送ります")
+        }
+    }
 }
 
 fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
@@ -166,6 +191,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     if let Some(note) = core.startup_note() {
         eprintln!("{note}");
     }
+    // 前の起動で閉じきれずに（落ちて）、置き場に残った「消した半荘」を、ごみ箱へ送る（U-9）。
+    trash::recycle_pending(&settings.data_dir);
     app.manage(SharedCore(Arc::new(Mutex::new(core))));
     app.manage(import::mjai_window::MjaiWindowState::default());
     commands::allow_asset_dir(&handle, &settings.data_dir);
