@@ -219,6 +219,34 @@ describe('U-18 受け入れ枚数の行と小窓', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
+  it('U-25 「行を押すと…」の説明の文は、本文に出さない。受け入れ枚数の見出しのそばの (i) に、マウスを乗せるかキーボードで選ぶと、重ねて出る。Esc で閉じる', async () => {
+    const { user } = renderQuiz();
+    await answer(user, drawn);
+    const HINT = '行を押すと、受け入れ牌と枚数・残りの一覧を開きます。';
+    const section = document.querySelector('[data-ai="ukeire-box"]') as HTMLElement;
+    // 本文には、説明の文が見えていない（重なりは閉じている）
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(section.textContent).not.toContain('一覧を開きます');
+    expect(document.querySelector('.uk-hint')).toBeNull();
+    // 見出し（受け入れ枚数）のそばに、名前のある (i)
+    const icon = within(section).getByRole('button', { name: '受け入れ枚数の操作の説明' });
+    expect(icon.closest('.sec-head')?.querySelector('h2')?.textContent).toBe('受け入れ枚数');
+    // マウスを乗せると出る
+    await user.hover(icon);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(HINT);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await user.unhover(icon);
+    // キーボードで選ぶと出る
+    icon.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('tooltip')).toHaveTextContent(HINT);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    // 行は、同じ文を読み上げの説明として持つ（押すと開くことが、読み上げでも分かる）
+    expect(ukRow('自分・最大')).toHaveAccessibleDescription(HINT);
+  });
+
   it('行を押すと小窓が開く: 受け入れ牌ごとの枚数と残り・合計の行・注。Esc で閉じて、キーボードの位置は押した行へ戻る', async () => {
     const { user } = renderQuiz();
     await answer(user, drawn);

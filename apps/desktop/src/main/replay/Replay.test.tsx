@@ -893,7 +893,20 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
       ['迷い6'],
       ['大きな不一致'],
     ]);
-    expect(screen.getByText('場面を押すと、その場面へ飛びます。場面に着くまで、AIの答えは出ません。')).toBeInTheDocument();
+    // 操作の説明は、本文に出さず、見出しのそばの (i) に乗せるか選ぶと、重ねて出る（U-25）
+    const panel = document.querySelector('.scenes-h') as HTMLElement;
+    expect(panel.textContent).not.toContain('場面を押すと');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    const icon = within(panel).getByRole('button', { name: '場面の一覧の操作の説明' });
+    expect(icon.closest('.sec-head')?.querySelector('h2')?.textContent).toBe('この半荘の場面');
+    expect(screen.getByRole('list', { name: '場面の一覧' })).toHaveAccessibleDescription(
+      '場面を押すと、その場面へ飛びます。場面に着くまで、AIの答えは出ません。',
+    );
+    await user.hover(icon);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('場面を押すと、その場面へ飛びます。場面に着くまで、AIの答えは出ません。');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await user.unhover(icon);
     // 場面を押すと、その場面へ飛ぶ。答えの欄が出る
     await user.click(rows[3] as HTMLElement);
     expect(title()).toBe('東2局1本場 6巡目');

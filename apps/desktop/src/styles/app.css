@@ -80,6 +80,70 @@
   color: var(--ink);
 }
 
+/* ---------- 説明のアイコン（InfoTip。U-25）。重なりは body の下に描く（欄の中の container-type が位置の基準を奪うため） ---------- */
+.infotip {
+  display: inline-flex;
+  flex: none;
+}
+
+.infotip-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-block: -5px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r2);
+  color: var(--muted);
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.infotip-btn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.infotip-btn:hover,
+.infotip-btn[data-open="1"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.infotip-pop {
+  position: fixed;
+  z-index: 80;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 16px));
+  padding: var(--s2) var(--s3);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  box-shadow: 0 8px 20px var(--menu-shadow);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+  text-align: left;
+  text-wrap: pretty;
+}
+
+.infotip-pop[hidden] {
+  display: none;
+}
+
+@media (width < 640px) {
+  .infotip-btn {
+    width: 36px;
+    height: 36px;
+    margin-block: -9px;
+  }
+}
+
 .field {
   display: grid;
   gap: 6px;
@@ -558,6 +622,18 @@ fieldset.setting:not(:first-child) {
   line-height: 1.4;
 }
 
+/* 見出しと、そのそばの説明のアイコン（InfoTip）。アイコンの押せる範囲（28px）が、見出しの行を高くしないように、上下の余白を負にする */
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.sec-head .sec-title {
+  margin: 0;
+}
+
 .rating-list {
   list-style: none;
   margin: 0;
@@ -852,66 +928,74 @@ fieldset.setting:not(:first-child) {
   flex: 1 1 8em;
 }
 
-/* ---------- 狭いとき（640px 未満）: アイコンだけの細い列にする。完全には隠さない ---------- */
+/* ---------- サイドバーの出す・しまう・引き出し（U-32、R11-15。承認済みの見本は、11回目のシートの rail-a） ----------
+  - 640px 以上: サイドバーは出ている。左上のボタンでしまえる（しまったら、本文は全幅になり、本文の上の帯（.topbar）にボタンが出る）
+  - 640px 未満: サイドバーは隠れ、本文は左端（16px）から始まる。左上のボタンで、サイドバーを引き出しとして重ねる（幕つき）
+  色はトークンだけ。 */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  min-height: 44px;
+  margin: 0 0 var(--s3);
+}
+
+.topbar .app-mark {
+  margin-left: var(--s1);
+}
+
+.topbar-sp {
+  flex: 1 1 auto;
+}
+
+.side-id {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.sb-toggle {
+  width: 40px;
+  height: 40px;
+  color: var(--ink);
+}
+
+/* 引き出しを開いたとき、キーボードの位置を最初に置く所。枠は出さない */
+.side:focus {
+  outline: none;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  padding: 0;
+  background: var(--scrim-soft);
+  border: 0;
+  border-radius: 0;
+  cursor: default;
+}
+
+/* 広い窓で、利用者がしまったとき */
+@media (width >= 640px) {
+  .app[data-sb="hidden"] {
+    --side-w: 0px;
+
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app[data-sb="hidden"] .side {
+    display: none;
+  }
+}
+
+/* 細い窓: 列は無い。引き出しは、画面の左から重ねる */
 @media (width < 640px) {
   .app {
-    --side-w: 60px;
-  }
+    --side-w: 0px;
 
-  .side-in {
-    align-items: center;
-    gap: var(--s4);
-    padding: var(--s4) var(--s2) var(--s3);
-  }
-
-  .nav-item .label,
-  .nav-item .count,
-  .import .label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-  }
-
-  .nav {
-    gap: var(--s1);
-  }
-
-  .side-top {
-    justify-items: center;
-  }
-
-  .import {
-    width: 44px;
-    min-height: 44px;
-    padding: 0;
-    justify-content: center;
-  }
-
-  .nav-item,
-  .side-foot .nav-item {
-    width: 44px;
-    min-height: 44px;
-    padding: 0;
-    justify-content: center;
-    flex: none;
-  }
-
-  .side-foot {
-    flex-direction: column;
-    align-items: center;
-    gap: var(--s1);
-    width: 100%;
-  }
-
-  .icon-btn {
-    width: 44px;
-    height: 44px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .main {
@@ -920,5 +1004,26 @@ fieldset.setting:not(:first-child) {
 
   .title {
     font-size: 22px;
+  }
+
+  .side {
+    position: fixed;
+    z-index: 60;
+    inset: 0 auto 0 0;
+    width: min(86vw, 300px);
+    background: var(--bg);
+    border-right: 1px solid var(--line-strong);
+    box-shadow: 0 8px 20px var(--menu-shadow);
+    transform: translateX(-102%);
+    visibility: hidden;
+    transition:
+      transform 160ms ease,
+      visibility 0s linear 160ms;
+  }
+
+  .app[data-drawer="open"] .side {
+    transform: none;
+    visibility: visible;
+    transition: transform 160ms ease;
   }
 }

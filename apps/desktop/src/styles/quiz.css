@@ -1796,10 +1796,6 @@ li:has(> .qrow.next) + li > .qrow {
   color: var(--ink);
 }
 
-.uk-hint {
-  margin-top: -2px;
-}
-
 .ukpop {
   position: fixed;
   z-index: 75;

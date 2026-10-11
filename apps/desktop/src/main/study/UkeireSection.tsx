@@ -10,6 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { createPortal } from 'react-dom';
 
 import { Icon } from '../Icon';
+import { InfoTip } from '../InfoTip';
 import { isDoraTile } from './dora';
 import { followOf, type UkeireBox, type UkeireRow } from './reveal';
 import { Tile } from './Tile';
@@ -406,7 +407,12 @@ export function UkeireSection({ box, dora }: SectionProps) {
 
   return (
     <div className="q-sec" data-ai="ukeire-box">
-      <h2 className="sec-title">受け入れ枚数</h2>
+      <div className="sec-head">
+        <h2 className="sec-title">受け入れ枚数</h2>
+        <InfoTip label="受け入れ枚数の操作の説明" id="uk-hint">
+          行を押すと、受け入れ牌と枚数・残りの一覧を開きます。
+        </InfoTip>
+      </div>
       <ul className="uk">
         {box.rows.map((row, index) => {
           const detail = row.detail;
@@ -448,9 +454,6 @@ export function UkeireSection({ box, dora }: SectionProps) {
         })}
       </ul>
       {box.takeaway !== '' && <p className="takeaway">{box.takeaway}</p>}
-      <p className="quiet uk-hint" id="uk-hint">
-        行を押すと、受け入れ牌と枚数・残りの一覧を開きます。
-      </p>
       {box.anyWorse && <p className="quiet">シャンテン数が違う打牌は、受け入れ枚数では比べられません。</p>}
       <div className="uk-links">
         <a className="q-link" href={box.pairiUrl || tenhouPairiUrl(box.tiles)} target="_blank" rel="noopener noreferrer">

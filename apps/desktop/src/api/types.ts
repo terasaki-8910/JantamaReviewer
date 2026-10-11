@@ -48,9 +48,14 @@ export interface Settings {
   show_all_mismatches: boolean;
   /** 半荘を通して見る画面のキーの割り当て（R10-3、U-21）。 */
   replay_keys: ReplayKeys;
+  /**
+   * `replay_keys` の表の版（設定ファイルの側が書く。画面は、受け取ったものをそのまま返すだけで、触らない。R11-4）。
+   * 試験の設定の見本には無くてよい。
+   */
+  replay_keys_revision?: number;
 }
 
-/** idle = 半荘がまだ始まっていない、recording = 記録中、error = 保存先を開けない。 */
+/** idle =半荘がまだ始まっていない、recording = 記録中、error = 保存先を開けない。 */
 export type Status = 'idle' | 'recording' | 'error';
 
 /** 記録の現在の状態。ウィジェットの表示のもと。 */
