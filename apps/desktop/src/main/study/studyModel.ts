@@ -101,7 +101,8 @@ function sourcesOf(sessions: readonly SessionRecord[], games: GameMap): { source
     const state = games.get(session.id);
     if (state === undefined || state.status !== 'ready') continue;
     const resolved = resolveMarks(state.game.report, session);
-    for (const mark of resolved) if (mark.resolution.kind === 'manual') undecided++;
+    // 判断が決まっていない迷い: 手で選ぶものと、局だけ分かって巡目が決まらないもの（E-30。選ぶまでは問題に入らない）
+    for (const mark of resolved) if (mark.resolution.kind !== 'linked') undecided++;
     sources.push({
       sessionId: session.id,
       startedMs: session.started_ms,

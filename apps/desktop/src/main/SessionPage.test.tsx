@@ -11,10 +11,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeSessionStore, REPORT_TEXTS, local } from '../../tests/fake-sessions';
-import { FX4_TEXT, OCR_GEOMETRY, fx4Ocr, fx4Session } from '../../tests/import-fixtures';
+import {
+  FX4_TEXT,
+  FX5_ID,
+  FX5_STARTED,
+  FX5_USER_CHOICES,
+  OCR_GEOMETRY,
+  fx4Ocr,
+  fx4Session,
+  fx5Ocr,
+  fx5Session,
+} from '../../tests/import-fixtures';
 import { installTauriMock } from '../../tests/tauri-mock';
 import { api } from '../api/tauri';
 import type { Links, OcrCache, Rating, SessionRecord } from '../api/types';
+import { relinkRatings } from './ratingRelink';
 import { RereadStore } from './rereadStore';
 import { SessionPage } from './SessionPage';
 import { summarizeReportText, type SummaryState } from './sessionSummaries';
@@ -79,6 +90,17 @@ function recorded(): SessionRecord {
 
 const summaryOf = (key: keyof typeof REPORT_TEXTS = 'fx4'): SummaryState => summarizeReportText(REPORT_TEXTS[key]);
 
+/**
+ * 迷い 1 の読み取りが、この半荘に合う局が無い（別の半荘のスクショ）半荘: 迷い 1 は、手で選ぶ（理由は no-kyoku）。
+ * 局の幅が決まらないので、半荘のすべての判断から選ぶ。（迷い 6 は、前後の評価と迷いから局が分かるので、局だけ分かった迷いになる）
+ */
+function manualOcr(): OcrCache {
+  const cache = fx4Ocr();
+  cache.entries['marks/m1.png'] = { lines: ['南 2 局', '余 40', '25000'] };
+  return cache;
+}
+const manualSession = (): SessionRecord => imported({ ocr: manualOcr() });
+
 /** 読み直し（F11、E-27）の偽物の指定。渡すと、画面に読み直しの部品（`RereadStore`）を渡す。 */
 interface RereadOptions {
   /** 読み直したあとの写し。既定は、迷い 6 の読み直しの行も入った FX-4 の写し。 */
@@ -97,6 +119,8 @@ interface SetupOptions {
   summary?: SummaryState | undefined;
   handlers?: Record<string, (args: unknown) => unknown>;
   reread?: RereadOptions;
+  /** 読み直しのあとの、評価の当てはめ直し（E-31）を付ける。渡すと、画面に読み直しの部品（`RereadStore`）を渡す。 */
+  relink?: boolean;
 }
 
 function setup(options: SetupOptions = {}) {
@@ -118,9 +142,14 @@ function setup(options: SetupOptions = {}) {
   // 読み直しの部品は、検討画面のシェルと同じく、画面（半荘のページ）より長く生きる（開き直しても、この起動で 1 回だけ）。
   const reloader = { current: async () => undefined as void };
   const rereads =
-    options.reread === undefined
+    options.reread === undefined && options.relink !== true
       ? undefined
-      : new RereadStore({ needed: api.needsOcrReread, reread: api.rereadOcr, changed: () => reloader.current() });
+      : new RereadStore({
+          needed: api.needsOcrReread,
+          reread: api.rereadOcr,
+          changed: () => reloader.current(),
+          ...(options.relink === true ? { relink: (sessionId: string) => relinkRatings(api, sessionId) } : {}),
+        });
 
   function Harness() {
     const [current, setCurrent] = useState(() => store.session(session.id));
@@ -265,13 +294,14 @@ describe('F9・U-13 迷いのカード（取り込んだあと。FX-4）', () =>
     await tableReady();
     for (const n of [1, 2, 3, 4, 5, 6]) {
       const c = card(n);
-      const order = Array.from(c.querySelectorAll('.mtop, .mwhat, .mread, .msub, .malt, .mctl')).map((el) => el.className.split(' ')[0]);
+      const order = Array.from(c.querySelectorAll('.mtop, .mwhat, .mread, .mhow, .msub, .malt, .mctl')).map((el) => el.className.split(' ')[0]);
       expect(order.slice(0, 3), `迷い${n}`).toEqual(['mtop', 'mwhat', 'mread']);
     }
     for (const n of [1, 2, 3, 4, 5]) {
       expect(card(n).querySelector('.mtop + .mwhat + .mread + .msub'), `迷い${n}`).not.toBeNull();
     }
-    expect(card(6).querySelector('.mtop + .mwhat + .mread + .mctl')).not.toBeNull();
+    // 局だけ分かった迷い 6 は、読み取りの下に、局をどう決めたかの 1 文（.mhow）が入る
+    expect(card(6).querySelector('.mtop + .mwhat + .mread + .mhow + .mctl')).not.toBeNull();
   });
 
   it('推定の迷い 1・3（ほかの候補が無い）: 局面・読んだ値・「推定」の印・「自分：実戦の行動」・「選び直す」', async () => {
@@ -334,16 +364,37 @@ describe('F9・U-13 迷いのカード（取り込んだあと。FX-4）', () =>
     expect(within(card(4)).getByRole('button', { name: '迷い4を選び直す' })).toBeInTheDocument();
   });
 
-  it('読み取れなかった迷い 6: 局面は決まっていません・スクショを読めませんでした・「手で選ぶ」（局のメニュー・判断のメニュー。判断は局を選ぶまで押せない）', async () => {
+  it('U-24 読み取れなかった迷い 6: 局だけ分かる（東3局1本場）。「巡目は決まっていません」・スクショを読めませんでした・局をどう決めたかの 1 文・「手で選ぶ」（局は選んである。判断は局の幅の 17 から）', async () => {
     setup();
     await tableReady();
     const six = card(6);
-    expect(textsOf(6)).toMatchObject({ what: '局面は決まっていません', read: 'スクショを読めませんでした', tag: null, mine: null, chips: [] });
+    expect(textsOf(6)).toMatchObject({ what: '東3局1本場 · 巡目は決まっていません', read: 'スクショを読めませんでした', tag: null, mine: null, chips: [] });
+    expect(six.querySelector('.mhow')?.textContent).toBe(
+      '東3局1本場の迷い5（19:21:58）と東3局1本場の評価（19:23:54）の間に押したので、東3局1本場です。',
+    );
     expect(within(six).getByText('手で選ぶ')).toBeInTheDocument();
-    expect(within(six).getByRole('button', { name: '迷い6の局を選ぶ' })).toBeEnabled();
-    expect(within(six).getByRole('button', { name: '迷い6の判断を選ぶ' })).toBeDisabled();
+    expect(within(six).getByRole('button', { name: '迷い6の局 東3局1本場' })).toBeEnabled();
+    expect(within(six).getByRole('button', { name: '迷い6の判断を選ぶ' })).toBeEnabled();
     expect(within(six).queryByRole('button', { name: /選び直す/ })).toBeNull();
     expect(within(six).queryByText('推定')).toBeNull();
+  });
+
+  it('手で選ぶ迷い（読み取りが、この半荘のどの局にも合わない）: 局面は決まっていません・読んだ値と理由・「手で選ぶ」（局のメニュー → 判断のメニュー。判断は局を選ぶまで押せない）', async () => {
+    setup({ session: manualSession() });
+    await tableReady();
+    const one = card(1);
+    expect(textsOf(1)).toMatchObject({
+      what: '局面は決まっていません',
+      read: 'スクショ: 南2局・残り40・25,000点 · この半荘に合う局がありません',
+      tag: null,
+      mine: null,
+      chips: [],
+    });
+    expect(one.querySelector('.mhow')).toBeNull();
+    expect(within(one).getByText('手で選ぶ')).toBeInTheDocument();
+    expect(within(one).getByRole('button', { name: '迷い1の局を選ぶ' })).toBeEnabled();
+    expect(within(one).getByRole('button', { name: '迷い1の判断を選ぶ' })).toBeDisabled();
+    expect(within(one).queryByRole('button', { name: /選び直す/ })).toBeNull();
   });
 
   it('E-20 読み直しの写しがあれば、迷い 6 も推定になる（東3局・残り38枚・4,400点。打北 9巡目。ほかの候補は 8巡目の鳴かない判断）', async () => {
@@ -479,12 +530,12 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     expect(calls(mock, 'set_mark_link')).toEqual([]);
   });
 
-  it('局面を手で選ぶ（迷い 6）: 局を選ぶと判断のメニューが使え、判断を選ぶと保存する。Ctrl+Z で、読み取れなかった状態に戻る', async () => {
-    const { user, mock, store } = setup();
+  it('局面を手で選ぶ（迷い 1）: 局を選ぶと判断のメニューが使え、判断を選ぶと保存する。Ctrl+Z で、手で選ぶ状態に戻る', async () => {
+    const { user, mock, store } = setup({ session: manualSession() });
     await tableReady();
-    const six = card(6);
-    await user.click(within(six).getByRole('button', { name: '迷い6の局を選ぶ' }));
-    const kyokuMenu = screen.getByRole('menu', { name: '迷い6の局' });
+    const one = card(1);
+    await user.click(within(one).getByRole('button', { name: '迷い1の局を選ぶ' }));
+    const kyokuMenu = screen.getByRole('menu', { name: '迷い1の局' });
     expect(within(kyokuMenu).getAllByRole('menuitemradio').map((i) => i.textContent)).toEqual([
       '東1局',
       '東2局',
@@ -494,25 +545,52 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     ]);
     await user.click(within(kyokuMenu).getByRole('menuitemradio', { name: '東3局1本場' }));
     expect(screen.queryByRole('menu')).toBeNull();
-    expect(within(six).getByRole('button', { name: '迷い6の局 東3局1本場' })).toHaveFocus();
+    expect(within(one).getByRole('button', { name: '迷い1の局 東3局1本場' })).toHaveFocus();
     expect(calls(mock, 'set_mark_link')).toEqual([]); // 局を選んだだけでは、保存しない
 
-    const decisionButton = within(six).getByRole('button', { name: '迷い6の判断を選ぶ' });
+    const decisionButton = within(one).getByRole('button', { name: '迷い1の判断を選ぶ' });
     expect(decisionButton).toBeEnabled();
     await user.click(decisionButton);
-    const decisionMenu = screen.getByRole('menu', { name: '迷い6の判断' });
+    const decisionMenu = screen.getByRole('menu', { name: '迷い1の判断' });
     expect(within(decisionMenu).getAllByRole('menuitemradio')).toHaveLength(17);
     await user.click(within(decisionMenu).getByRole('menuitemradio', { name: '9巡目 · 打北' }));
 
-    await waitFor(() => expect(within(six).getByText('自分：打北')).toBeInTheDocument());
-    expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 6, decision: 'k2h1e10' }]);
-    expect(within(six).getByText('東3局1本場 9巡目 · 打牌の迷い')).toBeInTheDocument();
-    expect(within(six).queryByText('推定')).toBeNull();
-    expect(store.session(ID).links.marks['6']).toBe('k2h1e10');
+    await waitFor(() => expect(within(one).getByText('自分：打北')).toBeInTheDocument());
+    expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 1, decision: 'k2h1e10' }]);
+    expect(within(one).getByText('東3局1本場 9巡目 · 打牌の迷い')).toBeInTheDocument();
+    expect(within(one).queryByText('推定')).toBeNull();
+    expect(store.session(ID).links.marks['1']).toBe('k2h1e10');
 
     await undoKey(user);
-    await waitFor(() => expect(within(six).getByText('局面は決まっていません')).toBeInTheDocument());
+    await waitFor(() => expect(within(one).getByText('局面は決まっていません')).toBeInTheDocument());
+    expect(calls(mock, 'clear_mark_link')).toEqual([{ sessionId: ID, markId: 1 }]);
+  });
+
+  it('U-24 局だけ分かった迷い（迷い 6）から判断を選ぶ: 局の幅の中の判断（東3局1本場の 17）だけが並ぶ。選ぶと保存して、カードは選んだ形になる。Ctrl+Z で、局だけ分かった状態に戻る', async () => {
+    const { user, mock, store } = setup();
+    await tableReady();
+    const six = card(6);
+    // 局のメニューには、局の幅の中の局（東3局1本場）だけ
+    await user.click(within(six).getByRole('button', { name: '迷い6の局 東3局1本場' }));
+    expect(within(screen.getByRole('menu', { name: '迷い6の局' })).getAllByRole('menuitemradio').map((i) => i.textContent)).toEqual(['東3局1本場']);
+    await user.keyboard('{Escape}');
+    await user.click(within(six).getByRole('button', { name: '迷い6の判断を選ぶ' }));
+    const decisionMenu = screen.getByRole('menu', { name: '迷い6の判断' });
+    expect(within(decisionMenu).getAllByRole('menuitemradio')).toHaveLength(17);
+    await user.click(within(decisionMenu).getByRole('menuitemradio', { name: '11巡目 · 打3m' }));
+
+    await waitFor(() => expect(within(six).getByText('自分：打3m')).toBeInTheDocument());
+    expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 6, decision: 'k2h1e14' }]);
+    expect(store.session(ID).links.marks['6']).toBe('k2h1e14');
+    // 利用者が選んだ形: 局と巡目、「選び直す」。局をどう決めたかの 1 文は、もう出ない
+    expect(within(six).getByText('東3局1本場 11巡目 · 打牌の迷い')).toBeInTheDocument();
+    expect(six.querySelector('.mhow')).toBeNull();
+    expect(within(six).getByRole('button', { name: '迷い6を選び直す' })).toHaveFocus();
+
+    await undoKey(user);
+    await waitFor(() => expect(within(six).getByText('東3局1本場 · 巡目は決まっていません')).toBeInTheDocument());
     expect(calls(mock, 'clear_mark_link')).toEqual([{ sessionId: ID, markId: 6 }]);
+    expect(six.querySelector('.mhow')).not.toBeNull();
   });
 
   it('「選び直す」の札のとなりの「手で選ぶ」で、手で選ぶ欄に替わる。「候補から選ぶ」で札に戻る（保存はしない）', async () => {
@@ -560,7 +638,7 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
   it('メニューは Esc で閉じ、何も保存しない。キーボードの位置は開いたボタンへ戻る', async () => {
     const { user, mock } = setup();
     await tableReady();
-    const open = within(card(6)).getByRole('button', { name: '迷い6の局を選ぶ' });
+    const open = within(card(6)).getByRole('button', { name: '迷い6の局 東3局1本場' });
     await user.click(open);
     expect(screen.getByRole('menu', { name: '迷い6の局' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
@@ -592,7 +670,7 @@ describe('F9 画像を大きく表示する求め', () => {
       '迷い3 · 東2局1本場 · 6巡目 · 打牌の迷い · 推定',
       '迷い4 · 東2局1本場 · 8〜9巡目 · 鳴きの迷い · 推定',
       '迷い5 · 東3局1本場 · 6〜7巡目 · 打牌の迷い · 推定',
-      '迷い6 · 局面は決まっていません',
+      '迷い6 · 東3局1本場 · 巡目は決まっていません',
     ]);
   });
 
@@ -880,20 +958,20 @@ describe('U-1・F3 この画面に AI の答えは出さない（答えを書く
   });
 
   it('メニューを開いた状態（局・判断・MAKA）にも、選んだあとにも、AI の答えは出ない', async () => {
-    const { user } = setup();
+    const { user } = setup({ session: manualSession() });
     const table = await tableReady();
     const check = () => {
       const html = withoutImageUrls(document.body.innerHTML);
       expect(html).not.toMatch(/data-ai/i);
       expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
     };
-    await user.click(within(card(6)).getByRole('button', { name: '迷い6の局を選ぶ' }));
+    await user.click(within(card(1)).getByRole('button', { name: '迷い1の局を選ぶ' }));
     check();
     await user.click(screen.getByRole('menuitemradio', { name: '東2局' }));
-    await user.click(within(card(6)).getByRole('button', { name: '迷い6の判断を選ぶ' }));
+    await user.click(within(card(1)).getByRole('button', { name: '迷い1の判断を選ぶ' }));
     check();
     await user.click(screen.getByRole('menuitemradio', { name: '8巡目 · 打4s' }));
-    await waitFor(() => expect(within(card(6)).getByText('自分：打4s')).toBeInTheDocument());
+    await waitFor(() => expect(within(card(1)).getByText('自分：打4s')).toBeInTheDocument());
     check();
     await user.click(within(table).getByRole('button', { name: '東1局の MAKA を入力' }));
     check();
@@ -919,15 +997,15 @@ describe('U-1・F3 この画面に AI の答えは出さない（答えを書く
   });
 
   it('「局面を手で選ぶ」の判断のメニューは、半荘の全判断（70）を出すが、どれも自分が実際にした行動の名前だけ（AI の第 1 位は出ない）', async () => {
-    const { user } = setup();
+    const { user } = setup({ session: manualSession() });
     await tableReady();
     let checkedPicks = 0;
     for (let position = 0; position < report.review.kyokus.length; position += 1) {
       const kyokuLabel = refs.find((r) => r.kyokuPosition === position)?.kyokuLabel ?? '';
-      await user.click(within(card(6)).getByRole('button', { name: /^迷い6の局/ }));
+      await user.click(within(card(1)).getByRole('button', { name: /^迷い1の局/ }));
       await user.click(screen.getByRole('menuitemradio', { name: kyokuLabel }));
-      await user.click(within(card(6)).getByRole('button', { name: /^迷い6の判断/ }));
-      const menu = screen.getByRole('menu', { name: '迷い6の判断' });
+      await user.click(within(card(1)).getByRole('button', { name: /^迷い1の判断/ }));
+      const menu = screen.getByRole('menu', { name: '迷い1の判断' });
       const text = menu.textContent ?? '';
       const keys = refs.filter((r) => r.kyokuPosition === position).map((r) => r.key);
       expect(within(menu).getAllByRole('menuitemradio')).toHaveLength(keys.length);
@@ -1230,5 +1308,293 @@ describe('F11・E-27・U-23 前の作り方で読んだ半荘の読み直し', (
     hold.resolve();
     await waitFor(() => expect(statusLine()).toBeNull());
     check();
+  });
+});
+
+// ---- FX-5（10月11日の半荘）----
+
+/** 取り込んだ FX-5 の半荘。ユーザーの本物の links.json（前の当てはめ方で作った評価。評価の版は無い）と、表で付け直した南4局の △ を持つ。 */
+const FX5_OLD_RATINGS: Record<string, string> = {
+  '1': 'k0h0',
+  '5': 'k1h0',
+  '7': 'k2h0',
+  '11': 'k2h1',
+  '12': 'k3h0',
+  '15': 'k3h1',
+  '18': 'k4h2',
+  '20': 'k5h0',
+  '22': 'k6h0',
+};
+function fx5Imported(overrides: Partial<SessionRecord> = {}): SessionRecord {
+  return fx5Session(FX5_ID, FX5_STARTED, {
+    report_path: `C:\\data\\games\\${FX5_ID}\\report.json`,
+    ocr: fx5Ocr(),
+    links: { marks: {}, ratings: {} },
+    ...overrides,
+  });
+}
+
+describe('U-24 局だけ分かった迷いと、崩れた読み取りの迷いのカード（FX-5）', () => {
+  const setupFx5 = (session: SessionRecord = fx5Imported(), more: Partial<SetupOptions> = {}) =>
+    setup({ session, report: 'fx5', summary: summaryOf('fx5'), ...more });
+  /** カードの欄の文字を、確かめやすい形で取り出す。 */
+  function textsOf(n: number) {
+    const c = card(n);
+    return {
+      what: c.querySelector('.mwhat')?.textContent ?? null,
+      read: c.querySelector('.mread')?.textContent ?? null,
+      how: c.querySelector('.mhow')?.textContent ?? null,
+      tag: c.querySelector('.tag.est')?.textContent ?? null,
+      mine: c.querySelector('.mact > span:not(.tag)')?.textContent ?? null,
+    };
+  }
+
+  it('局だけ分かった迷い（15:38:10 = 迷い3、15:42:37 = 迷い5）: 局の名前と「巡目は決まっていません」・読んだ値・局をどう決めたかの 1 文。推定の印は無い', async () => {
+    setupFx5();
+    await tableReady();
+    expect(textsOf(3)).toEqual({
+      what: '東2局 · 巡目は決まっていません',
+      read: 'スクショ: 風は読めず・2局・残りは読めず・25,000点',
+      how: '局の名前の一部が読めなかったので、読めた部分と点数から、東2局です。',
+      tag: null,
+      mine: null,
+    });
+    expect(textsOf(5)).toEqual({
+      what: '東4局 · 巡目は決まっていません',
+      read: 'スクショを読めませんでした',
+      how: '東3局1本場の評価（15:41:44）と東4局の迷い6（15:42:52）の間に押したので、東4局です。',
+      tag: null,
+      mine: null,
+    });
+  });
+
+  it('局だけ分かった迷いは、局の幅の中の判断を並べて選べる: 局は選んである。判断のメニューは、その局の判断だけ（迷い3は東2局の15、迷い5は東4局の16）', async () => {
+    const { user } = setupFx5();
+    await tableReady();
+    for (const [n, kyoku, count] of [
+      [3, '東2局', 15],
+      [5, '東4局', 16],
+    ] as const) {
+      const c = card(n);
+      expect(within(c).getByText('手で選ぶ')).toBeInTheDocument();
+      await user.click(within(c).getByRole('button', { name: `迷い${n}の局 ${kyoku}` }));
+      expect(within(screen.getByRole('menu', { name: `迷い${n}の局` })).getAllByRole('menuitemradio').map((i) => i.textContent)).toEqual([kyoku]);
+      await user.keyboard('{Escape}');
+      await user.click(within(c).getByRole('button', { name: `迷い${n}の判断を選ぶ` }));
+      const menu = screen.getByRole('menu', { name: `迷い${n}の判断` });
+      expect(within(menu).getAllByRole('menuitemradio'), `迷い${n}`).toHaveLength(count);
+      await user.keyboard('{Escape}');
+    }
+  });
+
+  it('ユーザーが選んだとおりの判断（15:38:10 は東2局8巡目の打9m）を選ぶと、保存して、選んだ形（局と巡目・自分の行動・選び直す）になる。局をどう決めたかの 1 文は消える', async () => {
+    const { user, mock, store } = setupFx5();
+    await tableReady();
+    await user.click(within(card(3)).getByRole('button', { name: '迷い3の判断を選ぶ' }));
+    await user.click(screen.getByRole('menuitemradio', { name: '8巡目 · 打9m' }));
+    await waitFor(() => expect(within(card(3)).getByText('自分：打9m')).toBeInTheDocument());
+    expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: FX5_ID, markId: 4, decision: 'k1h0e8' }]);
+    expect(store.session(FX5_ID).links.marks['4']).toBe('k1h0e8');
+    expect(textsOf(3)).toEqual({
+      what: '東2局 8巡目 · 打牌の迷い',
+      read: 'スクショ: 風は読めず・2局・残りは読めず・25,000点',
+      how: null,
+      tag: null,
+      mine: '自分：打9m',
+    });
+  });
+
+  it('崩れた読み取りで局が決まり、残り枚数も読めた迷い（15:37:02 = 迷い1）は、推定が付く（ユーザーが選んだ 5巡目 の打6s）。局の決め方の 1 文も付く', async () => {
+    setupFx5();
+    await tableReady();
+    expect(textsOf(1)).toEqual({
+      what: '東2局 5巡目 · 打牌の迷い',
+      read: 'スクショ: 風は読めず・2局・残り50・25,000点',
+      how: '局の名前の一部が読めなかったので、読めた部分と点数から、東2局です。',
+      tag: '推定',
+      mine: '自分：打6s',
+    });
+    expect(textsOf(8).mine).toBe('自分：打1s'); // 15:50:36（南1局2本場 3巡目。ユーザーが選んだ判断）
+    expect(textsOf(13).mine).toBe('自分：打2p'); // 16:03:19（南4局 6巡目のリーチ。ユーザーが選んだ判断）
+    expect(textsOf(13).read).toBe('スクショ: 南・局の番号は読めず・残り49・28,500点');
+  });
+
+  it('すべて読めた迷い（15:37:25 = 迷い2）には、局の決め方の 1 文は付かない（これまでどおり）', async () => {
+    setupFx5();
+    await tableReady();
+    expect(textsOf(2)).toMatchObject({ what: '東2局 6巡目 · 打牌の迷い', read: 'スクショ: 東2局・残り46・25,000点', how: null, tag: '推定' });
+  });
+
+  it('ユーザーが選んだ迷いは、選んだ形のまま（局の決め方の 1 文は付かない）。局だけ分かった迷いを選ぶと、ほかの迷いの局の幅も変わらない', async () => {
+    setupFx5(fx5Imported({ links: { marks: { ...FX5_USER_CHOICES }, ratings: {} } }));
+    await tableReady();
+    expect(textsOf(5)).toEqual({
+      what: '東4局 5巡目 · 打牌の迷い',
+      read: 'スクショを読めませんでした',
+      how: null,
+      tag: null,
+      mine: '自分：打2s',
+    });
+    expect(textsOf(1).how).toBeNull();
+    expect(textsOf(1).tag).toBeNull();
+  });
+
+  it('画像の大きな表示の説明も、局だけ分かった迷いは「局 · 巡目は決まっていません」', async () => {
+    const { user, onOpenImage } = setupFx5();
+    await tableReady();
+    await user.click(within(card(5)).getByRole('button', { name: '迷い5の画像を大きく見る' }));
+    const request = onOpenImage.mock.calls[0]?.[0] as { items: Array<{ caption: string }>; start: number };
+    expect(request.items).toHaveLength(13);
+    expect(request.items[4]?.caption).toBe('迷い5 · 東4局 · 巡目は決まっていません');
+    expect(request.items[2]?.caption).toBe('迷い3 · 東2局 · 巡目は決まっていません');
+  });
+
+  it('この画面に AI の答えは出ない: 局だけ分かった迷い・崩れた読み取りの迷いの文にも、確率・順位は無い（U-1）', async () => {
+    const { user } = setupFx5();
+    await tableReady();
+    await user.click(within(card(5)).getByRole('button', { name: '迷い5の判断を選ぶ' }));
+    const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '');
+    expect(html).not.toMatch(/data-ai/i);
+    expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
+  });
+});
+
+describe('E-31 前の当てはめ方で作った評価の結びつけを、半荘の画面を開いたときに、1 回だけ当てはめ直す（FX-5）', () => {
+  /** 局の評価の表の、局ごとの自分の評価（ボタンの名前）。 */
+  const selfLabels = (table: HTMLElement) =>
+    within(table)
+      .getAllByRole('row')
+      .slice(1, 11)
+      .map((row) => within(row).getByRole('button', { name: /の自分の評価/ }).getAttribute('aria-label'));
+  /** ユーザーの本物の状態: 前の当てはめ方で作った評価（東3局1本場から後が 1 局ずつ前にずれている）と、表で付け直した南4局の △。 */
+  const oldSession = (): SessionRecord =>
+    fx5Imported({
+      links: { marks: { ...FX5_USER_CHOICES }, ratings: { ...FX5_OLD_RATINGS } },
+      self_ratings: { kyokus: { k7h0: 'fair' } },
+    });
+
+  const BEFORE = [
+    '東1局の自分の評価（△）',
+    '東2局の自分の評価（△）',
+    '東3局の自分の評価（〇）',
+    '東3局1本場の自分の評価（✕）',
+    '東4局の自分の評価（〇）',
+    '東4局1本場の自分の評価（△）',
+    '南1局2本場の自分の評価（✕）',
+    '南2局の自分の評価（〇）',
+    '南3局の自分の評価（✕）',
+    '南4局の自分の評価（△）',
+  ];
+  const AFTER = [
+    '東1局の自分の評価（△）',
+    '東2局の自分の評価（△）',
+    '東3局の自分の評価を付ける',
+    '東3局1本場の自分の評価（〇）',
+    '東4局の自分の評価（✕）',
+    '東4局1本場の自分の評価（〇）',
+    '南1局2本場の自分の評価（△）',
+    '南2局の自分の評価（✕）',
+    '南3局の自分の評価（〇）',
+    '南4局の自分の評価（△）', // 表で付け直した △（ウィジェットの✕は、上書きされる）
+  ];
+
+  it('開くと当てはめ直して保存する: 表の評価が 東1局 △・東2局 △・東3局 空・東3局1本場 〇・東4局 ✕・東4局1本場 〇・南1局2本場 △・南2局 ✕・南3局 〇・南4局 △（自分で付け直した）になる', async () => {
+    // 当てはめ直しを付けないと、保存してある（前の当てはめ方の）評価の局のまま
+    setup({ session: oldSession(), report: 'fx5', summary: summaryOf('fx5') });
+    expect(selfLabels(await tableReady())).toEqual(BEFORE);
+    cleanup();
+
+    const { mock, store } = setup({ session: oldSession(), report: 'fx5', summary: summaryOf('fx5'), relink: true });
+    await tableReady();
+    await waitFor(() => expect(calls(mock, 'replace_rating_links')).toHaveLength(1));
+    expect(calls(mock, 'replace_rating_links')[0]).toEqual({
+      sessionId: FX5_ID,
+      ratings: { '1': 'k0h0', '5': 'k1h0', '7': 'k2h1', '11': 'k3h0', '12': 'k3h1', '15': 'k4h2', '18': 'k5h0', '20': 'k6h0', '22': 'k7h0' },
+      version: 2,
+    });
+    await waitFor(() => expect(selfLabels(screen.getByRole('table', { name: '局の評価' }))).toEqual(AFTER));
+    expect(store.session(FX5_ID).links.ratings_version).toBe(2);
+  });
+
+  it('迷いの結びつけ（links.marks）と、表で付け直した〇△✕（self-ratings）は変わらない。迷いの結びつけの保存の命令は呼ばない', async () => {
+    const { mock, store } = setup({ session: oldSession(), report: 'fx5', summary: summaryOf('fx5'), relink: true });
+    await tableReady();
+    await waitFor(() => expect(calls(mock, 'replace_rating_links')).toHaveLength(1));
+    await waitFor(() => expect(selfLabels(screen.getByRole('table', { name: '局の評価' }))).toEqual(AFTER));
+    expect(store.session(FX5_ID).links.marks).toEqual({ ...FX5_USER_CHOICES });
+    expect(store.session(FX5_ID).self_ratings).toEqual({ kyokus: { k7h0: 'fair' } });
+    for (const command of ['set_mark_link', 'clear_mark_link', 'replace_links', 'set_rating_link', 'clear_rating_link', 'set_self_rating', 'clear_self_rating']) {
+      expect(calls(mock, command), command).toEqual([]);
+    }
+  });
+
+  it('開き直しても（この起動の間）、もう一度は当てはめない。アプリを起動し直しても（保存した版が新しい）、当てはめない', async () => {
+    const first = setup({ session: oldSession(), report: 'fx5', summary: summaryOf('fx5'), relink: true });
+    await tableReady();
+    await waitFor(() => expect(calls(first.mock, 'replace_rating_links')).toHaveLength(1));
+    await waitFor(() => expect(selfLabels(screen.getByRole('table', { name: '局の評価' }))).toEqual(AFTER));
+    first.reopen();
+    await tableReady();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(calls(first.mock, 'replace_rating_links')).toHaveLength(1);
+
+    // 起動し直し: 保存した記録（評価の結びつけと版）のまま、新しい読み直しの部品で開く
+    const saved = first.store.session(FX5_ID);
+    cleanup();
+    const second = setup({ session: saved, report: 'fx5', summary: summaryOf('fx5'), relink: true });
+    const table = await tableReady();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(calls(second.mock, 'replace_rating_links')).toEqual([]);
+    expect(selfLabels(table)).toEqual(AFTER);
+  });
+
+  it('当てはめ方の版が新しい半荘・取り込む前の半荘・評価が無い半荘は、当てはめ直さない（保存の命令を呼ばない）', async () => {
+    const fresh = setup({
+      session: fx5Imported({ links: { marks: {}, ratings: { ...FX5_OLD_RATINGS }, ratings_version: 2 } }),
+      report: 'fx5',
+      summary: summaryOf('fx5'),
+      relink: true,
+    });
+    await tableReady();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(calls(fresh.mock, 'replace_rating_links')).toEqual([]);
+    cleanup();
+
+    const noRatings = setup({ session: fx5Imported({ ratings: [], rating_count: 0 }), report: 'fx5', summary: summaryOf('fx5'), relink: true });
+    await tableReady();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(calls(noRatings.mock, 'replace_rating_links')).toEqual([]);
+    cleanup();
+
+    const before = setup({ session: recorded(), relink: true });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(calls(before.mock, 'replace_rating_links')).toEqual([]);
+  });
+
+  it('読み取りの写しが無い半荘（文字認識を使えなかった）も、迷いの選びと押した順で、評価を当てはめ直す', async () => {
+    const noOcr = setup({ session: { ...oldSession(), ocr: null }, report: 'fx5', summary: summaryOf('fx5'), relink: true });
+    await tableReady();
+    await waitFor(() => expect(calls(noOcr.mock, 'replace_rating_links')).toHaveLength(1));
+    expect(calls(noOcr.mock, 'replace_rating_links')[0]).toMatchObject({ sessionId: FX5_ID, version: 2 });
+    expect(calls(noOcr.mock, 'needs_ocr_reread')).toEqual([]); // 写しが無いので、読み直しは確かめない
+  });
+
+  it('当てはめ直しに失敗しても、画面は前の評価のまま使える（理由は出さない。繰り返さない）', async () => {
+    const { mock } = setup({
+      session: oldSession(),
+      report: 'fx5',
+      summary: summaryOf('fx5'),
+      relink: true,
+      handlers: {
+        replace_rating_links: () => {
+          throw '保存できませんでした';
+        },
+      },
+    });
+    const table = await tableReady();
+    await waitFor(() => expect(calls(mock, 'replace_rating_links')).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(selfLabels(table)).toEqual(BEFORE);
+    expect(calls(mock, 'replace_rating_links')).toHaveLength(1);
   });
 });

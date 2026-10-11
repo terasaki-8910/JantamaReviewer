@@ -1,0 +1,147 @@
+{
+  "description": "FX-5: 10月11日 15:35 の半荘（結果 20261011-153540）のウィジェットの記録（迷いマーク13・評価9。取り消しは無い）。id は半荘の中の通し番号、time は押した時刻（ローカル時刻。ミリ秒まで。画像のファイル名は記録の t_ms から作られるので、そこから戻した値）、rating は評価の値（good = 〇、fair = △、bad = ✕）、screenshot は画像のファイル名（半荘のフォルダからの相対パス。画像そのものは入れない）。",
+  "date": "2026-10-11",
+  "events": [
+    {
+      "id": 1,
+      "type": "rating",
+      "time": "2026-10-11T15:35:40.873",
+      "screenshot": "ratings/20261011-153540-873.png",
+      "rating": "fair"
+    },
+    {
+      "id": 2,
+      "type": "mark",
+      "time": "2026-10-11T15:37:02.516",
+      "screenshot": "marks/20261011-153702-516.png"
+    },
+    {
+      "id": 3,
+      "type": "mark",
+      "time": "2026-10-11T15:37:25.015",
+      "screenshot": "marks/20261011-153725-015.png"
+    },
+    {
+      "id": 4,
+      "type": "mark",
+      "time": "2026-10-11T15:38:10.682",
+      "screenshot": "marks/20261011-153810-682.png"
+    },
+    {
+      "id": 5,
+      "type": "rating",
+      "time": "2026-10-11T15:39:22.189",
+      "screenshot": "ratings/20261011-153922-189.png",
+      "rating": "fair"
+    },
+    {
+      "id": 6,
+      "type": "mark",
+      "time": "2026-10-11T15:40:03.329",
+      "screenshot": "marks/20261011-154003-329.png"
+    },
+    {
+      "id": 7,
+      "type": "rating",
+      "time": "2026-10-11T15:41:44.511",
+      "screenshot": "ratings/20261011-154144-511.png",
+      "rating": "good"
+    },
+    {
+      "id": 8,
+      "type": "mark",
+      "time": "2026-10-11T15:42:37.016",
+      "screenshot": "marks/20261011-154237-016.png"
+    },
+    {
+      "id": 9,
+      "type": "mark",
+      "time": "2026-10-11T15:42:52.084",
+      "screenshot": "marks/20261011-154252-084.png"
+    },
+    {
+      "id": 10,
+      "type": "mark",
+      "time": "2026-10-11T15:43:46.318",
+      "screenshot": "marks/20261011-154346-318.png"
+    },
+    {
+      "id": 11,
+      "type": "rating",
+      "time": "2026-10-11T15:45:13.317",
+      "screenshot": "ratings/20261011-154513-317.png",
+      "rating": "bad"
+    },
+    {
+      "id": 12,
+      "type": "rating",
+      "time": "2026-10-11T15:46:25.132",
+      "screenshot": "ratings/20261011-154625-132.png",
+      "rating": "good"
+    },
+    {
+      "id": 13,
+      "type": "mark",
+      "time": "2026-10-11T15:50:36.641",
+      "screenshot": "marks/20261011-155036-641.png"
+    },
+    {
+      "id": 14,
+      "type": "mark",
+      "time": "2026-10-11T15:52:15.014",
+      "screenshot": "marks/20261011-155215-014.png"
+    },
+    {
+      "id": 15,
+      "type": "rating",
+      "time": "2026-10-11T15:52:43.723",
+      "screenshot": "ratings/20261011-155243-723.png",
+      "rating": "fair"
+    },
+    {
+      "id": 16,
+      "type": "mark",
+      "time": "2026-10-11T15:54:39.499",
+      "screenshot": "marks/20261011-155439-499.png"
+    },
+    {
+      "id": 17,
+      "type": "mark",
+      "time": "2026-10-11T15:56:01.601",
+      "screenshot": "marks/20261011-155601-601.png"
+    },
+    {
+      "id": 18,
+      "type": "rating",
+      "time": "2026-10-11T15:57:10.663",
+      "screenshot": "ratings/20261011-155710-663.png",
+      "rating": "bad"
+    },
+    {
+      "id": 19,
+      "type": "mark",
+      "time": "2026-10-11T15:58:10.777",
+      "screenshot": "marks/20261011-155810-777.png"
+    },
+    {
+      "id": 20,
+      "type": "rating",
+      "time": "2026-10-11T16:01:05.654",
+      "screenshot": "ratings/20261011-160105-654.png",
+      "rating": "good"
+    },
+    {
+      "id": 21,
+      "type": "mark",
+      "time": "2026-10-11T16:03:19.757",
+      "screenshot": "marks/20261011-160319-757.png"
+    },
+    {
+      "id": 22,
+      "type": "rating",
+      "time": "2026-10-11T16:04:51.526",
+      "screenshot": "ratings/20261011-160451-526.png",
+      "rating": "bad"
+    }
+  ]
+}

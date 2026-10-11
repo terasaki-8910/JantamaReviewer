@@ -4,6 +4,7 @@
 //! ここは薄い層にとどめる。ウィジェットの窓には、これらのコマンドの権限は無い（検討画面だけが呼ぶ）。
 //! 待ちのある処理（通信・ファイルの読み込み・文字認識）は、`spawn_blocking` で別のスレッドに回す（画面を止めない）。
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 
@@ -327,6 +328,24 @@ pub async fn clear_rating_link(
     core.lock()
         .store()?
         .clear_rating_link(&session_id, rating_id)
+        .map_err(|e| e.to_string())?;
+    changed_links(&app, &core);
+    Ok(())
+}
+
+/// 評価の結びつけだけをまるごと置き換える（前の当てはめ方で当てはめた評価を、半荘の画面を開いたときに当てはめ直す。E-31）。
+/// 当てはめ方の版（`version`）も書く。迷いマークの結びつけと、局の自己評価・MAKA の評価は変えない。
+#[tauri::command]
+pub async fn replace_rating_links(
+    app: AppHandle,
+    core: State<'_, SharedCore>,
+    session_id: String,
+    ratings: BTreeMap<String, String>,
+    version: u32,
+) -> Result<(), String> {
+    core.lock()
+        .store()?
+        .replace_rating_links(&session_id, ratings, version)
         .map_err(|e| e.to_string())?;
     changed_links(&app, &core);
     Ok(())

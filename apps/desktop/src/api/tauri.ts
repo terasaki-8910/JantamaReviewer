@@ -144,6 +144,12 @@ export const api = {
   /** 結びつけをまるごと置き換える（取り込みのときに、自動で決めた結びつけを一度に書く）。 */
   replaceLinks: (sessionId: string, links: Links) =>
     invoke<void>('replace_links', { sessionId, links }),
+  /**
+   * 評価の結びつけだけをまるごと置き換える（`version` は当てはめ方の版）。前の当てはめ方で当てはめた評価を、半荘の画面を開いたときに
+   * 当てはめ直す（E-31）。迷いの結びつけと、局の自己評価・MAKA の評価は変えない。
+   */
+  replaceRatingLinks: (sessionId: string, ratings: Record<string, string>, version: number) =>
+    invoke<void>('replace_rating_links', { sessionId, ratings, version }),
 
   // ---- 局の評価の表（F10）。ウィジェットの記録（events.jsonl）は書き換えず、別のファイルに保存する ----
   /** 局の自己評価を上書きする（`kyoku` は局の鍵。`none` は「評価なし」）。付け直しにも使う。 */

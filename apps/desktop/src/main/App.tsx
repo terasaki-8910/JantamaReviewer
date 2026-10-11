@@ -9,6 +9,7 @@ import { ImportOffer } from './ImportOffer';
 import { ImportPage } from './ImportPage';
 import { Lightbox, type ViewerRequest } from './Lightbox';
 import { ReplayPage } from './replay/ReplayPage';
+import { relinkRatings } from './ratingRelink';
 import { RereadStore } from './rereadStore';
 import { SearchOverlay } from './search/SearchOverlay';
 import { useSearchOverlay } from './search/useSearchOverlay';
@@ -96,7 +97,14 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const study = useStudyData(sessions);
   // 前の作り方で読んだ半荘の読み直し（F11）。半荘の画面を開いたときに 1 回だけ。済んだら、一覧を読み直して、新しい読み取りを反映する。
   const [rereads] = useState(
-    () => new RereadStore({ needed: api.needsOcrReread, reread: api.rereadOcr, changed: reload }),
+    () =>
+      new RereadStore({
+        needed: api.needsOcrReread,
+        reread: api.rereadOcr,
+        changed: reload,
+        // 読み直しのあとに、前の当てはめ方で当てはめた評価を、1 回だけ当てはめ直す（E-31）
+        relink: (sessionId) => relinkRatings(api, sessionId),
+      }),
   );
   const rows = useMemo(() => buildListRows(sessions ?? [], summaries), [sessions, summaries]);
   const sessionIds = useMemo(() => new Set(rows.map((row) => row.id)), [rows]);

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { answerRow, gameOf } from '../../../tests/fake-study';
 import { local, seedSession } from '../../../tests/fake-sessions';
-import { fx4Ocr, fx4Session } from '../../../tests/import-fixtures';
+import { FX5_ID, FX5_STARTED, FX5_USER_CHOICES, fx4Ocr, fx4Session, fx5Ocr, fx5Session } from '../../../tests/import-fixtures';
 import type { AnswerRow, SessionRecord } from '../../api/types';
 import type { GameMap } from './gameStore';
 import { answeredIds, buildStudyModel, collectProblems, plannedSet } from './studyModel';
@@ -166,5 +166,36 @@ describe('E-25 解き直しの期限', () => {
     );
     expect(today.due).toHaveLength(1);
     expect(buildStudyModel({ ...base, answers: [] }, collected).due).toEqual([]);
+  });
+});
+
+describe('E-24 問題の数え方（局だけ分かった迷い・崩れた読み取りの推定。FX-5）', () => {
+  const fx5 = (marks: Record<string, string> = {}): SessionRecord =>
+    fx5Session(FX5_ID, FX5_STARTED, {
+      report_path: 'C:/data/fx5/report.json',
+      ocr: fx5Ocr(),
+      links: { marks, ratings: {} },
+    });
+  const fx5Games = (): GameMap => new Map([[FX5_ID, { status: 'ready' as const, game: gameOf('fx5') }]]);
+
+  it('局だけ分かった迷い（15:38:10・15:42:37）は、判断を選ぶまで、決まっていない迷いとして数え、問題に入れない。崩れた読み取りの推定は、推定と同じに問題になる', () => {
+    const collected = collectProblems([fx5()], fx5Games(), 0.05);
+    const marks = collected.problems.filter((problem) => problem.kind === 'mark');
+    // 迷い 13 のうち、局だけ分かった 2 つ（迷いの番号 3・5）を除いた 11 が、問題になる
+    expect(marks.map((problem) => problem.markNumber)).toEqual([1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(collected.undecided).toBe(2);
+    // 崩れた読み取りの推定（15:37:02 の 5巡目の打6s、15:50:36 の 3巡目の打1s、16:03:19 の 6巡目のリーチ）も、問題になる
+    expect(marks.filter((problem) => [1, 8, 13].includes(problem.markNumber ?? 0)).map((problem) => problem.key)).toEqual(['k1h0e5', 'k4h2e2', 'k7h0e6']);
+  });
+
+  it('局だけ分かった迷いを、判断を選ぶと、その判断が問題になり、決まっていない迷いは減る', () => {
+    // 15:38:10（迷いの id 4）に、ユーザーが選んだ 東2局8巡目の打9m（k1h0e8）を結びつける
+    const collected = collectProblems([fx5({ '4': 'k1h0e8' })], fx5Games(), 0.05);
+    const marks = collected.problems.filter((problem) => problem.kind === 'mark');
+    expect(marks.map((problem) => problem.markNumber)).toContain(3);
+    expect(marks.find((problem) => problem.markNumber === 3)?.key).toBe('k1h0e8');
+    expect(collected.undecided).toBe(1);
+    // ユーザーが選んだ 7 つ（ACCEPTANCE の FX-5）をすべて結びつけると、決まっていない迷いは 0
+    expect(collectProblems([fx5({ ...FX5_USER_CHOICES })], fx5Games(), 0.05).undecided).toBe(0);
   });
 });

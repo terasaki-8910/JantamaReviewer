@@ -90,6 +90,28 @@ describe('公開 API（src/index.ts）', () => {
     expect(engine.HAND_START_TILES_LEFT).toBe(66);
   });
 
+  it('E-28 崩れた読み取りの部分の入口が使える', () => {
+    for (const name of [
+      'parsePartialCenterText',
+      'partialReadingOf',
+      'partialOf',
+      'readParts',
+      'isFullReading',
+      'kyokuFitsPartial',
+      'locatePartialKyokus',
+    ] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+  });
+
+  it('E-29・E-30 迷いと評価の時間の並びでの当てはめの入口と、費用・版の定数が使える', () => {
+    for (const name of ['linkTimeline', 'rankDecisions'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+    expect([engine.CHOSEN_COST, engine.FULL_READING_COST, engine.PARTIAL_READING_COST, engine.UNPLACED_RATING_COST]).toEqual([100, 3, 2, 1]);
+    expect(engine.RATING_LINK_VERSION).toBe(2);
+  });
+
   it('E-19 結びつける半荘の入口が使える', () => {
     expect(typeof engine.matchSessionForReport).toBe('function');
     expect(typeof engine.checkShotsAgainstReport).toBe('function');

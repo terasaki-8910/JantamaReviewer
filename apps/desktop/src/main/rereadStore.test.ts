@@ -202,3 +202,96 @@ describe('U-23 読み直しの進み具合（RereadStore）', () => {
     expect(IDLE_REREADS.subscribe(() => undefined)()).toBeUndefined();
   });
 });
+
+describe('E-31 読み直しのあとの、評価の当てはめ直し（relink）', () => {
+  it('読み直しが済んでから、評価を当てはめ直す: 確かめる → 読み直す → 当てはめ直す → 一覧を読み直す（1 回）、の順', async () => {
+    const log: string[] = [];
+    const { store } = setup({
+      needed: async (id) => (log.push(`needed:${id}`), true),
+      reread: async (id) => (log.push(`reread:${id}`), true),
+      relink: async (id) => (log.push(`relink:${id}`), true),
+      changed: async () => void log.push('changed'),
+    });
+    store.open('a');
+    await settle();
+    expect(log).toEqual(['needed:a', 'reread:a', 'relink:a', 'changed']);
+    expect(store.getSnapshot().size).toBe(0);
+  });
+
+  it('読み直しが要らない半荘も、評価は当てはめ直す。状態の 1 行（読み直している印）は出ない', async () => {
+    const relink = deferred<boolean>();
+    const { store, log, seen } = setup({
+      needed: async (id) => (log.push(`needed:${id}`), false),
+      relink: async (id) => (log.push(`relink:${id}`), relink.promise),
+    });
+    store.open('a');
+    await settle();
+    expect(log).toEqual(['needed:a', 'relink:a']);
+    expect(store.getSnapshot().size).toBe(0);
+    relink.resolve(true);
+    await settle();
+    expect(log).toEqual(['needed:a', 'relink:a', 'changed']);
+    expect(seen).toEqual([]);
+  });
+
+  it('読み取りの写しが無い半荘（reread: false）は、読み直しを確かめず、評価の当てはめ直しだけ確かめる', async () => {
+    const { store, deps, log } = setup({ relink: vi.fn(async (id: string) => (log.push(`relink:${id}`), false)) });
+    store.open('a', { reread: false });
+    await settle();
+    expect(deps.needed).not.toHaveBeenCalled();
+    expect(deps.reread).not.toHaveBeenCalled();
+    expect(log).toEqual(['relink:a']);
+    // 当てはめ直さなかった（false）ので、一覧は読み直さない
+    expect(deps.changed).not.toHaveBeenCalled();
+  });
+
+  it('読み直しに失敗したときは、当てはめ直さない（前の読み取りで版を書かない。次の起動でもう一度）', async () => {
+    const relink = vi.fn(async () => true);
+    const { store, deps } = setup({
+      reread: async () => {
+        throw new Error('読み直せません');
+      },
+      relink,
+    });
+    store.open('a');
+    await settle();
+    expect(relink).not.toHaveBeenCalled();
+    expect(deps.changed).not.toHaveBeenCalled();
+    expect(store.getSnapshot().size).toBe(0);
+  });
+
+  it('当てはめ直しに失敗しても、読み直しの結果は画面に反映する。もう一度は試さない（開き直しても）', async () => {
+    const relink = vi.fn(async () => {
+      throw new Error('保存できません');
+    });
+    const { store, deps } = setup({ relink });
+    store.open('a');
+    await settle();
+    expect(deps.changed).toHaveBeenCalledTimes(1);
+    expect(store.getSnapshot().size).toBe(0);
+    store.open('a');
+    await settle();
+    expect(relink).toHaveBeenCalledTimes(1);
+  });
+
+  it('当てはめ直しを渡さなければ、これまでどおり（読み直しだけ）', async () => {
+    const { store, log } = setup();
+    store.open('a');
+    await settle();
+    expect(log).toEqual(['needed:a', 'reread:a', 'changed']);
+  });
+
+  it('同じ半荘は、この起動の間、1 回だけ（当てはめ直しも）', async () => {
+    const relink = vi.fn(async () => false);
+    const { store } = setup({ needed: async () => false, relink });
+    store.open('a');
+    await settle();
+    store.open('a');
+    store.open('a', { reread: false });
+    await settle();
+    expect(relink).toHaveBeenCalledTimes(1);
+    store.open('b');
+    await settle();
+    expect(relink).toHaveBeenCalledTimes(2);
+  });
+});

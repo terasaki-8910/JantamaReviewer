@@ -38,9 +38,20 @@
  * - `isFarFromReading(report, link, chosenKey)`（E-27）: ユーザーが選んだ判断（`links.json` の値）が、`linkMarks` の結果の推定にも
  *   ほかの候補にも入らず、読んだ局と違う局か、読んだ残りの牌の数との差が推定より大きいとき true（スクショの値から「離れている」）。
  *   推定が無い迷い（読めない・合う局が無い）は false
- * - `linkRatings(report, ratings)`（E-18）: 局の評価（〇△✕）→ 局。評価は `t_ms` と読み取りを持つ記録。局の始め
- *   （残り `HAND_START_TILES_LEFT` 枚以上）に読めたら前の局、途中なら読んだ局、読めないものは前後の間へ押した順。
- *   戻り値は `alignRatings`（E-7）と同じ形（status・assigned・extra・missingHands・message）に、評価ごとの当てはめ方 `placements` を足したもの
+ * - `parsePartialCenterText(lines)` / `partialReadingOf(input)`（E-28）: 局の名前（風・番号）や残りの牌の数が崩れていても、点数の行が読めれば、
+ *   読めた部分だけを返す（`PartialCenterText`。読めなかった部分は null）。`partialReadingOf` は、1回目と読み直しのうち、読めた部分の
+ *   いちばん多いものを使う。すべて読めるものは `parseCenterText` / `readingOf` と同じ結果。読めた部分に合う局は
+ *   `locatePartialKyokus`（読めた風・番号は局の名前と同じ、点数は局の始めの点数。リーチ棒の分は引く）
+ * - `linkTimeline(report, { marks, ratings })`（E-29・E-30）: 迷いと評価を押した時刻の順に 1 本に並べて、局に当てはめる。評価のあとに押した
+ *   ものは、その評価の局より後の局、迷いのあとに押したものは、その迷いの局か後の局。評価は当てはめないこともできる（同じ局に 2 つ当たるなら、
+ *   あとに押したほうを残す）。読み取り（崩れた部分も）とユーザーが選んだ結びつけ（`marks` の `chosen`）に、できるだけ合わせる
+ *   （費用は `CHOSEN_COST`・`FULL_READING_COST`・`PARTIAL_READING_COST`・`UNPLACED_RATING_COST`）。迷いの結果 `TimelineMarkLink` は、
+ *   `MarkLink` に、当てはめた局 `kyokuPosition`・局の幅 `range`・どう決めたか `how`・前後の出来事を足したもの。残り枚数が読めた迷いは、
+ *   局の幅の中で E-17 と同じ順位を付け（estimated）、読めない迷い・局だけ分かった迷いは、局の幅の中の判断をすべて選ぶ候補にする
+ *   （`status` が kyoku。`choices`）。評価の結果は `linkRatings` と同じ形。当てはめ方を変えたら `RATING_LINK_VERSION` を上げる
+ * - `linkRatings(report, ratings, marks?)`（E-29）: 局の評価（〇△✕）→ 局。`linkTimeline` のうち評価だけを返す入口。
+ *   戻り値は `alignRatings`（E-7）と同じ形（status・assigned・extra・missingHands・message）に、評価ごとの当てはめ方 `placements` を足したもの。
+ *   局の始め（残り `HAND_START_TILES_LEFT` 枚以上）に読めたら前の局
  * - `matchSessionForReport(report, sessions)`（E-19）: 結果を結びつける半荘。sessions は結果がまだ無い半荘
  *   （`id`・`started_ms`・スクショの読み取り `marks`）。合うものがちょうど1つなら `match`、合うものが無いか2つ以上なら
  *   `choose`（`sessionIds` は新しい順）、結果の無い半荘が無ければ `new`
@@ -88,6 +99,7 @@ export * from './session-match';
 export * from './shanten';
 export * from './srs';
 export * from './tenhou-url';
+export * from './timeline-link';
 export * from './tiles';
 export * from './two-shanten-follow';
 export * from './ukeire-remaining';
