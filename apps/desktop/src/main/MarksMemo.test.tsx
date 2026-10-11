@@ -3,7 +3,7 @@
  * 半荘の保存先の偽物（FakeSessionStore）の上で、取り込んだ半荘（FX-5・FX-4）と取り込む前の半荘を出し、使う人と同じ操作で確かめる。
  * 通して見る画面の場面でのメモと、答え合わせのあとのメモは、MarksMemoStudy.test.tsx。実ブラウザでの見え方は、tests/browser/marks-memo.browser.test.ts。
  */
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useCallback, useMemo, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +14,7 @@ import { installTauriMock } from '../../tests/tauri-mock';
 import type { Memos, SessionRecord } from '../api/types';
 import { MARK_CHIPS_HINT } from './HandTable';
 import { MEMO_DEBOUNCE_MS } from './MemoFields';
+import { MEMO_INTRO } from './memos';
 import { SessionPage, FLASH_MS } from './SessionPage';
 import { summarizeReportText, type SummaryState } from './sessionSummaries';
 import { UndoProvider } from './undo/UndoProvider';
@@ -71,13 +72,17 @@ interface SetupOptions {
 function setup(options: SetupOptions) {
   const { session } = options;
   const store = new FakeSessionStore([{ session, ...(options.report === undefined ? {} : { report: options.report }) }]);
-  const mock = installTauriMock({ handlers: { ...store.handlers, ...options.handlers } });
+  const importing = store.importHandlers(fx4Ocr());
+  const mock = installTauriMock({ handlers: { ...store.handlers, ...importing, ...options.handlers } });
   const user = userEvent.setup();
   const summary: SummaryState | undefined = options.report === undefined ? undefined : summarizeReportText(REPORT_TEXTS[options.report]);
+  // 半荘のページの、保存したあとの読み直し（取り込みが済んだあとに、呼び出し側が呼べるよう、外へ出す）
+  let reloadPage: () => Promise<void> = async () => undefined;
 
   function Harness() {
     const [current, setCurrent] = useState(() => store.session(session.id));
     const reload = useCallback(async () => setCurrent(store.session(session.id)), []);
+    reloadPage = reload;
     const stable = useMemo(() => summary, []);
     return (
       <UndoProvider>
@@ -91,7 +96,12 @@ function setup(options: SetupOptions) {
     view.unmount();
     view = render(<Harness />);
   };
-  return { store, mock, user, reopen };
+  /** この半荘に、結果（FX-4）を取り込んだことにして、ページを読み直す（取り込む前に足したメモが、どうなるかを見る）。 */
+  const importReport = async (text: string = REPORT_TEXTS.fx4) => {
+    await importing.save_report?.({ sessionId: session.id, text });
+    await act(async () => reloadPage());
+  };
+  return { store, mock, user, reopen, importReport };
 }
 
 const tableReady = () => screen.findByRole('table', { name: '局の評価' });
@@ -263,7 +273,7 @@ describe('U-27 局の評価の表の「迷い」の列（FX-4）', () => {
 });
 
 describe('U-28 迷いのカードのメモ', () => {
-  it('取り込む前の半荘のカードにも、「候補」「理由（1行）」の欄がある（空）。迷いマークの無い迷いは、取り込んだあとに足せることを伝える', () => {
+  it('取り込む前の半荘のカードにも、「候補」「理由（1行）」の欄がある（空）。迷いマークの無い迷いも、取り込む前から足せる（「取り込んだあとに足せます」の 1 行は無い）', () => {
     setup({ session: recorded() });
     expect(candidates(1)).toHaveValue('');
     expect(reason(1)).toHaveValue('');
@@ -271,8 +281,9 @@ describe('U-28 迷いのカードのメモ', () => {
     expect(reason(1)).toHaveAttribute('placeholder', '考えたことを1行で');
     expect(candidates(1)).toHaveAttribute('maxlength', '40');
     expect(reason(1)).toHaveAttribute('maxlength', '80');
-    expect(screen.getByText('迷いマークの無い迷いは、検討結果を取り込んだあとに足せます。')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '迷いマークの無い迷いを足す' })).toBeNull();
+    expect(screen.queryByText('迷いマークの無い迷いは、検討結果を取り込んだあとに足せます。')).toBeNull();
+    expect(document.body.textContent).not.toContain('取り込んだあとに足せます');
+    expect(screen.getByRole('button', { name: '迷いマークの無い迷いを足す' })).toBeEnabled();
   });
 
   it('打って欄の外へ出ると保存する（迷いの記録の番号で）。保存した文は、半荘のページを開き直しても残る', async () => {
@@ -535,6 +546,409 @@ describe('U-28 迷いマークの無い迷いを足す', () => {
     reopen();
     await tableReady();
     expect(screen.getAllByRole('article', { name: '追加のメモ' })).toHaveLength(2);
+  });
+});
+
+describe('U-28 取り込む前に迷いマークの無い迷いを足す（位置で。FX-4 の半荘の、取り込む前）', () => {
+  type User = ReturnType<typeof userEvent.setup>;
+  const addButton = () => screen.getByRole('button', { name: '迷いマークの無い迷いを足す' });
+  const submitButton = (panel: HTMLElement) => within(panel).getByRole('button', { name: '足す' });
+  const honbaInput = (panel: HTMLElement) => within(panel).getByRole('spinbutton', { name: '本場' });
+  const junmeInput = (panel: HTMLElement) => within(panel).getByRole('spinbutton', { name: '巡目' });
+  const ID = '20261009-161200';
+
+  async function openPanel(user: User) {
+    await user.click(addButton());
+    return screen.getByRole('region', { name: '迷いマークの無い迷いを足す' });
+  }
+
+  /** 局を名前で選び、本場（あれば）と巡目を入れる。 */
+  async function fill(user: User, panel: HTMLElement, where: { kyoku: string; honba?: string; junme: string }) {
+    await user.click(within(panel).getByRole('button', { name: '追加するメモの局を選ぶ' }));
+    await user.click(screen.getByRole('menuitemradio', { name: where.kyoku }));
+    if (where.honba !== undefined) {
+      await user.clear(honbaInput(panel));
+      await user.type(honbaInput(panel), where.honba);
+    }
+    await user.type(junmeInput(panel), where.junme);
+  }
+
+  it('足すボタンを押すと、局のメニュー・本場（既定 0）・巡目・候補・理由（1行）と、「足す」「やめる」が出る。キーボードの位置は見出しへ移る。「足す」は、局と巡目を入れるまで押せない', async () => {
+    const { user } = setup({ session: recorded() });
+    const panel = await openPanel(user);
+    expect(within(panel).getByRole('heading', { name: '迷いマークの無い迷いを足す' })).toHaveFocus();
+    expect(within(panel).getByText('画像が無いので、局と巡目は手で選びます。')).toBeInTheDocument();
+    expect(honbaInput(panel)).toHaveValue(0);
+    expect(junmeInput(panel)).toHaveValue(null);
+    expect(within(panel).getByLabelText('候補')).toHaveValue('');
+    expect(within(panel).getByLabelText('理由（1行）')).toHaveValue('');
+    expect(submitButton(panel)).toBeDisabled();
+    expect(within(panel).getByRole('button', { name: 'やめる' })).toBeEnabled();
+    // 局を選んだだけでは、まだ押せない
+    await user.click(within(panel).getByRole('button', { name: '追加するメモの局を選ぶ' }));
+    await user.click(screen.getByRole('menuitemradio', { name: '東3局' }));
+    expect(within(panel).getByRole('button', { name: '追加するメモの局 東3局' })).toBeInTheDocument();
+    expect(submitButton(panel)).toBeDisabled();
+    await user.type(junmeInput(panel), '9');
+    expect(submitButton(panel)).toBeEnabled();
+  });
+
+  it('局のメニューは、東1局から西4局までの 12（取り込む前は、西入したかどうかを決める材料が無いので、西も並べる）。本場は 0〜99、巡目は 1〜30 の整数', async () => {
+    const { user } = setup({ session: recorded() });
+    const panel = await openPanel(user);
+    await user.click(within(panel).getByRole('button', { name: '追加するメモの局を選ぶ' }));
+    const items = within(screen.getByRole('menu', { name: '追加するメモの局' })).getAllByRole('menuitemradio');
+    expect(items.map((item) => item.textContent)).toEqual([
+      '東1局', '東2局', '東3局', '東4局', '南1局', '南2局', '南3局', '南4局', '西1局', '西2局', '西3局', '西4局',
+    ]);
+    await user.keyboard('{Escape}');
+    expect(honbaInput(panel)).toHaveAttribute('min', '0');
+    expect(honbaInput(panel)).toHaveAttribute('max', '99');
+    expect(junmeInput(panel)).toHaveAttribute('min', '1');
+    expect(junmeInput(panel)).toHaveAttribute('max', '30');
+  });
+
+  it('範囲の外の巡目・本場は、入れた欄の下に理由を出して、「足す」を押せないままにする。直すと、理由は消えて押せる', async () => {
+    const { user } = setup({ session: recorded() });
+    const panel = await openPanel(user);
+    await fill(user, panel, { kyoku: '東3局', junme: '31' });
+    expect(within(panel).getByText('巡目は 1〜30 で入れてください。')).toBeInTheDocument();
+    expect(junmeInput(panel)).toBeInvalid();
+    expect(junmeInput(panel)).toHaveAccessibleDescription('巡目は 1〜30 で入れてください。');
+    expect(submitButton(panel)).toBeDisabled();
+    await user.clear(junmeInput(panel));
+    expect(within(panel).queryByText(/巡目は 1〜30/)).toBeNull();
+    await user.type(junmeInput(panel), '0');
+    expect(within(panel).getByText('巡目は 1〜30 で入れてください。')).toBeInTheDocument();
+    expect(submitButton(panel)).toBeDisabled();
+    await user.clear(junmeInput(panel));
+    await user.type(junmeInput(panel), '30');
+    expect(within(panel).queryByText(/巡目は 1〜30/)).toBeNull();
+    expect(submitButton(panel)).toBeEnabled();
+    await user.clear(honbaInput(panel));
+    await user.type(honbaInput(panel), '100');
+    expect(within(panel).getByText('本場は 0〜99 で入れてください。')).toBeInTheDocument();
+    expect(submitButton(panel)).toBeDisabled();
+    await user.clear(honbaInput(panel));
+    await user.type(honbaInput(panel), '2');
+    expect(within(panel).queryByText(/本場は 0〜99/)).toBeNull();
+    expect(submitButton(panel)).toBeEnabled();
+  });
+
+  it('局・本場・巡目・候補・理由を入れて「足す」: 判断の鍵は付けずに位置で保存し、追加のメモのカードが並ぶ。パネルは閉じ、キーボードの位置は、新しいカードの「候補」へ移る', async () => {
+    const { user, store } = setup({ session: recorded() });
+    const panel = await openPanel(user);
+    await fill(user, panel, { kyoku: '東3局', junme: '9' });
+    await user.type(within(panel).getByLabelText('候補'), '5s・發');
+    await user.type(within(panel).getByLabelText('理由（1行）'), '押すか引くか');
+    await user.click(submitButton(panel));
+    await waitFor(() =>
+      expect(store.session(ID).memos.extras).toEqual([
+        { id: 'x1', position: { kyoku: 2, honba: 0, junme: 9 }, candidates: '5s・發', reason: '押すか引くか' },
+      ]),
+    );
+    expect(store.session(ID).memos.extras[0]).not.toHaveProperty('decision');
+    expect(calls(store)).toEqual(['set-extra:x1:@2.0.9:5s・發|押すか引くか']);
+    expect(screen.queryByRole('region', { name: '迷いマークの無い迷いを足す' })).toBeNull();
+    const extra = within(screen.getByRole('list', { name: '追加のメモの一覧' })).getByRole('article', { name: '追加のメモ' });
+    expect(within(extra).getByText('迷いマークなし')).toBeInTheDocument();
+    expect(within(extra).getByText('手で足した')).toBeInTheDocument();
+    expect(within(extra).getByText('東3局 9巡目')).toBeInTheDocument();
+    const group = within(extra).getByRole('group', { name: '追加のメモ 東3局 9巡目' });
+    expect(within(group).getByLabelText('候補')).toHaveValue('5s・發');
+    expect(within(group).getByLabelText('候補')).toHaveFocus();
+    // 結果を取り込む前の半荘には、判断を選ぶ欄は無い
+    expect(within(extra).queryByRole('button', { name: /局面を選んでください/ })).toBeNull();
+    // 迷いの見出しの数は、迷いマークの数のまま（2）
+    expect(screen.getByRole('heading', { level: 2, name: '迷い（2）' })).toBeInTheDocument();
+    expect(addButton()).toBeInTheDocument();
+  });
+
+  it('本場があれば、呼び名に付く（東3局2本場 9巡目）。候補と理由は空のまま足せる。2 つ目の名前は x2', async () => {
+    const { user, store } = setup({ session: recorded() });
+    let panel = await openPanel(user);
+    await fill(user, panel, { kyoku: '東3局', junme: '9' });
+    await user.click(submitButton(panel));
+    await waitFor(() => expect(store.session(ID).memos.extras).toHaveLength(1));
+    panel = await openPanel(user);
+    await fill(user, panel, { kyoku: '東3局', honba: '2', junme: '4' });
+    await user.click(submitButton(panel));
+    await waitFor(() => expect(store.session(ID).memos.extras.map((e) => e.id)).toEqual(['x1', 'x2']));
+    expect(store.session(ID).memos.extras[1]).toEqual({ id: 'x2', position: { kyoku: 2, honba: 2, junme: 4 }, candidates: '', reason: '' });
+    expect(screen.getByRole('group', { name: '追加のメモ 東3局2本場 4巡目' })).toBeInTheDocument();
+  });
+
+  it('保存した追加のメモは、半荘のページを開き直しても残る（位置も、文も）。書き直しても、位置は変わらない（判断の鍵も付かない）', async () => {
+    const { user, store, reopen } = setup({ session: recorded() });
+    const panel = await openPanel(user);
+    await fill(user, panel, { kyoku: '南4局', honba: '1', junme: '12' });
+    await user.type(within(panel).getByLabelText('候補'), 'リーチ');
+    await user.click(submitButton(panel));
+    await waitFor(() => expect(store.session(ID).memos.extras).toHaveLength(1));
+    reopen();
+    const group = screen.getByRole('group', { name: '追加のメモ 南4局1本場 12巡目' });
+    expect(within(group).getByLabelText('候補')).toHaveValue('リーチ');
+    await user.type(within(group).getByLabelText('理由（1行）'), '待ちが良い{Enter}');
+    await waitFor(() =>
+      expect(store.session(ID).memos.extras).toEqual([
+        { id: 'x1', position: { kyoku: 7, honba: 1, junme: 12 }, candidates: 'リーチ', reason: '待ちが良い' },
+      ]),
+    );
+    expect(calls(store).every((call) => call.startsWith('set-extra:x1:@7.1.12:'))).toBe(true);
+  });
+
+  it('U-11 足したあと Ctrl+Z で足したことを取り消せる（位置も戻る）。Ctrl+Y で足し直す。「消す」も取り消せる（位置も文も元のまま）。書き直しも取り消せる', async () => {
+    const { user, store } = setup({ session: recorded() });
+    const panel = await openPanel(user);
+    await fill(user, panel, { kyoku: '東3局', junme: '9' });
+    await user.type(within(panel).getByLabelText('候補'), '5s');
+    await user.click(submitButton(panel));
+    await waitFor(() => expect(store.session(ID).memos.extras).toHaveLength(1));
+    const placed = { id: 'x1', position: { kyoku: 2, honba: 0, junme: 9 }, candidates: '5s', reason: '' };
+    await user.click(document.body);
+    await undoKey(user);
+    await waitFor(() => expect(store.session(ID).memos.extras).toEqual([]));
+    expect(screen.queryByRole('list', { name: '追加のメモの一覧' })).toBeNull();
+    await redoKey(user);
+    await waitFor(() => expect(store.session(ID).memos.extras).toEqual([placed]));
+    // 書き直し
+    const group = screen.getByRole('group', { name: '追加のメモ 東3局 9巡目' });
+    await user.type(within(group).getByLabelText('理由（1行）'), '速い{Enter}');
+    await waitFor(() => expect(store.session(ID).memos.extras[0]?.reason).toBe('速い'));
+    await user.click(document.body);
+    await undoKey(user);
+    await waitFor(() => expect(store.session(ID).memos.extras).toEqual([placed]));
+    // 消す → 取り消す
+    await user.click(screen.getByRole('button', { name: '追加のメモを消す' }));
+    await waitFor(() => expect(store.session(ID).memos.extras).toEqual([]));
+    await user.click(document.body);
+    await undoKey(user);
+    await waitFor(() => expect(store.session(ID).memos.extras).toEqual([placed]));
+  });
+
+  it('「やめる」で閉じる（何も保存しない）。キーボードの位置は、押したボタンへ戻る', async () => {
+    const { user, store } = setup({ session: recorded() });
+    const panel = await openPanel(user);
+    await fill(user, panel, { kyoku: '東3局', junme: '9' });
+    await user.click(within(panel).getByRole('button', { name: 'やめる' }));
+    expect(screen.queryByRole('region', { name: '迷いマークの無い迷いを足す' })).toBeNull();
+    await waitFor(() => expect(addButton()).toHaveFocus());
+    expect(calls(store)).toEqual([]);
+    expect(store.session(ID).memos.extras).toEqual([]);
+  });
+
+  it('保存できなかったときは、パネルの中に理由を出して、開いたままにする（入れた値は残る）', async () => {
+    const { user, store } = setup({ session: recorded() });
+    const panel = await openPanel(user);
+    await fill(user, panel, { kyoku: '東3局', junme: '9' });
+    store.failNextMemo = '半荘のフォルダに書けません';
+    await user.click(submitButton(panel));
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('メモを足せませんでした: 半荘のフォルダに書けません');
+    expect(screen.getByRole('region', { name: '迷いマークの無い迷いを足す' })).toBeInTheDocument();
+    expect(junmeInput(panel)).toHaveValue(9);
+    expect(store.session(ID).memos.extras).toEqual([]);
+  });
+
+  it('Tab で、足すボタン → 局のメニュー → 本場 → 巡目 → 候補 → 理由 → 足す → やめる の順に着く', async () => {
+    const { user } = setup({ session: recorded() });
+    const panel = await openPanel(user);
+    await fill(user, panel, { kyoku: '東3局', junme: '9' });
+    within(panel).getByRole('heading').focus();
+    const names: string[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      await user.tab();
+      const active = document.activeElement as HTMLElement;
+      names.push(active.getAttribute('aria-label') ?? active.textContent ?? '');
+    }
+    expect(names.slice(0, 7)).toEqual(['追加するメモの局 東3局', '本場', '巡目', '', '', '足す', 'やめる']);
+    expect(within(panel).getByLabelText('候補')).toBeInTheDocument();
+  });
+});
+
+describe('U-28 迷いの見出しのそばの説明（i）', () => {
+  it('取り込む前にも取り込んだあとにも、見出し「迷い（N）」のすぐ右の (i) に、終局直後のメモの説明が入る。本文には出ない', async () => {
+    const { user } = setup({ session: recorded() });
+    const heading = screen.getByRole('heading', { level: 2, name: '迷い（2）' });
+    const icon = within(heading.closest('.sec-head') as HTMLElement).getByRole('button', { name: '終局直後のメモの説明' });
+    expect(MEMO_INTRO).toBe('AI の答えを見る前に、そのとき考えたことを書き留めます。局と巡目は、検討結果を取り込むときに画像から読むので、書かなくて構いません。');
+    expect(heading.closest('section')?.textContent).not.toContain('AI の答えを見る前に');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(icon).toHaveAccessibleDescription(MEMO_INTRO);
+    await user.hover(icon);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(MEMO_INTRO);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    cleanup();
+    setup({ session: fx5Imported(), report: 'fx5' });
+    await tableReady();
+    const imported = screen.getByRole('heading', { level: 2, name: '迷い（13）' });
+    expect(within(imported.closest('.sec-head') as HTMLElement).getByRole('button', { name: '終局直後のメモの説明' })).toBeInTheDocument();
+  });
+});
+
+describe('U-28 取り込んだあとの位置だけのメモ（FX-5。迷いマークの無い迷いの局面を、位置から判断へ結びつける）', () => {
+  type User = ReturnType<typeof userEvent.setup>;
+  const withExtras = (...extras: Memos['extras']) => fx5Imported({ memos: { marks: {}, extras } });
+  const placed = (position: { kyoku: number; honba: number; junme: number }, id = 'x1') => ({ id, position, candidates: '6s', reason: '押す' });
+  const picker = () => screen.queryByRole('button', { name: '追加のメモの局面を選んでください' });
+  const pickerMenuItems = () => within(screen.getByRole('menu', { name: '追加のメモの局面' })).getAllByRole('menuitemradio');
+
+  async function pickFirst(user: User): Promise<void> {
+    await user.click(screen.getByRole('button', { name: '追加のメモの局面を選んでください' }));
+    await user.click(pickerMenuItems()[0] as HTMLElement);
+  }
+
+  it('位置に自分の判断がちょうど 1 つ（東2局 5巡目 = 打6s）なら、自動で判断の鍵を足す（位置は残す）。選ぶ欄は出ない。取り消しの履歴には載せない', async () => {
+    const { store, user } = setup({ session: withExtras(placed({ kyoku: 1, honba: 0, junme: 5 })), report: 'fx5' });
+    await tableReady();
+    await waitFor(() =>
+      expect(store.session(FX5_ID).memos.extras).toEqual([
+        { id: 'x1', decision: 'k1h0e5', position: { kyoku: 1, honba: 0, junme: 5 }, candidates: '6s', reason: '押す' },
+      ]),
+    );
+    expect(calls(store)).toEqual(['set-extra:x1:k1h0e5@1.0.5:6s|押す']);
+    const group = screen.getByRole('group', { name: '追加のメモ 東2局 5巡目 · 打牌の迷い' });
+    expect(within(group).getByLabelText('候補')).toHaveValue('6s');
+    expect(within(screen.getByRole('article', { name: '追加のメモ' })).getByText('東2局 5巡目 · 打牌の迷い')).toBeInTheDocument();
+    expect(picker()).toBeNull();
+    // 利用者の操作ではないので、Ctrl+Z では戻らない
+    await user.click(document.body);
+    await undoKey(user);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(store.session(FX5_ID).memos.extras[0]?.decision).toBe('k1h0e5');
+    expect(calls(store)).toHaveLength(1);
+  });
+
+  it('1 回だけ結びつける: 半荘のページを開き直しても、結びついたものを書き直さない。判断の鍵だけの古いメモ・鍵と位置の両方を持つメモも、そのまま', async () => {
+    const both = { id: 'x2', decision: 'k1h0e5', position: { kyoku: 1, honba: 0, junme: 5 }, candidates: 'a', reason: '' };
+    const legacy = { id: 'x3', decision: 'k4h2e5', candidates: 'b', reason: '' };
+    const { store, reopen } = setup({ session: withExtras(placed({ kyoku: 1, honba: 0, junme: 5 }), both, legacy), report: 'fx5' });
+    await tableReady();
+    await waitFor(() => expect(store.session(FX5_ID).memos.extras[0]?.decision).toBe('k1h0e5'));
+    expect(calls(store)).toEqual(['set-extra:x1:k1h0e5@1.0.5:6s|押す']);
+    reopen();
+    await tableReady();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls(store)).toHaveLength(1);
+    expect(store.session(FX5_ID).memos.extras.slice(1)).toEqual([both, legacy]);
+    expect(screen.getByRole('group', { name: '追加のメモ 南1局2本場 6巡目 · 打牌の迷い' })).toBeInTheDocument();
+    expect(picker()).toBeNull();
+  });
+
+  it('その巡目に判断が 2 つ（東2局 4巡目 = 打白・鳴かない判断）なら、そのメモのカードに「局面を選んでください」と、その巡目の判断を出す。選ぶまで何も保存しない', async () => {
+    const { store } = setup({ session: withExtras(placed({ kyoku: 1, honba: 0, junme: 4 })), report: 'fx5' });
+    await tableReady();
+    const card = screen.getByRole('article', { name: '追加のメモ' });
+    expect(within(card).getByText('東2局 4巡目')).toBeInTheDocument();
+    const button = within(card).getByRole('button', { name: '追加のメモの局面を選んでください' });
+    expect(button).toHaveTextContent('局面を選んでください');
+    await userEvent.setup().click(button);
+    expect(pickerMenuItems().map((item) => item.textContent)).toEqual(['東2局 4巡目 · 打白', '東2局 4巡目 · 鳴かない判断']);
+    // AI の候補・確率・順位は出ない
+    expect(document.body.innerHTML.replace(/ src="[^"]*"/g, '')).not.toMatch(/\d\s*[%％]|確率|順位|probab|q_value/i);
+    expect(calls(store)).toEqual([]);
+    expect(store.session(FX5_ID).memos.extras[0]).not.toHaveProperty('decision');
+  });
+
+  it('選ぶと、判断の鍵を足して（位置は残す）、カードは選んだ判断の呼び名になり、選ぶ欄は消えて、キーボードの位置は「候補」へ移る。Ctrl+Z で位置だけに戻り、Ctrl+Y で結びつけ直す', async () => {
+    const { store, user } = setup({ session: withExtras(placed({ kyoku: 1, honba: 0, junme: 4 })), report: 'fx5' });
+    await tableReady();
+    await pickFirst(user);
+    const linked = { id: 'x1', decision: 'k1h0e3', position: { kyoku: 1, honba: 0, junme: 4 }, candidates: '6s', reason: '押す' };
+    await waitFor(() => expect(store.session(FX5_ID).memos.extras).toEqual([linked]));
+    expect(calls(store)).toEqual(['set-extra:x1:k1h0e3@1.0.4:6s|押す']);
+    const group = await screen.findByRole('group', { name: '追加のメモ 東2局 4巡目 · 打牌の迷い' });
+    expect(picker()).toBeNull();
+    await waitFor(() => expect(within(group).getByLabelText('候補')).toHaveFocus());
+    // 取り消す（位置だけに戻り、選ぶ欄が戻る。2 つの判断があるので、自動では結びつかない）
+    await user.click(document.body);
+    await undoKey(user);
+    await waitFor(() => expect(store.session(FX5_ID).memos.extras).toEqual([{ id: 'x1', position: linked.position, candidates: '6s', reason: '押す' }]));
+    await waitFor(() => expect(picker()).not.toBeNull());
+    await redoKey(user);
+    await waitFor(() => expect(store.session(FX5_ID).memos.extras).toEqual([linked]));
+    expect(picker()).toBeNull();
+  });
+
+  it('選んだあと、書き直した文は、結びつけた判断を消さずに保存する（局面ごと書き直す）', async () => {
+    const { store, user } = setup({ session: withExtras(placed({ kyoku: 1, honba: 0, junme: 4 })), report: 'fx5' });
+    await tableReady();
+    await pickFirst(user);
+    const group = await screen.findByRole('group', { name: '追加のメモ 東2局 4巡目 · 打牌の迷い' });
+    await user.type(within(group).getByLabelText('理由（1行）'), 'です{Enter}');
+    await waitFor(() => expect(store.session(FX5_ID).memos.extras[0]?.reason).toBe('押すです'));
+    expect(store.session(FX5_ID).memos.extras[0]).toMatchObject({ decision: 'k1h0e3', position: { kyoku: 1, honba: 0, junme: 4 } });
+  });
+
+  it('その巡目に判断が無いときは、同じ局の判断から選ぶ（東2局 20巡目 → 東2局の 15 の判断）。自動では結びつけない', async () => {
+    const { store, user } = setup({ session: withExtras(placed({ kyoku: 1, honba: 0, junme: 20 })), report: 'fx5' });
+    await tableReady();
+    await user.click(screen.getByRole('button', { name: '追加のメモの局面を選んでください' }));
+    const labels = pickerMenuItems().map((item) => item.textContent ?? '');
+    expect(labels).toHaveLength(15);
+    expect(labels.every((label) => label.startsWith('東2局 '))).toBe(true);
+    expect(labels).toContain('東2局 5巡目 · 打6s');
+    expect(calls(store)).toEqual([]);
+    await user.click(screen.getByRole('menuitemradio', { name: '東2局 5巡目 · 打6s' }));
+    await waitFor(() => expect(store.session(FX5_ID).memos.extras[0]).toMatchObject({ decision: 'k1h0e5', position: { kyoku: 1, honba: 0, junme: 20 } }));
+  });
+
+  it('その本場に判断が無いときは、同じ局の判断から選ぶ（東3局 0本場 → 東3局1本場の判断。名前に本場が入る）', async () => {
+    setup({ session: withExtras(placed({ kyoku: 2, honba: 0, junme: 3 })), report: 'fx5' });
+    await tableReady();
+    await userEvent.setup().click(screen.getByRole('button', { name: '追加のメモの局面を選んでください' }));
+    const labels = pickerMenuItems().map((item) => item.textContent ?? '');
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels.every((label) => label.startsWith('東3局1本場 '))).toBe(true);
+    expect(labels).toContain('東3局1本場 3巡目 · 打中');
+  });
+
+  it('その局に自分の判断が無いときは、選ぶ欄の代わりに、そう伝える（メモは、位置のまま残る）', async () => {
+    const { store } = setup({ session: withExtras(placed({ kyoku: 9, honba: 0, junme: 5 })), report: 'fx5' });
+    await tableReady();
+    expect(screen.getByText('この局には、自分の判断がありません。')).toBeInTheDocument();
+    expect(picker()).toBeNull();
+    expect(screen.getByText('西2局 5巡目')).toBeInTheDocument();
+    expect(calls(store)).toEqual([]);
+  });
+
+  it('取り込む前に足したメモ: 取り込んだら、位置に判断が 1 つのメモは自動で結びつき、2 つのメモは「局面を選んでください」になる。選ぶと結びつく', async () => {
+    const { store, user, importReport } = setup({ session: recorded() });
+    const ID = '20261009-161200';
+    // 取り込む前に、2 つ足す（東2局1本場 6巡目 = 判断 1 つ。同 4巡目 = 判断 2 つ）
+    for (const [junme, text] of [['6', '南'], ['4', '鳴く']] as const) {
+      await user.click(screen.getByRole('button', { name: '迷いマークの無い迷いを足す' }));
+      const panel = screen.getByRole('region', { name: '迷いマークの無い迷いを足す' });
+      await user.click(within(panel).getByRole('button', { name: '追加するメモの局を選ぶ' }));
+      await user.click(screen.getByRole('menuitemradio', { name: '東2局' }));
+      await user.clear(within(panel).getByRole('spinbutton', { name: '本場' }));
+      await user.type(within(panel).getByRole('spinbutton', { name: '本場' }), '1');
+      await user.type(within(panel).getByRole('spinbutton', { name: '巡目' }), junme);
+      await user.type(within(panel).getByLabelText('候補'), text);
+      await user.click(within(panel).getByRole('button', { name: '足す' }));
+      await waitFor(() => expect(screen.queryByRole('region', { name: '迷いマークの無い迷いを足す' })).toBeNull());
+    }
+    expect(store.session(ID).memos.extras.map((e) => [e.id, e.decision, e.position])).toEqual([
+      ['x1', undefined, { kyoku: 1, honba: 1, junme: 6 }],
+      ['x2', undefined, { kyoku: 1, honba: 1, junme: 4 }],
+    ]);
+    expect(picker()).toBeNull();
+    // 結果を取り込む
+    await importReport();
+    await waitFor(() => expect(store.session(ID).memos.extras[0]?.decision).toBe('k1h1e7'));
+    expect(store.session(ID).memos.extras[0]?.position).toEqual({ kyoku: 1, honba: 1, junme: 6 });
+    expect(store.session(ID).memos.extras[1]?.decision).toBeUndefined();
+    await screen.findByRole('group', { name: '追加のメモ 東2局1本場 6巡目 · 打牌の迷い' });
+    await user.click(await screen.findByRole('button', { name: '追加のメモの局面を選んでください' }));
+    expect(pickerMenuItems().map((item) => item.textContent)).toEqual(['東2局1本場 4巡目 · 打4s', '東2局1本場 4巡目 · 鳴かない判断']);
+    await user.click(pickerMenuItems()[1] as HTMLElement);
+    await waitFor(() => expect(store.session(ID).memos.extras[1]).toMatchObject({ decision: 'k1h1e5', position: { kyoku: 1, honba: 1, junme: 4 } }));
+    expect(picker()).toBeNull();
+    // 取り込んだあとに足すときは、これまでどおり、局 → 判断から選ぶ（位置の入力は出ない）
+    await user.click(screen.getByRole('button', { name: '迷いマークの無い迷いを足す' }));
+    const panel = screen.getByRole('region', { name: '迷いマークの無い迷いを足す' });
+    expect(within(panel).getByRole('button', { name: '追加するメモの巡目と判断を選ぶ' })).toBeInTheDocument();
+    expect(within(panel).queryByRole('spinbutton')).toBeNull();
   });
 });
 

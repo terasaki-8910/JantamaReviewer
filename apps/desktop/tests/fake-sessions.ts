@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { Links, OcrCache, SelfRatingValue, SessionRecord } from '../src/api/types';
+import type { ExtraMemo, Links, MemoPosition, OcrCache, SelfRatingValue, SessionRecord } from '../src/api/types';
 
 const REPORTS_DIR = resolve(import.meta.dirname, '../../../packages/engine/tests/fixtures/reports');
 
@@ -90,7 +90,7 @@ export class FakeSessionStore {
   /** 次の削除・元に戻すを失敗させたいときの理由。 */
   failNextDelete: string | null = null;
   failNextRestore: string | null = null;
-  /** メモの保存の呼び出しの記録（'set:1:3m・6p|理由'・'clear:1'・'set-extra:x1:k0h0e3:候補|理由'・'clear-extra:x1'）。 */
+  /** メモの保存の呼び出しの記録（'set:1:3m・6p|理由'・'clear:1'・'set-extra:x1:k0h0e3:候補|理由'・'set-extra:x1:@2.0.9:候補|理由'（位置だけ）・'clear-extra:x1'）。 */
   readonly memoCalls: string[] = [];
   /** 次のメモの保存を失敗させたいときの理由（1 回だけ）。 */
   failNextMemo: string | null = null;
@@ -236,16 +236,27 @@ export class FakeSessionStore {
       return undefined;
     },
     set_extra_memo: (args) => {
-      const { sessionId, id, decision, candidates, reason } = args as {
+      const { sessionId, id, decision, position, candidates, reason } = args as {
         sessionId: string;
         id: string;
-        decision: string;
+        decision: string | null;
+        position: MemoPosition | null;
         candidates: string;
         reason: string;
       };
-      this.memoCalls.push(`set-extra:${id}:${decision}:${candidates}|${reason}`);
+      // 判断の鍵だけなら 'set-extra:x1:k0h0e3:候補|理由'。位置があれば、鍵のあとに '@局.本場.巡目' を足す（位置だけなら 'set-extra:x1:@2.0.9:候補|理由'）
+      const where = `${decision ?? ''}${position === null ? '' : `@${position.kyoku}.${position.honba}.${position.junme}`}`;
+      this.memoCalls.push(`set-extra:${id}:${where}:${candidates}|${reason}`);
       this.failMemoWith();
-      const extra = { id, decision, candidates: candidates.trim(), reason: reason.trim() };
+      // Rust 側と同じく、判断の鍵も位置も無いものは受け付けない
+      if (decision === null && position === null) throw '局面（判断の鍵か、局・本場・巡目）が要ります';
+      const extra: ExtraMemo = {
+        id,
+        ...(decision === null ? {} : { decision }),
+        ...(position === null ? {} : { position }),
+        candidates: candidates.trim(),
+        reason: reason.trim(),
+      };
       this.update(sessionId, (s) => {
         const extras = s.memos.extras.some((e) => e.id === id) ? s.memos.extras.map((e) => (e.id === id ? extra : e)) : [...s.memos.extras, extra];
         return { ...s, memos: { ...s.memos, extras } };

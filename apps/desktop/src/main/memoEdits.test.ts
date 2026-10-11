@@ -3,7 +3,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-import type { MemoEntry } from '../api/types';
+import type { ExtraMemoPlace, MemoEntry } from '../api/types';
 import { extraMemoCommand, markMemoCommand, type MemoApi } from './memoEdits';
 import { UndoStack } from './undo/undoStack';
 
@@ -12,8 +12,11 @@ function fakeApi() {
   const api: MemoApi = {
     setMemo: async (sessionId: string, markId: number, memo: MemoEntry) => void calls.push(`set ${sessionId} ${markId} ${memo.candidates}|${memo.reason}`),
     clearMemo: async (sessionId: string, markId: number) => void calls.push(`clear ${sessionId} ${markId}`),
-    setExtraMemo: async (sessionId: string, id: string, decision: string, memo: MemoEntry) =>
-      void calls.push(`set-extra ${sessionId} ${id} ${decision} ${memo.candidates}|${memo.reason}`),
+    // 局面は「判断の鍵」「@局.本場.巡目」の順に、あるものだけ並べる（例: k4h2e5@4.2.9）
+    setExtraMemo: async (sessionId: string, id: string, place: ExtraMemoPlace, memo: MemoEntry) => {
+      const where = `${place.decision ?? ''}${place.position === undefined ? '' : `@${place.position.kyoku}.${place.position.honba}.${place.position.junme}`}`;
+      calls.push(`set-extra ${sessionId} ${id} ${where} ${memo.candidates}|${memo.reason}`);
+    },
     clearExtraMemo: async (sessionId: string, id: string) => void calls.push(`clear-extra ${sessionId} ${id}`),
   };
   return { api, calls };
@@ -102,5 +105,46 @@ describe('U-11・U-28 迷いマークの無い迷いのメモの命令', () => {
     expect(calls).toEqual(['set-extra s x1 k4h2e5 1m|押すか引くか']);
     await stack.undo();
     expect(calls.at(-1)).toBe('set-extra s x1 k4h2e5 5s・發|押すか引くか');
+  });
+
+  it('位置だけのメモ（取り込む前）を足す: 判断の鍵を付けずに、位置を保存する。取り消すと消す', async () => {
+    const { api, calls } = fakeApi();
+    const stack = new UndoStack();
+    const position = { kyoku: 2, honba: 0, junme: 9 };
+    const placed = { id: 'x1', position, candidates: '5s・發', reason: '' };
+    await stack.run(extraMemoCommand(api, async () => undefined, { sessionId: 's', id: 'x1', before: undefined, after: placed }));
+    expect(calls).toEqual(['set-extra s x1 @2.0.9 5s・發|']);
+    await stack.undo();
+    expect(calls.at(-1)).toBe('clear-extra s x1');
+    await stack.redo();
+    expect(calls.at(-1)).toBe('set-extra s x1 @2.0.9 5s・發|');
+  });
+
+  it('局面を選んで結びつける: 位置は残したまま判断の鍵を足す。取り消すと位置だけに戻す。通知の文に、選んだ局面が入る', async () => {
+    const { api, calls } = fakeApi();
+    const reload = vi.fn(async () => undefined);
+    const stack = new UndoStack();
+    const position = { kyoku: 2, honba: 0, junme: 9 };
+    const before = { id: 'x1', position, candidates: '5s', reason: '押す' };
+    const command = extraMemoCommand(api, reload, {
+      sessionId: 's',
+      id: 'x1',
+      before,
+      after: { ...before, decision: 'k2h0e11' },
+      link: '東3局 9巡目',
+    });
+    expect(command.label).toBe('追加のメモの局面を選ぶ');
+    expect(command.messages).toEqual({
+      run: '追加のメモを東3局 9巡目の局面に結びつけました',
+      undo: '追加のメモの結びつけを元に戻しました',
+      redo: '追加のメモを東3局 9巡目の局面に結びつけました',
+    });
+    await stack.run(command);
+    expect(calls).toEqual(['set-extra s x1 k2h0e11@2.0.9 5s|押す']);
+    await stack.undo();
+    expect(calls.at(-1)).toBe('set-extra s x1 @2.0.9 5s|押す');
+    await stack.redo();
+    expect(calls.at(-1)).toBe('set-extra s x1 k2h0e11@2.0.9 5s|押す');
+    expect(reload).toHaveBeenCalledTimes(3);
   });
 });

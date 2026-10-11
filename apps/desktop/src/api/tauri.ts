@@ -9,6 +9,7 @@ import type {
   AnswerNotes,
   AnswerRow,
   AppState,
+  ExtraMemoPlace,
   InputStatus,
   Links,
   MemoEntry,
@@ -178,8 +179,15 @@ export const api = {
   /** 迷いマークのメモを消す（取り消しに使う）。 */
   clearMemo: (sessionId: string, markId: number) => invoke<void>('clear_memo', { sessionId, markId }),
   /** 迷いマークの無い迷いのメモを書く（同じ名前があれば置き換え、無ければ足す）。`decision` は判断の鍵。 */
-  setExtraMemo: (sessionId: string, id: string, decision: string, memo: MemoEntry) =>
-    invoke<void>('set_extra_memo', { sessionId, id, decision, candidates: memo.candidates, reason: memo.reason }),
+  setExtraMemo: (sessionId: string, id: string, place: ExtraMemoPlace, memo: MemoEntry) =>
+    invoke<void>('set_extra_memo', {
+      sessionId,
+      id,
+      decision: place.decision ?? null,
+      position: place.position ?? null,
+      candidates: memo.candidates,
+      reason: memo.reason,
+    }),
   /** 迷いマークの無い迷いのメモを消す（取り消しに使う）。 */
   clearExtraMemo: (sessionId: string, id: string) => invoke<void>('clear_extra_memo', { sessionId, id }),
 

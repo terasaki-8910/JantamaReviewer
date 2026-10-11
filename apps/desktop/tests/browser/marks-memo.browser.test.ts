@@ -7,6 +7,8 @@
  * - U-5・U-6: axe の重大な違反が 0 件（色のコントラストを含む）。Tab で、札・メモの欄・追加のボタンなど、すべての操作に届く。ライトとダーク
  * - 形: 広い幅では、札が表の「迷い」の列に並ぶ。幅 390px では、局ごとのかたまりに、小さな見出し「迷い」つきの行が付く
  * - 札を押す・Enter で、そのカードへ移る（実際のスクロールと、キーボードの位置）。メモは、実際のキーで保存され、Ctrl+Z で戻る
+ * - 取り込む前の半荘（FX-4。結果を取り込んでいない）: 「迷いマークの無い迷いを足す」の位置の入力（局のメニュー・本場・巡目）が、幅 390・1280px の
+ *   ライト・ダークで、横スクロールも重大な a11y 違反も無く、Tab で届く。実際のキー・マウスで足すと、位置で保存される
  * jsdom の試験（src/main/MarksMemo.test.tsx）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
 import type { Browser, BrowserContext, Page } from 'playwright-core';
@@ -14,7 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { Memos } from '../../src/api/types';
 import { REPORT_TEXTS } from '../fake-sessions';
-import { FX5_ID, FX5_STARTED, FX5_USER_CHOICES, fx5Ocr, fx5Session } from '../import-fixtures';
+import { FX5_ID, FX5_STARTED, FX5_USER_CHOICES, fx4Session, fx5Ocr, fx5Session } from '../import-fixtures';
 import {
   TINY_PNG,
   launchBrowser,
@@ -101,7 +103,9 @@ interface Opened {
   external: string[];
 }
 
-async function open(options: { width?: number; height?: number; scheme?: Scheme; scenario?: Scenario; reduced?: boolean } = {}): Promise<Opened> {
+async function open(
+  options: { width?: number; height?: number; scheme?: Scheme; scenario?: Scenario; reduced?: boolean; table?: boolean } = {},
+): Promise<Opened> {
   const context = await browser.newContext({
     viewport: { width: options.width ?? 1280, height: options.height ?? 800 },
     colorScheme: options.scheme ?? 'light',
@@ -124,7 +128,9 @@ async function open(options: { width?: number; height?: number; scheme?: Scheme;
   await page.addInitScript(tauriMockScript(options.scenario ?? scenario()));
   await page.goto(new URL('index.html', server.url).toString());
   await waitForMainReady(page);
-  await page.getByRole('table', { name: '局の評価' }).waitFor();
+  // 取り込む前の半荘には、局の評価の表が無い（記録した評価の一覧だけ）。迷いのカードが出るのを待つ
+  if (options.table === false) await page.getByRole('article', { name: '迷い1' }).waitFor();
+  else await page.getByRole('table', { name: '局の評価' }).waitFor();
   // 画面に近い画像が読み終わるまで待つ（遅延読み込みの、まだ遠い画像は待たない）
   await page.waitForFunction(() =>
     Array.from(document.images)
@@ -411,6 +417,192 @@ describe('U-28: メモの保存と取り消し（実ブラウザ）', () => {
         .toBe('發・白');
     } finally {
       await context.close();
+    }
+  });
+});
+
+// ---- 取り込む前の半荘（FX-4。結果を取り込んでいない）----
+
+const PRE_ID = '20261009-190953';
+
+/** 取り込む前に足した追加のメモ（東3局 9巡目。位置だけ）と、迷い 3（記録の番号 3）のメモ。 */
+const PRE_MEMOS: Memos = {
+  marks: { '3': { candidates: '南・6m', reason: '東を残して形を整えたい' } },
+  extras: [{ id: 'x1', position: { kyoku: 2, honba: 0, junme: 9 }, candidates: '5s・發', reason: '押すか引くか迷った' }],
+};
+
+function preScenario(memos: Memos = PRE_MEMOS): Scenario {
+  return scenario({
+    sessions: [fx4Session(PRE_ID, new Date(2026, 9, 9, 19, 9, 0).getTime(), { memos })],
+    reports: {},
+  });
+}
+
+const openPanel = async (page: Page) => {
+  await page.getByRole('button', { name: '迷いマークの無い迷いを足す' }).click();
+  const panel = page.getByRole('region', { name: '迷いマークの無い迷いを足す' });
+  await panel.waitFor();
+  return panel;
+};
+
+const PRE_STATES: Record<string, (page: Page) => Promise<void>> = {
+  default: async () => undefined,
+  // 位置を入れるパネルを開く
+  prePanel: async (page) => {
+    await openPanel(page);
+  },
+  // 局のメニューを開く（12 の局が並ぶ）
+  preMenu: async (page) => {
+    const panel = await openPanel(page);
+    await panel.getByRole('button', { name: '追加するメモの局を選ぶ' }).click();
+    await page.getByRole('menu', { name: '追加するメモの局' }).waitFor();
+  },
+  // 局・本場・巡目・候補・理由を入れた状態（「足す」が押せる）
+  preFilled: async (page) => {
+    const panel = await openPanel(page);
+    await panel.getByRole('button', { name: '追加するメモの局を選ぶ' }).click();
+    await page.getByRole('menuitemradio', { name: '南4局' }).click();
+    await panel.getByRole('spinbutton', { name: '本場' }).fill('1');
+    await panel.getByRole('spinbutton', { name: '巡目' }).fill('12');
+    await panel.getByLabel('候補', { exact: true }).fill('リーチ');
+    await panel.getByLabel('理由（1行）', { exact: true }).fill('待ちが良い');
+  },
+  // 範囲の外の巡目（理由の 1 行が出る）
+  preInvalid: async (page) => {
+    const panel = await openPanel(page);
+    await panel.getByRole('spinbutton', { name: '巡目' }).fill('31');
+    await panel.getByText('巡目は 1〜30 で入れてください。').waitFor();
+  },
+};
+
+describe('U-4・U-5・U-6・U-28: 取り込む前の半荘の、迷いマークの無い迷いを足す（実ブラウザ）', () => {
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 1280] as const) {
+      for (const [name, drive] of Object.entries(PRE_STATES)) {
+        it(`${name} 幅${width}px ${scheme}: 横スクロールが無く、重大な a11y 違反が無く、Tab で位置の入力・メモの欄に届き、外へ通信しない`, async () => {
+          const { context, page, problems, external } = await open({ width, scheme, scenario: preScenario(), table: false });
+          try {
+            await drive(page);
+            await page.waitForTimeout(100);
+
+            const m = await overflow(page);
+            expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+            expect(m.body).toBeLessThanOrEqual(m.client);
+
+            const axe = await runAxe(page);
+            expect(seriousViolations(axe)).toEqual([]);
+            expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(5);
+
+            if (name === 'default') {
+              // 取り込む前でも、足すボタンがあり、「取り込んだあとに足せます」の 1 行は無い
+              expect(await page.getByRole('button', { name: '迷いマークの無い迷いを足す' }).count()).toBe(1);
+              expect(await page.getByText('取り込んだあとに足せます').count()).toBe(0);
+              // 迷い 6 + 追加のメモ 1 の「候補」「理由（1行）」。追加のメモは位置の呼び名で出る
+              expect(await page.getByLabel('候補', { exact: true }).count()).toBe(7);
+              expect(await page.getByLabel('理由（1行）', { exact: true }).count()).toBe(7);
+              expect(await page.getByText('東3局 9巡目').count()).toBe(1);
+              // 説明の (i) は、見出しのそばに 1 つ
+              expect(await page.getByRole('button', { name: '終局直後のメモの説明' }).count()).toBe(1);
+            }
+            if (name === 'default' || name === 'prePanel' || name === 'preFilled' || name === 'preInvalid') {
+              const reach = await unreachableByTab(page);
+              expect(reach.total).toBeGreaterThan(20);
+              expect(reach.missed).toEqual([]);
+            }
+            if (name === 'preInvalid') {
+              const junme = page.getByRole('spinbutton', { name: '巡目' });
+              expect(await junme.getAttribute('aria-invalid')).toBe('true');
+              expect(await page.getByRole('button', { name: '足す', exact: true }).isDisabled()).toBe(true);
+            }
+            if (name === 'preMenu') {
+              expect(await page.getByRole('menuitemradio').count()).toBe(12);
+            }
+            expect(problems).toEqual([]);
+            expect(external).toEqual([]);
+          } finally {
+            await context.close();
+          }
+        });
+      }
+    }
+  }
+});
+
+describe('U-28: 取り込む前の半荘で、メモを足す（実ブラウザ）', () => {
+  it('Tab の順: 見出し → 局のメニュー → 本場 → 巡目 → 候補 → 理由 → 足す → やめる。局のメニューは、キーボードだけで開ける', async () => {
+    const { context, page } = await open({ scenario: preScenario(), table: false });
+    try {
+      await PRE_STATES.preFilled?.(page);
+      await page.getByRole('heading', { name: '迷いマークの無い迷いを足す' }).focus();
+      const names: string[] = [];
+      for (let i = 0; i < 7; i += 1) {
+        await page.keyboard.press('Tab');
+        names.push(
+          await page.evaluate(() => {
+            const el = document.activeElement as HTMLInputElement | null;
+            return el?.getAttribute('aria-label') ?? el?.labels?.[0]?.textContent ?? el?.textContent ?? '';
+          }),
+        );
+      }
+      expect(names).toEqual(['追加するメモの局 南4局', '本場', '巡目', '候補', '理由（1行）', '足す', 'やめる']);
+      await page.getByRole('button', { name: '追加するメモの局 南4局' }).focus();
+      await page.keyboard.press('Enter');
+      await page.getByRole('menu', { name: '追加するメモの局' }).waitFor();
+      await page.keyboard.press('Escape');
+      expect(await isFocused(page.getByRole('button', { name: '追加するメモの局 南4局' }))).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('実際のマウス・キーで局・巡目・候補を入れて「足す」と、位置（判断の鍵なし）で保存し、カードが並び、キーボードの位置は新しいカードの「候補」へ移る', async () => {
+    const { context, page } = await open({ scenario: preScenario({ marks: {}, extras: [] }), table: false });
+    try {
+      const panel = await openPanel(page);
+      await panel.getByRole('button', { name: '追加するメモの局を選ぶ' }).click();
+      await page.getByRole('menuitemradio', { name: '東3局' }).click();
+      await panel.getByRole('spinbutton', { name: '巡目' }).click();
+      await page.keyboard.type('9');
+      await panel.getByLabel('候補', { exact: true }).fill('5s・發');
+      await panel.getByRole('button', { name: '足す', exact: true }).click();
+      await expect.poll(async () => (await calls(page, 'set_extra_memo')).length, { timeout: 5000 }).toBe(1);
+      expect((await calls(page, 'set_extra_memo'))[0]).toEqual({
+        sessionId: PRE_ID,
+        id: 'x1',
+        decision: null,
+        position: { kyoku: 2, honba: 0, junme: 9 },
+        candidates: '5s・發',
+        reason: '',
+      });
+      await page.getByRole('group', { name: '追加のメモ 東3局 9巡目' }).waitFor();
+      await expect
+        .poll(() => page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.value ?? null), { timeout: 5000 })
+        .toBe('5s・發');
+      // 取り込む前の半荘では、判断を選ぶ欄は出ない
+      expect(await page.getByRole('button', { name: '追加のメモの局面を選んでください' }).count()).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('説明の (i) に乗せると、終局直後のメモの説明が、見出しの近くに重なって出る（幅 390px でも、窓の中に収まる）', async () => {
+    for (const width of [1280, 390]) {
+      const { context, page } = await open({ width, scenario: preScenario(), table: false });
+      try {
+        await page.getByRole('button', { name: '終局直後のメモの説明' }).hover();
+        const tip = page.getByRole('tooltip').filter({ hasText: 'AI の答えを見る前に' });
+        await tip.waitFor();
+        const box = await tip.boundingBox();
+        expect(box).not.toBeNull();
+        if (box !== null) {
+          expect(box.x).toBeGreaterThanOrEqual(0);
+          expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
+        }
+        const m = await overflow(page);
+        expect(m.scroll).toBeLessThanOrEqual(m.client);
+      } finally {
+        await context.close();
+      }
     }
   });
 });

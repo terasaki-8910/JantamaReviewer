@@ -117,6 +117,25 @@ describe('U-28 答え合わせのあとの「終局直後のメモ」（出題�
     expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['a', '押すか引くか']);
   });
 
+  it('位置だけの追加のメモ（判断の鍵がまだ無い）は、答え合わせのあとにも出ない。判断の鍵が付いたメモは、位置が残っていても出る（出題・解き直し）', async () => {
+    const position = { kyoku: 3, honba: 0, junme: 13 };
+    const only: Memos = { marks: {}, extras: [{ id: 'x1', position, candidates: '位置だけ', reason: '' }] };
+    const first = renderQuiz({ session: quizSession(only) });
+    await answer(first.user);
+    expect(memoBlock()).toBeNull();
+    expect(screen.queryByRole('heading', { name: '終局直後のメモ' })).toBeNull();
+    expect(document.body.textContent).not.toContain('位置だけ');
+    cleanup();
+    const review = renderQuiz({ mode: 'review', previousIntervalDays: 1, session: quizSession(only) });
+    await answer(review.user);
+    expect(memoBlock()).toBeNull();
+    cleanup();
+    const linked: Memos = { marks: {}, extras: [{ id: 'x1', decision: 'k3h0e15', position, candidates: '鍵あり', reason: '押す' }] };
+    const second = renderQuiz({ session: quizSession(linked) });
+    await answer(second.user);
+    expect([...(memoBlock() as HTMLElement).querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['鍵あり', '押す']);
+  });
+
   it('メモが 1 つだけのとき、名前は付けない。メモの無い問題には、見出しも出ない', async () => {
     const { user } = renderQuiz({ session: quizSession(MEMO) });
     await answer(user);
@@ -278,6 +297,22 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
     expect(document.querySelector('[data-memo]')).toBeNull();
+  });
+
+  it('位置だけの追加のメモ（東2局1本場 6巡目）は、半荘のページが、その位置の判断（迷い 3 の場面）に結びつけたあと、答え合わせのあとに出る。答える前は出ない', async () => {
+    const memos: Memos = { marks: {}, extras: [{ id: 'x1', position: { kyoku: 1, honba: 1, junme: 6 }, candidates: '位置から', reason: '速さ' }] };
+    const { user, sessions } = replaySetup(memos);
+    await loaded();
+    // 半荘のページを開いたとき、位置に判断が 1 つ（打南）なので、判断の鍵が付く
+    await waitFor(() => expect(sessions.session(FX4_ID).memos.extras[0]?.decision).toBe('k1h1e7'), LOAD);
+    await openScene(user, 3);
+    expect(document.body.textContent).not.toContain('位置から');
+    await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
+    await user.type(screen.getByLabelText('理由（1行）'), '形を崩さない');
+    await user.click(screen.getByRole('button', { name: '答え合わせ' }));
+    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    const block = document.querySelector('[data-memo="shown"]') as HTMLElement;
+    expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['位置から', '速さ']);
   });
 
   it('迷いではない場面（不一致だけの場面）には、メモの欄は出ない', async () => {
