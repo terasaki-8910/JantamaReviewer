@@ -20,6 +20,7 @@ import {
   type ResolvedMark,
 } from './markCards';
 import { MenuSelect } from './MenuSelect';
+import { ReplayIcon } from './replay/ReplayIcons';
 
 /**
  * 迷いマーク 1 つのカード（F9、U-13）。画像（押すと大きく表示。R7-4）・「迷いN」と時刻・結びつけの欄。
@@ -33,6 +34,8 @@ import { MenuSelect } from './MenuSelect';
  *   （推定にもほかの候補にも入らない。E-27）ときは、その下に、警告のアイコンつきの 1 行（「スクショの値（残り38）と離れています。
  *   選んだ局面は残り29です。」）と、「ほかの候補」の札（推定には「（推定）」を足す。押すと、その判断に替わる。取り消せる）
  * - 手で選ぶ（読めない・合う局が無い）: 「手で選ぶ」（局のメニュー → 判断のメニュー）
+ * 判断が決まっているカードには、下端に「この局面を解く」を置く（押すと、半荘を通して見る画面を、その局面で開く。F9・F12）。
+ * 局面が決まっていない（手で選ぶ）カードには、置かない。
  * AI の候補・確率・順位は出さない（SPEC F3。答えを書くまで隠す）。
  *
  * 選んだ瞬間に保存する（`onChoose`。取り消せる）。選んだあとは、「選び直す」にキーボードの位置を移す
@@ -54,9 +57,11 @@ interface MarkCardProps {
   onOpenImage: (opener: HTMLElement) => void;
   /** 判断を選んだ（保存して、取り消せる命令にする）。 */
   onChoose: (resolved: ResolvedMark, ref: DecisionRef) => Promise<void>;
+  /** 「この局面を解く」（結びついた判断の鍵で、半荘を通して見る画面を開く）。渡さなければ、ボタンは出さない。 */
+  onSolve?: (decisionKey: string) => void;
 }
 
-export function MarkCard({ mark, number, resolved, decisions, onOpenImage, onChoose }: MarkCardProps) {
+export function MarkCard({ mark, number, resolved, decisions, onOpenImage, onChoose, onSolve }: MarkCardProps) {
   const clock = formatClock(mark.t_ms);
   const labelId = useId();
   return (
@@ -93,6 +98,19 @@ export function MarkCard({ mark, number, resolved, decisions, onOpenImage, onCho
           <span className="mclock">{clock}</span>
         </div>
         {resolved !== null && <LinkArea number={number} resolved={resolved} decisions={decisions} onChoose={onChoose} />}
+        {resolved !== null && resolved.resolution.kind === 'linked' && onSolve !== undefined && (
+          <div className="msolve">
+            <button
+              type="button"
+              className="btn tonal solve"
+              aria-label={`この局面を解く（迷い${number}）`}
+              onClick={() => onSolve(resolved.resolution.kind === 'linked' ? resolved.resolution.ref.key : '')}
+            >
+              <ReplayIcon name="play" />
+              この局面を解く
+            </button>
+          </div>
+        )}
       </div>
     </article>
   );

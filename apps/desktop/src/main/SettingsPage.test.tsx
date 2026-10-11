@@ -270,6 +270,43 @@ describe('設定ページ: 出題の設定（D-3・U-19）', () => {
   });
 });
 
+describe('設定ページ: 通して見る画面の設定（R10-4・E-26・U-21）', () => {
+  it('「AI の1位と違う判断も、不一致として出す」は、「大きな不一致の基準」のすぐ下にあり、既定は切', async () => {
+    await renderPage();
+    const box = screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' });
+    expect(box).not.toBeChecked();
+    const threshold = screen.getByRole('spinbutton', { name: '大きな不一致の基準' }).closest('.setting');
+    expect(threshold?.nextElementSibling).toContainElement(box);
+    expect(screen.getByText(/出題の基準は変わりません/)).toBeInTheDocument();
+    expect(box).toHaveAccessibleDescription(/半荘を通して見る画面で/);
+  });
+
+  it('チェックで、その場で保存する（入れたあと、切ることもできる）。ほかの設定と、キーの割り当てはそのまま', async () => {
+    const user = userEvent.setup();
+    const mock = await renderPage();
+    await user.click(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' }));
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
+    expect(savedSettings(mock)[0]).toMatchObject({
+      show_all_mismatches: true,
+      disagreement_percent: 5,
+      highlight_dora: false,
+      replay_keys: baseSettings.replay_keys,
+    });
+    expect(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' })).toBeChecked();
+    await user.click(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' }));
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(2));
+    expect(savedSettings(mock)[1]?.show_all_mismatches).toBe(false);
+  });
+
+  it('別の窓の変更（settings-changed）も、ここに反映する', async () => {
+    const mock = await renderPage();
+    act(() => {
+      mock.emit('settings-changed', { ...baseSettings, show_all_mismatches: true } satisfies Settings);
+    });
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' })).toBeChecked());
+  });
+});
+
 describe('設定ページ: 迷いマークのボタンの登録（W-10）', () => {
   it('W-10 4 つの選択肢のラジオは無く、いまの割り当てと「ボタンを登録」が並ぶ', async () => {
     await renderPage();

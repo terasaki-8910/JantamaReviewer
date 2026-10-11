@@ -61,8 +61,8 @@ export function Hand({ items, interactive, kind, selected, revealed, marks, used
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const { key } = event;
     if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'Home' && key !== 'End') return;
-    // Alt+← → は画面の戻る・進む。ここでは使わない
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    // Alt+← → は画面の戻る・進む、Shift+← → は通して見る画面の前・次の局。ここでは使わない
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     const buttons = [...refs.current.entries()].filter(([, el]) => !el.disabled).sort((a, b) => a[0] - b[0]);
     const current = buttons.findIndex(([, el]) => el === document.activeElement);
     if (current < 0) return;

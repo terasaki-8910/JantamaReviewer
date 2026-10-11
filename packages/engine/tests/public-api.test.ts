@@ -170,6 +170,26 @@ describe('公開 API（src/index.ts）', () => {
     expect(engine.DEFAULT_DAILY_COUNT).toBe(5);
   });
 
+  it('E-26・U-21 半荘を通して見る画面（時間軸・場面・不一致）の入口が使える', () => {
+    for (const name of [
+      'buildReplayTimeline',
+      'kyokuEndOf',
+      'nextStepIn',
+      'prevStepIn',
+      'countAfter',
+      'decisionSteps',
+      'nextTurnStep',
+      'prevTurnStep',
+      'nextKyokuStep',
+      'prevKyokuStep',
+      'replayMismatches',
+      'mismatchKindOf',
+      'listReplayScenes',
+    ] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+  });
+
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
   });

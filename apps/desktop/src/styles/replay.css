@@ -1,0 +1,856 @@
+/*
+  replay.css: 半荘を通して見る画面（F12）。承認済みの 10 回目のサンプル（round10.css の「半荘を通して見る」）を、実際の画面に移したもの。
+  卓・手牌・答えの欄は、出題と同じ部品（quiz.css）。ここで足すのは、操作の段・位置の帯・「いまの一手」と場面の一覧・キーの一覧と、
+  半荘のページの「この半荘を通して見る」「この局面を解く」。
+  色は書かない。すべて tokens.css のトークンから。
+  方針（サンプルのまま）:
+  - 新しい見た目は足さず、既存の部品（.btn、.icon-btn、.pill、.pop、.tag、.sec-title、.track）を言い換えて作る
+  - accent は「選択・主な操作・フォーカス」と AI の印。ink は「実戦（実際のゲーム）」。赤は「自分の手」だけ
+  - 迷い = 丸（accent）、不一致 = ひし形（ink）。色だけで区別しない
+*/
+/* stylelint-disable no-descending-specificity -- 狭いとき（640px 未満）の上書きを、サンプルの並びのまま、各部品の規則のあとにまとめて置く */
+
+/* ================= 半荘のページ: 見出しの主な操作と、迷いのカードの「この局面を解く」 ================= */
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.head-actions .btn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.mcard .msolve {
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.mcard .msolve .btn {
+  width: 100%;
+}
+
+.mcard .msolve .btn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+/* ================= 通して見る画面 ================= */
+.rp {
+  /*
+    上の操作の段（約 170px）の分、卓を小さくして、窓の高さ 900px 前後でも、手牌まで 1 画面に入れる（出題の画面は 246px）。
+    1280×800 のときは、下の「窓が低いとき」で、さらに詰める。
+  */
+  --chrome-h: 396px;
+}
+
+.rp .work {
+  padding-top: 14px;
+}
+
+.kyoku-btn {
+  gap: 6px;
+}
+
+.kyoku-btn .stage-ic {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.tag.mis {
+  background: transparent;
+  border-color: var(--ink);
+}
+
+/* ---- 操作の段（局・1手・巡目・場面へ飛ぶ・位置の帯） ---- */
+.pbar {
+  display: grid;
+  gap: 10px;
+  max-width: 1240px;
+  margin: 14px auto 0;
+  padding: 10px 12px 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+}
+
+.pb-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.pb-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pb-steps .btn {
+  min-width: 36px;
+  padding: 0 10px;
+  gap: 6px;
+}
+
+.pb-steps .btn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.pb-steps .btn:disabled,
+.pb-jumps .btn:disabled {
+  background: transparent;
+  border-color: var(--line);
+}
+
+.pos {
+  min-width: 8.2em;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pos b {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.pb-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--s5);
+}
+
+.jump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.jump-l {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 9.2em;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.jump-l b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.jump-l .shape {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+.jump[data-kind="mismatch"] .jump-l .shape {
+  width: 10px;
+  height: 10px;
+  margin: 0 1px;
+  background: var(--ink);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.jump .jc {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  background: var(--hover);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.jump .btn:disabled .jc {
+  background: transparent;
+}
+
+.jump .jnext {
+  gap: 6px;
+}
+
+.jump .btn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---- 位置の帯 ---- */
+.tl {
+  --pin: 24px;
+
+  position: relative;
+  container: tl / inline-size;
+  padding: var(--pin) 0;
+}
+
+.tl-track {
+  position: relative;
+  display: flex;
+  height: 26px;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.tl-track:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.tl-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--p, 0) * 100%);
+  background: var(--accent-fill);
+  pointer-events: none;
+}
+
+.tl-seg {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 5px;
+  border-left: 1px solid var(--line-strong);
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.tl-seg:first-of-type {
+  border-left: 0;
+}
+
+.tl-seg .short {
+  display: none;
+}
+
+@container tl (width < 560px) {
+  .tl-seg .long {
+    display: none;
+  }
+
+  .tl-seg .short {
+    display: inline;
+  }
+
+  .tl-seg {
+    padding: 0 3px;
+    font-size: 11px;
+  }
+}
+
+.tl-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--p, 0) * 100%);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.tl-pins {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--pin);
+}
+
+.tl-pins.up {
+  top: 0;
+}
+
+.tl-pins.down {
+  bottom: 0;
+}
+
+.pin {
+  position: absolute;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: var(--pin);
+  height: var(--pin);
+  margin-left: calc(var(--pin) / -2);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--accent);
+}
+
+.pin::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: currentcolor;
+  border-radius: 50%;
+}
+
+.pin.mis {
+  color: var(--ink);
+}
+
+.pin.mis::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+/* AI の1位と違うだけの判断（設定を入れたときだけ出る不一致）は、小さなひし形 */
+.pin.mis.small::before {
+  width: 7px;
+  height: 7px;
+}
+
+/* 解答済みは、中を抜く（輪郭だけ） */
+.pin[data-done="1"]::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px currentcolor;
+}
+
+.pin[aria-current="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+.pin:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* ---- 右の欄（半荘をたどっているとき） ---- */
+.now {
+  display: grid;
+  gap: 2px;
+  padding-bottom: var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.now-k {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.now-t {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.now-s {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.now-d {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.now-res {
+  margin: var(--s2) 0 0;
+  padding: var(--s2) var(--s3);
+  background: var(--hover);
+  border-radius: var(--r2);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.now-res b {
+  font-family: var(--font-body);
+  font-weight: 700;
+}
+
+.deltas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.deltas .me {
+  color: var(--you);
+}
+
+.scenes-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+
+.scenes-h .sec-title {
+  margin: 0;
+}
+
+.scenes-n {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.scenes {
+  display: grid;
+  gap: 1px;
+  margin: var(--s2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+  卓と欄が横に並ぶとき（.work と同じ、主の欄が 840px 以上）は、場面の一覧の高さを決めて、一覧の中でスクロールする
+  （不一致を増やす設定のとき、場面が 40 を超えることがあり、ページが一覧の長さだけ伸びるため）。縦に並ぶ狭いときは、ページをスクロールする。
+*/
+@container main (width >= 840px) {
+  .scenes {
+    max-height: min(26rem, 52vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+.sc-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px var(--s2);
+  width: 100%;
+  min-height: 50px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r2);
+  color: var(--ink);
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+
+.sc-row:hover {
+  background: var(--hover);
+}
+
+.sc-row[aria-current="true"] {
+  background: var(--accent-fill);
+}
+
+.sc-row:focus-visible {
+  outline-offset: -2px;
+}
+
+.sc-where {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sc-where b {
+  font-size: 14px;
+}
+
+.sc-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.sc-st {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: bottom;
+}
+
+.sc-st .ic {
+  width: 13px;
+  height: 13px;
+}
+
+.sc-st.done {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.sc-hint {
+  margin: var(--s3) 0 0;
+}
+
+/* ---- キーの一覧と割り当て（操作の段のキーボードのアイコンを押す・マウスを乗せると、重なって出る） ---- */
+.keyhelp {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+}
+
+.key-btn {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.key-btn:hover {
+  border-color: var(--ink);
+}
+
+.key-btn[aria-expanded="true"] {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.keypanel {
+  position: fixed;
+  z-index: 80;
+  width: min(720px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  padding: var(--s3) var(--s4) var(--s3);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  box-shadow: 0 12px 32px var(--menu-shadow);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.keypanel:focus {
+  outline: none;
+}
+
+.kp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.kp-title {
+  margin: 0;
+  font-size: 14px;
+}
+
+.kp-x {
+  width: 32px;
+  height: 32px;
+  margin: -4px -8px -4px 0;
+}
+
+/* 前・次の組を 1 行に並べる（2 列。狭いときは 1 列） */
+.kp-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--s5);
+  margin: var(--s2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kp-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 42px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+.kp-row:nth-child(-n + 2) {
+  border-top: 0;
+}
+
+.kp-row[data-waiting="1"] {
+  margin-inline: calc(var(--s2) * -1);
+  padding-inline: var(--s2);
+  background: var(--accent-fill);
+  border-radius: var(--r2);
+  border-top-color: transparent;
+}
+
+.kp-name {
+  display: grid;
+  min-width: 0;
+}
+
+.kp-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  word-break: auto-phrase;
+}
+
+.kp-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 7em;
+}
+
+.kp-caps {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.key-cap {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.kp-none {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.kp-wait {
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.kp-act {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s2);
+  min-width: 6.4em;
+}
+
+.kp-msg {
+  min-height: 3.1em;
+  margin: var(--s2) 0 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.kp-foot {
+  display: grid;
+  justify-items: start;
+  gap: var(--s2);
+  padding-top: var(--s2);
+  border-top: 1px solid var(--line);
+}
+
+.kp-foot .quiet {
+  font-size: 12px;
+}
+
+/*
+  ---- 窓の高さが足りないとき（1280×800 など）: 操作の段・卓・手牌が 1 画面に入るようにする ----
+  卓が大きい配置のままでは入らない高さのとき（河の段の数で決まる。replayModel.ts の `compactBelowHeight`）、画面が
+  `.rp` に data-compact を付ける。そのとき、卓の列を 560px までにして、狭い窓のときと同じ配置にする（局・本場・残り・ドラ表示牌を
+  卓の上の 1 行にして、卓の中央は点数だけ。quiz.css の `@container board (width <= 579px)`）。牌の大きさは、窓の高さから決まる
+  （`--chrome-h` は、そのとき卓の外にあるもの: 見出し・操作の段・情報の 1 行・凡例・手牌の高さ）。見出しと操作の段の余白も、少し詰める。
+*/
+.rp[data-compact="1"] {
+  --chrome-h: 404px;
+}
+
+.rp[data-compact="1"] .head {
+  padding-bottom: 8px;
+}
+
+.rp[data-compact="1"] .pbar {
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.rp[data-compact="1"] .work {
+  padding-top: 10px;
+}
+
+.rp[data-compact="1"] .board-col {
+  justify-self: center;
+  width: 100%;
+  max-width: 560px;
+}
+
+/* ---- 狭いとき: 主の欄が 600px 未満（窓が 780px 前後までのとき。サイドバーが細い列になっても、幅の広いサイドバーのままでも） ---- */
+@container main (width < 600px) {
+  .pb-steps .btn .lbl {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .pb-steps {
+    width: 100%;
+  }
+
+  .pb-steps .btn {
+    flex: 1 1 36px;
+    min-width: 36px;
+    min-height: 38px;
+    padding: 0;
+  }
+
+  .pb-steps .pos {
+    flex: 1 1 100%;
+    order: -1;
+    padding: 0;
+    text-align: left;
+  }
+
+  .kyoku-btn {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* 局の選択と、キーの一覧のアイコンを 1 行目に、進める・戻るを 2 行目に */
+  .pb-row.top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  .pb-row.top .pb-steps {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .jump {
+    width: 100%;
+  }
+
+  .jump-l {
+    flex: 1 1 100%;
+  }
+
+  .jump .jnext {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .jump .jprev {
+    flex: 0 0 auto;
+  }
+
+  .pbar {
+    padding: 10px 10px 2px;
+  }
+
+  .head-actions {
+    width: 100%;
+  }
+
+  .keyhelp {
+    grid-column: 2;
+    grid-row: 1;
+    margin-left: 0;
+  }
+
+  .key-btn {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+/*
+  キーの一覧は、窓（画面）の幅で決める（窓に重ねて出すので、主の欄の幅は関係しない）。
+  狭いときは、1 列にして、画面の下から出す（アイコンの近くには、縦に並んだ 14 行が入る場所が無い）。
+  JS がアイコンのそばに置くために入れた left・top は、ここで上書きする。
+*/
+@media (width < 640px) {
+  .keypanel {
+    inset: auto 8px 8px !important;
+    width: auto;
+    max-height: min(82vh, 720px);
+  }
+
+  .kp-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kp-row:nth-child(2) {
+    border-top: 1px solid var(--line);
+  }
+}
+
+/*
+  主の欄が 840px 未満（卓と欄が縦に並ぶとき。アプリの初めの窓 1120px も）は、局の頭・局の終わりを、アイコンだけにする
+  （名前は title と読み上げに残る）。局の名前が長い（東2局1本場）ときも、キーの一覧のアイコンが 1 行目に入る。
+*/
+@container main (width < 840px) {
+  #b-kstart .lbl,
+  #b-kend .lbl {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}

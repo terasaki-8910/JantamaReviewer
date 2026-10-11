@@ -557,6 +557,48 @@ mod tests {
     }
 
     #[test]
+    fn u21_replay_settings_are_validated_saved_and_kept_after_a_restart() {
+        let mut f = fixture();
+        let mut next = f.core.settings().clone();
+        next.show_all_mismatches = true;
+        next.replay_keys
+            .insert("step_back".into(), Some("KeyJ".into()));
+        next.replay_keys
+            .insert("step_forward".into(), Some("KeyL".into()));
+        let change = f.core.apply_settings(next).unwrap();
+        // 半荘を通して見る画面の設定は、窓・フックに反映するものではない
+        assert_eq!(change, SettingsChange::default());
+        let reloaded = Core::load(f.config_dir(), FakeCapturer::ok(&[1]), CountingSound::new());
+        assert!(reloaded.settings().show_all_mismatches);
+        assert_eq!(
+            reloaded.settings().replay_keys["step_back"].as_deref(),
+            Some("KeyJ")
+        );
+        assert_eq!(
+            reloaded.settings().replay_keys["step_forward"].as_deref(),
+            Some("KeyL")
+        );
+        // 同じキーを 2 つの操作に割り当てると、何も変えずにエラー（入れ替えない）
+        let mut twice = f.core.settings().clone();
+        twice
+            .replay_keys
+            .insert("prev_turn".into(), Some("KeyJ".into()));
+        twice.sound = false;
+        let error = f.core.apply_settings(twice).unwrap_err();
+        assert!(error.contains("2 つの操作"), "{error}");
+        assert_eq!(f.core.settings().replay_keys["prev_turn"], None);
+        assert!(f.core.settings().sound);
+        // 足りない操作は、既定のキーで補う
+        let mut partial = f.core.settings().clone();
+        partial.replay_keys.remove("next_decision");
+        f.core.apply_settings(partial).unwrap();
+        assert_eq!(
+            f.core.settings().replay_keys["next_decision"].as_deref(),
+            Some("ArrowRight")
+        );
+    }
+
+    #[test]
     fn keywords_are_normalized_when_applied() {
         let mut f = fixture();
         let mut next = f.core.settings().clone();

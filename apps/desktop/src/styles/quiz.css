@@ -861,6 +861,20 @@
   }
 }
 
+/*
+  自分・実戦・AI が同じ牌のとき、3 行の印（自分・実戦・AI）が 1 つの牌の下に重なる。手牌が折り返す狭い配置（列が 480px 以下）では、
+  その 3 行が次の段・答えの欄に重ならないように、空ける。
+*/
+@container board (width <= 480px) {
+  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"]:has(.mk:nth-child(3)) {
+    padding-bottom: 28px;
+  }
+
+  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"]:has(.mk:nth-child(3)) .hand {
+    row-gap: 56px;
+  }
+}
+
 /* ---------- 答えの欄 ---------- */
 .answer {
   background: var(--surface);
