@@ -14,6 +14,7 @@ import {
   farChipLabels,
   farLine,
   isEstimated,
+  kyokuChoices,
   kyokuOptions,
   markHeading,
   readingLine,
@@ -27,13 +28,17 @@ import { ReplayIcon } from './replay/ReplayIcons';
  *
  * どの状態も、同じ構成で書く（取り込み前、または結果を読めていないときは、画像と時刻だけ）:
  * 1 行目「迷いN」と時刻 / 2 行目 局面（「東2局1本場 6巡目 · 打牌の迷い」） / 静かな 1 行 スクショから読んだ値
- * （「スクショ: 東2局・残り47・15,100点」か「スクショを読めませんでした」） / 状態ごとの欄:
+ * （「スクショ: 東2局・残り47・15,100点」か「スクショを読めませんでした」。崩れた部分は「読めず」） /
+ * 局をどう決めたかの 1 文（読み取りが崩れていた・前後の評価と迷いの時刻から決めたものだけ） / 状態ごとの欄:
  * - 推定（自動で、1 位の判断に結びつけた）: 「推定」の印・「自分：打南」（自分が実際にした行動だけ）・小さな「選び直す」。
  *   近い判断があれば、その下に「ほかの候補」の札（押すと、その判断に替わる。取り消せる）
  * - 利用者が選んだ: 「推定」の印は無い。「自分：打南」と「選び直す」。選んだ判断が、スクショから読んだ値から離れている
  *   （推定にもほかの候補にも入らない。E-27）ときは、その下に、警告のアイコンつきの 1 行（「スクショの値（残り38）と離れています。
  *   選んだ局面は残り29です。」）と、「ほかの候補」の札（推定には「（推定）」を足す。押すと、その判断に替わる。取り消せる）
- * - 手で選ぶ（読めない・合う局が無い）: 「手で選ぶ」（局のメニュー → 判断のメニュー）
+ * - 局だけ分かった（残り枚数が読めない・読めないが前後の評価と迷いから局が分かる。E-30、U-24）: 2 行目は「東4局 · 巡目は決まっていません」。
+ *   局をどう決めたかの 1 文の下に、「手で選ぶ」（局のメニュー → 判断のメニュー）。選び肢は、局の幅の中の判断だけ
+ *   （局が 1 つなら、局は選んである）
+ * - 手で選ぶ（読めない・合う局が無い）: 「手で選ぶ」（局のメニュー → 判断のメニュー。半荘のすべての判断から）
  * 判断が決まっているカードには、下端に「この局面を解く」を置く（押すと、半荘を通して見る画面を、その局面で開く。F9・F12）。
  * 局面が決まっていない（手で選ぶ）カードには、置かない。
  * AI の候補・確率・順位は出さない（SPEC F3。答えを書くまで隠す）。
@@ -150,6 +155,10 @@ function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
   const estimated = isEstimated(resolved);
   const alternatives = alternativesOf(resolved);
   const view = viewOf(mode, hasCandidates, resolution);
+  // 局だけ分かった迷いは、局の幅の中の判断だけから選ぶ。局が 1 つに決まっていれば、局は選んである
+  const kyokuOnly = resolution.kind === 'kyoku';
+  const pickable = kyokuOnly ? kyokuChoices(resolved) : decisions;
+  const onlyKyoku = kyokuOnly ? (kyokuOptions(pickable).length === 1 ? (kyokuOptions(pickable)[0]?.position ?? null) : null) : null;
 
   // 決まって「選び直す」が出たら、選ぶのに使ったボタンの代わりに、キーボードの位置をそこへ移す
   // （候補の札を押して、推定から選んだ状態に替わったときは、見せ方は `view` のままなので、決まった判断が変わったときにも移す）。
@@ -197,6 +206,7 @@ function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
     <>
       <p className="mwhat">{markHeading(resolved)}</p>
       <p className="mread">{readingLine(resolved)}</p>
+      {resolved.howText !== null && <p className="mhow">{resolved.howText}</p>}
       {view === 'view' && linked !== null && (
         <>
           <p className="msub">
@@ -278,8 +288,8 @@ function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
       {view === 'pick' && (
         <PickArea
           number={number}
-          decisions={decisions}
-          kyoku={pickedKyoku ?? linked?.ref.kyokuPosition ?? null}
+          decisions={pickable}
+          kyoku={pickedKyoku ?? linked?.ref.kyokuPosition ?? onlyKyoku}
           current={linked?.ref ?? null}
           onKyoku={setPickedKyoku}
           onDecision={(ref) => void choose(ref)}

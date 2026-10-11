@@ -3,8 +3,8 @@
  *
  * 1 行 = 取り込んだ結果の 1 局。次を並べる:
  * - 結果と点の増減（`summary.kyokus` の局のまとめ）
- * - 自分の〇△✕: ウィジェットで付けた評価を、局に当てはめたもの（`linkRatings`。保存した結びつけ `links.ratings` が先）に、
- *   表で付け直した上書き（`self_ratings`）を重ねたもの。上書きの `none` は「評価なし」
+ * - 自分の〇△✕: ウィジェットで付けた評価を、局に当てはめたもの（保存した結びつけ `links.ratings` が先。無いものは、迷いと評価を
+ *   押した時刻の順に並べて当てはめる `linkRatings`。E-29）に、表で付け直した上書き（`self_ratings`）を重ねたもの。上書きの `none` は「評価なし」
  * - AI 基準: 局の Rating から当てはめた段階（まとめにある）
  * - MAKA: 利用者が入れた段階（任意。入れていなければ空）
  * - 印: 自分の〇△✕と AI 基準が大きく食い違う局（`disagreesWithGrade`。規則はエンジンの 1 つの関数）
@@ -22,7 +22,7 @@ import {
 } from '@jantama/engine';
 
 import type { Rating, SelfRatingValue, SessionRecord } from '../api/types';
-import { kyokuKey, ratingReadings } from './importFlow';
+import { kyokuKey, markReadings, ratingReadings } from './importFlow';
 
 /** 局の結果の言い方（承認済みの見本の言葉）。 */
 export const RESULT_TEXT: Readonly<Record<HandOutcomeKind, string>> = {
@@ -85,16 +85,16 @@ export interface HandTableData {
 /**
  * ウィジェットで付けた評価を、局ごとに当てはめる（局の添字 → 評価）。
  * 1 つの評価について、保存した結びつけ（局の鍵。空は「どの局にも結びつけない」）があればそれ、無ければ自動の当てはめ
- * （`linkRatings`）。同じ局に 2 つ当たったときは、あとに押したほうを使う。
+ * （`linkRatings`。迷いと、利用者が選んだ迷いの結びつけも、手がかりにする）。同じ局に 2 つ当たったときは、あとに押したほうを使う。
  */
 function widgetRatingsByKyoku(
   report: MortalReport,
-  session: Pick<SessionRecord, 'ratings' | 'ocr' | 'links'>,
+  session: Pick<SessionRecord, 'marks' | 'ratings' | 'ocr' | 'links'>,
 ): { byPosition: Array<Rating | null>; unplaced: number } {
   const readings = ratingReadings(session, session.ocr);
   const automatic = new Map<number, number | null>();
   if (readings.length > 0) {
-    for (const placement of linkRatings(report, readings).placements) {
+    for (const placement of linkRatings(report, readings, markReadings(session, session.ocr)).placements) {
       automatic.set(placement.rating.id, placement.position);
     }
   }
@@ -115,7 +115,7 @@ function widgetRatingsByKyoku(
 export function buildHandTable(args: {
   report: MortalReport;
   summary: HanchanSummary;
-  session: Pick<SessionRecord, 'ratings' | 'ocr' | 'links' | 'self_ratings' | 'maka'>;
+  session: Pick<SessionRecord, 'marks' | 'ratings' | 'ocr' | 'links' | 'self_ratings' | 'maka'>;
 }): HandTableData {
   const { report, summary, session } = args;
   const widget = widgetRatingsByKyoku(report, session);

@@ -2,7 +2,8 @@
 /**
  * 検討結果の取り込みの進め方（`importFlow.ts`）の試験。Rust 側のコマンドは偽物（`ImportDeps`）に差し替える。
  * 固定データは FX-4（10 月 9 日の半荘。結果 5b821c8a048ff791。迷いマーク 6 枚の文字認識の写し）。
- * エンジンの結びつけ（E-17・E-18・E-19）が、ここで取り込みの流れにつながることを確かめる。
+ * エンジンの結びつけ（E-17・E-19・E-29）が、ここで取り込みの流れにつながることを確かめる。
+ * FX-5（10 月 11 日の半荘）の取り込みで、時間の並びでの当てはめ（E-28〜E-30）と、評価の当てはめ方の版（E-31）も確かめる。
  */
 import {
   importReportText,
@@ -11,7 +12,7 @@ import {
 } from '@jantama/engine';
 import { describe, expect, it, vi } from 'vitest';
 
-import { FX4_OCR, FX4_TEXT, OCR_GEOMETRY, fx4Ocr, fx4Session } from '../../tests/import-fixtures';
+import { FX4_OCR, FX4_TEXT, FX5_ID, FX5_TEXT, OCR_GEOMETRY, fx4Ocr, fx4Session, fx5Ocr, fx5Session } from '../../tests/import-fixtures';
 import type { Links, SessionRecord } from '../api/types';
 import {
   CANDIDATE_WINDOW_MS,
@@ -112,7 +113,13 @@ describe('結びつけ先の候補', () => {
     const ratings = ratingReadings(session, cache);
     expect(ratings.map((r) => r.id)).toEqual([7, 8, 9, 10, 11]);
     expect(ratings.every((r) => r.lines === undefined)).toBe(true);
-    expect(ratings.map((r) => r.rating)).toEqual(['good', 'fair', 'good', 'bad', 'fair']);
+    expect(ratings.map((r) => r.rating)).toEqual(['fair', 'bad', 'fair', 'bad', 'bad']);
+  });
+
+  it('保存した結びつけ（links）があれば、迷いに、利用者が選んだ結びつけ（chosen）を付ける。無ければ付けない', () => {
+    const session = fx4Session('s', NOW - HOUR, { links: { marks: { '2': 'k1h0e12', '5': 'manual' }, ratings: {} } });
+    expect(markReadings(session, null).map((m) => m.chosen)).toEqual([undefined, 'k1h0e12', undefined, undefined, 'manual', undefined]);
+    expect(markReadings({ marks: session.marks }, null).every((m) => m.chosen === undefined)).toBe(true);
   });
 
   it('読み直し（retries）のある画像は、1 回目の行に加えて、読み直しの行も持つ（E-20）。無い画像は、持たない', () => {
@@ -264,10 +271,12 @@ describe('completeImport: 保存・結びつけ・まとめ', () => {
 
     expect(deps.calls['saveReport']).toEqual([['20261009-190953', FX4_TEXT]]);
     // 迷いマークの結びつけは、保存しない（推定は、読み取りの写しと結果から出せる。保存するのは、利用者が選んだものだけ）。
-    // 評価は押した順で局へ。
+    // 評価は、迷いと評価を押した時刻の順に、局へ（E-29）。19:22:41 の評価は、押し直しなので当てはめない（空の文字列）。
+    // 当てはめ方の版（ratings_version）も書く（E-31）。
     const expected: Links = {
       marks: {},
-      ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': 'k2h0', '11': 'k2h1' },
+      ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': '', '11': 'k2h1' },
+      ratings_version: 2,
     };
     expect(deps.calls['replaceLinks']).toEqual([['20261009-190953', expected]]);
 
@@ -284,11 +293,12 @@ describe('completeImport: 保存・結びつけ・まとめ', () => {
       decisionCount: 70,
       disagreementCount: listDisagreements(imported.value.decisions).total,
       markCount: 6,
-      // 読めた迷い 1〜5 は、1 位を推定として結びつける。読めない迷い 6 だけが、手で選ぶ。
+      // 読めた迷い 1〜5 は、1 位を推定として結びつける。読めない迷い 6 は、局だけ分かる（東3局1本場）が、巡目が決まらないので、
+      // 判断を選ぶまでは、手で選んでほしい数に入れる。
       estimatedMarks: 5,
       manualMarks: 1,
       ratingCount: 5,
-      placedRatings: 5,
+      placedRatings: 4,
       warnings: [],
     });
     expect(summary.disagreementCount).toBeGreaterThan(0);
@@ -469,7 +479,7 @@ describe('U-14 その半荘に取り込む（結びつけ先が決まってい�
     expect(result.context.targetCheck?.mismatches).toHaveLength(1);
     const summary = await completeImport(deps, result.context, ID);
     expect(deps.calls['saveReport']).toEqual([[ID, FX4_TEXT]]);
-    expect(summary).toMatchObject({ sessionId: ID, linkedToRecording: true, markCount: 6, placedRatings: 5 });
+    expect(summary).toMatchObject({ sessionId: ID, linkedToRecording: true, markCount: 6, placedRatings: 4 });
     // 合わなかった迷い 2 は、1 枚の読み取りが「この半荘に合う局が無い」ので、手で選ぶ。読めた 4 枚は推定
     expect(summary).toMatchObject({ estimatedMarks: 4, manualMarks: 2 });
   });
@@ -493,6 +503,7 @@ describe('buildLinks', () => {
           rating: { id: 7, t_ms: 1, rating: 'good' as const },
           order: 0,
           center: null,
+          reading: null,
           position: 4,
           how: 'order',
           unplaced: null,
@@ -501,12 +512,74 @@ describe('buildLinks', () => {
           rating: { id: 8, t_ms: 2, rating: 'bad' as const },
           order: 1,
           center: null,
+          reading: null,
           position: null,
           how: null,
           unplaced: 'no-room',
         },
       ],
     });
-    expect(links).toEqual({ marks: {}, ratings: { '7': 'k2h1', '8': '' } });
+    // 評価の当てはめ方の版（ratings_version）も書く（E-31）
+    expect(links).toEqual({ marks: {}, ratings: { '7': 'k2h1', '8': '' }, ratings_version: 2 });
+  });
+
+  it('評価が無い（当てはめていない）ときは、結びつけは空で、版も書かない', () => {
+    const imported = importReportText(FX4_TEXT);
+    if (!imported.ok) throw new Error(imported.error.message);
+    expect(buildLinks(imported.value.report, null)).toEqual({ marks: {}, ratings: {} });
+  });
+});
+
+describe('E-29〜E-31 FX-5（10月11日の半荘）の取り込み: 迷いと評価を押した時刻の順に当てはめて、評価の結びつけを版つきで保存する', () => {
+  const ID = FX5_ID;
+
+  async function importFx5() {
+    const deps = fakeDeps([fx5Session(ID, NOW - 3 * HOUR)], {
+      ocrSessions: async (ids) => ids.map((id) => ({ session_id: id, ocr: fx5Ocr() })),
+    });
+    const result = await prepareImport(deps, FX5_TEXT);
+    if (!result.ok) throw new Error(result.failure.message);
+    const summary = await completeImport(deps, result.context, ID);
+    return { deps, summary };
+  }
+
+  it('評価 9 つが FX-5 の評価の局に入る（東3局は空欄）。評価の id → 局の鍵と、版 2 を保存する。迷いの結びつけは保存しない', async () => {
+    const { deps } = await importFx5();
+    expect(deps.calls['replaceLinks']).toEqual([
+      [
+        ID,
+        {
+          marks: {},
+          ratings: {
+            // 東1局・東2局・東3局1本場・東4局・東4局1本場・南1局2本場・南2局・南3局・南4局（k2h0 = 東3局は無い）
+            '1': 'k0h0',
+            '5': 'k1h0',
+            '7': 'k2h1',
+            '11': 'k3h0',
+            '12': 'k3h1',
+            '15': 'k4h2',
+            '18': 'k5h0',
+            '20': 'k6h0',
+            '22': 'k7h0',
+          },
+          ratings_version: 2,
+        },
+      ],
+    ]);
+  });
+
+  it('まとめ: 迷い 13 のうち、推定は 11。局だけ分かった 2 つ（15:38:10・15:42:37）は、判断を選ぶまで、手で選んでほしい数に入れる', async () => {
+    const { summary } = await importFx5();
+    expect(summary).toMatchObject({
+      sessionId: ID,
+      linkedToRecording: true,
+      decisionCount: 125,
+      markCount: 13,
+      estimatedMarks: 11,
+      manualMarks: 2,
+      ratingCount: 9,
+      placedRatings: 9,
+      warnings: [],
+    });
   });
 });
