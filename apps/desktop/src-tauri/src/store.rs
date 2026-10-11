@@ -59,6 +59,13 @@ pub const MAX_MEMO_CANDIDATES_CHARS: usize = 40;
 pub const MAX_MEMO_REASON_CHARS: usize = 80;
 /// 迷いマークの無い迷いのメモの、1 つの半荘での数の上限。
 pub const MAX_EXTRA_MEMOS: usize = 200;
+/// 迷いマークの無い迷いの位置の、局の通し番号の上限（東1局が 0。西4局が 15）。
+pub const MAX_MEMO_KYOKU: u32 = 15;
+/// 迷いマークの無い迷いの位置の、本場の上限。
+pub const MAX_MEMO_HONBA: u32 = 99;
+/// 迷いマークの無い迷いの位置の、巡目の下限と上限（1 から）。
+pub const MIN_MEMO_JUNME: u32 = 1;
+pub const MAX_MEMO_JUNME: u32 = 30;
 /// MAKA の評価の段階（14 段階。強い順）。エンジンの `GRADES` と同じ並びの名前。
 pub const MAKA_GRADES: [&str; 14] = [
     "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "E",
@@ -389,12 +396,28 @@ impl MemoText {
     }
 }
 
-/// 迷いマークの無い迷いのメモ。局・巡目は、判断の鍵（`decision`。エンジンの `DecisionRef.key`）で持つ。
-/// `id` は、メモを呼ぶ名前（英数字だけ。画面が付ける）。
+/// 迷いマークの無い迷いの位置（局・本場・巡目）。結果を取り込む前の半荘では、判断の一覧が無いので、手で選んだ位置で持つ。
+/// `kyoku` は局の通し番号（エンジンの `DecisionRef.kyoku` と同じ。東1局が 0、南4局が 7、西1局が 8）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoPosition {
+    pub kyoku: u32,
+    pub honba: u32,
+    pub junme: u32,
+}
+
+/// 迷いマークの無い迷いのメモ。局面は、次のどちらか、または両方で持つ（`check_extra_memo_place`）:
+/// - `position`: 手で選んだ局・本場・巡目（結果を取り込む前に足したもの）
+/// - `decision`: 判断の鍵（エンジンの `DecisionRef.key`。取り込んだあとに、判断を選んだ・位置から自動で結びつけたもの。
+///   結びつけたあとも、`position` は残す）
+///
+/// 判断の鍵だけを持つ古いファイルも、そのまま読める。`id` は、メモを呼ぶ名前（英数字だけ。画面が付ける）。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ExtraMemo {
     pub id: String,
-    pub decision: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<MemoPosition>,
     #[serde(default)]
     pub candidates: String,
     #[serde(default)]
@@ -1333,18 +1356,20 @@ impl Store {
         })
     }
 
-    /// 迷いマークの無い迷いのメモを書く。`id` が同じメモがあれば置き換え、無ければ足す。`decision` は判断の鍵（局・巡目を手で選んだもの）。
+    /// 迷いマークの無い迷いのメモを書く。`id` が同じメモがあれば置き換え、無ければ足す。
+    /// 局面は、`decision`（判断の鍵）か `position`（手で選んだ局・本場・巡目）の、どちらか、または両方（どちらも無いのは受け付けない）。
     /// 「候補」「理由」は、空でもよい（足したあとに書く）。前後の空白は除く。
     pub fn set_extra_memo(
         &self,
         session_id: &str,
         id: &str,
-        decision: &str,
+        decision: Option<&str>,
+        position: Option<MemoPosition>,
         candidates: &str,
         reason: &str,
     ) -> Result<(), StoreError> {
         check_extra_memo_id(id)?;
-        check_memo_decision(decision)?;
+        check_extra_memo_place(decision, position)?;
         let text = checked_memo_text(candidates, reason)?;
         let dir = self.session_path(session_id)?;
         let existing = read_json_file::<Memos>(&dir.join(MEMOS_FILE)).unwrap_or_default();
@@ -1357,7 +1382,8 @@ impl Store {
         }
         let extra = ExtraMemo {
             id: id.to_string(),
-            decision: decision.to_string(),
+            decision: decision.map(str::to_string),
+            position,
             candidates: text.candidates,
             reason: text.reason,
         };
@@ -1534,6 +1560,50 @@ fn check_memo_decision(key: &str) -> Result<(), StoreError> {
             "判断の鍵の形ではありません: {key:?}（例: k1h1e7）"
         )))
     }
+}
+
+/// 迷いマークの無い迷いの位置（局・本場・巡目）が、決めた範囲に入っているか。
+fn check_memo_position(position: MemoPosition) -> Result<(), StoreError> {
+    let MemoPosition {
+        kyoku,
+        honba,
+        junme,
+    } = position;
+    if kyoku > MAX_MEMO_KYOKU {
+        return Err(StoreError::InvalidMemo(format!(
+            "局は、東1局から西4局までです（局の通し番号 0〜{MAX_MEMO_KYOKU}。{kyoku} は範囲の外）"
+        )));
+    }
+    if honba > MAX_MEMO_HONBA {
+        return Err(StoreError::InvalidMemo(format!(
+            "本場は 0〜{MAX_MEMO_HONBA} にしてください（{honba} は範囲の外）"
+        )));
+    }
+    if !(MIN_MEMO_JUNME..=MAX_MEMO_JUNME).contains(&junme) {
+        return Err(StoreError::InvalidMemo(format!(
+            "巡目は {MIN_MEMO_JUNME}〜{MAX_MEMO_JUNME} にしてください（{junme} は範囲の外）"
+        )));
+    }
+    Ok(())
+}
+
+/// 迷いマークの無い迷いの局面が正しいか: 判断の鍵と位置のどちらか（または両方）があり、あるものが正しい形・範囲であること。
+fn check_extra_memo_place(
+    decision: Option<&str>,
+    position: Option<MemoPosition>,
+) -> Result<(), StoreError> {
+    if decision.is_none() && position.is_none() {
+        return Err(StoreError::InvalidMemo(
+            "局面（判断の鍵か、局・本場・巡目）が要ります".to_string(),
+        ));
+    }
+    if let Some(key) = decision {
+        check_memo_decision(key)?;
+    }
+    if let Some(position) = position {
+        check_memo_position(position)?;
+    }
+    Ok(())
 }
 
 /// MAKA の評価の段階が、14 段階のどれかか。
@@ -3571,7 +3641,7 @@ mod tests {
         let id = session_with_records(&mut store);
         store.set_memo(&id, 2, "南・6m", "東を残したい").unwrap();
         store
-            .set_extra_memo(&id, "x1", "k4h2e5", "5s・發", "押すか引くか")
+            .set_extra_memo(&id, "x1", Some("k4h2e5"), None, "5s・發", "押すか引くか")
             .unwrap();
         let path = session_dir_of(&store, &id).join(MEMOS_FILE);
         let value: serde_json::Value =
@@ -3610,7 +3680,7 @@ mod tests {
             );
             assert!(
                 matches!(
-                    store.set_extra_memo(&id, "x1", "k0h0e0", candidates, reason),
+                    store.set_extra_memo(&id, "x1", Some("k0h0e0"), None, candidates, reason),
                     Err(StoreError::InvalidMemo(_))
                 ),
                 "{candidates:?} {reason:?}"
@@ -3660,22 +3730,24 @@ mod tests {
         let (_tmp, mut store) = open_store();
         let id = session_with_records(&mut store);
         store
-            .set_extra_memo(&id, "x1", "k4h2e5", "5s・發", "押すか引くか")
+            .set_extra_memo(&id, "x1", Some("k4h2e5"), None, "5s・發", "押すか引くか")
             .unwrap();
         // 足したあとに書く（候補も理由も空でよい）
-        store.set_extra_memo(&id, "x2", "k1h0e3", "", "").unwrap();
+        store
+            .set_extra_memo(&id, "x2", Some("k1h0e3"), None, "", "")
+            .unwrap();
         let memos = store.load_memos(&id).unwrap();
         assert_eq!(
             memos
                 .extras
                 .iter()
-                .map(|e| (e.id.as_str(), e.decision.as_str()))
+                .map(|e| (e.id.as_str(), e.decision.as_deref().unwrap_or("")))
                 .collect::<Vec<_>>(),
             [("x1", "k4h2e5"), ("x2", "k1h0e3")]
         );
         // 同じ名前は置き換え（場所は変わらない）。前後の空白は除く
         store
-            .set_extra_memo(&id, "x1", "k4h2e6", " 1m ", " 速い ")
+            .set_extra_memo(&id, "x1", Some("k4h2e6"), None, " 1m ", " 速い ")
             .unwrap();
         let memos = store.load_memos(&id).unwrap();
         assert_eq!(memos.extras.len(), 2);
@@ -3683,7 +3755,8 @@ mod tests {
             memos.extras[0],
             ExtraMemo {
                 id: "x1".into(),
-                decision: "k4h2e6".into(),
+                decision: Some("k4h2e6".into()),
+                position: None,
                 candidates: "1m".into(),
                 reason: "速い".into()
             }
@@ -3716,7 +3789,7 @@ mod tests {
         for bad_id in ["", "x 1", "x-1", "あ", "../x", too_long.as_str()] {
             assert!(
                 matches!(
-                    store.set_extra_memo(&id, bad_id, "k0h0e0", "", ""),
+                    store.set_extra_memo(&id, bad_id, Some("k0h0e0"), None, "", ""),
                     Err(StoreError::InvalidMemo(_))
                 ),
                 "{bad_id:?}"
@@ -3736,7 +3809,7 @@ mod tests {
         ] {
             assert!(
                 matches!(
-                    store.set_extra_memo(&id, "x1", bad_key, "", ""),
+                    store.set_extra_memo(&id, "x1", Some(bad_key), None, "", ""),
                     Err(StoreError::InvalidMemo(_))
                 ),
                 "{bad_key:?}"
@@ -3751,16 +3824,197 @@ mod tests {
         let id = session_with_records(&mut store);
         for n in 0..MAX_EXTRA_MEMOS {
             store
-                .set_extra_memo(&id, &format!("x{n}"), "k0h0e0", "", "")
+                .set_extra_memo(&id, &format!("x{n}"), Some("k0h0e0"), None, "", "")
                 .unwrap();
         }
         assert!(matches!(
-            store.set_extra_memo(&id, "over", "k0h0e0", "", ""),
+            store.set_extra_memo(&id, "over", Some("k0h0e0"), None, "", ""),
             Err(StoreError::InvalidMemo(_))
         ));
         // 上限でも、いまあるメモの書き換えはできる
-        store.set_extra_memo(&id, "x0", "k0h0e1", "3m", "").unwrap();
+        store
+            .set_extra_memo(&id, "x0", Some("k0h0e1"), None, "3m", "")
+            .unwrap();
         assert_eq!(store.load_memos(&id).unwrap().extras.len(), MAX_EXTRA_MEMOS);
+    }
+
+    fn position(kyoku: u32, honba: u32, junme: u32) -> MemoPosition {
+        MemoPosition {
+            kyoku,
+            honba,
+            junme,
+        }
+    }
+
+    #[test]
+    fn u28_an_extra_memo_can_have_only_a_position_before_the_result_is_imported() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        // 取り込む前の半荘: 判断の鍵は無く、手で選んだ局・本場・巡目だけ（東3局 0本場 9巡目）
+        store
+            .set_extra_memo(
+                &id,
+                "x1",
+                None,
+                Some(position(2, 0, 9)),
+                " 5s・發 ",
+                "押すか引くか",
+            )
+            .unwrap();
+        let memos = store.load_memos(&id).unwrap();
+        assert_eq!(
+            memos.extras,
+            [ExtraMemo {
+                id: "x1".into(),
+                decision: None,
+                position: Some(position(2, 0, 9)),
+                candidates: "5s・發".into(),
+                reason: "押すか引くか".into()
+            }]
+        );
+        assert_eq!(only_session(&store).memos, memos);
+        // ファイルの形: 判断の鍵の項目は出さない
+        let value: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(session_dir_of(&store, &id).join(MEMOS_FILE)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "marks": {},
+                "extras": [{
+                    "id": "x1",
+                    "position": {"kyoku": 2, "honba": 0, "junme": 9},
+                    "candidates": "5s・發",
+                    "reason": "押すか引くか"
+                }]
+            })
+        );
+    }
+
+    #[test]
+    fn u28_linking_a_position_memo_to_a_decision_keeps_the_position() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        store
+            .set_extra_memo(&id, "x1", None, Some(position(1, 1, 6)), "南", "")
+            .unwrap();
+        // 取り込んだあと、判断を結びつける（同じ名前で書き直す。位置は残す）
+        store
+            .set_extra_memo(&id, "x1", Some("k1h1e7"), Some(position(1, 1, 6)), "南", "")
+            .unwrap();
+        let extra = store.load_memos(&id).unwrap().extras.remove(0);
+        assert_eq!(extra.decision.as_deref(), Some("k1h1e7"));
+        assert_eq!(extra.position, Some(position(1, 1, 6)));
+        let value: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(session_dir_of(&store, &id).join(MEMOS_FILE)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            value["extras"],
+            serde_json::json!([{
+                "id": "x1",
+                "decision": "k1h1e7",
+                "position": {"kyoku": 1, "honba": 1, "junme": 6},
+                "candidates": "南",
+                "reason": ""
+            }])
+        );
+        // 結びつけを取り消す（判断の鍵を外して、位置だけに戻す）こともできる
+        store
+            .set_extra_memo(&id, "x1", None, Some(position(1, 1, 6)), "南", "")
+            .unwrap();
+        let extra = store.load_memos(&id).unwrap().extras.remove(0);
+        assert_eq!(extra.decision, None);
+        assert_eq!(extra.position, Some(position(1, 1, 6)));
+    }
+
+    #[test]
+    fn u28_an_extra_memo_needs_a_place_and_the_position_must_be_in_range() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        // 判断の鍵も位置も無いものは受け付けない
+        assert!(matches!(
+            store.set_extra_memo(&id, "x1", None, None, "3m", ""),
+            Err(StoreError::InvalidMemo(_))
+        ));
+        // 局は 0〜15、本場は 0〜99、巡目は 1〜30。範囲の外は、判断の鍵があっても受け付けない
+        for bad in [
+            position(16, 0, 6),
+            position(u32::MAX, 0, 6),
+            position(0, 100, 6),
+            position(0, 0, 0),
+            position(0, 0, 31),
+        ] {
+            assert!(
+                matches!(
+                    store.set_extra_memo(&id, "x1", None, Some(bad), "", ""),
+                    Err(StoreError::InvalidMemo(_))
+                ),
+                "{bad:?}"
+            );
+            assert!(
+                matches!(
+                    store.set_extra_memo(&id, "x1", Some("k0h0e0"), Some(bad), "", ""),
+                    Err(StoreError::InvalidMemo(_))
+                ),
+                "{bad:?}"
+            );
+        }
+        // 判断の鍵の形が悪いものは、位置が正しくても受け付けない
+        assert!(matches!(
+            store.set_extra_memo(&id, "x1", Some("manual"), Some(position(0, 0, 6)), "", ""),
+            Err(StoreError::InvalidMemo(_))
+        ));
+        assert!(
+            !session_dir_of(&store, &id).join(MEMOS_FILE).exists(),
+            "何も書いていない"
+        );
+        // 範囲の端は受け付ける
+        for edge in [position(0, 0, 1), position(15, 99, 30)] {
+            store
+                .set_extra_memo(&id, "x1", None, Some(edge), "", "")
+                .unwrap();
+            assert_eq!(
+                store.load_memos(&id).unwrap().extras[0].position,
+                Some(edge)
+            );
+        }
+    }
+
+    #[test]
+    fn u28_a_memos_file_from_before_positions_still_loads_and_is_kept_when_another_memo_is_written()
+    {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let path = session_dir_of(&store, &id).join(MEMOS_FILE);
+        // 位置の項目が無い（判断の鍵だけの）古い形。知らない項目があっても読める
+        fs::write(
+            &path,
+            r#"{"marks":{"1":{"candidates":"3m","reason":""}},"extras":[{"id":"x1","decision":"k4h2e5","candidates":"5s・發","reason":"押すか引くか","note":"将来の項目"}]}"#,
+        )
+        .unwrap();
+        let memos = store.load_memos(&id).unwrap();
+        assert_eq!(
+            memos.extras,
+            [ExtraMemo {
+                id: "x1".into(),
+                decision: Some("k4h2e5".into()),
+                position: None,
+                candidates: "5s・發".into(),
+                reason: "押すか引くか".into()
+            }]
+        );
+        assert_eq!(only_session(&store).memos, memos);
+        // 別のメモを足しても、古い形のメモは、そのまま残る
+        store
+            .set_extra_memo(&id, "x2", None, Some(position(2, 0, 9)), "", "")
+            .unwrap();
+        let memos = store.load_memos(&id).unwrap();
+        assert_eq!(memos.extras.len(), 2);
+        assert_eq!(memos.extras[0].decision.as_deref(), Some("k4h2e5"));
+        assert_eq!(memos.extras[0].position, None);
+        assert!(memos.marks.contains_key("1"));
     }
 
     #[test]
@@ -3785,7 +4039,9 @@ mod tests {
             );
             assert!(store.clear_memo(bad, 1).is_err(), "{bad:?}");
             assert!(
-                store.set_extra_memo(bad, "x1", "k0h0e0", "", "").is_err(),
+                store
+                    .set_extra_memo(bad, "x1", Some("k0h0e0"), None, "", "")
+                    .is_err(),
                 "{bad:?}"
             );
             assert!(store.clear_extra_memo(bad, "x1").is_err(), "{bad:?}");
@@ -3841,7 +4097,9 @@ mod tests {
         store.set_mark_link(&id, 1, "k0h0e1").unwrap();
         store.set_maka_hanchan(&id, "A+").unwrap();
         store.set_memo(&id, 1, "3m", "速さ").unwrap();
-        store.set_extra_memo(&id, "x1", "k0h0e1", "", "").unwrap();
+        store
+            .set_extra_memo(&id, "x1", Some("k0h0e1"), None, "", "")
+            .unwrap();
         assert_eq!(event_lines(&store), before);
         assert_eq!(store.view(), view_before);
         // 記録の続きは、これまでどおり同じ半荘に入る
@@ -3869,7 +4127,7 @@ mod tests {
         let (older, _newer) = two_sessions(&mut store);
         store.set_memo(&older, 1, "3m・6p", "形").unwrap();
         store
-            .set_extra_memo(&older, "x1", "k2h0e4", "發", "押す")
+            .set_extra_memo(&older, "x1", Some("k2h0e4"), None, "發", "押す")
             .unwrap();
         let before = store.load_memos(&older).unwrap();
         store.delete_sessions(std::slice::from_ref(&older)).unwrap();
