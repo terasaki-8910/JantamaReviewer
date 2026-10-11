@@ -15,6 +15,7 @@ import {
   formatChord,
   keyName,
   normalizeReplayKeys,
+  spokenChord,
 } from './keys';
 
 const event = (code: string, init: { ctrl?: boolean; alt?: boolean; shift?: boolean; meta?: boolean } = {}) => ({
@@ -97,6 +98,20 @@ describe('U-21 押したキーを割り当ての書き方にする', () => {
     expect(formatChord('Shift+ArrowUp')).toBe('Shift+↑');
     expect(formatChord('Period')).toBe('.');
     expect(formatChord(null)).toBe('なし');
+  });
+
+  it('U-21 読み上げ用の書き方: 矢印や記号は言葉にする（アクセシブルな名前に使う）。割り当て無しは「なし」', () => {
+    expect(spokenChord('ArrowUp')).toBe('上矢印');
+    expect(spokenChord('Shift+ArrowLeft')).toBe('Shift+左矢印');
+    expect(spokenChord('Comma')).toBe('カンマ');
+    expect(spokenChord('Period')).toBe('ピリオド');
+    expect(spokenChord('Ctrl+Alt+Shift+KeyJ')).toBe('Ctrl+Alt+Shift+J');
+    expect(spokenChord('Digit3')).toBe('3');
+    expect(spokenChord(null)).toBe('なし');
+    // 設定のどの既定のキーも、読み上げ用の名前に記号が残らない
+    for (const chord of Object.values(defaultReplayKeys())) {
+      if (chord !== null) expect(spokenChord(chord)).not.toMatch(/[←→↑↓,.]/);
+    }
   });
 });
 

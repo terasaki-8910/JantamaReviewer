@@ -259,6 +259,38 @@ export function chordParts(chord: string): string[] {
   return out;
 }
 
+/** 読み上げ用のキーの名前（記号は、読み上げで抜けることがあるので、言葉にする）。 */
+const SPOKEN_NAMES: Readonly<Record<string, string>> = {
+  ArrowUp: '上矢印',
+  ArrowDown: '下矢印',
+  ArrowLeft: '左矢印',
+  ArrowRight: '右矢印',
+  Comma: 'カンマ',
+  Period: 'ピリオド',
+  Slash: 'スラッシュ',
+  Semicolon: 'セミコロン',
+  Quote: 'シングルクォート',
+  BracketLeft: '左角かっこ',
+  BracketRight: '右角かっこ',
+  Backslash: 'バックスラッシュ',
+  Minus: 'マイナス',
+  Equal: 'イコール',
+  Backquote: 'バッククォート',
+};
+
+/** 読み上げ用の書き方。例: Shift+ArrowUp → Shift+上矢印、Comma → カンマ。割り当て無しは「なし」。 */
+export function spokenChord(chord: string | null): string {
+  if (chord === null) return 'なし';
+  const parts = splitChord(chord);
+  if (parts === null) return chord;
+  const out: string[] = [];
+  if (parts.ctrl) out.push('Ctrl');
+  if (parts.alt) out.push('Alt');
+  if (parts.shift) out.push('Shift');
+  out.push(SPOKEN_NAMES[parts.code] ?? keyName(parts.code));
+  return out.join('+');
+}
+
 /** 1 つの文字にした書き方。例: Shift+↑。割り当て無しは「なし」。 */
 export function formatChord(chord: string | null): string {
   return chord === null ? 'なし' : chordParts(chord).join('+');

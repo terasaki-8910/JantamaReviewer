@@ -20,6 +20,7 @@ import {
   chordParts,
   clearKey,
   defaultReplayKeys,
+  spokenChord,
   type ReplayAction,
 } from './keys';
 import { ReplayIcon } from './ReplayIcons';
@@ -38,7 +39,7 @@ const LEAVE_MS = 220;
 function KeyCaps({ chord }: { chord: string | null }) {
   if (chord === null) return <span className="kp-none">なし</span>;
   return (
-    <span className="kp-caps" aria-label={chordParts(chord).join('+')}>
+    <span className="kp-caps" role="img" aria-label={spokenChord(chord)}>
       {chordParts(chord).map((part, index) => (
         <kbd className="key-cap" key={`${index}${part}`} aria-hidden="true">
           {part}

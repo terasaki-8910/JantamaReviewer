@@ -802,8 +802,18 @@
   }
 }
 
-/* キーの一覧は、窓（画面）の幅で決める（窓に重ねて出すので、主の欄の幅は関係しない） */
+/*
+  キーの一覧は、窓（画面）の幅で決める（窓に重ねて出すので、主の欄の幅は関係しない）。
+  狭いときは、1 列にして、画面の下から出す（アイコンの近くには、縦に並んだ 14 行が入る場所が無い）。
+  JS がアイコンのそばに置くために入れた left・top は、ここで上書きする。
+*/
 @media (width < 640px) {
+  .keypanel {
+    inset: auto 8px 8px !important;
+    width: auto;
+    max-height: min(82vh, 720px);
+  }
+
   .kp-list {
     grid-template-columns: minmax(0, 1fr);
   }

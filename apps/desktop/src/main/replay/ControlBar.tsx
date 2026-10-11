@@ -165,7 +165,7 @@ export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, 
         {kyoku !== undefined && (
           <MenuSelect
             className="btn sm kyoku-btn"
-            label={`局を選ぶ（いまは${kyoku.label}）`}
+            label={`局を選ぶ：${kyoku.label}`}
             menuLabel="局を選ぶ"
             items={kyokuItems}
           >
