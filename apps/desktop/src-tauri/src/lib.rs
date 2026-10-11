@@ -28,6 +28,7 @@ pub mod menu;
 pub mod navigation;
 pub mod ready;
 pub mod recorder;
+pub mod replay_keys;
 pub mod settings;
 pub mod sound;
 pub mod store;

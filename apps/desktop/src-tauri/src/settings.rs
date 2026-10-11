@@ -1,7 +1,8 @@
 //! 設定。JSON で保存し、欠けた項目は既定値で補う（W-5）。
 //!
 //! 保存する項目: 迷いマークのボタン（マウスのボタン、または修飾キー付きのキー）、ウィジェットの形と位置、音、
-//! 雀魂の窓を探す語、データの保存先、出題の設定（1 日に出す数・大きな不一致の基準・ドラを目立たせる）。
+//! 雀魂の窓を探す語、データの保存先、出題の設定（1 日に出す数・大きな不一致の基準・ドラを目立たせる）、
+//! 半荘を通して見る画面の設定（AI の1位と違う判断も不一致として出す・キーの割り当て）。
 
 use std::ffi::OsString;
 use std::fs;
@@ -12,6 +13,8 @@ use jantama_input::keys::{code_from_vk, vk_from_code, Modifiers};
 use jantama_input::logic::{ActiveTrigger, MouseButton};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::replay_keys::{self, ReplayKeys, ReplayKeysError};
 
 /// 雀魂の窓を探す語の既定値（W-7）。
 pub const DEFAULT_CAPTURE_KEYWORDS: [&str; 2] = ["雀魂", "Mahjong Soul"];
@@ -154,6 +157,10 @@ pub struct Settings {
     pub disagreement_percent: u32,
     /// 出題・半荘を通して見る画面で、ドラ表示牌が指す牌の面を黄色にする（既定は切。U-19）。
     pub highlight_dora: bool,
+    /// 半荘を通して見る画面で、AI の1位と違う判断もすべて不一致として出す（既定は切。R10-4、E-26）。出題の基準は変えない。
+    pub show_all_mismatches: bool,
+    /// 半荘を通して見る画面のキーの割り当て（操作の名前 → キー。割り当て無しは null。R10-3、U-21）。
+    pub replay_keys: ReplayKeys,
 }
 
 impl Default for Settings {
@@ -171,6 +178,8 @@ impl Default for Settings {
             daily_count: DEFAULT_DAILY_COUNT,
             disagreement_percent: DEFAULT_DISAGREEMENT_PERCENT,
             highlight_dora: false,
+            show_all_mismatches: false,
+            replay_keys: replay_keys::default_keys(),
         }
     }
 }
@@ -184,6 +193,8 @@ pub enum SettingsError {
     DailyCountOutOfRange(u32),
     /// 大きな不一致の基準が範囲の外。
     DisagreementPercentOutOfRange(u32),
+    /// 半荘を通して見る画面のキーの割り当てが使えない。
+    ReplayKeys(ReplayKeysError),
 }
 
 impl std::fmt::Display for SettingsError {
@@ -200,6 +211,7 @@ impl std::fmt::Display for SettingsError {
                 f,
                 "大きな不一致の基準は {MIN_DISAGREEMENT_PERCENT}% から {MAX_DISAGREEMENT_PERCENT}% の間で指定してください: {value}"
             ),
+            SettingsError::ReplayKeys(error) => write!(f, "{error}"),
         }
     }
 }
@@ -249,6 +261,10 @@ impl Settings {
                 .filter(|n| (MIN_DISAGREEMENT_PERCENT..=MAX_DISAGREEMENT_PERCENT).contains(n))
                 .unwrap_or(defaults.disagreement_percent),
             highlight_dora: field(value, "highlight_dora").unwrap_or(defaults.highlight_dora),
+            show_all_mismatches: field(value, "show_all_mismatches")
+                .unwrap_or(defaults.show_all_mismatches),
+            // 無い・読めない・使えないキーは、既定のキーにする（replay_keys.rs）。
+            replay_keys: replay_keys::from_value(value.get("replay_keys")),
         }
     }
 
@@ -263,6 +279,8 @@ impl Settings {
             }
         }
         self.capture_keywords = kept;
+        // キーの割り当ては、足りない操作に既定を入れ、書き方をそろえる（使えないものは、`validate` が断る）。
+        self.replay_keys = replay_keys::normalized(std::mem::take(&mut self.replay_keys));
         self
     }
 
@@ -283,6 +301,7 @@ impl Settings {
                 self.disagreement_percent,
             ));
         }
+        replay_keys::validate(&self.replay_keys).map_err(SettingsError::ReplayKeys)?;
         Ok(())
     }
 
@@ -433,6 +452,97 @@ mod tests {
         assert!(SettingsError::DailyCountOutOfRange(0)
             .to_string()
             .contains("1 から 50"));
+    }
+
+    #[test]
+    fn u21_the_replay_settings_default_to_big_mismatches_only_and_the_keys_of_round_10() {
+        let s = Settings::default();
+        assert!(!s.show_all_mismatches);
+        assert_eq!(s.replay_keys, replay_keys::default_keys());
+        assert_eq!(s.replay_keys["step_back"].as_deref(), Some("Comma"));
+        assert_eq!(
+            s.replay_keys["next_kyoku"].as_deref(),
+            Some("Shift+ArrowRight")
+        );
+        assert_eq!(s.replay_keys["next_turn"], None);
+        // 昔の設定ファイル（この 2 つの項目が無い）は、既定値
+        let old = Settings::from_json_str(r#"{ "sound": false, "highlight_dora": true }"#).unwrap();
+        assert!(!old.show_all_mismatches);
+        assert_eq!(old.replay_keys, replay_keys::default_keys());
+        assert!(old.highlight_dora);
+        assert_eq!(s.validate(), Ok(()));
+    }
+
+    #[test]
+    fn u21_the_replay_settings_are_saved_and_read_back_so_they_survive_a_restart() {
+        let dir = temp_dir();
+        let path = settings_path(dir.path());
+        let mut keys = replay_keys::default_keys();
+        keys.insert("step_back".into(), Some("KeyJ".into()));
+        keys.insert("step_forward".into(), Some("KeyL".into()));
+        keys.insert("prev_turn".into(), Some("Shift+Comma".into()));
+        keys.insert("next_kyoku".into(), None);
+        let saved = Settings {
+            show_all_mismatches: true,
+            replay_keys: keys,
+            ..Settings::default()
+        };
+        assert_eq!(saved.validate(), Ok(()));
+        saved.save(&path).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert_eq!(loaded, saved);
+        assert!(loaded.show_all_mismatches);
+        assert_eq!(loaded.replay_keys["step_back"].as_deref(), Some("KeyJ"));
+        assert_eq!(
+            loaded.replay_keys["prev_turn"].as_deref(),
+            Some("Shift+Comma")
+        );
+        assert_eq!(loaded.replay_keys["next_kyoku"], None);
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"show_all_mismatches\": true"), "{text}");
+        assert!(text.contains("\"step_back\": \"KeyJ\""), "{text}");
+        assert!(text.contains("\"next_kyoku\": null"), "{text}");
+    }
+
+    #[test]
+    fn u21_replay_keys_that_cannot_be_used_are_refused_when_saving_and_a_broken_file_falls_back() {
+        // 保存: 同じキーを 2 つの操作に（入れ替えない）・割り当てられないキーは、理由つきで断る
+        let mut twice = Settings::default();
+        twice
+            .replay_keys
+            .insert("prev_turn".into(), Some("Comma".into()));
+        let error = twice.validate().unwrap_err();
+        assert!(matches!(
+            error,
+            SettingsError::ReplayKeys(ReplayKeysError::DuplicateKey { .. })
+        ));
+        assert!(error.to_string().contains("2 つの操作"), "{error}");
+        for reserved in ["Alt+ArrowLeft", "Ctrl+KeyK", "Escape", "Ctrl+KeyZ"] {
+            let mut s = Settings::default();
+            s.replay_keys
+                .insert("step_back".into(), Some(reserved.into()));
+            let error = s.validate().unwrap_err();
+            assert!(
+                matches!(
+                    error,
+                    SettingsError::ReplayKeys(ReplayKeysError::ReservedKey { .. })
+                ),
+                "{reserved}"
+            );
+        }
+        // 読み込み: 手で書き換えたファイルは、その項目だけ（重なり・割り当てられないキーはキーの全部）既定に戻り、ほかの設定は守る
+        let s = Settings::from_json_str(
+            r#"{ "sound": false, "show_all_mismatches": true,
+                 "replay_keys": { "step_back": "KeyJ", "step_forward": "KeyJ" } }"#,
+        )
+        .unwrap();
+        assert_eq!(s.replay_keys, replay_keys::default_keys());
+        assert!(s.show_all_mismatches);
+        assert!(!s.sound);
+        let s = Settings::from_json_str(r#"{ "show_all_mismatches": "yes", "replay_keys": 3 }"#)
+            .unwrap();
+        assert!(!s.show_all_mismatches);
+        assert_eq!(s.replay_keys, replay_keys::default_keys());
     }
 
     #[test]
