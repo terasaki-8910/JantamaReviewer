@@ -5,15 +5,17 @@
  * 実ブラウザでの見え方（横スクロール・axe・描かれた色）は、tests/browser/hanchan.browser.test.ts が確かめる。
  */
 import { actionLabel, listDecisionRefs, parseReportText, type MortalReport } from '@jantama/engine';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeSessionStore, REPORT_TEXTS, local } from '../../tests/fake-sessions';
-import { FX4_TEXT, fx4Ocr, fx4Session } from '../../tests/import-fixtures';
+import { FX4_TEXT, OCR_GEOMETRY, fx4Ocr, fx4Session } from '../../tests/import-fixtures';
 import { installTauriMock } from '../../tests/tauri-mock';
-import type { Links, Rating, SessionRecord } from '../api/types';
+import { api } from '../api/tauri';
+import type { Links, OcrCache, Rating, SessionRecord } from '../api/types';
+import { RereadStore } from './rereadStore';
 import { SessionPage } from './SessionPage';
 import { summarizeReportText, type SummaryState } from './sessionSummaries';
 import { UndoProvider } from './undo/UndoProvider';
@@ -77,6 +79,16 @@ function recorded(): SessionRecord {
 
 const summaryOf = (key: keyof typeof REPORT_TEXTS = 'fx4'): SummaryState => summarizeReportText(REPORT_TEXTS[key]);
 
+/** 読み直し（F11、E-27）の偽物の指定。渡すと、画面に読み直しの部品（`RereadStore`）を渡す。 */
+interface RereadOptions {
+  /** 読み直したあとの写し。既定は、迷い 6 の読み直しの行も入った FX-4 の写し。 */
+  fresh?: OcrCache;
+  /** これが済むまで、読み直しは終わらない。 */
+  hold?: Promise<unknown>;
+  /** 読み直しを、この理由で失敗させる。 */
+  failWith?: string;
+}
+
 interface SetupOptions {
   session?: SessionRecord;
   /** 取り込んだ結果。既定は FX-4。null なら、結果を読み出せない。 */
@@ -84,28 +96,52 @@ interface SetupOptions {
   /** 画面に渡すまとめ。既定は、結果から作ったもの。 */
   summary?: SummaryState | undefined;
   handlers?: Record<string, (args: unknown) => unknown>;
+  reread?: RereadOptions;
 }
 
 function setup(options: SetupOptions = {}) {
   const session = options.session ?? imported();
   const store = new FakeSessionStore([{ session, ...(options.report === null ? {} : { report: options.report ?? 'fx4' }) }]);
-  const mock = installTauriMock({ handlers: { ...store.handlers, ...options.handlers } });
+  const rereadHandlers =
+    options.reread === undefined
+      ? {}
+      : store.rereadHandlers({
+          currentGeometry: OCR_GEOMETRY,
+          fresh: options.reread.fresh ?? fx4Ocr({ retries: true }),
+          ...(options.reread.hold === undefined ? {} : { hold: options.reread.hold }),
+          ...(options.reread.failWith === undefined ? {} : { failWith: options.reread.failWith }),
+        });
+  const mock = installTauriMock({ handlers: { ...store.handlers, ...rereadHandlers, ...options.handlers } });
   const user = userEvent.setup();
   const onOpenImage = vi.fn();
   const summary = 'summary' in options ? options.summary : session.report_path === null ? undefined : summaryOf();
+  // 読み直しの部品は、検討画面のシェルと同じく、画面（半荘のページ）より長く生きる（開き直しても、この起動で 1 回だけ）。
+  const reloader = { current: async () => undefined as void };
+  const rereads =
+    options.reread === undefined
+      ? undefined
+      : new RereadStore({ needed: api.needsOcrReread, reread: api.rereadOcr, changed: () => reloader.current() });
 
   function Harness() {
     const [current, setCurrent] = useState(() => store.session(session.id));
     const reload = useCallback(async () => setCurrent(store.session(session.id)), []);
+    useEffect(() => {
+      reloader.current = reload;
+    }, [reload]);
     const stable = useMemo(() => summary, []);
     return (
       <UndoProvider>
-        <SessionPage session={current} summary={stable} onChanged={reload} onOpenImage={onOpenImage} />
+        <SessionPage session={current} summary={stable} onChanged={reload} onOpenImage={onOpenImage} rereads={rereads} />
       </UndoProvider>
     );
   }
-  render(<Harness />);
-  return { store, mock, user, onOpenImage };
+  let view = render(<Harness />);
+  /** 半荘のページを閉じて、開き直す（読み直しの部品は、そのまま）。 */
+  const reopen = () => {
+    view.unmount();
+    view = render(<Harness />);
+  };
+  return { store, mock, user, onOpenImage, reopen };
 }
 
 /** 結果を読み終えて、局の評価の表が出るまで待つ。 */
@@ -905,5 +941,294 @@ describe('U-1・F3 この画面に AI の答えは出さない（答えを書く
       await user.keyboard('{Escape}');
     }
     expect(checkedPicks).toBeGreaterThan(0);
+  });
+});
+
+/** 前の作り方（v1）で読んだ写し: 1 回目の読み取りだけ（迷い 6 は読めない）。決まりの名前が、いまの作り方と違う。 */
+const OLD_OCR: OcrCache = { ...fx4Ocr(), geometry: 'center-v1-lanczos3x' };
+/** 迷い 6 に、ユーザーが選んだ判断: 東3局1本場 11巡目 打3m（残り29）。読み直しで 東3局・残り38 と読めると、離れている。 */
+const MARK6_FAR = 'k2h1e14';
+const FAR_LINKS: Links = { ...IMPORTED_LINKS, marks: { '6': MARK6_FAR } };
+const FAR_LINE = 'スクショの値（残り38）と離れています。選んだ局面は残り29です。';
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+describe('F9・E-27・U-13 離れている（読み直したあとの FX-4 の迷い 6）', () => {
+  const farSetup = (links: Links = FAR_LINKS, ocr: OcrCache = fx4Ocr({ retries: true })) =>
+    setup({ session: imported({ ocr, links }) });
+  const lineOf = (n: number) => card(n).querySelector('.mfar');
+  const chipsOf = (n: number) => Array.from(card(n).querySelectorAll('.chip')).map((b) => b.textContent);
+
+  it('迷い 6: 「自分：打3m」の下に、警告のアイコンと「スクショの値（残り38）と離れています。選んだ局面は残り29です。」。ほかの候補は、推定（打北）が先で「（推定）」つき', async () => {
+    farSetup();
+    await tableReady();
+    const six = card(6);
+    expect(six.querySelector('.mwhat')?.textContent).toBe('東3局1本場 11巡目 · 打牌の迷い');
+    expect(six.querySelector('.mread')?.textContent).toBe('スクショ: 東3局・残り38・4,400点');
+    expect(six.querySelector('.mact > span:not(.tag)')?.textContent).toBe('自分：打3m');
+    expect(six.querySelector('.tag.est')).toBeNull(); // 利用者が選んだもの: 「推定」の印は付けない
+    const line = lineOf(6);
+    expect(line?.textContent).toBe(FAR_LINE);
+    // 警告のアイコンは、線の絵（色は文字と同じ）。読み上げない。
+    const icon = line?.querySelector('svg.ic');
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveAttribute('aria-hidden', 'true');
+    // 並び: 1 行目 → 局面 → 読んだ値 → 自分 → 離れている → ほかの候補
+    expect(six.querySelector('.mtop + .mwhat + .mread + .msub + .mfar + .malt')).not.toBeNull();
+    expect(six.querySelector('.malt-lbl')?.textContent).toBe('ほかの候補');
+    const group = within(six).getByRole('group', { name: '迷い6のほかの候補' });
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['9巡目 打北（推定）', '8巡目 鳴かない判断']);
+    for (const chip of group.querySelectorAll('.chip')) expect(chip).toHaveAttribute('aria-pressed', 'false');
+    expect(within(six).getByRole('button', { name: '迷い6を選び直す' })).toBeInTheDocument();
+  });
+
+  it('離れていない迷い（1〜5）は、これまでどおり: 1 行は無く、推定の迷いのほかの候補の札に「（推定）」は付かない', async () => {
+    farSetup();
+    await tableReady();
+    for (const n of [1, 2, 3, 4, 5]) {
+      expect(lineOf(n), `迷い${n}`).toBeNull();
+      expect(card(n).querySelector('.tag.est')?.textContent, `迷い${n}`).toBe('推定');
+    }
+    expect([1, 2, 3, 4, 5].map(chipsOf)).toEqual([
+      [],
+      ['12巡目 打9m', '11巡目 鳴かない判断'],
+      [],
+      ['9巡目 打7p'],
+      ['7巡目 打1p'],
+    ]);
+  });
+
+  it('ユーザーが選んだ判断（E-17）にした迷い 1〜5 は、選んでいても離れていない（1 行は無い）', async () => {
+    const marks = { '1': 'k0h0e4', '2': 'k1h0e12', '3': 'k1h1e7', '4': 'k1h1e10', '5': 'k2h1e6' };
+    farSetup({ ...IMPORTED_LINKS, marks });
+    await tableReady();
+    for (const n of [1, 2, 3, 4, 5, 6]) expect(lineOf(n), `迷い${n}`).toBeNull();
+  });
+
+  it('読み取りと違う局の判断を選んだ迷いは、局の名前を書く: 「スクショの値（東3局・残り46）と離れています。選んだ局面は東2局1本場です。」', async () => {
+    farSetup({ ...IMPORTED_LINKS, marks: { '5': 'k1h1e7' } });
+    await tableReady();
+    expect(lineOf(5)?.textContent).toBe('スクショの値（東3局・残り46）と離れています。選んだ局面は東2局1本場です。');
+    expect(card(5).querySelector('.mact > span:not(.tag)')?.textContent).toBe('自分：打南');
+    expect(chipsOf(5)).toEqual(['6巡目 打9m（推定）', '7巡目 打1p']);
+    expect(lineOf(6)).toBeNull(); // 迷い 6 は、選んでいない（推定のまま）
+  });
+
+  it('読み直しの前（迷い 6 が読めない写し）は、選んだ判断があっても、離れているとは出さない', async () => {
+    farSetup(FAR_LINKS, fx4Ocr());
+    await tableReady();
+    expect(lineOf(6)).toBeNull();
+    expect(card(6).querySelector('.mread')?.textContent).toBe('スクショを読めませんでした');
+    expect(card(6).querySelector('.mact > span:not(.tag)')?.textContent).toBe('自分：打3m');
+    expect(chipsOf(6)).toEqual([]);
+  });
+
+  it('推定の札を押すと、その判断に替わって保存する（links.json）。1 行も札も消え、「自分：打北」。Ctrl+Z で選んでいた判断に戻り、1 行も札も戻る（U-11）。Ctrl+Y でもう一度', async () => {
+    const { user, mock, store } = farSetup();
+    await tableReady();
+    await user.click(within(card(6)).getByRole('button', { name: '9巡目 打北（推定）' }));
+    await waitFor(() => expect(within(card(6)).getByText('自分：打北')).toBeInTheDocument());
+    expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 6, decision: 'k2h1e10' }]);
+    expect(store.session(ID).links.marks['6']).toBe('k2h1e10');
+    expect(lineOf(6)).toBeNull();
+    expect(card(6).querySelector('.chip, .malt')).toBeNull();
+    expect(within(card(6)).queryByText('推定')).toBeNull(); // 利用者が選んだもの: 印は付けない
+    expect(within(card(6)).getByRole('button', { name: '迷い6を選び直す' })).toHaveFocus();
+
+    await undoKey(user);
+    await waitFor(() => expect(within(card(6)).getByText('自分：打3m')).toBeInTheDocument());
+    expect(calls(mock, 'set_mark_link').at(-1)).toEqual({ sessionId: ID, markId: 6, decision: MARK6_FAR });
+    expect(store.session(ID).links.marks['6']).toBe(MARK6_FAR);
+    expect(lineOf(6)?.textContent).toBe(FAR_LINE);
+    expect(chipsOf(6)).toEqual(['9巡目 打北（推定）', '8巡目 鳴かない判断']);
+
+    await redoKey(user);
+    await waitFor(() => expect(within(card(6)).getByText('自分：打北')).toBeInTheDocument());
+    expect(store.session(ID).links.marks['6']).toBe('k2h1e10');
+  });
+
+  it('ほかの候補の札（8巡目 鳴かない判断）を押しても、その判断に替わる', async () => {
+    const { user, mock } = farSetup();
+    await tableReady();
+    await user.click(within(card(6)).getByRole('button', { name: '8巡目 鳴かない判断' }));
+    await waitFor(() => expect(within(card(6)).getByText('自分：鳴かない判断')).toBeInTheDocument());
+    expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 6, decision: 'k2h1e9' }]);
+    expect(lineOf(6)).toBeNull();
+    expect(card(6).querySelector('.mwhat')?.textContent).toBe('東3局1本場 8巡目 · 鳴きの迷い');
+  });
+
+  it('「選び直す」: 札（先頭に「（推定）」）が出る。どれも押されていない。「やめる」で、1 行と札が出ていた形に戻り、何も保存しない', async () => {
+    const { user, mock } = farSetup();
+    await tableReady();
+    await user.click(within(card(6)).getByRole('button', { name: '迷い6を選び直す' }));
+    expect(lineOf(6)).toBeNull();
+    expect(chipsOf(6)).toEqual(['9巡目 打北（推定）', '8巡目 鳴かない判断']);
+    expect(within(card(6)).queryAllByRole('button', { pressed: true })).toHaveLength(0);
+    expect(within(card(6)).getByText('選んでください')).toBeInTheDocument();
+    await user.click(within(card(6)).getByRole('button', { name: '迷い6の選び直しをやめる' }));
+    expect(lineOf(6)?.textContent).toBe(FAR_LINE);
+    expect(chipsOf(6)).toEqual(['9巡目 打北（推定）', '8巡目 鳴かない判断']);
+    expect(calls(mock, 'set_mark_link')).toEqual([]);
+  });
+
+  it('この画面に AI の答えは出ない: 1 行にも札にも、確率・順位・AI の第 1 位は無い（U-1）', async () => {
+    farSetup();
+    await tableReady();
+    const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '');
+    expect(html).not.toMatch(/data-ai/i);
+    expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
+    expect(lineOf(6)?.textContent).not.toMatch(/AI|確率|順位/);
+  });
+});
+
+describe('F11・E-27・U-23 前の作り方で読んだ半荘の読み直し', () => {
+  const REREAD_STATUS = 'スクショを新しい読み取りで読み直しています';
+  const statusLine = () => screen.queryByRole('status');
+  const staleSession = () => imported({ ocr: OLD_OCR, links: FAR_LINKS });
+  const LINK_COMMANDS = ['set_mark_link', 'clear_mark_link', 'replace_links', 'set_rating_link', 'clear_rating_link'];
+
+  it('開くと 1 回だけ読み直す: 読み直している間は、前の読み取りの値で描いて、静かな 1 行を出す。済んだら、新しい読み取りの値で描き直して、1 行を消す', async () => {
+    const hold = deferred();
+    const { store, mock } = setup({ session: staleSession(), reread: { hold: hold.promise } });
+    const linksBefore = structuredClone(store.session(ID).links);
+    await tableReady();
+
+    // 読み直している間
+    expect(await screen.findByRole('status')).toHaveTextContent(REREAD_STATUS);
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(calls(mock, 'needs_ocr_reread')).toEqual([{ sessionId: ID }]);
+    expect(calls(mock, 'reread_ocr')).toEqual([{ sessionId: ID }]);
+    // 前の読み取り（1 回目だけ）の値: 迷い 6 は読めず、離れているとも出ない。選んだ判断は、そのまま。
+    expect(card(6).querySelector('.mread')?.textContent).toBe('スクショを読めませんでした');
+    expect(card(6).querySelector('.mfar')).toBeNull();
+    expect(card(6).querySelector('.mact > span:not(.tag)')?.textContent).toBe('自分：打3m');
+    expect(card(1).querySelector('.mread')?.textContent).toBe('スクショ: 東1局・残り59・25,000点');
+
+    hold.resolve();
+    await waitFor(() => expect(statusLine()).toBeNull());
+    // 新しい読み取りの値で描き直した: 迷い 6 が 東3局・残り38・4400点 と読めて、選んだ判断が離れていると分かる。
+    expect(card(6).querySelector('.mread')?.textContent).toBe('スクショ: 東3局・残り38・4,400点');
+    expect(card(6).querySelector('.mfar')?.textContent).toBe(FAR_LINE);
+    expect(Array.from(card(6).querySelectorAll('.chip')).map((b) => b.textContent)).toEqual(['9巡目 打北（推定）', '8巡目 鳴かない判断']);
+    expect(store.session(ID).ocr?.geometry).toBe(OCR_GEOMETRY);
+
+    // 読み直しは 1 回だけ。結びつけ（links.json）は、保存し直さず、変わっていない。
+    expect(calls(mock, 'reread_ocr')).toHaveLength(1);
+    expect(store.session(ID).links).toEqual(linksBefore);
+    for (const cmd of LINK_COMMANDS) expect(calls(mock, cmd), cmd).toEqual([]);
+  });
+
+  it('読み直している間も、画面は使える: 前の値のまま「ほかの候補」の札から選べて、保存できる', async () => {
+    const hold = deferred();
+    const { user, mock } = setup({ session: staleSession(), reread: { hold: hold.promise } });
+    await tableReady();
+    await screen.findByRole('status');
+    await user.click(within(card(4)).getByRole('button', { name: '9巡目 打7p' }));
+    await waitFor(() => expect(within(card(4)).getByText('自分：打7p')).toBeInTheDocument());
+    expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 4, decision: 'k1h1e11' }]);
+    hold.resolve();
+    await waitFor(() => expect(statusLine()).toBeNull());
+    // 読み直しのあとも、選んだ判断は残る。
+    expect(within(card(4)).getByText('自分：打7p')).toBeInTheDocument();
+  });
+
+  it('ページを閉じて開き直しても、この起動の間は、もう読み直さない（読み直している最中に戻ったときは、状態の 1 行が出る）', async () => {
+    const hold = deferred();
+    const { mock, reopen } = setup({ session: staleSession(), reread: { hold: hold.promise } });
+    await tableReady();
+    await screen.findByRole('status');
+    // 読み直している最中に、ページを閉じて開き直す。
+    reopen();
+    await tableReady();
+    expect(await screen.findByRole('status')).toHaveTextContent(REREAD_STATUS);
+    expect(calls(mock, 'reread_ocr')).toHaveLength(1);
+    hold.resolve();
+    await waitFor(() => expect(statusLine()).toBeNull());
+    // 済んだあとに開き直しても、確かめもしない。
+    reopen();
+    await tableReady();
+    expect(statusLine()).toBeNull();
+    expect(calls(mock, 'needs_ocr_reread')).toHaveLength(1);
+    expect(calls(mock, 'reread_ocr')).toHaveLength(1);
+    expect(card(6).querySelector('.mfar')?.textContent).toBe(FAR_LINE);
+  });
+
+  it('いまの作り方で読んだ半荘は、読み直さない: 状態の 1 行は出ず、読み直しは呼ばれない', async () => {
+    const { mock } = setup({ session: imported({ ocr: fx4Ocr({ retries: true }), links: FAR_LINKS }), reread: {} });
+    await tableReady();
+    await waitFor(() => expect(calls(mock, 'needs_ocr_reread')).toEqual([{ sessionId: ID }]));
+    expect(statusLine()).toBeNull();
+    expect(calls(mock, 'reread_ocr')).toEqual([]);
+    expect(card(6).querySelector('.mfar')?.textContent).toBe(FAR_LINE);
+  });
+
+  it('読み取りの写しが無い半荘・取り込む前の半荘は、確かめもしない', async () => {
+    const withoutOcr = setup({ session: imported({ ocr: null }), reread: {} });
+    await tableReady();
+    expect(calls(withoutOcr.mock, 'needs_ocr_reread')).toEqual([]);
+    expect(calls(withoutOcr.mock, 'reread_ocr')).toEqual([]);
+    expect(statusLine()).toBeNull();
+    cleanup();
+
+    const notImported = setup({ session: recorded(), reread: {} });
+    expect(calls(notImported.mock, 'needs_ocr_reread')).toEqual([]);
+    expect(calls(notImported.mock, 'reread_ocr')).toEqual([]);
+  });
+
+  it('読み直しに失敗したときは、前の読み取りのまま: 状態の 1 行は消え、画面の値は変わらず、もう一度は試さない（開き直しても）。links.json も変わらない', async () => {
+    const { store, mock, reopen } = setup({
+      session: staleSession(),
+      reread: { failWith: '日本語の文字認識が使えません' },
+    });
+    const linksBefore = structuredClone(store.session(ID).links);
+    await tableReady();
+    await waitFor(() => expect(calls(mock, 'reread_ocr')).toHaveLength(1));
+    await waitFor(() => expect(statusLine()).toBeNull());
+    expect(card(6).querySelector('.mread')?.textContent).toBe('スクショを読めませんでした');
+    expect(card(6).querySelector('.mfar')).toBeNull();
+    expect(store.session(ID).ocr).toEqual(OLD_OCR);
+    expect(store.session(ID).links).toEqual(linksBefore);
+
+    reopen();
+    await tableReady();
+    expect(statusLine()).toBeNull();
+    expect(calls(mock, 'needs_ocr_reread')).toHaveLength(1);
+    expect(calls(mock, 'reread_ocr')).toHaveLength(1);
+    for (const cmd of LINK_COMMANDS) expect(calls(mock, cmd), cmd).toEqual([]);
+  });
+
+  it('状態の 1 行は、見出し「迷い（6）」のとなり（同じ行の中）。見出しの名前は変わらない', async () => {
+    const hold = deferred();
+    setup({ session: staleSession(), reread: { hold: hold.promise } });
+    await tableReady();
+    const line = await screen.findByRole('status');
+    const heading = screen.getByRole('heading', { level: 2, name: '迷い（6）' });
+    expect(line.parentElement).toBe(heading.parentElement);
+    expect(line).toHaveClass('quiet');
+    hold.resolve();
+    await waitFor(() => expect(statusLine()).toBeNull());
+    expect(screen.getByRole('heading', { level: 2, name: '迷い（6）' })).toBeInTheDocument();
+  });
+
+  it('この画面に AI の答えは出ない: 読み直している間も、済んだあとも（U-1）', async () => {
+    const hold = deferred();
+    setup({ session: staleSession(), reread: { hold: hold.promise } });
+    await tableReady();
+    await screen.findByRole('status');
+    const check = () => {
+      const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '');
+      expect(html).not.toMatch(/data-ai/i);
+      expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
+    };
+    check();
+    hold.resolve();
+    await waitFor(() => expect(statusLine()).toBeNull());
+    check();
   });
 });

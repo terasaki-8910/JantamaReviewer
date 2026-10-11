@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { FX4_TEXT, fx4Ocr, fx4Session } from '../../tests/import-fixtures';
 import type { Links, OcrCache, SessionRecord } from '../api/types';
 import {
+  ESTIMATE_SUFFIX,
   ESTIMATE_TAG,
   LINK_MANUAL,
   UNDECIDED_TEXT,
@@ -12,6 +13,8 @@ import {
   chipLabels,
   decisionOptions,
   estimateHeading,
+  farChipLabels,
+  farLine,
   isEstimated,
   junmeSpanText,
   kyokuOptions,
@@ -251,6 +254,86 @@ describe('U-13 カードの 2 行目と、スクショから読んだ値の 1 �
       ...resolved.flatMap((r) => chipLabels(r.autoCandidates)),
     ];
     for (const text of texts) expect(text).not.toMatch(/%|％|確率|順位|AI|prob/i);
+  });
+});
+
+describe('E-27 離れている（利用者が選んだ判断が、推定にもほかの候補にも入らない）', () => {
+  /** 迷い 6 は、読み直し（E-20）で 東3局・残り38・4400点 と読める。ユーザーは、東3局1本場 11巡目の打3m（残り29）に結びつけた。 */
+  const retried = fx4Ocr({ retries: true });
+  const MARK6_FAR = 'k2h1e14';
+  const resolved = resolveMarks(report, session({ marks: { '6': MARK6_FAR }, ratings: {} }, retried));
+
+  it('迷い 6 に、東3局1本場 11巡目 打3m（残り29）を選ぶと、離れている。ほかの迷いは、選んでいないので離れていない', () => {
+    expect(refOf(MARK6_FAR)).toMatchObject({ label: '東3局1本場 11巡目 · 打牌の迷い', actionLabel: '打3m', tilesLeft: 29 });
+    expect(resolved.map((r) => r.far)).toEqual([false, false, false, false, false, true]);
+    // 選んだ判断は「利用者が選んだもの」（推定の印は付かない）で、自動の候補（推定とほかの候補）も持っている。
+    expect(resolved[5]?.resolution.kind === 'linked' && resolved[5].resolution.saved).toBe(true);
+    expect(resolved[5]?.autoCandidates.map((c) => c.key)).toEqual(['k2h1e10', 'k2h1e9']);
+    expect(resolved[5]?.reading).toEqual({ wind: 'E', number: 3, tilesLeft: 38, score: 4400 });
+  });
+
+  it('迷い 1〜5 を、ユーザーが選んだ判断（E-17）にしても、離れていない。推定や、ほかの候補を選んでも、離れていない', () => {
+    const marks = Object.fromEntries(USER_CHOICES.map((key, i) => [String(i + 1), key]));
+    const chosen = resolveMarks(report, session({ marks, ratings: {} }, retried));
+    expect(chosen.slice(0, 5).map((r) => r.far)).toEqual([false, false, false, false, false]);
+    // ほかの候補（迷い 2 の 12巡目の打9m、迷い 6 の 8巡目の鳴かない判断）を選んでも、離れていない。
+    const alternatives = resolveMarks(report, session({ marks: { '2': 'k1h0e14', '6': 'k2h1e9' }, ratings: {} }, retried));
+    expect(alternatives.map((r) => r.far)).toEqual([false, false, false, false, false, false]);
+    for (const r of [...chosen, ...alternatives]) expect(farLine(r)).toBeNull();
+  });
+
+  it('読み取りと同じ局の判断を選んだとき: 「スクショの値（残り38）と離れています。選んだ局面は残り29です。」（局の名前は書かない）', () => {
+    expect(resolved[5] && farLine(resolved[5])).toBe('スクショの値（残り38）と離れています。選んだ局面は残り29です。');
+  });
+
+  it('読み取りと違う局の判断を選んだとき: 「スクショの値（東3局・残り46）と離れています。選んだ局面は東2局1本場です。」（読んだ局の名前と、選んだ局の名前を書く）', () => {
+    // 迷い 5 は 東3局・残り46・4400点。東2局1本場 6巡目の打南（k1h1e7）を選ぶ。
+    const other = resolveMarks(report, session({ marks: { '5': 'k1h1e7' }, ratings: {} }, retried));
+    expect(other[4]?.far).toBe(true);
+    expect(other[4] && farLine(other[4])).toBe('スクショの値（東3局・残り46）と離れています。選んだ局面は東2局1本場です。');
+    // 本場だけが違う局（読んだ 東3局 に対して 東3局1本場）は、同じ局として扱う（上の「残り」の書き方）。
+    expect(refOf(MARK6_FAR).kyokuLabel).toBe('東3局1本場');
+  });
+
+  it('離れていないとき・推定のまま・手で選ぶ・読めない・この結果に無い鍵では、1 行は無い（null）', () => {
+    const states = [
+      resolveMarks(report, session()), // 保存なし（推定のまま。迷い 6 は読めない）
+      resolveMarks(report, session({ marks: { '6': LINK_MANUAL }, ratings: {} }, retried)), // 手で選ぶと決めた
+      resolveMarks(report, session({ marks: { '6': 'k9h9e1' }, ratings: {} }, retried)), // この結果に無い鍵（推定に戻る）
+      resolveMarks(report, session({ marks: { '6': MARK6_FAR }, ratings: {} })), // 読み直しの前（迷い 6 が読めない）
+    ];
+    for (const list of states) {
+      expect(list.every((r) => !r.far)).toBe(true);
+      expect(list.every((r) => farLine(r) === null)).toBe(true);
+    }
+  });
+
+  it('読み直しの前（迷い 6 が読めない写し）は、選んだ判断があっても離れていない。読み直したあとで、離れていると分かる', () => {
+    const links = { marks: { '6': MARK6_FAR }, ratings: {} };
+    const before = resolveMarks(report, session(links));
+    expect(before[5]?.far).toBe(false);
+    expect(before[5]?.reading).toBeNull();
+    const after = resolveMarks(report, session(links, retried));
+    expect(after[5]?.far).toBe(true);
+    // 結びつけ（保存した選び）は、読み直しの前も後も同じ。読み直しは、保存した値を変えない。
+    expect(before[5]?.stored).toBe(MARK6_FAR);
+    expect(after[5]?.stored).toBe(MARK6_FAR);
+  });
+
+  it('離れているときの札の文字: 先頭（推定）にだけ「（推定）」。ほかの候補はそのまま', () => {
+    expect(ESTIMATE_SUFFIX).toBe('（推定）');
+    expect(farChipLabels(resolved[5]?.autoCandidates ?? [])).toEqual(['9巡目 打北（推定）', '8巡目 鳴かない判断']);
+    // 推定だけのとき（ほかの候補が無い）も、推定の札は出す。
+    expect(farChipLabels([refOf('k0h0e4')])).toEqual(['打5p（推定）']);
+    expect(farChipLabels([])).toEqual([]);
+  });
+
+  it('1 行にも札にも、AI の候補・確率・順位は出てこない（実戦の行動と、残り枚数と、局の名前だけ）', () => {
+    const texts = [
+      resolved[5] ? farLine(resolved[5]) : null,
+      ...farChipLabels(resolved[5]?.autoCandidates ?? []),
+    ];
+    for (const text of texts) expect(text ?? '').not.toMatch(/%|％|確率|順位|AI|prob/i);
   });
 });
 

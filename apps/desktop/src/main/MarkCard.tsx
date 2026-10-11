@@ -11,6 +11,8 @@ import {
   alternativesOf,
   chipLabels,
   decisionOptions,
+  farChipLabels,
+  farLine,
   isEstimated,
   kyokuOptions,
   markHeading,
@@ -27,7 +29,9 @@ import { MenuSelect } from './MenuSelect';
  * （「スクショ: 東2局・残り47・15,100点」か「スクショを読めませんでした」） / 状態ごとの欄:
  * - 推定（自動で、1 位の判断に結びつけた）: 「推定」の印・「自分：打南」（自分が実際にした行動だけ）・小さな「選び直す」。
  *   近い判断があれば、その下に「ほかの候補」の札（押すと、その判断に替わる。取り消せる）
- * - 利用者が選んだ: 「推定」の印は無い。「自分：打南」と「選び直す」
+ * - 利用者が選んだ: 「推定」の印は無い。「自分：打南」と「選び直す」。選んだ判断が、スクショから読んだ値から離れている
+ *   （推定にもほかの候補にも入らない。E-27）ときは、その下に、警告のアイコンつきの 1 行（「スクショの値（残り38）と離れています。
+ *   選んだ局面は残り29です。」）と、「ほかの候補」の札（推定には「（推定）」を足す。押すと、その判断に替わる。取り消せる）
  * - 手で選ぶ（読めない・合う局が無い）: 「手で選ぶ」（局のメニュー → 判断のメニュー）
  * AI の候補・確率・順位は出さない（SPEC F3。答えを書くまで隠す）。
  *
@@ -122,7 +126,9 @@ function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
 
   const linked = resolution.kind === 'linked' ? resolution : null;
   const hasCandidates = autoCandidates.length >= 2;
-  const labels = chipLabels(autoCandidates);
+  // 離れているとき（E-27）は、札の先頭（推定）に「（推定）」を足す（「選び直す」の札にも、同じ文字を使う）。
+  const farText = farLine(resolved);
+  const labels = farText === null ? chipLabels(autoCandidates) : farChipLabels(autoCandidates);
   const estimated = isEstimated(resolved);
   const alternatives = alternativesOf(resolved);
   const view = viewOf(mode, hasCandidates, resolution);
@@ -198,6 +204,27 @@ function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
                 ))}
               </fieldset>
             </div>
+          )}
+          {farText !== null && (
+            <>
+              <p className="mfar">
+                <Icon name="alert" className="mfar-ic" />
+                <span>{farText}</span>
+              </p>
+              <div className="malt">
+                <span className="malt-lbl" aria-hidden="true">
+                  ほかの候補
+                </span>
+                <fieldset className="chips">
+                  <legend className="sr-only">迷い{number}のほかの候補</legend>
+                  {autoCandidates.map((candidate, i) => (
+                    <button key={candidate.key} type="button" className="chip" aria-pressed={false} onClick={() => void choose(candidate)}>
+                      {labels[i]}
+                    </button>
+                  ))}
+                </fieldset>
+              </div>
+            </>
           )}
         </>
       )}

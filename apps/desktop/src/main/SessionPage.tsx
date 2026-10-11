@@ -1,5 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
 
@@ -15,6 +15,7 @@ import { useSessionReport } from './hanchanReport';
 import type { ViewerItem, ViewerRequest } from './Lightbox';
 import { markCaptionParts, resolveMarks, type ResolvedMark } from './markCards';
 import { MarkCard } from './MarkCard';
+import { IDLE_REREADS, type Rereads } from './rereadStore';
 import type { SummaryState } from './sessionSummaries';
 import { ImportHereButton, TargetImportPanel } from './TargetImport';
 import { useUndo } from './undo/UndoProvider';
@@ -36,6 +37,12 @@ interface SessionPageProps {
    * この半荘に取り込んでいる間の進み具合を、このページの中に出す（U-14）。
    */
   importFlow?: ImportFlow;
+  /**
+   * 前の作り方で読んだ半荘の読み直し（検討画面のシェルが 1 つだけ持つ。F11、E-27、U-23）。渡すと、取り込んだ半荘を開いたとき、
+   * 読み取りの写しが前の作り方で読んだものなら、この起動で 1 回だけ、保存してあるスクショを読み直し、読み直している間は、
+   * 迷いの見出しのとなりに、静かな 1 行を出す。渡さなければ、読み直さない。
+   */
+  rereads?: Rereads;
 }
 
 const noop = () => Promise.resolve();
@@ -45,12 +52,25 @@ const noop = () => Promise.resolve();
  * 結果を取り込む前の半荘は、迷いのカード（「迷いN」と時刻だけ）と、記録した〇△✕の一覧だけ。
  * AI の候補・確率・順位は出さない（SPEC F3。答えを書くまで隠す）。段階と Rating は、見出しと表にある。
  */
-export function SessionPage({ session, summary, onChanged = noop, onOpenImage, importFlow }: SessionPageProps) {
+export function SessionPage({
+  session,
+  summary,
+  onChanged = noop,
+  onOpenImage,
+  importFlow,
+  rereads = IDLE_REREADS,
+}: SessionPageProps) {
   const titleId = useId();
   const marksId = useId();
   const handsId = useId();
   const undo = useUndo();
   const reportState = useSessionReport(session.id, session.report_path);
+  // 前の作り方で読んだ写しは、開いたとき 1 回だけ読み直す（読み直す間は、前の読み取りの値で描く。済んだら、一覧が読み直されて、描き直す）。
+  const rereading = useSyncExternalStore(rereads.subscribe, rereads.getSnapshot).has(session.id);
+  const hasReadings = session.report_path !== null && session.ocr !== null;
+  useEffect(() => {
+    if (hasReadings) rereads.open(session.id);
+  }, [rereads, session.id, hasReadings]);
   const ready = summary?.status === 'ready' ? summary.summary : null;
   const report = reportState.status === 'ready' ? reportState.report : null;
   const when = formatSessionTitle(session.started_ms);
@@ -183,9 +203,16 @@ export function SessionPage({ session, summary, onChanged = noop, onOpenImage, i
           )}
           {importingHere && <TargetImportPanel flow={importFlow} />}
           <section aria-labelledby={marksId}>
-            <h2 className="sec-title" id={marksId}>
-              迷い（{session.marks.length}）
-            </h2>
+            <div className="sec-head">
+              <h2 className="sec-title" id={marksId}>
+                迷い（{session.marks.length}）
+              </h2>
+              {rereading && (
+                <p className="quiet" role="status">
+                  スクショを新しい読み取りで読み直しています
+                </p>
+              )}
+            </div>
             {session.marks.length === 0 ? (
               <p className="empty">迷いの記録はありません。</p>
             ) : (

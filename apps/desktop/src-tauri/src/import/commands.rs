@@ -5,13 +5,17 @@
 //! 待ちのある処理（通信・ファイルの読み込み・文字認識）は、`spawn_blocking` で別のスレッドに回す（画面を止めない）。
 
 use std::path::PathBuf;
+use std::sync::{Mutex, PoisonError};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::mjai_nav;
 use super::mjai_window;
-use super::ocr_job::{plan_session, run_job, Progress, SessionJob, Shot, WindowsReader};
+use super::ocr_job::{
+    finish_reread, needs_reread, plan_reread, plan_session, run_job, run_reread, LineReader,
+    Progress, SessionJob, Shot, WindowsReader,
+};
 use super::report_fetch::{fetch_report_by_text, ReportEndpoint};
 use super::report_file::read_report_file;
 use crate::clipboard;
@@ -162,6 +166,65 @@ fn save_job(app: &AppHandle, job: &SessionJob) -> Result<(), String> {
 
 fn report_progress(app: &AppHandle, done: usize, total: usize) {
     let _ = app.emit_to(MAIN_LABEL, EVENT_OCR_PROGRESS, Progress { done, total });
+}
+
+/// 半荘の写しが、前の作り方で読んだものか（読み直しが要るか）。半荘の画面を開いたときに呼ぶ（F11）。
+/// 写しの決まりの名前が、いまの作り方と違う（または名前が無い）ときだけ true。写しが無いときは false。
+#[tauri::command]
+pub async fn needs_ocr_reread(
+    core: State<'_, SharedCore>,
+    session_id: String,
+) -> Result<bool, String> {
+    let existing = core
+        .lock()
+        .store()?
+        .load_ocr(&session_id)
+        .map_err(|e| e.to_string())?;
+    Ok(needs_reread(existing.as_ref()))
+}
+
+/// 前の作り方で読んだ半荘の画像を、いまの作り方で読み直して、新しい写し（`ocr.json`）を書く（取り込みの一部。F11、E-27）。
+/// 画面を止めないよう、別のスレッドで動く。書き換えるのは `ocr.json` だけ（結びつけ・評価・MAKA・結果には触らない）。
+/// 書き直したら `true`、読み直しが要らなかったら `false`。失敗したら、前の写しをそのまま残して、理由を標準エラーに書き、返す。
+#[tauri::command]
+pub async fn reread_ocr(app: AppHandle, session_id: String) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || reread_blocking(&app, &session_id))
+        .await
+        .map_err(|e| format!("読み直しの処理が止まりました: {e}"))?
+}
+
+/// 読み直しを同時に 1 つしか動かさないための錠（半荘の画面を続けて開いても、文字認識の担当を一度に 1 つだけ動かす）。
+static REREAD_GATE: Mutex<()> = Mutex::new(());
+
+fn reread_blocking(app: &AppHandle, session_id: &str) -> Result<bool, String> {
+    let _gate = REREAD_GATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let result = reread_steps(app, session_id);
+    if let Err(reason) = &result {
+        eprintln!(
+            "半荘 {session_id} の文字認識の読み直しに失敗しました（前の読み取りのまま残します）: {reason}"
+        );
+    }
+    result
+}
+
+/// 仕事を決める → 読む → 書く。記録の錠は、決めるときと書くときだけ、短く取る（読んでいる間は、ウィジェットの記録を止めない）。
+fn reread_steps(app: &AppHandle, session_id: &str) -> Result<bool, String> {
+    let planned = {
+        let shared = app.state::<SharedCore>();
+        let core = shared.lock();
+        plan_reread(core.store()?, session_id).map_err(|e| e.to_string())?
+    };
+    let Some(job) = planned else {
+        return Ok(false);
+    };
+    let job = run_reread(job, || {
+        WindowsReader::start().map(|reader| Box::new(reader) as Box<dyn LineReader>)
+    })
+    .map_err(|e| e.to_string())?;
+    let shared = app.state::<SharedCore>();
+    let core = shared.lock();
+    finish_reread(core.store()?, &job).map_err(|e| e.to_string())?;
+    Ok(true)
 }
 
 /// 取り込んだ結果（生の JSON）を、半荘のフォルダに保存する。`session_id` が無ければ、記録の無い半荘として新しいフォルダを作る。
