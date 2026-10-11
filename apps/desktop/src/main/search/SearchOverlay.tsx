@@ -220,8 +220,10 @@ export function SearchOverlay({ rows, summaries, now, onOpenGame, onOpenProblem,
 
   const move = (to: (current: number, count: number) => number) => {
     if (entries.length === 0) return;
+    const next = to(activeIndex, entries.length);
+    if (next === activeIndex) return;
     scrollToActive.current = true;
-    setActive(to(activeIndex, entries.length));
+    setActive(next);
   };
 
   const onInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
