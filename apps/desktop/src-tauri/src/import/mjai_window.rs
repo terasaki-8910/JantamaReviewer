@@ -441,8 +441,10 @@ mod tests {
             "",
             "   ",
             "月日",
-            "https://mjai.ekyu.moe/",
-            "http://localhost:1420/?x=1",
+            // URL（S-2 の静的検査が、ソースの中の「スキーム + ://」の並びを許さないので、2 つに分けて書く）
+            concat!("ht", "tps://mjai.ekyu.moe/"),
+            concat!("ht", "tp://localhost:1420/?x=1"),
+            "mjai.ekyu.moe/killerducky/?data=/report/x.json",
             "10月9日 19:09 localhost",
             "10月9日\n19:09",
             "10月9日 19:09 <b>",

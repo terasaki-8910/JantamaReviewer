@@ -1,5 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
 
@@ -59,6 +59,15 @@ export function SessionPage({ session, summary, onChanged = noop, onOpenImage, i
   const canImportHere = importFlow !== undefined && session.report_path === null;
   const importingHere =
     importFlow !== undefined && importFlow.target?.sessionId === session.id && importFlow.state.phase !== 'prompt';
+  // 進み具合の知らせを閉じたら（やめる・閉じる）、押したボタンがまだあればそこへ、取り込みが済んでボタンが消えていれば見出しへ、
+  // キーボードの位置を戻す（知らせの中のボタンが消えて、位置が失われないように）。
+  const actionRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const wasImporting = useRef(false);
+  useEffect(() => {
+    if (wasImporting.current && !importingHere) (actionRef.current ?? titleRef.current)?.focus();
+    wasImporting.current = importingHere;
+  }, [importingHere]);
 
   const resolved = useMemo(() => (report === null ? null : resolveMarks(report, session)), [report, session]);
   const decisions = useMemo<DecisionRef[]>(() => (report === null ? [] : listDecisionRefs(report)), [report]);
@@ -143,7 +152,7 @@ export function SessionPage({ session, summary, onChanged = noop, onOpenImage, i
     <>
       <header className="head session-head">
         <div className="head-l">
-          <h1 className="title" id={titleId}>
+          <h1 className="title" id={titleId} ref={titleRef} tabIndex={-1}>
             {when}
             {/* 狭い幅で折り返すときは、卓の名前の途中ではなく、卓の名前の前（空白のところ）で折り返す */}
             {ready?.room ? (
@@ -161,7 +170,9 @@ export function SessionPage({ session, summary, onChanged = noop, onOpenImage, i
             <span className="rate-num">{ready.ratingText}</span> <span className="rate-lbl">Rating</span>
           </div>
         )}
-        {canImportHere && <ImportHereButton session={session} flow={importFlow} onNotice={setImportNotice} />}
+        {canImportHere && (
+          <ImportHereButton session={session} flow={importFlow} onNotice={setImportNotice} buttonRef={actionRef} />
+        )}
       </header>
       <div className="page">
         <div className="detail">

@@ -4,7 +4,7 @@
  * mjai の窓の題名には取り込み先を出す。画面から読んだ局・点数が結果と合わなければ、保存の前に聞く。
  * 取り込みの流れそのもの（検査・読み取り・保存）は ImportPage.test.tsx と importFlow.test.ts が確かめる。
  */
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,6 +14,7 @@ import { installTauriMock, type TauriMock } from '../../tests/tauri-mock';
 import type { OcrCache, SessionRecord } from '../api/types';
 import { ANNOUNCED_STORAGE_KEY } from './announced';
 import { App } from './App';
+import { useImportFlow } from './useImportFlow';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -187,6 +188,22 @@ describe('U-14 mjai の窓（題名に取り込み先を出す）と、ページ
     expect(lastCall(mock, 'save_report')).toMatchObject({ sessionId: ID });
   });
 
+  it('知らせを閉じると、キーボードの位置は、押したボタンへ戻る（取り込みが済んだときは、見出しへ）', async () => {
+    const { user, mock } = setup();
+    await user.click(await actionButton());
+    const panel = await panelOf('mjai の窓で Submit を押してください');
+    await user.click(within(panel).getByRole('button', { name: 'やめる' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: ACTION })).toHaveFocus());
+
+    await user.click(screen.getByRole('button', { name: ACTION }));
+    await screen.findByRole('heading', { name: 'mjai の窓で Submit を押してください' });
+    found(mock);
+    const done = await panelOf('取り込みました');
+    await user.click(within(done).getByRole('button', { name: '閉じる' }));
+    // 取り込みが済んで、操作は消えている。見出しへ戻る。
+    await waitFor(() => expect(sessionHeading()).toHaveFocus());
+  });
+
   it('完了のあと、ページの中の知らせは「閉じる」で消える。取り込みのページには、古い結果が残らない', async () => {
     const { user, mock } = setup();
     await user.click(await actionButton());
@@ -281,6 +298,45 @@ describe('U-14 画面から読んだ局・点数が結果と合わないとき�
     const done = await panelOf('取り込みました');
     expect(done.textContent).toContain('日本語の文字認識が使えません');
     expect(screen.queryByRole('heading', { name: /画面から読んだ局・点数/ })).toBeNull();
+  });
+});
+
+describe('U-14 確認の途中で取り込みのページへ移っても、同じ確認が出る', () => {
+  it('合わない画面の確認は、取り込みのページにも出る（取り込み先も）。「やめる」で、何も保存せず、牌譜リンクを待つ状態へ戻る', async () => {
+    const cache = fx4Ocr();
+    cache.entries['marks/m2.png'] = { lines: ['南 2 局', '个 4 0', '25000'] };
+    const { user, mock, store } = setup({ ocr: cache });
+    await user.click(await actionButton());
+    await screen.findByRole('heading', { name: 'mjai の窓で Submit を押してください' });
+    found(mock);
+    await screen.findByRole('heading', { name: '画面から読んだ局・点数が、この結果と合いません' });
+    await user.click(
+      within(screen.getByRole('complementary', { name: 'サイドバー' })).getByRole('button', { name: '検討結果を取り込む' }),
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: '検討結果を取り込む' })).toBeInTheDocument();
+    const panel = await panelOf('画面から読んだ局・点数が、この結果と合いません');
+    expect(panel.textContent).toContain('迷い2');
+    expect(panel.textContent).toContain('10月9日 19:09 の半荘に取り込むと、結果はあとから入れ替えられません');
+    await user.click(within(panel).getByRole('button', { name: 'やめる' }));
+    expect(await screen.findByRole('heading', { name: 'コピーした牌譜リンクを見つけました' })).toBeInTheDocument();
+    expect(calls(mock, 'save_report')).toEqual([]);
+    expect(store.session(ID).report_path).toBeNull();
+  });
+
+  it('取り込みのページで「それでも取り込む」を押すと、取り込み先の半荘に保存して、「取り込みました」になる', async () => {
+    const cache = fx4Ocr();
+    cache.entries['marks/m2.png'] = { lines: ['南 2 局', '个 4 0', '25000'] };
+    const { user, mock } = setup({ ocr: cache });
+    await user.click(await actionButton());
+    await screen.findByRole('heading', { name: 'mjai の窓で Submit を押してください' });
+    found(mock);
+    await screen.findByRole('heading', { name: '画面から読んだ局・点数が、この結果と合いません' });
+    await user.click(
+      within(screen.getByRole('complementary', { name: 'サイドバー' })).getByRole('button', { name: '検討結果を取り込む' }),
+    );
+    await user.click(await screen.findByRole('button', { name: 'それでも取り込む' }));
+    expect(await screen.findByRole('heading', { name: '取り込みました' })).toBeInTheDocument();
+    expect(lastCall(mock, 'save_report')).toEqual({ sessionId: ID, text: FX4_TEXT });
   });
 });
 
@@ -387,5 +443,59 @@ describe('U-14 取り込みの途中で別のページへ移っても、続き�
     found(mock);
     expect(await screen.findByRole('heading', { name: '取り込みました' })).toBeInTheDocument();
     expect(lastCall(mock, 'save_report')).toMatchObject({ sessionId: ID });
+  });
+});
+
+describe('U-14 取り込み先は、次の取り込みに残らない（取り込みの状態を持つ部品の試験）', () => {
+  function hook() {
+    const store = new FakeSessionStore([{ session: fx4Session(ID, local(2026, 10, 9, 19, 9)) }]);
+    const mock = installTauriMock({
+      handlers: { ...importHandlers([]), ...store.handlers, ...store.importHandlers(fx4Ocr({ retries: true })) },
+    });
+    return { ...renderHook(() => useImportFlow()), mock, store };
+  }
+  const TARGET = { sessionId: ID, label: '10月9日 19:09' };
+
+  it('始めると取り込み先が決まる。やめる・最初に戻る・「取り込みますか」を受けるで、牌譜リンクを待つ状態に戻ると、取り込み先も無くなる', async () => {
+    const { result, mock } = hook();
+    await act(async () => {
+      expect(await result.current.startForSession(TARGET)).toEqual({ started: true });
+    });
+    expect(result.current.state.phase).toBe('window');
+    expect(result.current.target).toEqual(TARGET);
+
+    // やめる
+    await act(async () => result.current.cancel());
+    expect(result.current.state.phase).toBe('prompt');
+    expect(result.current.target).toBeNull();
+
+    // 失敗（結果が出る前に窓が閉じられた）→ 「取り込みますか」を受ける
+    await act(async () => {
+      await result.current.startForSession(TARGET);
+    });
+    act(() => mock.emit('mjai-window', { kind: 'closed' }));
+    await waitFor(() => expect(result.current.state.phase).toBe('error'));
+    expect(result.current.target).toEqual(TARGET);
+    act(() => result.current.acceptOffer());
+    expect(result.current.state.phase).toBe('prompt');
+    expect(result.current.target).toBeNull();
+  });
+
+  it('取り込み先を決めた取り込みが失敗して、牌譜リンクを待つ状態に戻ったあとの、結果の URL を貼る取り込みは、取り込み先を決めない（結びつけ先の照合をする）', async () => {
+    const { result, mock } = hook();
+    await act(async () => {
+      await result.current.startForSession(TARGET);
+    });
+    act(() => mock.emit('mjai-window', { kind: 'closed' }));
+    await waitFor(() => expect(result.current.state.phase).toBe('error'));
+    act(() => result.current.acceptOffer());
+    // 取り込み先だった半荘を、直近 7 日の外にする。取り込み先が残っていれば、それでもその半荘に取り込む。
+    // 残っていなければ、結びつけ先の候補（直近 7 日の、結果の無い半荘）が無いので、画像は読まず、記録の無い半荘になる。
+    vi.setSystemTime(new Date(2026, 9, 30, 22, 0, 0));
+    await act(async () => result.current.submitPastedUrl(`https://example.invalid/${FX4_ID}`));
+    await waitFor(() => expect(calls(mock, 'save_report')).toHaveLength(1));
+    expect(calls(mock, 'ocr_sessions')).toEqual([]);
+    expect(lastCall(mock, 'save_report')).toMatchObject({ sessionId: null });
+    expect(result.current.target).toBeNull();
   });
 });

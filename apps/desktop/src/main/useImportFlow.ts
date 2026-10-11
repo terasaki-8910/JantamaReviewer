@@ -146,6 +146,11 @@ export function useImportFlow(): ImportFlow {
     const value = typeof next === 'function' ? next(stateRef.current) : next;
     stateRef.current = value;
     setStateRaw(value);
+    // 牌譜リンクを待つ状態に戻ったら、取り込み先も無くす（次の取り込みが、前の取り込み先に結びつかないように）。
+    if (value.phase === 'prompt' && targetRef.current !== null) {
+      targetRef.current = null;
+      setTargetRaw(null);
+    }
   }, []);
   const setLink = useCallback((value: PaipuLink | null) => {
     linkRef.current = value;

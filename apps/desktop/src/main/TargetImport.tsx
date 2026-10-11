@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, type Ref, type RefObject } from 'react';
 
 import type { SessionRecord } from '../api/types';
 import { formatSessionShort } from './format';
@@ -31,10 +31,12 @@ interface ButtonProps {
   flow: ImportFlow;
   /** 始められなかったときの理由（クリップボードに牌譜リンクが無いなど）を、ページに出す。始めたら null。 */
   onNotice: (message: string | null) => void;
+  /** ボタン（進み具合の知らせを閉じたあとに、キーボードの位置を戻す先）。 */
+  buttonRef?: Ref<HTMLButtonElement>;
 }
 
 /** 取り込み前の半荘のページの、主な操作「この半荘に検討結果を取り込む」。 */
-export function ImportHereButton({ session, flow, onNotice }: ButtonProps) {
+export function ImportHereButton({ session, flow, onNotice, buttonRef }: ButtonProps) {
   const [starting, setStarting] = useState(false);
   const busy = isBusy(flow.state.phase);
   const others = busy && flow.target?.sessionId !== session.id;
@@ -52,7 +54,13 @@ export function ImportHereButton({ session, flow, onNotice }: ButtonProps) {
 
   return (
     <div className="head-act">
-      <button type="button" className="btn primary" disabled={busy || starting} onClick={() => void start()}>
+      <button
+        type="button"
+        className="btn primary"
+        ref={buttonRef}
+        disabled={busy || starting}
+        onClick={() => void start()}
+      >
         この半荘に検討結果を取り込む
       </button>
       {others && <p className="quiet">ほかの取り込みが進んでいます</p>}
