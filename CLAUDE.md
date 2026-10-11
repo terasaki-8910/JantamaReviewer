@@ -19,7 +19,7 @@ run state/init-tools.sh myself. Never auto-install or enable tools.
 ## Commands
 どれもリポジトリのルートで実行する（Windows 専用。pnpm 11・Node・Rust が要る）。
 - Install: `pnpm install`
-- Tests: `pnpm test`（= `pnpm test:ts`（全 vitest）+ `pnpm test:rust`（cargo test --workspace））。実ブラウザの検査（tests/browser）は、インストール済みの Chrome か Edge を使う。Rust は 4 つのクレートの workspace（`apps/desktop/src-tauri` の本体、共有の部品 `input`、管理者で動く補助プログラム `helper`、取り込みのときだけ使う文字認識 `ocr`）。文字認識の試験（`ocr/tests/ocr_fixtures.rs`）は、Windows の日本語の文字認識が入っている PC でだけ通る。
+- Tests: `pnpm test`（= `pnpm test:ts`（全 vitest）+ `pnpm test:rust`（cargo test --workspace））。実ブラウザの検査（tests/browser）は、インストール済みの Chrome か Edge を使う。画面の試験は、jsdom の試験を先に全部動かし、実ブラウザの検査はそのあとに 3 つずつ並べて動かす（`apps/desktop` の `test`。8 つを同時に動かすと、PC が重くなり、試験用のサーバーへの接続が切れて落ちることがあった）。Rust は 4 つのクレートの workspace（`apps/desktop/src-tauri` の本体、共有の部品 `input`、管理者で動く補助プログラム `helper`、取り込みのときだけ使う文字認識 `ocr`）。文字認識の試験（`ocr/tests/ocr_fixtures.rs`）は、Windows の日本語の文字認識が入っている PC でだけ通る。
 - 試しに動かすとき（`JANTAMA_CONFIG_DIR`）は、WebView2 のデータ（画面の保存領域）も、その設定フォルダの `webview/` に置かれる（本物のアプリの保存領域には触れない）。mjai の窓の WebView2 のデータは、いつもアプリの画面とは別（`webview-mjai/`）。
 - Hook test（手動）: `pnpm test:hook`。実際にマウスとキーの入力を注入して、本物のフック（修飾キー付きのキー・登録の待機を含む）を通す（src-tauri/tests/hook_integration.rs）。続けて、入力の流れ（記録・テスト・登録）を本物のフックにつないだ試験も動かす（input_flow_integration.rs。F23・F24 だけを注入する）。どちらも `pnpm test` には含めない。前面の窓が昇格している（管理者として動く雀魂のクライアントなど）と、入力が届かず、理由を示して失敗する。
 - Task test（手動）: `pnpm test:task`。補助プログラムのタスクの定義を、本物のタスクスケジューラが受け付けて、呼んだときだけ動かすことを確かめる（試験用の名前で一時的に登録し、終わったら消す。実行の権限だけは「普通」に替える。helper/tests/task_scheduler.rs。`pnpm test` には含めない）。

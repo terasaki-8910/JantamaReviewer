@@ -27,6 +27,35 @@ const ENTRY_MODULES = ['/src/main/main.tsx', '/src/widget/main.tsx'];
 /** Vite が「依存の事前変換をやり直した」と知らせる文。起動したあとに出たら、ページが二重の React を読み込みうる。 */
 const REOPTIMIZED = /new dependencies found|re-optimizing dependencies|optimized dependencies changed/i;
 
+/** 接続が切れたときに、読み直す回数の上限。 */
+const FETCH_ATTEMPTS = 4;
+
+/** 接続が切れた・つながらなかったときの失敗か（fetch は TypeError を投げ、理由は cause に入る）。 */
+function isDroppedConnection(error: unknown): boolean {
+  const cause = (error as { cause?: { code?: unknown } } | null)?.cause;
+  return (
+    error instanceof TypeError &&
+    typeof cause?.code === 'string' &&
+    ['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'UND_ERR_SOCKET'].includes(cause.code)
+  );
+}
+
+/**
+ * 開発サーバーから 1 つ読む。接続が切れたときだけ、少し待って読み直す（読むだけなので、何度読んでも同じ）。
+ * 多くのテストファイルが並んでサーバーとブラウザを動かして重いとき、使い回した接続をサーバーが閉じたのと同時に
+ * 次の要求を送ると、ECONNRESET で失敗する（2026-10-11 の出題の取り込みの検査で、2 回続けて起きた）。
+ */
+async function fetchFromServer(url: URL): Promise<Response> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await fetch(url);
+    } catch (error) {
+      if (attempt >= FETCH_ATTEMPTS || !isDroppedConnection(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+  }
+}
+
 /**
  * 入口のモジュールから読み込まれるものを、先にすべて 1 回ずつ読んでおく（依存の事前変換の結果も含む）。
  * 事前変換は最初の要求のあとに始まって数秒かかるので、最初のテストの制限時間の中で待たせないための準備。
@@ -37,7 +66,7 @@ async function warmUp(origin: string): Promise<void> {
   for (let path = queue.pop(); path !== undefined; path = queue.pop()) {
     if (seen.has(path)) continue;
     seen.add(path);
-    const response = await fetch(new URL(path, origin));
+    const response = await fetchFromServer(new URL(path, origin));
     const body = await response.text();
     if (!response.ok) throw new Error(`開発サーバーの応答が ${response.status} でした: ${path}`);
     for (const match of body.matchAll(/(?:from|import)\s*"(\/[^"]+)"/g)) {
