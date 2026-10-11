@@ -2,8 +2,10 @@
   hanchan.css: 半荘のページ（迷いの画像カード・選んでもらう部品・局の評価の表・画像ビューア）。
   承認済みのサンプル（8回目のシートの round8.css・7回目の round7.css）を、実際の画面の部品に合わせて移したもの。
   方針:
-  - 迷いのカードは、罫線で区切る面に、画像・1 行目（どの局面か）・2 行目（自分がした行動）。利用者の入力が要る所（候補を選ぶ・
+  - 迷いのカードは、罫線で区切る面に、画像・「迷いN」と時刻・局面・スクショから読んだ値（静かな 1 行）・状態ごとの欄
+    （推定の印と自分がした行動と「選び直す」、ほかの候補、手で選ぶ）。どの状態も同じ構成。利用者の入力が要る所（候補を選ぶ・
     局面を手で選ぶ）だけが、カードの下端に出る。色のある内容は画像だけ。accent は「選んである」と「フォーカス」だけ
+    （「推定」の印は、選んだのではないので、色を付けない）
   - 表は、静かに（罫線だけ・印は小さな旗 1 つ）。幅が狭いときは、1 局を 2 行のかたまりにする（表の意味は保ったまま）
   - ここでは色を書かない。すべて tokens.css のトークンから
 */
@@ -148,27 +150,66 @@
   line-height: 1.5;
 }
 
-/* 「自分：打5p」と、その右の「選び直す」。「選び直す」は行の右端に置く（行の高さは変えない） */
+/* スクショから読んだ値。局面の下に、静かに 1 行（どの状態のカードにも出る） */
+.mread {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/*
+  「推定」の印と「自分：打5p」と、その右の「選び直す」。「選び直す」は行の右端の上に置く
+  （自分の行動の文字が折り返しても、ボタンは動かない。行の高さは変えない）
+*/
 .msub {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--s2);
   min-height: 24px;
-  margin: 0;
+  margin: 2px 0 0;
   font-size: 12.5px;
   color: var(--muted);
   line-height: 1.5;
 }
 
-.msub > span {
+.msub .mact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
   min-width: 0;
+  min-height: 24px;
   overflow-wrap: anywhere;
 }
 
 .msub .link-btn {
   min-height: 24px;
   flex: none;
+}
+
+/* 推定の印。選んだのではないので、色は付けない（枠だけ）。「選んである」は、accent の札 */
+.tag.est {
+  min-height: 18px;
+  padding: 0 7px;
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ink);
+  font-size: 11.5px;
+}
+
+/* ほかの候補: 小さな見出しと、その下に候補の札（押すと、その判断に替わる）。札の数で並びが変わらないよう、見出しはいつも札の上 */
+.malt {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.malt-lbl {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 /* 選んでもらう所（このページで唯一、利用者の入力が要る所）。カードの下端に置く */
@@ -294,6 +335,48 @@
   width: 14px;
   height: 14px;
   color: var(--muted);
+}
+
+/*
+  ================= 半荘のページの中の取り込み（U-14） =================
+  取り込み前の半荘の見出しの、右の主な操作。狭いときは、見出しの下の行に回る
+*/
+.head-act {
+  display: grid;
+  gap: var(--s1);
+  justify-items: end;
+}
+
+.head-act .quiet {
+  text-align: right;
+}
+
+/* ページの中に出す、取り込みの進み具合・確認（取り込みのページと同じパネルを、少し詰めたもの） */
+.inline-import {
+  max-width: 640px;
+  gap: var(--s3);
+  padding: var(--s4);
+}
+
+/* 結果と合わなかった画面の一覧（確認のとき） */
+.mismatch {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.mismatch li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s3);
+}
+
+.mismatch b {
+  min-width: 5.5em;
+  font-weight: 700;
 }
 
 /* ================= 局の評価の表 ================= */

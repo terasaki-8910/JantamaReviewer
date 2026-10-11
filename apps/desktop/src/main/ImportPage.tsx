@@ -1,47 +1,11 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 import { formatSessionShort } from './format';
-import { paipuDateText, shortenMiddle, type ImportStep, type ImportSummary } from './importFlow';
+import { paipuDateText, shortenMiddle, type ImportSummary } from './importFlow';
 import { Icon } from './Icon';
-import type { ChooseOption, ClipboardProblem, ImportFlow, ImportState } from './useImportFlow';
-
-/** 取り込みの途中で、いま何をしているか（段階ごとの言葉）。 */
-function stepText(step: ImportStep, progress: { done: number; total: number } | null): string {
-  switch (step) {
-    case 'fetching':
-      return '結果を受け取っています';
-    case 'checking':
-      return '牌譜と検討結果が合うか、確かめています';
-    case 'reading':
-      return progress && progress.total > 0
-        ? `記録した画面から、局と点数を読み取っています（${progress.done} / ${progress.total}）`
-        : '記録した画面から、局と点数を読み取っています';
-    case 'saving':
-      return '保存しています';
-  }
-}
-
-/** クリップボードに牌譜リンクが無かった理由を、文にする。 */
-function problemText(problem: ClipboardProblem | null): string {
-  switch (problem?.kind) {
-    case 'empty':
-      return 'クリップボードが空です。';
-    case 'unreadable':
-      return `クリップボードを読めませんでした: ${problem.message}`;
-    default:
-      return 'クリップボードに、雀魂の牌譜リンクがありません。';
-  }
-}
-
-/** 取り込んだ迷いマークの結びつけの結果を、文にする（承認済みの見本の書き方）。 */
-function marksText(summary: ImportSummary): string | null {
-  if (summary.markCount === 0) return null;
-  if (summary.choiceMarks === 0) return `（迷い ${summary.markCount} つを、すべて局面に結びつけました）`;
-  if (summary.linkedMarks === 0) {
-    return `（局面に結びつけられたものはありません。${summary.choiceMarks}つは選んでください）`;
-  }
-  return `（${summary.linkedMarks}つは局面に結びつけました。${summary.choiceMarks}つは選んでください）`;
-}
+import { marksText, problemText, stepText } from './importText';
+import { TargetConfirm } from './TargetImport';
+import type { ChooseOption, ImportFlow, ImportState } from './useImportFlow';
 
 interface Props {
   flow: ImportFlow;
@@ -222,6 +186,17 @@ function StatePanel({ state, flow, heading, onOpenSession }: PanelProps) {
             </p>
           )}
         </section>
+      );
+
+    case 'confirm':
+      return (
+        <TargetConfirm
+          check={state.check}
+          label={flow.target?.label ?? null}
+          heading={heading}
+          onConfirm={() => void flow.confirmTarget()}
+          onCancel={flow.cancel}
+        />
       );
 
     case 'done':

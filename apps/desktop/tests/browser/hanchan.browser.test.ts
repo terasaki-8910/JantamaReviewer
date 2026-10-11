@@ -51,8 +51,9 @@ function importedSession(extra: { maka?: { kyokus: Record<string, string>; hanch
   const base = fx4Session(ID, local(2026, 10, 9, 19, 9), {
     report_path: `C:\\data\\games\\${ID}\\report.json`,
     ocr: fx4Ocr(),
+    // 取り込みが保存するとおり: 迷いマークは保存しない（読めた迷い 1〜5 は推定、読めない迷い 6 は手で選ぶ）。評価は局の順。
     links: {
-      marks: { '1': 'k0h0e4', '2': 'k1h0e13', '3': 'k1h1e7' },
+      marks: {},
       ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': 'k2h0', '11': 'k2h1' },
     },
     self_ratings: { kyokus: {} },
@@ -475,17 +476,17 @@ describe('R7-4 画像の大きな表示（実ブラウザ）', () => {
       await dialog.waitFor();
       const shown = () => dialog.locator('.lb-img').getAttribute('src');
       const first = await shown();
-      expect(await dialog.locator('figcaption').textContent()).toBe('迷い1 · 東1局 · 4巡目 · 打牌の迷い · 19:09:53');
+      expect(await dialog.locator('figcaption').textContent()).toBe('迷い1 · 東1局 · 4巡目 · 打牌の迷い · 推定 · 19:09:53');
       expect(await dialog.getByRole('button', { name: '前の画像' }).isDisabled()).toBe(true);
       await dialog.getByRole('button', { name: '次の画像' }).click();
       const second = await shown();
       expect(second).not.toBe(first);
-      expect(await dialog.locator('figcaption').textContent()).toBe('迷い2 · 東2局 · 11巡目 · 鳴きの迷い · 19:15:57');
+      expect(await dialog.locator('figcaption').textContent()).toBe('迷い2 · 東2局 · 11〜12巡目 · 打牌の迷い · 推定 · 19:15:57');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      expect(await dialog.locator('figcaption').textContent()).toBe('迷い6 · 読み取れませんでした · 19:22:36');
+      expect(await dialog.locator('figcaption').textContent()).toBe('迷い6 · 局面は決まっていません · 19:22:36');
       expect(await dialog.getByRole('button', { name: '次の画像' }).isDisabled()).toBe(true);
       await page.keyboard.press('ArrowRight');
       expect(await dialog.locator('figcaption').textContent()).toContain('迷い6');
@@ -549,18 +550,20 @@ describe('R7-4 画像の大きな表示（実ブラウザ）', () => {
 });
 
 describe('F9・F10・U-11 編集（実ブラウザ。実際のキーとマウス）', () => {
-  it('候補の札を押すと、保存して通知が出る。Ctrl+Z で戻り、Ctrl+Y でやり直す。キーボードの位置は「選び直す」へ', async () => {
+  it('ほかの候補の札を押すと、保存して通知が出る（「推定」の印が外れる）。Ctrl+Z で推定に戻り、Ctrl+Y でやり直す。キーボードの位置は「選び直す」へ', async () => {
     const { context, page, problems } = await open();
     try {
-      await card(page, 4).getByRole('button', { name: '打7p' }).click();
+      await card(page, 4).getByRole('button', { name: '9巡目 打7p' }).click();
       await poll(() => toastText(page)).toBe('迷い4を東2局1本場 9巡目の局面に結びつけました');
       await card(page, 4).getByText('自分：打7p').waitFor();
+      expect(await card(page, 4).locator('.tag.est').count()).toBe(0);
       expect(await calls(page, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 4, decision: 'k1h1e11' }]);
       await poll(() => isFocused(card(page, 4).getByRole('button', { name: '迷い4を選び直す' }))).toBe(true);
 
       await page.keyboard.press('Control+z');
       await poll(() => toastText(page)).toBe('迷い4の結びつけを元に戻しました');
-      await card(page, 4).getByText('選んでください').waitFor();
+      await card(page, 4).locator('.tag.est').waitFor();
+      await card(page, 4).getByText('自分：東をポン').waitFor();
       expect(await calls(page, 'clear_mark_link')).toEqual([{ sessionId: ID, markId: 4 }]);
 
       await page.keyboard.press('Control+y');

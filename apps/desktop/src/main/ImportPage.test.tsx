@@ -226,8 +226,9 @@ describe('取り込みの流れ（結果が見つかってから）', () => {
     expect(lastCall(mock, 'save_report')).toEqual({ sessionId: session.id, text: FX4_TEXT });
     expect(lastCall(mock, 'replace_links')).toEqual({
       sessionId: session.id,
+      // 迷いマークの結びつけは、保存しない（推定は、読み取りの写しと結果から出せる。保存するのは、利用者が選んだものだけ）。
       links: {
-        marks: { '1': 'k0h0e4', '2': 'k1h0e13', '3': 'k1h1e7' },
+        marks: {},
         ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': 'k2h0', '11': 'k2h1' },
       },
     });
@@ -238,7 +239,7 @@ describe('取り込みの流れ（結果が見つかってから）', () => {
     expect(panel.textContent).toMatch(/判断 70/);
     expect(panel.textContent).toMatch(/大きな不一致 \d+/);
     expect(panel.textContent).toContain('迷い 6');
-    expect(panel.textContent).toContain('3つは局面に結びつけました。3つは選んでください');
+    expect(panel.textContent).toContain('5つは推定で局面に結びつけました。1つは手で選んでください');
     expect(panel.textContent).toContain('局の評価 5 件のうち、5 件を局に当てはめました');
 
     // 取り込んだ半荘を、半荘のページで開く（サイドバーの一覧で、その半荘の行に印が付く）。

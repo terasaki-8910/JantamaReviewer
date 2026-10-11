@@ -82,9 +82,19 @@ export type StoredEvent = { id: number; t_ms: number } & (
   | { type: 'session_close' }
 );
 
-/** 画像 1 枚の文字認識の結果（行ごとの文字）。読めなかったときは、理由が `error` に入る。 */
+/** 読み直し 1 回分（E-20）。`variant` は、どの画像で読み直したか（コントラストを上げた画像 `contrast1.8`、1.5 倍に広げた画像 `upscale1.5`）。 */
+export interface OcrRetry {
+  variant: string;
+  lines: string[];
+}
+
+/**
+ * 画像 1 枚の文字認識の結果（行ごとの文字）。読めなかったときは、理由が `error` に入る。
+ * `retries` は、同じ画像をコントラストを上げたり広げたりして読み直した結果（順に試す。1 回目の `lines` で読めないときに使う。E-20）。
+ */
 export interface OcrEntry {
   lines: string[];
+  retries?: OcrRetry[];
   error?: string | null;
 }
 

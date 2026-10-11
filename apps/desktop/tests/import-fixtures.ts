@@ -21,6 +21,8 @@ export interface Fx4OcrMark {
   /** 押した時刻（ローカル時刻）。 */
   time: string;
   lines: string[];
+  /** 1 回目で読めなかったときの読み直し（迷い 6 だけ。E-20）。 */
+  retries?: Array<{ variant: string; lines: string[] }>;
 }
 
 export const FX4_OCR: Fx4OcrMark[] = (
@@ -28,7 +30,7 @@ export const FX4_OCR: Fx4OcrMark[] = (
 ).marks;
 
 /** 切り出しの決まりの名前（Rust 側の `jantama_ocr::GEOMETRY_ID`）。 */
-export const OCR_GEOMETRY = 'center-v1-lanczos3x';
+export const OCR_GEOMETRY = 'center-v2-lanczos3x-variants';
 
 /** FX-4 の迷いマーク 6 枚（id は 1〜6）と、評価 5 件（id は 7〜11。スクショは読み取れていない）を持つ半荘。 */
 export function fx4Session(
@@ -69,12 +71,19 @@ export function fx4Session(
   };
 }
 
-/** FX-4 の迷いマークの画像の読み取りの写し（評価の画像は、読み取れなかった）。 */
-export function fx4Ocr(): OcrCache {
+/**
+ * FX-4 の迷いマークの画像の読み取りの写し（評価の画像は、読み取れなかった）。
+ * 既定は 1 回目の読み取りだけ（迷い 6 は読めない）。`retries: true` なら、1 回目で読めなかった迷い 6 の読み直しの行も入る（E-20。
+ * 迷い 6 は、東3局・残り38枚・4400点と読める）。
+ */
+export function fx4Ocr(options: { retries?: boolean } = {}): OcrCache {
   return {
     geometry: OCR_GEOMETRY,
     entries: Object.fromEntries(
-      FX4_OCR.map((m, i) => [`marks/m${i + 1}.png`, { lines: m.lines }] as const),
+      FX4_OCR.map((m, i) => {
+        const retries = options.retries === true && m.retries !== undefined ? { retries: m.retries } : {};
+        return [`marks/m${i + 1}.png`, { lines: m.lines, ...retries }] as const;
+      }),
     ),
   };
 }

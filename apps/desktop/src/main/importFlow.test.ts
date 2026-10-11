@@ -11,7 +11,7 @@ import {
 } from '@jantama/engine';
 import { describe, expect, it, vi } from 'vitest';
 
-import { FX4_OCR, FX4_TEXT, fx4Ocr, fx4Session } from '../../tests/import-fixtures';
+import { FX4_OCR, FX4_TEXT, OCR_GEOMETRY, fx4Ocr, fx4Session } from '../../tests/import-fixtures';
 import type { Links, SessionRecord } from '../api/types';
 import {
   CANDIDATE_WINDOW_MS,
@@ -115,6 +115,18 @@ describe('結びつけ先の候補', () => {
     expect(ratings.map((r) => r.rating)).toEqual(['good', 'fair', 'good', 'bad', 'fair']);
   });
 
+  it('読み直し（retries）のある画像は、1 回目の行に加えて、読み直しの行も持つ（E-20）。無い画像は、持たない', () => {
+    const session = fx4Session('s', NOW - HOUR);
+    const marks = markReadings(session, fx4Ocr({ retries: true }));
+    expect(marks[5]?.lines).toEqual(FX4_OCR[5]?.lines);
+    expect(marks[5]?.retries).toEqual(FX4_OCR[5]?.retries?.map((r) => r.lines));
+    expect(marks[0]?.retries).toBeUndefined();
+    // 読めなかった（理由つき）画像は、読み直しの行があっても、読めない扱い
+    const failed = fx4Ocr({ retries: true });
+    failed.entries['marks/m6.png'] = { lines: [], retries: [{ variant: 'contrast1.8', lines: ['東 3 局'] }], error: '画像を開けませんでした' };
+    expect(markReadings(session, failed)[5]).toEqual({ id: 6, t_ms: session.marks[5]?.t_ms });
+  });
+
   it('半荘の候補は、迷いマークと評価の両方の読み取りを持つ', () => {
     const session = fx4Session('s', NOW - HOUR);
     const candidate = toSessionCandidate(session, fx4Ocr());
@@ -200,7 +212,7 @@ describe('prepareImport: 検査・読み取り・結びつけ先の決定', () =
           session_id: id,
           // 別の半荘のスクショ（点数が合わない）
           ocr: {
-            geometry: 'center-v1-lanczos3x',
+            geometry: OCR_GEOMETRY,
             entries: { 'marks/m1.png': { lines: ['東 1 局', '个 5 9', '17000'] } },
           },
         })),
@@ -251,9 +263,10 @@ describe('completeImport: 保存・結びつけ・まとめ', () => {
     const summary = await completeImport(deps, context, '20261009-190953');
 
     expect(deps.calls['saveReport']).toEqual([['20261009-190953', FX4_TEXT]]);
-    // 迷い 1〜3 は 1 つに決まる。迷い 4・5 は候補が複数、迷い 6 は読めない（どれも保存しない）。評価は押した順で局へ。
+    // 迷いマークの結びつけは、保存しない（推定は、読み取りの写しと結果から出せる。保存するのは、利用者が選んだものだけ）。
+    // 評価は押した順で局へ。
     const expected: Links = {
-      marks: { '1': 'k0h0e4', '2': 'k1h0e13', '3': 'k1h1e7' },
+      marks: {},
       ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': 'k2h0', '11': 'k2h1' },
     };
     expect(deps.calls['replaceLinks']).toEqual([['20261009-190953', expected]]);
@@ -271,8 +284,9 @@ describe('completeImport: 保存・結びつけ・まとめ', () => {
       decisionCount: 70,
       disagreementCount: listDisagreements(imported.value.decisions).total,
       markCount: 6,
-      linkedMarks: 3,
-      choiceMarks: 3,
+      // 読めた迷い 1〜5 は、1 位を推定として結びつける。読めない迷い 6 だけが、手で選ぶ。
+      estimatedMarks: 5,
+      manualMarks: 1,
       ratingCount: 5,
       placedRatings: 5,
       warnings: [],
@@ -287,7 +301,7 @@ describe('completeImport: 保存・結びつけ・まとめ', () => {
     const summary = await completeImport(deps, context, 'a');
     expect(summary.sessionId).toBe('a');
     expect(summary.startedMs).toBe(NOW - 20 * HOUR);
-    expect(summary.linkedMarks).toBe(3);
+    expect(summary.estimatedMarks).toBe(5);
     expect(deps.calls['saveReport']).toEqual([['a', FX4_TEXT]]);
   });
 
@@ -302,8 +316,8 @@ describe('completeImport: 保存・結びつけ・まとめ', () => {
       startedMs: NOW,
       linkedToRecording: false,
       markCount: 0,
-      linkedMarks: 0,
-      choiceMarks: 0,
+      estimatedMarks: 0,
+      manualMarks: 0,
       ratingCount: 0,
       placedRatings: 0,
       ratingText: '93.0',
@@ -332,8 +346,17 @@ describe('completeImport: 保存・結びつけ・まとめ', () => {
     const context = await prepared(deps);
     const summary = await completeImport(deps, context, 's');
     expect(summary.warnings.join('\n')).toContain('日本語の言語パックがありません');
-    // 迷いマークは読み取れていないので、結びつけは 0、選んでほしいのは 6。評価は押した順に当てはめる。
-    expect(summary).toMatchObject({ markCount: 6, linkedMarks: 0, choiceMarks: 6, placedRatings: 5 });
+    // 迷いマークは読み取れていないので、推定は 0、手で選んでほしいのは 6。評価は押した順に当てはめる。
+    expect(summary).toMatchObject({ markCount: 6, estimatedMarks: 0, manualMarks: 6, placedRatings: 5 });
+  });
+
+  it('E-20 読み直しの写しがあれば、1 回目で読めなかった迷い 6 も推定になる（推定 6・手で選ぶ 0）', async () => {
+    const deps = fakeDeps([fx4Session('s', NOW - HOUR)], {
+      ocrSessions: async (ids) => ids.map((id) => ({ session_id: id, ocr: fx4Ocr({ retries: true }) })),
+    });
+    const context = await prepared(deps);
+    const summary = await completeImport(deps, context, 's');
+    expect(summary).toMatchObject({ markCount: 6, estimatedMarks: 6, manualMarks: 0 });
   });
 
   it('結果の保存に失敗したときは、例外を投げて、結びつけは書かない', async () => {
@@ -356,12 +379,108 @@ describe('completeImport: 保存・結びつけ・まとめ', () => {
   });
 });
 
+describe('U-14 その半荘に取り込む（結びつけ先が決まっているとき。結びつけ先の照合はしない）', () => {
+  const ID = '20261009-190953';
+
+  it('指定した半荘だけを読み取って、その半荘に結びつける（ほかの半荘は見ない。直近 7 日の外でも）', async () => {
+    const old = fx4Session(ID, NOW - 30 * 24 * HOUR);
+    const other = fx4Session('other', NOW - HOUR);
+    const deps = fakeDeps([other, old]);
+    const steps: ImportStep[] = [];
+    const result = await prepareImport(deps, FX4_TEXT, (step) => steps.push(step), { target: ID });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(deps.calls['ocrSessions']).toEqual([[[ID]]]);
+    expect(result.context.match).toEqual({ kind: 'match', sessionId: ID });
+    expect(result.context.sessions.map((s) => s.id)).toEqual([ID]);
+    expect(steps).toEqual(['checking', 'reading']);
+    expect(result.context.targetCheck).toEqual({ sessionId: ID, readable: 5, fitting: 5, mismatches: [] });
+  });
+
+  it('読めたスクショがすべて結果と合えば、食い違いは無い。読み直しで読めた迷い 6 も数える', async () => {
+    const deps = fakeDeps([fx4Session(ID, NOW - HOUR)], {
+      ocrSessions: async (ids) => ids.map((id) => ({ session_id: id, ocr: fx4Ocr({ retries: true }) })),
+    });
+    const result = await prepareImport(deps, FX4_TEXT, undefined, { target: ID });
+    if (!result.ok) throw new Error(result.failure.message);
+    expect(result.context.targetCheck).toEqual({ sessionId: ID, readable: 6, fitting: 6, mismatches: [] });
+  });
+
+  it('結果と合わないスクショは、迷い・評価の呼び名と、読んだ内容を返す（局が違う・点数が違う）', async () => {
+    const session = fx4Session(ID, NOW - HOUR);
+    const cache = fx4Ocr();
+    cache.entries['marks/m2.png'] = { lines: ['南 2 局', '个 4 0', '25000'] };
+    cache.entries['marks/m4.png'] = { lines: ['東 2 局', '个 3 5', '17000'] };
+    cache.entries['ratings/r3.png'] = { lines: ['西 1 局', '个 6 0', '25000'] };
+    const deps = fakeDeps([session], { ocrSessions: async (ids) => ids.map((id) => ({ session_id: id, ocr: cache })) });
+    const result = await prepareImport(deps, FX4_TEXT, undefined, { target: ID });
+    if (!result.ok) throw new Error(result.failure.message);
+    expect(result.context.targetCheck).toEqual({
+      sessionId: ID,
+      readable: 6,
+      fitting: 3,
+      mismatches: [
+        { label: '迷い2', reading: '南2局・残り40・25,000点' },
+        { label: '迷い4', reading: '東2局・残り35・17,000点' },
+        { label: '評価3局目', reading: '西1局・残り60・25,000点' },
+      ],
+    });
+  });
+
+  it('何も読めなければ（文字認識が使えない）、食い違いは言えない。理由を添えて、そのまま進められる', async () => {
+    const deps = fakeDeps([fx4Session(ID, NOW - HOUR)], {
+      ocrSessions: async () => {
+        throw 'Windows の日本語の文字認識が使えません。';
+      },
+    });
+    const result = await prepareImport(deps, FX4_TEXT, undefined, { target: ID });
+    if (!result.ok) throw new Error(result.failure.message);
+    expect(result.context.ocrWarning).toContain('日本語の文字認識が使えません');
+    expect(result.context.targetCheck).toEqual({ sessionId: ID, readable: 0, fitting: 0, mismatches: [] });
+  });
+
+  it('指定した半荘が無い・すでに結果が入っているときは、画像を読まずに失敗にする', async () => {
+    const done = fx4Session(ID, NOW - HOUR, { report_path: 'C:\\data\\games\\x\\report.json' });
+    const deps = fakeDeps([done]);
+    const already = await prepareImport(deps, FX4_TEXT, undefined, { target: ID });
+    expect(already.ok).toBe(false);
+    if (!already.ok) expect(already.failure.title).toBe('この半荘には、すでに結果が取り込まれています');
+    const missing = await prepareImport(deps, FX4_TEXT, undefined, { target: 'nothing' });
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.failure.title).toBe('取り込む半荘が見つかりません');
+    expect(deps.calls['ocrSessions']).toBeUndefined();
+  });
+
+  it('牌譜と結果が合わないときは、半荘を調べる前に止める（結びつけ先が決まっていても同じ）', async () => {
+    const deps = fakeDeps([fx4Session(ID, NOW - HOUR)]);
+    const result = await prepareImport(deps, '<html>error</html>', undefined, { target: ID });
+    expect(result.ok).toBe(false);
+    expect(deps.calls['listSessions']).toBeUndefined();
+  });
+
+  it('指定した半荘に保存して、結びつけを書く。結びつけ先の照合の結果が合わなくても、ここでは保存を止めない（聞くのは画面）', async () => {
+    const cache = fx4Ocr();
+    cache.entries['marks/m2.png'] = { lines: ['南 2 局', '个 4 0', '25000'] };
+    const deps = fakeDeps([fx4Session(ID, NOW - 17 * HOUR), fx4Session('newer', NOW - HOUR)], {
+      ocrSessions: async (ids) => ids.map((id) => ({ session_id: id, ocr: cache })),
+    });
+    const result = await prepareImport(deps, FX4_TEXT, undefined, { target: ID });
+    if (!result.ok) throw new Error(result.failure.message);
+    expect(result.context.targetCheck?.mismatches).toHaveLength(1);
+    const summary = await completeImport(deps, result.context, ID);
+    expect(deps.calls['saveReport']).toEqual([[ID, FX4_TEXT]]);
+    expect(summary).toMatchObject({ sessionId: ID, linkedToRecording: true, markCount: 6, placedRatings: 5 });
+    // 合わなかった迷い 2 は、1 枚の読み取りが「この半荘に合う局が無い」ので、手で選ぶ。読めた 4 枚は推定
+    expect(summary).toMatchObject({ estimatedMarks: 4, manualMarks: 2 });
+  });
+});
+
 describe('buildLinks', () => {
   it('どの局にも当てはめられなかった評価は、空の文字列（どの局にも結びつけない）で保存する', async () => {
     const imported = importReportText(FX4_TEXT);
     if (!imported.ok) throw new Error(imported.error.message);
     const report = imported.value.report;
-    const links = buildLinks(report, [], {
+    const links = buildLinks(report, {
       status: 'tooMany',
       handCount: 5,
       ratingCount: 2,

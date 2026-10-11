@@ -7,17 +7,21 @@
  * 2. 読み取り: 結果が無い半荘（新しい順、直近 7 日）の迷いマーク・評価のスクショを、Rust 側で文字認識にかける（対局後だけ。SPEC 2章）
  * 3. 当てはめ: `matchSessionForReport` で、結果を結びつける半荘を決める
  *    （1 つに決まる＝そのまま／決まらない＝一覧から選んでもらう／結果の無い半荘が無い＝記録の無い半荘として取り込む）
- * 4. 保存: 結果を半荘のフォルダに保存し、迷いマーク・評価の結びつけ（`linkMarks`・`linkRatings`）を書く
- * 5. まとめ: `summarizeHanchan` で、Rating・段階・結びつけた迷いマークの数・選んでほしい数を出す
+ *    取り込み前の半荘のページから、その半荘に取り込むとき（`PrepareOptions.target`。U-14）は、この当てはめをせず、その半荘だけを読み取って、
+ *    読めたスクショが結果と合うかを調べる（`checkShotsAgainstReport`）。合わないものがあれば、保存の前に利用者に聞く
+ * 4. 保存: 結果を半荘のフォルダに保存し、評価の結びつけ（`linkRatings`）を書く。
+ *    迷いマークの結びつけ（`linkMarks`）は、保存しない（推定は、読み取りの写しと結果から、いつでも同じに出せる。
+ *    保存するのは、利用者が選んだものだけ。選んだものには「推定」の印が付かないため）
+ * 5. まとめ: `summarizeHanchan` で、Rating・段階・推定で結びつけた迷いマークの数・手で選んでほしい数を出す
  */
 import {
+  checkShotsAgainstReport,
   importReportText,
   linkRatings,
   listDisagreements,
   matchSessionForReport,
   summarizeHanchan,
   type ImportedGame,
-  type MarkLink,
   type RatingLinking,
   type ScreenReading,
   type SessionCandidate,
@@ -25,6 +29,7 @@ import {
 } from '@jantama/engine';
 
 import type { Links, OcrCache, Rating, SessionOcr, SessionRecord } from '../api/types';
+import { centerText } from './format';
 
 /** 結果を結びつける半荘の候補にする、記録した半荘の新しさ。これより古い半荘は、候補に入れない（読み取りの手間を減らす）。 */
 export const CANDIDATE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -65,11 +70,20 @@ export interface RatingReading extends ScreenReading {
   rating: Rating;
 }
 
-/** 写しの中の、画像 1 枚の行。写しが無い・その画像が無い・読めなかった（理由つき）ときは `undefined`（読めない扱い）。 */
-function linesOf(ocr: OcrCache | null | undefined, relative: string | null | undefined): string[] | undefined {
-  if (!ocr || !relative) return undefined;
+/**
+ * 写しの中の、画像 1 枚の読み取り（1 回目の行と、読み直しの行）。写しが無い・その画像が無い・読めなかった（理由つき）ときは、
+ * どちらも無い（読めない扱い）。
+ */
+function shotOf(
+  ocr: OcrCache | null | undefined,
+  relative: string | null | undefined,
+): Pick<ScreenReading, 'lines' | 'retries'> {
+  if (!ocr || !relative) return {};
   const entry = ocr.entries[relative];
-  return entry && !entry.error ? entry.lines : undefined;
+  if (!entry || entry.error) return {};
+  return entry.retries && entry.retries.length > 0
+    ? { lines: entry.lines, retries: entry.retries.map((retry) => retry.lines) }
+    : { lines: entry.lines };
 }
 
 /** 半荘の迷いマークと、そのスクショの読み取り（記録の順）。 */
@@ -77,7 +91,7 @@ export function markReadings(session: Pick<SessionRecord, 'marks'>, ocr: OcrCach
   return session.marks.map((mark) => ({
     id: mark.id,
     t_ms: mark.t_ms,
-    lines: linesOf(ocr, mark.screenshot),
+    ...shotOf(ocr, mark.screenshot),
   }));
 }
 
@@ -87,7 +101,7 @@ export function ratingReadings(session: Pick<SessionRecord, 'ratings'>, ocr: Ocr
     id: rating.id,
     t_ms: rating.t_ms,
     rating: rating.rating,
-    lines: linesOf(ocr, rating.screenshot),
+    ...shotOf(ocr, rating.screenshot),
   }));
 }
 
@@ -106,26 +120,21 @@ export function toSessionCandidate(session: SessionRecord, ocr: OcrCache | null 
   return {
     id: session.id,
     started_ms: session.started_ms,
-    marks: [...markReadings(session, ocr), ...ratingReadings(session, ocr)].map((r) => ({ lines: r.lines })),
+    marks: [...markReadings(session, ocr), ...ratingReadings(session, ocr)].map((r) => ({
+      lines: r.lines,
+      retries: r.retries,
+    })),
   };
 }
 
 /**
  * 自動で決めた結びつけを、保存する形にする。
- * - 迷いマーク: 判断が 1 つに決まったものだけ、その判断の鍵を保存する。候補が複数のものと、手で選ぶものは、
- *   保存しない（「まだ決めていない」のまま。画面で、選んでもらう）
+ * - 迷いマーク: 保存しない。1 位の推定は、読み取りの写しと結果から、いつでも同じに出せる。保存するのは、利用者が選んだものだけ
+ *   （保存してあるものには、「推定」の印が付かない）
  * - 評価: 当てはめた局の鍵。どの局にも当てはめられなかった評価は、空の文字列（「どの局にも結びつけない」）
  */
-export function buildLinks(
-  report: ImportedGame['report'],
-  marks: readonly MarkLink<MarkReading>[],
-  ratings: RatingLinking<RatingReading> | null,
-): Links {
+export function buildLinks(report: ImportedGame['report'], ratings: RatingLinking<RatingReading> | null): Links {
   const links: Links = { marks: {}, ratings: {} };
-  for (const link of marks) {
-    const only = link.status === 'linked' ? link.candidates[0] : undefined;
-    if (only) links.marks[String(link.mark.id)] = only.key;
-  }
   for (const placement of ratings?.placements ?? []) {
     const kyoku = placement.position === null ? undefined : report.review.kyokus[placement.position];
     links.ratings[String(placement.rating.id)] = kyoku ? kyokuKey(kyoku.kyoku, kyoku.honba) : '';
@@ -152,10 +161,10 @@ export interface ImportSummary {
   disagreementCount: number;
   /** 結びつけ先の半荘の迷いマークの数。 */
   markCount: number;
-  /** そのうち、判断に結びつけた数。 */
-  linkedMarks: number;
-  /** そのうち、選んでほしい数（候補が複数・読み取れない・合う局が無い）。 */
-  choiceMarks: number;
+  /** そのうち、読めて、1 位の判断を推定として結びつけた数。 */
+  estimatedMarks: number;
+  /** そのうち、手で選んでほしい数（読み取れない・合う局が無い・その局に判断が無い）。 */
+  manualMarks: number;
   /** 局の評価の数と、局に当てはめた数。 */
   ratingCount: number;
   placedRatings: number;
@@ -163,21 +172,45 @@ export interface ImportSummary {
   warnings: string[];
 }
 
+/**
+ * 結びつけ先の半荘が決まっているとき（`PrepareOptions.target`。U-14）の、スクショと結果の照合。
+ * `mismatches` が、読めて、結果と合わなかったスクショ（迷い・評価の呼び名と、読んだ内容）。
+ */
+export interface TargetCheck {
+  /** 結びつけ先の半荘の名前。 */
+  sessionId: string;
+  /** 読めたスクショの数と、そのうち結果と合ったものの数。 */
+  readable: number;
+  fitting: number;
+  mismatches: Array<{ label: string; reading: string }>;
+}
+
 /** 取り込みの準備の結果。 */
 export interface ImportContext {
   /** 結果の生の JSON。 */
   text: string;
   game: ImportedGame;
-  /** 結びつけ先の候補（結果が無い・直近 7 日の半荘。新しい順）。 */
+  /** 結びつけ先の候補（結果が無い・直近 7 日の半荘。新しい順）。結びつけ先が決まっているときは、その半荘だけ。 */
   sessions: SessionRecord[];
   /** 半荘ごとの、文字認識の結果の写し。 */
   ocr: Map<string, OcrCache>;
   /** 文字認識が使えなかったときの理由。 */
   ocrWarning: string | null;
   match: SessionMatch;
+  /** 結びつけ先が決まっているときの、スクショと結果の照合。決まっていなければ null。 */
+  targetCheck: TargetCheck | null;
 }
 
 export type PrepareResult = { ok: true; context: ImportContext } | { ok: false; failure: ImportFailure };
+
+/** 取り込みの準備の指定。 */
+export interface PrepareOptions {
+  /**
+   * 結びつけ先の半荘の名前（取り込み前の半荘のページから、その半荘に取り込むとき。U-14）。
+   * 決まっていれば、結びつけ先の照合（E-19）はせず、その半荘の画像だけを読み取る。
+   */
+  target?: string;
+}
 
 function messageOf(error: unknown): string {
   if (typeof error === 'string') return error;
@@ -202,12 +235,13 @@ function failureOf(error: { code: string; message: string }): ImportFailure {
 
 /**
  * 結果の JSON を検査して、結びつけ先を決めるところまで進める（保存はしない）。
- * `onStep` は、段階が変わるたびに呼ぶ。
+ * `onStep` は、段階が変わるたびに呼ぶ。`options.target` があれば、その半荘に結びつける（U-14。結びつけ先の照合はしない）。
  */
 export async function prepareImport(
   deps: ImportDeps,
   text: string,
   onStep: (step: ImportStep) => void = () => undefined,
+  options: PrepareOptions = {},
 ): Promise<PrepareResult> {
   onStep('checking');
   const imported = importReportText(text);
@@ -224,7 +258,33 @@ export async function prepareImport(
       failure: { title: '半荘の一覧を読めませんでした', message: messageOf(error) },
     };
   }
-  const sessions = candidateSessions(all, deps.now());
+
+  const targetId = options.target;
+  let sessions: SessionRecord[];
+  if (targetId === undefined) {
+    sessions = candidateSessions(all, deps.now());
+  } else {
+    const found = all.find((s) => s.id === targetId);
+    if (found === undefined) {
+      return {
+        ok: false,
+        failure: {
+          title: '取り込む半荘が見つかりません',
+          message: `取り込み先の半荘（${targetId}）が、半荘の一覧にありません。削除したか、保存先を変えた可能性があります。`,
+        },
+      };
+    }
+    if (found.report_path !== null) {
+      return {
+        ok: false,
+        failure: {
+          title: 'この半荘には、すでに結果が取り込まれています',
+          message: '結果の入っている半荘には、別の結果を取り込めません。',
+        },
+      };
+    }
+    sessions = [found];
+  }
 
   // 読み取りは、候補の半荘のスクショだけ（対局後の、取り込みのときだけ）。使えなくても、取り込み自体は続ける。
   const ocr = new Map<string, OcrCache>();
@@ -241,11 +301,41 @@ export async function prepareImport(
   }
 
   const cacheOf = (session: SessionRecord) => ocr.get(session.id) ?? session.ocr;
+  const base = { text, game: imported.value, sessions, ocr, ocrWarning };
+  const target = targetId === undefined ? undefined : sessions[0];
+  if (target !== undefined) {
+    return {
+      ok: true,
+      context: {
+        ...base,
+        match: { kind: 'match', sessionId: target.id },
+        targetCheck: checkTarget(imported.value.report, target, cacheOf(target)),
+      },
+    };
+  }
   const match = matchSessionForReport(
     imported.value.report,
     sessions.map((session) => toSessionCandidate(session, cacheOf(session))),
   );
-  return { ok: true, context: { text, game: imported.value, sessions, ocr, ocrWarning, match } };
+  return { ok: true, context: { ...base, match, targetCheck: null } };
+}
+
+/** 結びつけ先の半荘の迷い・評価のスクショが、結果と合うかを調べる（読めたものだけ）。 */
+function checkTarget(report: ImportedGame['report'], session: SessionRecord, ocr: OcrCache | null | undefined): TargetCheck {
+  const marks = markReadings(session, ocr);
+  const ratings = ratingReadings(session, ocr);
+  const check = checkShotsAgainstReport(report, [...marks, ...ratings]);
+  const nameOf = (index: number): string => {
+    if (index < marks.length) return `迷い${index + 1}`;
+    const at = index - marks.length;
+    return `評価${session.ratings[at]?.hand ?? at + 1}局目`;
+  };
+  return {
+    sessionId: session.id,
+    readable: check.readable,
+    fitting: check.fitting,
+    mismatches: check.mismatches.map((m) => ({ label: nameOf(m.index), reading: centerText(m.center) })),
+  };
 }
 
 /**
@@ -278,7 +368,7 @@ export async function completeImport(
     );
   }
   if (session) {
-    const links = buildLinks(report, hanchan.marks, ratingLinking);
+    const links = buildLinks(report, ratingLinking);
     if (Object.keys(links.marks).length > 0 || Object.keys(links.ratings).length > 0) {
       try {
         await deps.replaceLinks(savedId, links);
@@ -288,7 +378,7 @@ export async function completeImport(
     }
   }
 
-  const linked = hanchan.marks.filter((m) => m.status === 'linked').length;
+  const estimated = hanchan.marks.filter((m) => m.status === 'estimated').length;
   return {
     sessionId: savedId,
     startedMs: session ? session.started_ms : deps.now(),
@@ -299,8 +389,8 @@ export async function completeImport(
     decisionCount: hanchan.decisionCount,
     disagreementCount: listDisagreements(context.game.decisions).total,
     markCount: hanchan.marks.length,
-    linkedMarks: linked,
-    choiceMarks: hanchan.marks.length - linked,
+    estimatedMarks: estimated,
+    manualMarks: hanchan.marks.length - estimated,
     ratingCount: ratings.length,
     placedRatings: ratingLinking ? ratingLinking.placements.filter((p) => p.position !== null).length : 0,
     warnings,

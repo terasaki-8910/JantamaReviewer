@@ -56,7 +56,7 @@ describe('公開 API（src/index.ts）', () => {
   });
 
   it('E-16 画面中央の文字認識の読み取りの入口が使える', () => {
-    for (const name of ['parseCenterText', 'readingOf'] as const) {
+    for (const name of ['parseCenterText', 'firstReadable', 'readingOf'] as const) {
       expect(typeof engine[name], name).toBe('function');
     }
   });
@@ -64,6 +64,7 @@ describe('公開 API（src/index.ts）', () => {
   it('E-17 迷いマークの結びつけと、判断の呼び名・鍵の入口が使える', () => {
     for (const name of [
       'linkMarks',
+      'markScore',
       'kyokuFactsOf',
       'kyokuFits',
       'locateKyokus',
@@ -87,6 +88,7 @@ describe('公開 API（src/index.ts）', () => {
 
   it('E-19 結びつける半荘の入口が使える', () => {
     expect(typeof engine.matchSessionForReport).toBe('function');
+    expect(typeof engine.checkShotsAgainstReport).toBe('function');
   });
 
   it('半荘のまとめ（F9・F10）と、既定の段階の当てはめの入口が使える', () => {

@@ -39,6 +39,8 @@ export interface Fx4OcrMark {
   text: string;
   /** text を ` | ` で分けた行。 */
   lines: string[];
+  /** 1 回目で読めなかったときの、読み直し（コントラストを上げた画像・1.5 倍に広げた画像）の結果。迷い 6 だけにある（E-20）。 */
+  retries?: Array<{ variant: string; text: string; lines: string[] }>;
 }
 
 export function reportPath(id: string): string {

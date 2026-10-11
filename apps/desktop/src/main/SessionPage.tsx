@@ -1,5 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { useId, useMemo } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
 
@@ -16,7 +16,9 @@ import type { ViewerItem, ViewerRequest } from './Lightbox';
 import { markCaptionParts, resolveMarks, type ResolvedMark } from './markCards';
 import { MarkCard } from './MarkCard';
 import type { SummaryState } from './sessionSummaries';
+import { ImportHereButton, TargetImportPanel } from './TargetImport';
 import { useUndo } from './undo/UndoProvider';
+import type { ImportFlow } from './useImportFlow';
 
 interface SessionPageProps {
   session: SessionRecord;
@@ -29,6 +31,11 @@ interface SessionPageProps {
   onChanged?: () => Promise<void>;
   /** 迷いの画像を大きく表示する（表示は呼び出す側が持つ。裏の画面を操作できなくするため）。 */
   onOpenImage?: (request: ViewerRequest) => void;
+  /**
+   * 取り込みの状態（検討画面のシェルが 1 つだけ持つ）。渡すと、取り込み前の半荘に「この半荘に検討結果を取り込む」を出し、
+   * この半荘に取り込んでいる間の進み具合を、このページの中に出す（U-14）。
+   */
+  importFlow?: ImportFlow;
 }
 
 const noop = () => Promise.resolve();
@@ -38,7 +45,7 @@ const noop = () => Promise.resolve();
  * 結果を取り込む前の半荘は、迷いのカード（「迷いN」と時刻だけ）と、記録した〇△✕の一覧だけ。
  * AI の候補・確率・順位は出さない（SPEC F3。答えを書くまで隠す）。段階と Rating は、見出しと表にある。
  */
-export function SessionPage({ session, summary, onChanged = noop, onOpenImage }: SessionPageProps) {
+export function SessionPage({ session, summary, onChanged = noop, onOpenImage, importFlow }: SessionPageProps) {
   const titleId = useId();
   const marksId = useId();
   const handsId = useId();
@@ -47,6 +54,20 @@ export function SessionPage({ session, summary, onChanged = noop, onOpenImage }:
   const ready = summary?.status === 'ready' ? summary.summary : null;
   const report = reportState.status === 'ready' ? reportState.report : null;
   const when = formatSessionTitle(session.started_ms);
+  // この半荘に取り込む（U-14）: 取り込み前なら、主な操作を見出しに出す。始められなかった理由は、ページの上に出す。
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const canImportHere = importFlow !== undefined && session.report_path === null;
+  const importingHere =
+    importFlow !== undefined && importFlow.target?.sessionId === session.id && importFlow.state.phase !== 'prompt';
+  // 進み具合の知らせを閉じたら（やめる・閉じる）、押したボタンがまだあればそこへ、取り込みが済んでボタンが消えていれば見出しへ、
+  // キーボードの位置を戻す（知らせの中のボタンが消えて、位置が失われないように）。
+  const actionRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const wasImporting = useRef(false);
+  useEffect(() => {
+    if (wasImporting.current && !importingHere) (actionRef.current ?? titleRef.current)?.focus();
+    wasImporting.current = importingHere;
+  }, [importingHere]);
 
   const resolved = useMemo(() => (report === null ? null : resolveMarks(report, session)), [report, session]);
   const decisions = useMemo<DecisionRef[]>(() => (report === null ? [] : listDecisionRefs(report)), [report]);
@@ -131,7 +152,7 @@ export function SessionPage({ session, summary, onChanged = noop, onOpenImage }:
     <>
       <header className="head session-head">
         <div className="head-l">
-          <h1 className="title" id={titleId}>
+          <h1 className="title" id={titleId} ref={titleRef} tabIndex={-1}>
             {when}
             {/* 狭い幅で折り返すときは、卓の名前の途中ではなく、卓の名前の前（空白のところ）で折り返す */}
             {ready?.room ? (
@@ -149,9 +170,18 @@ export function SessionPage({ session, summary, onChanged = noop, onOpenImage }:
             <span className="rate-num">{ready.ratingText}</span> <span className="rate-lbl">Rating</span>
           </div>
         )}
+        {canImportHere && (
+          <ImportHereButton session={session} flow={importFlow} onNotice={setImportNotice} buttonRef={actionRef} />
+        )}
       </header>
       <div className="page">
         <div className="detail">
+          {canImportHere && importNotice !== null && (
+            <p className="notice" role="alert">
+              {importNotice}
+            </p>
+          )}
+          {importingHere && <TargetImportPanel flow={importFlow} />}
           <section aria-labelledby={marksId}>
             <h2 className="sec-title" id={marksId}>
               迷い（{session.marks.length}）

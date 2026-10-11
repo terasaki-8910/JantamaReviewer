@@ -32,8 +32,9 @@ afterEach(() => {
 });
 
 const ID = '20261009-190953';
+/** 取り込みが保存するとおりの結びつけ（迷いは保存しない。推定は、読み取りの写しと結果から出す）。 */
 const LINKS: Links = {
-  marks: { '1': 'k0h0e4', '2': 'k1h0e13', '3': 'k1h1e7' },
+  marks: {},
   ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': 'k2h0', '11': 'k2h1' },
 };
 
@@ -70,7 +71,7 @@ async function ready() {
 }
 
 describe('R7-4 迷いの画像の大きな表示（アプリ全体の中で）', () => {
-  it('カードの画像を押すと開き、裏の画面は操作できなくなる。説明は「迷いN · 局 · 巡目 · 種類」と時刻', async () => {
+  it('カードの画像を押すと開き、裏の画面は操作できなくなる。説明は「迷いN · 局 · 巡目 · 種類 · 推定」と時刻', async () => {
     const { user } = setup();
     await ready();
     expect(screen.queryByRole('dialog', { name: '迷いの画像' })).toBeNull();
@@ -82,12 +83,12 @@ describe('R7-4 迷いの画像の大きな表示（アプリ全体の中で）',
       'src',
       `asset://localhost/${encodeURIComponent('C:\\data\\games\\20261009-190953\\marks\\m3.png')}`,
     );
-    expect(dialog.querySelector('figcaption')?.textContent).toBe('迷い3 · 東2局1本場 · 6巡目 · 打牌の迷い · 19:17:37');
+    expect(dialog.querySelector('figcaption')?.textContent).toBe('迷い3 · 東2局1本場 · 6巡目 · 打牌の迷い · 推定 · 19:17:37');
     // 3 枚目から、前（2 枚目）・次（4 枚目）へ。
     await user.click(within(dialog).getByRole('button', { name: '次の画像' }));
-    expect(dialog.querySelector('figcaption')?.textContent).toBe('迷い4 · 東2局1本場 · 候補が3つ · 19:18:24');
+    expect(dialog.querySelector('figcaption')?.textContent).toBe('迷い4 · 東2局1本場 · 8〜9巡目 · 鳴きの迷い · 推定 · 19:18:24');
     await user.keyboard('{ArrowLeft}{ArrowLeft}');
-    expect(dialog.querySelector('figcaption')?.textContent).toBe('迷い2 · 東2局 · 11巡目 · 鳴きの迷い · 19:15:57');
+    expect(dialog.querySelector('figcaption')?.textContent).toBe('迷い2 · 東2局 · 11〜12巡目 · 打牌の迷い · 推定 · 19:15:57');
   });
 
   it('Esc で閉じると、押したカードの画像のボタンにキーボードの位置が戻り、裏の画面がまた操作できる', async () => {
@@ -122,7 +123,7 @@ describe('R7-4 迷いの画像の大きな表示（アプリ全体の中で）',
     const { user, mock, store } = setup();
     await ready();
     // 取り消せる操作を 1 つしておく（迷い 5 を選ぶ）。
-    await user.click(within(card(5)).getByRole('button', { name: '打1p' }));
+    await user.click(within(card(5)).getByRole('button', { name: '7巡目 打1p' }));
     await waitFor(() => expect(store.session(ID).links.marks['5']).toBe('k2h1e7'));
     await user.click(thumb(1));
     await user.keyboard('{Control>}z{/Control}');
@@ -141,12 +142,14 @@ describe('U-11 半荘のページの編集の通知と取り消し（アプリ�
   it('迷いを選ぶと、通知（「元に戻す」付き）が出る。通知の「元に戻す」で戻り、「元に戻しました」と出る', async () => {
     const { user, store } = setup();
     await ready();
-    await user.click(within(card(4)).getByRole('button', { name: '打7p' }));
+    await user.click(within(card(4)).getByRole('button', { name: '9巡目 打7p' }));
     await toastShows('迷い4を東2局1本場 9巡目の局面に結びつけました');
     expect(store.session(ID).links.marks['4']).toBe('k1h1e11');
     await user.click(within(document.querySelector('.toast') as HTMLElement).getByRole('button', { name: '元に戻す' }));
     await toastShows('迷い4の結びつけを元に戻しました');
-    await waitFor(() => expect(within(card(4)).getByText('選んでください')).toBeInTheDocument());
+    // 保存が消えて、推定（東をポン）に戻る。
+    await waitFor(() => expect(within(card(4)).getByText('推定')).toBeInTheDocument());
+    expect(within(card(4)).getByText('自分：東をポン')).toBeInTheDocument();
     expect(store.session(ID).links.marks['4']).toBeUndefined();
   });
 
@@ -160,8 +163,8 @@ describe('U-11 半荘のページの編集の通知と取り消し（アプリ�
     await user.click(within(table).getByRole('button', { name: '東1局の MAKA を入力' }));
     await user.click(screen.getByRole('menuitemradio', { name: 'C-' }));
     await toastShows('東1局の MAKA を C- にしました');
-    await user.click(within(card(5)).getByRole('button', { name: '打9m' }));
-    await toastShows('迷い5を東3局1本場 6巡目の局面に結びつけました');
+    await user.click(within(card(5)).getByRole('button', { name: '7巡目 打1p' }));
+    await toastShows('迷い5を東3局1本場 7巡目の局面に結びつけました');
 
     await user.keyboard('{Control>}z{/Control}');
     await toastShows('迷い5の結びつけを元に戻しました');
@@ -180,16 +183,16 @@ describe('U-11 半荘のページの編集の通知と取り消し（アプリ�
     await user.keyboard('{Control>}y{/Control}');
     await toastShows('東1局の MAKA を C- にしました');
     await user.keyboard('{Control>}y{/Control}');
-    await toastShows('迷い5を東3局1本場 6巡目の局面に結びつけました');
+    await toastShows('迷い5を東3局1本場 7巡目の局面に結びつけました');
     expect(store.session(ID).self_ratings.kyokus).toEqual({ k1h0: 'good' });
     expect(store.session(ID).maka.kyokus).toEqual({ k0h0: 'C-' });
-    expect(store.session(ID).links.marks['5']).toBe('k2h1e6');
+    expect(store.session(ID).links.marks['5']).toBe('k2h1e7');
   });
 
   it('別の半荘を開いたあとでも、Ctrl+Z は前の編集を取り消す（通知で、何を戻したか分かる）', async () => {
     const { user, store, olderId } = setup();
     await ready();
-    await user.click(within(card(5)).getByRole('button', { name: '打1p' }));
+    await user.click(within(card(5)).getByRole('button', { name: '7巡目 打1p' }));
     await toastShows('迷い5を東3局1本場 7巡目の局面に結びつけました');
     // 取り込み前の半荘を開く。
     const list = screen.getByRole('navigation', { name: '半荘の一覧' });
@@ -200,9 +203,9 @@ describe('U-11 半荘のページの編集の通知と取り消し（アプリ�
     await toastShows('迷い5の結びつけを元に戻しました');
     expect(store.session(ID).links.marks['5']).toBeUndefined();
     expect(store.session(olderId).links.marks).toEqual({});
-    // 元の半荘へ戻ると、選ぶ前の状態になっている。
+    // 元の半荘へ戻ると、選ぶ前の状態（推定）になっている。
     await user.click(within(list).getByRole('button', { name: /^19:09/ }));
-    await waitFor(() => expect(within(card(5)).getByText('選んでください')).toBeInTheDocument());
+    await waitFor(() => expect(within(card(5)).getByText('推定')).toBeInTheDocument());
   });
 
   it('保存できなかったときは、理由を通知に出し、表も変えない', async () => {
@@ -228,7 +231,7 @@ describe('U-11 半荘のページの編集の通知と取り消し（アプリ�
   it('文字を打つ欄（検索）の中の Ctrl+Z は、半荘のページの編集を戻さない', async () => {
     const { user, store } = setup();
     await ready();
-    await user.click(within(card(5)).getByRole('button', { name: '打1p' }));
+    await user.click(within(card(5)).getByRole('button', { name: '7巡目 打1p' }));
     await waitFor(() => expect(store.session(ID).links.marks['5']).toBe('k2h1e7'));
     await user.click(screen.getByRole('searchbox'));
     await user.keyboard('昨日{Control>}z{/Control}');

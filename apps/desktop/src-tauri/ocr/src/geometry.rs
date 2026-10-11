@@ -13,8 +13,52 @@ pub const CENTER_BOTTOM_PERMILLE: u64 = 500;
 /// 切り出したあとに、文字認識の前に拡大する倍率。
 pub const UPSCALE: u32 = 3;
 
+/// 読み直し（E-20）の、コントラストの倍率。3 倍にした画像の、明るさの平均を中心に、色を 1.8 倍に広げる。
+pub const CONTRAST_FACTOR: f32 = 1.8;
+
+/// 読み直し（E-20）の、広げる倍率の分子と分母（3 倍にした画像を、さらに 3/2 = 1.5 倍に広げる）。小数は切り捨てる。
+pub const ENLARGE_NUMERATOR: u32 = 3;
+pub const ENLARGE_DENOMINATOR: u32 = 2;
+
 /// 切り出しの決まりの名前。読み取りの結果を保存するとき（`ocr.json`）に添えて、決まりが変わったら読み直せるようにする。
-pub const GEOMETRY_ID: &str = "center-v1-lanczos3x";
+/// 切り出しの箱・3 倍の拡大・読み直しの画像の作り方（`Variant`）のどれかを変えたら、名前を変える（古い写しは読み直す）。
+/// - v1: 3 倍の画像を 1 回だけ読む
+/// - v2: 3 倍の画像に加えて、コントラストを上げた画像と 1.5 倍に広げた画像も読む（読み直し）
+pub const GEOMETRY_ID: &str = "center-v2-lanczos3x-variants";
+
+/// 文字認識にかける画像の作り方。1 回目は `Plain`。1 回目で読めない画像のために、`Contrast`・`Enlarged` の順で読み直す（E-20）。
+/// どれで読むかを決めるのは呼ぶ側（結果を取り込む画面の側が、局・残り枚数・点数が取れた最初のものを使う）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Variant {
+    /// 切り出した画像を 3 倍にしたもの（そのまま）。
+    Plain,
+    /// コントラストを 1.8 倍にしたもの。
+    Contrast,
+    /// さらに 1.5 倍に広げたもの。
+    Enlarged,
+}
+
+impl Variant {
+    /// 1 回目と読み直しの順。
+    pub const ALL: [Variant; 3] = [Variant::Plain, Variant::Contrast, Variant::Enlarged];
+
+    /// 写し（`ocr.json`）に残す名前。
+    pub fn name(self) -> &'static str {
+        match self {
+            Variant::Plain => "plain",
+            Variant::Contrast => "contrast1.8",
+            Variant::Enlarged => "upscale1.5",
+        }
+    }
+}
+
+/// 3 倍にした画像（幅, 高さ）を、読み直しのために広げたあとの大きさ。小数は切り捨てる（654×393 → 981×589）。
+pub fn enlarged_size(width: u32, height: u32) -> (u32, u32) {
+    (
+        width * ENLARGE_NUMERATOR / ENLARGE_DENOMINATOR,
+        height * ENLARGE_NUMERATOR / ENLARGE_DENOMINATOR,
+    )
+}
 
 /// 切り出す長方形（画素。左上と大きさ）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,6 +172,25 @@ mod tests {
                 height: 14
             })
         );
+    }
+
+    #[test]
+    fn the_enlarged_size_cuts_the_fraction_down() {
+        // 迷いマークの画面（1447×935）の中央は、3 倍で 654×393、広げて 981×589（393 × 1.5 = 589.5 → 589）。
+        let crop = center_crop(1447, 935).unwrap();
+        let (w, h) = crop.scaled(UPSCALE);
+        assert_eq!(enlarged_size(w, h), (981, 589));
+        assert_eq!(enlarged_size(61, 28), (91, 42));
+        assert_eq!(enlarged_size(2, 2), (3, 3));
+    }
+
+    #[test]
+    fn the_variants_are_read_in_order_with_stable_names() {
+        assert_eq!(
+            Variant::ALL.map(Variant::name),
+            ["plain", "contrast1.8", "upscale1.5"]
+        );
+        assert!(GEOMETRY_ID.starts_with("center-v2"));
     }
 
     #[test]

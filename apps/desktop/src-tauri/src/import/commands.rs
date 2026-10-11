@@ -39,13 +39,15 @@ pub async fn read_clipboard_text() -> Result<Option<String>, String> {
 
 /// mjai の窓を開いて、URL 欄に牌譜リンクを入れる。Submit はユーザーが押す。
 /// `background` は、画面が描いている背景の色（CSS の色。窓の背景色をそろえる）。
+/// `target` は、取り込み先の半荘の呼び名（例: 10月9日 19:09。その半荘のページから取り込むとき。窓の題名に出す。U-14）。
 #[tauri::command]
 pub async fn open_mjai_window(
     app: AppHandle,
     link: String,
     background: String,
+    target: Option<String>,
 ) -> Result<(), String> {
-    mjai_window::open(&app, &link, &background)
+    mjai_window::open(&app, &link, &background, target.as_deref())
 }
 
 /// mjai の窓を閉じる（「やめる」など。開いていなければ何もしない）。

@@ -16,11 +16,14 @@
  *   `detectNewPaipuLink(text, announced)`（純粋な関数）か `new PaipuLinkAnnouncer(ids).announce(text)`
  *
  * 取り込みのあとの結びつけ（F9〜F11。スクショの中央から読んだ局・残りの牌の数・点数を使う）。
- * スクショ 1 枚の読み取りは `ScreenReading` で渡す（`center`＝読み取り済み、`lines`＝文字認識の行。どちらも無ければ読めない扱い）:
- * - `parseCenterText(lines)`（E-16）: 文字認識の行 → `{ wind: 'E' | 'S' | 'W', number: 1〜4, tilesLeft, score } | null`（読めなければ null）
- * - `linkMarks(report, marks)`（E-17）: 迷いマーク → 判断。結果は渡した順の `MarkLink`（`status` は linked＝1つに決まった・
- *   candidates＝候補が複数・manual＝手で選ぶ）。局は点数との照合で決め（`kyokuFactsOf` / `locateKyokus`）、判断は残りの牌の数が
- *   いちばん近いもの（同じ差は候補すべて）。判断の呼び名と保存用の鍵は `DecisionRef`
+ * スクショ 1 枚の読み取りは `ScreenReading` で渡す（`center`＝読み取り済み、`lines`＝文字認識の行、`retries`＝1回目で読めないときに
+ * 順に試す読み直しの行。どれも無ければ読めない扱い）:
+ * - `parseCenterText(lines)`（E-16）: 文字認識の行 → `{ wind: 'E' | 'S' | 'W', number: 1〜4, tilesLeft, score } | null`（読めなければ null）。
+ *   `firstReadable(lines, retries)`（E-20）は、1回目の行と読み直しの行のうち、最初に読めたものから取る（`readingOf` も同じ）
+ * - `linkMarks(report, marks)`（E-17）: 迷いマーク → 判断。結果は渡した順の `MarkLink`（`status` は estimated＝読めた・
+ *   manual＝手で選ぶ）。局は点数との照合で決め（`kyokuFactsOf` / `locateKyokus`）、その局の判断に順位を付ける
+ *   （点 `markScore` = 残りの牌の数の差 + スルー 1.5 / 和了 3 + 読んだあとの判断 0.25。小さいほど上）。1位が推定（`estimate`）、
+ *   1位との点の差が 0.75 以下の判断が、ほかの候補（`alternatives`。最大 4 つ）。判断の呼び名と保存用の鍵は `DecisionRef`
  *   （`listDecisionRefs` / `findDecisionRef` / `decisionKey`。「手で選ぶ」の一覧にも使う）
  * - `linkRatings(report, ratings)`（E-18）: 局の評価（〇△✕）→ 局。評価は `t_ms` と読み取りを持つ記録。局の始め
  *   （残り `HAND_START_TILES_LEFT` 枚以上）に読めたら前の局、途中なら読んだ局、読めないものは前後の間へ押した順。
@@ -28,6 +31,8 @@
  * - `matchSessionForReport(report, sessions)`（E-19）: 結果を結びつける半荘。sessions は結果がまだ無い半荘
  *   （`id`・`started_ms`・スクショの読み取り `marks`）。合うものがちょうど1つなら `match`、合うものが無いか2つ以上なら
  *   `choose`（`sessionIds` は新しい順）、結果の無い半荘が無ければ `new`
+ *   結びつけ先が決まっているとき（取り込み前の半荘のページから、その半荘に取り込むとき。U-14）は、`checkShotsAgainstReport(report, marks)`
+ *   で、読めたスクショのうち結果と合わないもの（`mismatches`）を調べる
  * - `summarizeHanchan(report, { gradeModel?, marks? })`: 半荘の一覧と局の表に出すまとめ（卓・Rating・段階・局ごとの結果と
  *   点の増減・Rating・段階・迷いマークの結びつけ）。段階の当てはめの既定は `DEFAULT_GRADE_MODEL`
  *   （analysis/maka-fit/dataset.csv を `fitGradeModel` で当てはめた定数）

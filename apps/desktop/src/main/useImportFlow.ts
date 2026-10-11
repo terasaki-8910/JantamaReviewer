@@ -7,6 +7,10 @@
  * - 流れ: 牌譜リンク → mjai の窓（Submit はユーザーが押す）→ 結果の受け取り → 検査 → 画面の読み取り → 結びつけ先の決定 →
  *   保存 → まとめ。mjai の窓が使えないときは、結果の URL を貼る・結果の JSON ファイルを開く、でも取り込める。
  * 段階ごとの処理は `importFlow.ts`（純粋な部分）に任せ、ここは状態と、Rust 側からの知らせをつなぐだけ。
+ *
+ * 取り込み前の半荘のページから、その半荘に取り込むとき（U-14。`startForSession`）は、同じ流れを、取り込み先（`target`）を
+ * 決めて動かす: 結びつけ先の照合（E-19）はせず、その半荘だけの画像を読み取り、mjai の窓の題名に取り込み先の半荘を出す。
+ * 読んだ局・点数が結果と合わなかったときは、保存の前に聞く（`confirm`。`confirmTarget`・`cancel`）。
  */
 import { PaipuLinkAnnouncer, detectPaipuLink, type PaipuLink } from '@jantama/engine';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -23,6 +27,7 @@ import {
   type ImportDeps,
   type ImportStep,
   type ImportSummary,
+  type TargetCheck,
 } from './importFlow';
 
 /** クリップボードに牌譜リンクが無かった理由。 */
@@ -41,6 +46,17 @@ export interface ChooseOption {
   matching: boolean;
 }
 
+/** 取り込み先が決まっている取り込み（取り込み前の半荘のページから、その半荘に取り込むとき。U-14）の、取り込み先。 */
+export interface ImportTarget {
+  /** 取り込み先の半荘の名前。 */
+  sessionId: string;
+  /** 半荘の呼び名（例: 10月9日 19:09）。画面と mjai の窓の題名に出す。 */
+  label: string;
+}
+
+/** `startForSession` の答え。始められなければ、理由（画面に出す文）。 */
+export type TargetStart = { started: true } | { started: false; message: string };
+
 export type ImportState =
   /** 牌譜リンクを待つ・見つけた。`checked` は、クリップボードを 1 度読んだか。`notice` は、貼り付けなどでの知らせ。 */
   | { phase: 'prompt'; checked: boolean; problem: ClipboardProblem | null; notice: string | null }
@@ -48,6 +64,8 @@ export type ImportState =
   | { phase: 'window' }
   | { phase: 'working'; step: ImportStep; progress: OcrProgress | null }
   | { phase: 'choose'; options: ChooseOption[]; matchingCount: number; warning: string | null }
+  /** 取り込み先が決まっているとき: 画面から読んだ局・点数が結果と合わなかった。保存の前に、取り込むかどうかを聞く。 */
+  | { phase: 'confirm'; check: TargetCheck }
   | { phase: 'done'; summary: ImportSummary }
   | { phase: 'error'; title: string; message: string };
 
@@ -72,6 +90,8 @@ const DEFAULT_DEPS: ImportDeps = {
 
 export interface ImportFlow {
   state: ImportState;
+  /** 取り込み先が決まっている取り込み（その半荘のページから始めたもの）の、取り込み先。決まっていなければ null。 */
+  target: ImportTarget | null;
   /** クリップボードにある牌譜リンク（無ければ null）。 */
   link: PaipuLink | null;
   /** 「この半荘を取り込みますか」と知らせている牌譜リンク（まだ知らせていない新しいリンクだけ）。 */
@@ -90,6 +110,14 @@ export interface ImportFlow {
   chooseFile: () => Promise<void>;
   /** 結びつけ先の半荘を選ぶ（null なら、記録の無い半荘として取り込む）。 */
   choose: (sessionId: string | null) => Promise<void>;
+  /**
+   * この半荘に取り込む（取り込み前の半荘のページから。U-14）。クリップボードの牌譜リンクで mjai の窓を開く（窓の題名に、
+   * 取り込み先の半荘を出す）。結びつけ先の照合はしない。クリップボードに牌譜リンクが無いなど、始められなければ、理由を返す。
+   * ほかの取り込みが進んでいるときは、始めない。
+   */
+  startForSession: (target: ImportTarget) => Promise<TargetStart>;
+  /** 画面から読んだ局・点数が結果と合わなかったあとに、それでも取り込む（`confirm` のとき）。 */
+  confirmTarget: () => Promise<void>;
   /** 完了・失敗の画面から、最初の状態に戻る。 */
   reset: () => void;
   /** 「取り込みますか」を受ける（取り込みの画面へ移る前に呼ぶ）。 */
@@ -101,10 +129,12 @@ export function useImportFlow(): ImportFlow {
   const [state, setStateRaw] = useState<ImportState>(PROMPT);
   const [link, setLinkRaw] = useState<PaipuLink | null>(null);
   const [offer, setOffer] = useState<PaipuLink | null>(null);
+  const [target, setTargetRaw] = useState<ImportTarget | null>(null);
 
   // 知らせを受ける側が、再描画を待たずに最新の状態を見られるように、同じ値を ref にも持つ。
   const stateRef = useRef(state);
   const linkRef = useRef<PaipuLink | null>(null);
+  const targetRef = useRef<ImportTarget | null>(null);
   const contextRef = useRef<ImportContext | null>(null);
   const announcerRef = useRef<PaipuLinkAnnouncer | null>(null);
   // 取り込みの世代。やめる・やり直す・次の取り込みを始めるたびに進めて、古い処理の結果を捨てる。
@@ -116,10 +146,19 @@ export function useImportFlow(): ImportFlow {
     const value = typeof next === 'function' ? next(stateRef.current) : next;
     stateRef.current = value;
     setStateRaw(value);
+    // 牌譜リンクを待つ状態に戻ったら、取り込み先も無くす（次の取り込みが、前の取り込み先に結びつかないように）。
+    if (value.phase === 'prompt' && targetRef.current !== null) {
+      targetRef.current = null;
+      setTargetRaw(null);
+    }
   }, []);
   const setLink = useCallback((value: PaipuLink | null) => {
     linkRef.current = value;
     setLinkRaw(value);
+  }, []);
+  const setTarget = useCallback((value: ImportTarget | null) => {
+    targetRef.current = value;
+    setTargetRaw(value);
   }, []);
   const begin = useCallback(() => {
     generationRef.current += 1;
@@ -176,7 +215,7 @@ export function useImportFlow(): ImportFlow {
   const checkClipboardOnFocus = useCallback(async () => {
     const phase = stateRef.current.phase;
     // 取り込みの途中は、別の知らせで邪魔しない（次に前面に来たときに、知らせる）。
-    if (phase === 'window' || phase === 'working' || phase === 'choose') return;
+    if (phase === 'window' || phase === 'working' || phase === 'choose' || phase === 'confirm') return;
     if (focusCheckBusyRef.current) return;
     focusCheckBusyRef.current = true;
     try {
@@ -219,9 +258,15 @@ export function useImportFlow(): ImportFlow {
 
   const processText = useCallback(
     async (text: string, token: number) => {
-      const prepared = await prepareImport(DEFAULT_DEPS, text, (step) => {
-        if (isCurrent(token)) setState({ phase: 'working', step, progress: null });
-      });
+      const targeted = targetRef.current;
+      const prepared = await prepareImport(
+        DEFAULT_DEPS,
+        text,
+        (step) => {
+          if (isCurrent(token)) setState({ phase: 'working', step, progress: null });
+        },
+        targeted === null ? {} : { target: targeted.sessionId },
+      );
       if (!isCurrent(token)) return;
       if (!prepared.ok) {
         setState({ phase: 'error', ...prepared.failure });
@@ -229,8 +274,15 @@ export function useImportFlow(): ImportFlow {
       }
       const context = prepared.context;
       contextRef.current = context;
-      const { match } = context;
-      if (match.kind === 'match') {
+      const { match, targetCheck } = context;
+      if (targetCheck !== null) {
+        // 取り込み先が決まっている。読めたスクショが結果と合わないものがあれば、保存の前に聞く。
+        if (targetCheck.mismatches.length > 0) {
+          setState({ phase: 'confirm', check: targetCheck });
+        } else {
+          await finish(context, targetCheck.sessionId, token);
+        }
+      } else if (match.kind === 'match') {
         await finish(context, match.sessionId, token);
       } else if (match.kind === 'new') {
         await finish(context, null, token);
@@ -302,6 +354,16 @@ export function useImportFlow(): ImportFlow {
         if (stateRef.current.phase !== 'window') return;
         if (event.kind === 'closed') {
           begin();
+          if (targetRef.current !== null) {
+            // 半荘のページから始めた取り込み: そのページの中に、中止したことを出す。
+            setState({
+              phase: 'error',
+              title: '取り込みを中止しました',
+              message:
+                '結果が出る前に、mjai の窓が閉じられました。もう一度、「この半荘に検討結果を取り込む」を押してください。',
+            });
+            return;
+          }
           setState({
             phase: 'prompt',
             checked: true,
@@ -343,11 +405,12 @@ export function useImportFlow(): ImportFlow {
   // ---- 画面からの操作 ----
 
   const startMjai = useCallback(async () => {
-    const target = linkRef.current;
-    if (target === null) return;
+    const found = linkRef.current;
+    if (found === null) return;
     const token = begin();
+    setTarget(null);
     try {
-      await api.openMjaiWindow(target.url, readPageBackground());
+      await api.openMjaiWindow(found.url, readPageBackground());
     } catch (error) {
       if (!isCurrent(token)) return;
       setState({
@@ -358,16 +421,17 @@ export function useImportFlow(): ImportFlow {
       return;
     }
     if (!isCurrent(token)) return;
-    remember(target.paipuId);
+    remember(found.paipuId);
     setOffer(null);
     setState({ phase: 'window' });
-  }, [begin, isCurrent, remember, setState]);
+  }, [begin, isCurrent, remember, setState, setTarget]);
 
   const showMjaiWindow = useCallback(async () => {
-    const target = linkRef.current;
-    if (target === null) return;
+    const link = linkRef.current;
+    if (link === null) return;
     try {
-      await api.openMjaiWindow(target.url, readPageBackground());
+      // 取り込み先が決まっているときは、題名にも取り込み先を出す（開いている窓は、題名だけ直して前面に出る）。
+      await api.openMjaiWindow(link.url, readPageBackground(), targetRef.current?.label);
     } catch (error) {
       setState({
         phase: 'error',
@@ -381,10 +445,11 @@ export function useImportFlow(): ImportFlow {
     (notice: string | null) => {
       begin();
       contextRef.current = null;
+      setTarget(null);
       setState({ ...PROMPT, notice });
       void refreshClipboard();
     },
-    [begin, refreshClipboard, setState],
+    [begin, refreshClipboard, setState, setTarget],
   );
 
   const cancel = useCallback(() => {
@@ -457,6 +522,54 @@ export function useImportFlow(): ImportFlow {
     [begin, finish],
   );
 
+  const startForSession = useCallback(
+    async (next: ImportTarget): Promise<TargetStart> => {
+      const phase = stateRef.current.phase;
+      if (phase === 'window' || phase === 'working' || phase === 'choose' || phase === 'confirm') {
+        return { started: false, message: 'ほかの取り込みが進んでいます。終わるまで待つか、やめてください。' };
+      }
+      let text: string | null;
+      try {
+        text = textOrNull(await api.readClipboardText());
+      } catch (error) {
+        return { started: false, message: `クリップボードを読めませんでした: ${errorMessage(error)}` };
+      }
+      const found = text === null ? null : detectPaipuLink(text);
+      if (found === null) {
+        const empty = text === null || text.trim() === '';
+        return {
+          started: false,
+          message: `${empty ? 'クリップボードが空です。' : 'クリップボードに、雀魂の牌譜リンクがありません。'}雀魂で「牌譜を共有」→「コピー」をしてから、もう一度押してください。`,
+        };
+      }
+      const token = begin();
+      contextRef.current = null;
+      setLink(found);
+      setTarget(next);
+      // 窓を開く間に、検討画面が前面を外れたり戻ったりして、クリップボードの確認や「牌譜リンクを待つ」状態の書き換えが
+      // 割り込まないよう、先に「窓を待つ」状態にする（その間に取り込み先が消えない）。開けなければ、失敗にする。
+      setOffer(null);
+      setState({ phase: 'window' });
+      try {
+        await api.openMjaiWindow(found.url, readPageBackground(), next.label);
+      } catch (error) {
+        if (!isCurrent(token)) return { started: true };
+        setState({ phase: 'error', title: 'mjai の窓を開けませんでした', message: errorMessage(error) });
+        return { started: true };
+      }
+      if (isCurrent(token)) remember(found.paipuId);
+      return { started: true };
+    },
+    [begin, isCurrent, remember, setLink, setState, setTarget],
+  );
+
+  const confirmTarget = useCallback(async () => {
+    const context = contextRef.current;
+    const confirmed = stateRef.current;
+    if (context === null || confirmed.phase !== 'confirm') return;
+    await finish(context, confirmed.check.sessionId, begin());
+  }, [begin, finish]);
+
   const acceptOffer = useCallback(() => {
     setOffer(null);
     const phase = stateRef.current.phase;
@@ -471,6 +584,7 @@ export function useImportFlow(): ImportFlow {
   return useMemo(
     () => ({
       state,
+      target,
       link,
       offer,
       refreshClipboard,
@@ -480,12 +594,15 @@ export function useImportFlow(): ImportFlow {
       submitPastedUrl,
       chooseFile,
       choose,
+      startForSession,
+      confirmTarget,
       reset,
       acceptOffer,
       dismissOffer,
     }),
     [
       state,
+      target,
       link,
       offer,
       refreshClipboard,
@@ -495,6 +612,8 @@ export function useImportFlow(): ImportFlow {
       submitPastedUrl,
       chooseFile,
       choose,
+      startForSession,
+      confirmTarget,
       reset,
       acceptOffer,
       dismissOffer,

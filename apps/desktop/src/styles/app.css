@@ -262,6 +262,11 @@ textarea.input {
   letter-spacing: 0.01em;
 }
 
+/* 取り込みの知らせを閉じたあとに、見出しへキーボードの位置を戻すことがある（そのとき、枠は出さない） */
+.title:focus {
+  outline: none;
+}
+
 .head,
 .page {
   max-width: 1240px;
@@ -625,6 +630,13 @@ fieldset.setting:not(:first-child) {
   border-color: var(--accent);
   color: var(--on-accent);
   font-weight: 700;
+}
+
+/* 押せないときは、塗りをやめる（主な操作が、押せないのに目立ち続けないように） */
+.btn.primary:disabled {
+  background: var(--hover);
+  border-color: var(--line);
+  color: var(--muted);
 }
 
 .btn.primary:hover:not(:disabled) {

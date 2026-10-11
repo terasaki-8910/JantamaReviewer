@@ -263,8 +263,11 @@ fn n1_to_n13_the_mjai_window_gets_every_browser_remnant_setting_and_every_naviga
         ".on_new_window(move |url, _features|",
         "NewWindowResponse::Deny",
         ".on_download(|_webview, event| download_hook(&event))",
-        // 題名は日本語の名前だけ（N-13）。隠したまま作り、最初のページを読み終えてから見せる（N-7）。
-        ".title(MJAI_TITLE)",
+        // 題名は日本語の名前だけ（N-13）。取り込み先の半荘を名指しする題名も、決めた字だけ（`mjai_title`）。
+        // 隠したまま作り、最初のページを読み終えてから見せる（N-7）。
+        ".title(&title)",
+        "let title = mjai_title(target);",
+        "window.set_title(&title)",
         ".visible(false)",
         ".background_color(",
         // 開くのは mjai のサイトの入り口だけ。牌譜リンクは、E-11 のスクリプトで URL 欄に入れるだけ。
