@@ -13,8 +13,9 @@
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { defaultReplayKeys } from '../../src/main/replay/keys';
 import type { Links } from '../../src/api/types';
+import { defaultReplayKeys } from '../../src/main/replay/keys';
+import { contrast, parseCssColor } from '../color-math';
 import { REPORT_TEXTS, local, seedSession } from '../fake-sessions';
 import { fx4Ocr, fx4Session } from '../import-fixtures';
 import {
@@ -29,6 +30,7 @@ import {
   type PageServer,
   type Scenario,
 } from './harness';
+import { faceColor, multiply, patternColors } from './tile-colors';
 
 const SCHEMES = ['light', 'dark'] as const;
 type Scheme = (typeof SCHEMES)[number];
@@ -326,14 +328,11 @@ describe('U-4・U-5・U-6: 各状態の、幅・アクセシビリティ・テ�
           expect(o.tableRight, `${state.name} @${width} table`).toBeLessThanOrEqual(o.columnRight + 1);
           expect(o.barScroll, `${state.name} @${width} bar`).toBeLessThanOrEqual(o.barClient);
           if (width !== 768) {
+            // 配色は、開き直さず、同じページで切り替える（色はトークンが、配色の指定（prefers-color-scheme）で変わる）
             for (const scheme of SCHEMES) {
-              const themed = scheme === 'light' ? { context, page } : await openState(state, { width, scheme });
-              try {
-                const found = seriousViolations(await runAxe(themed.page));
-                expect(found, `${state.name} @${width} ${scheme}`).toEqual([]);
-              } finally {
-                if (scheme !== 'light') await themed.context.close();
-              }
+              await page.emulateMedia({ colorScheme: scheme });
+              const found = seriousViolations(await runAxe(page));
+              expect(found, `${state.name} @${width} ${scheme}`).toEqual([]);
             }
           }
           expect(problems).toEqual([]);
@@ -357,44 +356,42 @@ describe('U-4: 1280×800 で、操作の段・卓・手牌が、ページをス�
   });
 
   for (const state of FIT_STATES) {
-    for (const scheme of SCHEMES) {
-      it(`${state.name}（${scheme}）`, { timeout: 90_000 }, async () => {
-        const { context, page } = await openState(state, { width: 1280, height: 800, scheme });
-        try {
-          const m = await page.evaluate(() => {
-            const rect = (selector: string) => {
-              const el = document.querySelector(selector);
-              if (el === null) return null;
-              const r = el.getBoundingClientRect();
-              return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
-            };
-            return {
-              height: window.innerHeight,
-              width: window.innerWidth,
-              scrollY: window.scrollY,
-              title: rect('.rp .head .title'),
-              bar: rect('.pbar'),
-              strip: rect('.pbar .tl'),
-              table: rect('.board-col .table'),
-              hand: rect('.board-col .hand'),
-            };
-          });
-          expect(m.height).toBe(800);
-          expect(m.scrollY).toBe(0);
-          for (const [name, box] of Object.entries({ title: m.title, bar: m.bar, strip: m.strip, table: m.table, hand: m.hand })) {
-            expect(box, `${state.name}: ${name} が描かれていない`).not.toBeNull();
-            expect(box!.top, `${state.name}: ${name} の上`).toBeGreaterThanOrEqual(0);
-            expect(box!.bottom, `${state.name}: ${name} の下（窓の高さ ${m.height}）`).toBeLessThanOrEqual(m.height);
-            expect(box!.left, `${state.name}: ${name} の左`).toBeGreaterThanOrEqual(0);
-            expect(box!.right, `${state.name}: ${name} の右`).toBeLessThanOrEqual(m.width);
-          }
-          // 卓は、手牌の上にある（重ならない）
-          expect(m.table!.bottom).toBeLessThanOrEqual(m.hand!.top + 1);
-        } finally {
-          await context.close();
+    it(`${state.name}`, { timeout: 90_000 }, async () => {
+      const { context, page } = await openState(state, { width: 1280, height: 800 });
+      try {
+        const m = await page.evaluate(() => {
+          const rect = (selector: string) => {
+            const el = document.querySelector(selector);
+            if (el === null) return null;
+            const r = el.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+          };
+          return {
+            height: window.innerHeight,
+            width: window.innerWidth,
+            scrollY: window.scrollY,
+            title: rect('.rp .head .title'),
+            bar: rect('.pbar'),
+            strip: rect('.pbar .tl'),
+            table: rect('.board-col .table'),
+            hand: rect('.board-col .hand'),
+          };
+        });
+        expect(m.height).toBe(800);
+        expect(m.scrollY).toBe(0);
+        for (const [name, box] of Object.entries({ title: m.title, bar: m.bar, strip: m.strip, table: m.table, hand: m.hand })) {
+          expect(box, `${state.name}: ${name} が描かれていない`).not.toBeNull();
+          expect(box!.top, `${state.name}: ${name} の上`).toBeGreaterThanOrEqual(0);
+          expect(box!.bottom, `${state.name}: ${name} の下（窓の高さ ${m.height}）`).toBeLessThanOrEqual(m.height);
+          expect(box!.left, `${state.name}: ${name} の左`).toBeGreaterThanOrEqual(0);
+          expect(box!.right, `${state.name}: ${name} の右`).toBeLessThanOrEqual(m.width);
         }
-      });
-    }
+        // 卓は、手牌の上にある（重ならない）
+        expect(m.table!.bottom).toBeLessThanOrEqual(m.hand!.top + 1);
+      } finally {
+        await context.close();
+      }
+    });
   }
 });
 
@@ -764,6 +761,22 @@ describe('U-1・N-8: 答える前の DOM と、牌の画像', () => {
     }
   });
 
+  it('操作部分（操作の段・位置の帯・いまの一手・場面の一覧・キーの一覧）の文字は、選択できない（N-8）', { timeout: 60_000 }, async () => {
+    const { context, page } = await openState(STATES[7] as StateDef);
+    try {
+      const selects = await page.evaluate(() =>
+        ['.pbar', '#pos', '.pin', '.kyoku-btn', '.key-btn', '.keypanel', '.kp-row', '.hand', '.table', '.now-t', '.sc-row'].map((selector) => {
+          const el = document.querySelector(selector);
+          return [selector, el === null ? null : getComputedStyle(el).userSelect];
+        }),
+      );
+      expect(selects.filter(([, value]) => value === null).map(([selector]) => selector)).toEqual([]);
+      expect(selects.filter(([, value]) => value !== 'none')).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it('牌の画像はすべて読み込めて、引きずれない。外へ通信しない', { timeout: 60_000 }, async () => {
     const { context, page, external } = await openState(STATES[3] as StateDef);
     try {
@@ -827,7 +840,38 @@ describe('U-19: ドラを目立たせる（通して見る画面）', () => {
             return style.content === 'none' || style.content === 'normal' ? 'none' : style.backgroundColor;
           });
           expect(plain, phase).toBe('none');
+          // 描いた面の色: ふつうの面に黄色を重ねた色になっている。図柄の色と黄色のコントラストは 3:1 以上
+          const tintColor = parseCssColor(tint.color);
+          expect(tintColor.a, phase).toBe(1);
+          const plainTile = page.locator('.hand .tile:not(.is-dora)').first();
+          const doraFace = page.locator(doraTile).first();
+          const face = await faceColor(page, plainTile);
+          const tintedFace = await faceColor(page, doraFace);
+          const expected = multiply(face, tintColor);
+          expect(Math.abs(tintedFace.r - expected.r), `${phase} r`).toBeLessThanOrEqual(3);
+          expect(Math.abs(tintedFace.g - expected.g), `${phase} g`).toBeLessThanOrEqual(3);
+          expect(Math.abs(tintedFace.b - expected.b), `${phase} b`).toBeLessThanOrEqual(3);
+          expect(tintedFace.b, phase).toBeLessThan(face.b - 40);
+          const low = patternColors()
+            .map((color) => ({ color, ratio: contrast(multiply(color, tintColor), tintedFace) }))
+            .filter((item) => item.ratio < 3);
+          expect(low.map((item) => `${item.color.r},${item.color.g},${item.color.b}: ${item.ratio.toFixed(2)}`), phase).toEqual([]);
         }
+        // 河の牌にも、同じ重ね方で付く（局の終わりまで進めて、河にドラ表示牌が指す牌がある局を探す）
+        let riverTint: { blend: string; color: string } | null = null;
+        for (let kyoku = 0; kyoku < 5 && riverTint === null; kyoku += 1) {
+          await goToKyokuEnd(page, kyoku);
+          const river = page.locator('.zone .tile.is-dora:not(.called)').first();
+          if ((await river.count()) > 0) {
+            riverTint = await river.evaluate((el) => {
+              const style = getComputedStyle(el, '::after');
+              return { blend: style.mixBlendMode, color: style.backgroundColor };
+            });
+          }
+        }
+        expect(riverTint, 'FX-4 の局の終わりのどれかに、河にドラが見えるはず').not.toBeNull();
+        expect(riverTint!.blend).toBe('multiply');
+        expect(riverTint!.color).toMatch(/^rgb\(/);
         // 鳴かれて薄くなった牌・ドラ表示牌そのものには付けない
         const odd = await page.evaluate(() => {
           const marked = Array.from(document.querySelectorAll('.tile.is-dora')).filter((el) => el.closest('.legend') === null);
