@@ -112,6 +112,7 @@ pub fn run() {
             import::commands::set_rating_link,
             import::commands::clear_rating_link,
             import::commands::replace_links,
+            import::commands::replace_rating_links,
             evaluation::set_self_rating,
             evaluation::clear_self_rating,
             evaluation::set_maka_grade,
