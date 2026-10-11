@@ -735,7 +735,8 @@ describe('U-1 この画面に AI の答えは出さない（実ブラウザ）',
     try {
       const scan = () =>
         page.evaluate(() => {
-          const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '');
+          // MAKA の当てはめの見込みの 1 行（U-31）の「34%」は、AI の確率ではないので、検査から外す（tests/fit-line.ts）
+          const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '').replace(/<p class="tbl-note fit"[\s\S]*?<\/p>/g, '');
           const attrs = Array.from(document.querySelectorAll('*')).flatMap((el) => el.getAttributeNames());
           return {
             dataAi: /data-ai/i.test(html) || attrs.some((a) => /^data-ai/i.test(a)),

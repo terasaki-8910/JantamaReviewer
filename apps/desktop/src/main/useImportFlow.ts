@@ -12,7 +12,7 @@
  * 決めて動かす: 結びつけ先の照合（E-19）はせず、その半荘だけの画像を読み取り、mjai の窓の題名に取り込み先の半荘を出す。
  * 読んだ局・点数が結果と合わなかったときは、保存の前に聞く（`confirm`。`confirmTarget`・`cancel`）。
  */
-import { PaipuLinkAnnouncer, detectPaipuLink, type PaipuLink } from '@jantama/engine';
+import { PaipuLinkAnnouncer, detectPaipuLink, type GradeModel, type PaipuLink } from '@jantama/engine';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -125,8 +125,17 @@ export interface ImportFlow {
   dismissOffer: () => void;
 }
 
-export function useImportFlow(): ImportFlow {
+/**
+ * 取り込みの流れ。`gradeModel` は、取り込んだあとの「完了」の画面に出す段階の当てはめ（MAKA の評価から合わせ直したもの。F10）。
+ * 渡さなければ、基礎の 67 局の当てはめ。
+ */
+export function useImportFlow(gradeModel?: GradeModel): ImportFlow {
   const [state, setStateRaw] = useState<ImportState>(PROMPT);
+  // 取り込みの途中でも、保存したときの最新の当てはめを使えるよう、ref にも持つ
+  const gradeModelRef = useRef(gradeModel);
+  useEffect(() => {
+    gradeModelRef.current = gradeModel;
+  }, [gradeModel]);
   const [link, setLinkRaw] = useState<PaipuLink | null>(null);
   const [offer, setOffer] = useState<PaipuLink | null>(null);
   const [target, setTargetRaw] = useState<ImportTarget | null>(null);
@@ -243,7 +252,7 @@ export function useImportFlow(): ImportFlow {
     async (context: ImportContext, sessionId: string | null, token: number) => {
       setState({ phase: 'working', step: 'saving', progress: null });
       try {
-        const summary = await completeImport(DEFAULT_DEPS, context, sessionId);
+        const summary = await completeImport(DEFAULT_DEPS, context, sessionId, gradeModelRef.current);
         if (!isCurrent(token)) return;
         contextRef.current = null;
         setState({ phase: 'done', summary });

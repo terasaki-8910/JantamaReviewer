@@ -1,13 +1,15 @@
 /**
  * 半荘の一覧を、サイドバーと本文が一緒に使うための部品（U-8）。
  * - `useSessions`: 保存先の半荘（新しい順）を読む。ウィジェットで記録するたび・取り込み・削除のたびに（`state-changed`）読み直す
- * - `useSessionSummaries`: 結果を取り込んだ半荘の、卓・段階・Rating（`sessionSummaries.ts`）
+ * - `useSessionSummaries`: 結果を取り込んだ半荘の、卓・段階・Rating（`sessionSummaries.ts`）。段階は、MAKA の評価から合わせ直した当てはめで決める。
+ *   `useSummariesAndFit` は、同じものと、当てはめの状態（MAKA の評価の局数・見込み。U-31）を一緒に返す
  * - `useToday`: 「本日」「昨日」の見出しの基準。日付が変わったら更新する
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import { api, errorMessage, onStateChanged } from '../api/tauri';
 import type { SessionRecord } from '../api/types';
+import type { MakaFitState } from './makaFit';
 import { SummaryStore, type SummaryMap } from './sessionSummaries';
 
 /** 新しい順（開始が同じなら、名前の大きい順）。保存先も同じ並びで返すが、画面は並びに頼らず、ここでそろえる。 */
@@ -73,13 +75,23 @@ export function useSessions(onLoaded?: (sessions: SessionRecord[]) => void): Ses
   return { sessions, error, reload };
 }
 
-/** 結果を取り込んだ半荘の、卓・段階・Rating。一覧が変わるたびに、足りない分だけ読む。 */
-export function useSessionSummaries(sessions: readonly SessionRecord[] | null): SummaryMap {
+/**
+ * 結果を取り込んだ半荘の、卓・段階・Rating と、段階の当てはめの状態。一覧が変わるたびに、足りない分だけ読む。
+ * MAKA の評価を入れると、当てはめを合わせ直して、すべての半荘の段階を付け直す（`fit.revision` が増える）。
+ */
+export function useSummariesAndFit(sessions: readonly SessionRecord[] | null): { summaries: SummaryMap; fit: MakaFitState } {
   const [store] = useState(() => new SummaryStore((id) => api.readReport(id)));
   useEffect(() => {
     if (sessions !== null) store.sync(sessions);
   }, [store, sessions]);
-  return useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const summaries = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const fit = useSyncExternalStore(store.subscribe, store.getFit);
+  return { summaries, fit };
+}
+
+/** 結果を取り込んだ半荘の、卓・段階・Rating。一覧が変わるたびに、足りない分だけ読む。 */
+export function useSessionSummaries(sessions: readonly SessionRecord[] | null): SummaryMap {
+  return useSummariesAndFit(sessions).summaries;
 }
 
 /** 次の 0 時（ローカル時刻）までの、ミリ秒。 */

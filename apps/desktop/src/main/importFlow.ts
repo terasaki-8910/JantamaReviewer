@@ -24,6 +24,7 @@ import {
   listDisagreements,
   matchSessionForReport,
   summarizeHanchan,
+  type GradeModel,
   type ImportedGame,
   type RatingLinking,
   type ScreenReading,
@@ -363,13 +364,14 @@ function checkTarget(report: ImportedGame['report'], session: SessionRecord, ocr
 
 /**
  * 結果を保存して、迷いマーク・評価の結びつけを書き、まとめを返す。
- * `sessionId` が null なら、記録の無い半荘として新しく作る。
+ * `sessionId` が null なら、記録の無い半荘として新しく作る。`gradeModel` は、まとめの段階の当てはめ（既定は、基礎の 67 局のもの）。
  * 結果の保存に失敗したときは例外を投げる。結びつけの保存だけ失敗したときは、結果は保存済みなので、まとめに知らせを添えて返す。
  */
 export async function completeImport(
   deps: ImportDeps,
   context: ImportContext,
   sessionId: string | null,
+  gradeModel?: GradeModel,
 ): Promise<ImportSummary> {
   const session = sessionId === null ? null : (context.sessions.find((s) => s.id === sessionId) ?? null);
   if (sessionId !== null && session === null) {
@@ -380,7 +382,7 @@ export async function completeImport(
   const report = context.game.report;
   const cache = session ? (context.ocr.get(session.id) ?? session.ocr) : null;
   const marks = session ? markReadings(session, cache) : [];
-  const hanchan = summarizeHanchan(report);
+  const hanchan = summarizeHanchan(report, gradeModel === undefined ? {} : { gradeModel });
   const ratings = session ? ratingReadings(session, cache) : [];
   // 迷いと評価を、押した時刻の順に並べて、局に当てはめる（E-29）
   const timeline = session ? linkTimeline(report, { marks, ratings }) : null;

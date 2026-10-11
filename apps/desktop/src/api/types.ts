@@ -344,3 +344,33 @@ export interface SolvedCount {
   session_id: string;
   solved: number;
 }
+
+// ---- 週ごとの成績と来週の重点（U-30、R11-12。保存先の study.sqlite の weeks 表。書き出しの「週の数」はこの形） ----
+
+/**
+ * 週の成績（手で入れる数。雀魂の成績の画面から）。入れていない項目は、無い（Rust の `WeekStats`）。
+ * 率は %（0 から 100）、平均順位は 1 から 4。
+ */
+export interface WeekStats {
+  /** 4位率（%）。 */
+  rank4?: number;
+  /** 放銃率（%）。 */
+  deal?: number;
+  /** 平均順位（1 から 4）。 */
+  avg?: number;
+  /** 和了率（%）。 */
+  win?: number;
+  /** 副露率（%）。 */
+  call?: number;
+  /** 立直率（%）。 */
+  riichi?: number;
+}
+
+/** 1 週ぶんの、手で入れた成績と来週の重点（Rust の `WeekRecord`）。 */
+export interface WeekRecord {
+  /** 週の月曜の日付（YYYY-MM-DD）。 */
+  week: string;
+  stats: WeekStats;
+  /** 来週の重点（1 から 3 行。空なら書いていない）。 */
+  focus: string;
+}

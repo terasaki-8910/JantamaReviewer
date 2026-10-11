@@ -30,7 +30,7 @@ import { UndoProvider, useUndo, useUndoEvents } from './undo/UndoProvider';
 import { useShortcutsBlocked } from './undo/shortcutGuard';
 import type { UndoCommand, UndoEvent } from './undo/undoStack';
 import { useImportFlow } from './useImportFlow';
-import { useSessionSummaries, useSessions, useToday } from './useSessions';
+import { useSessions, useSummariesAndFit, useToday } from './useSessions';
 import { useSidebar } from './useSidebar';
 import { currentView, historyReducer, isViewAvailable, startHistory, stepTarget } from './viewHistory';
 import { quizView, replayView, sessionView, viewSessionId, type View } from './views';
@@ -83,8 +83,6 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const [nav, dispatch] = useReducer(historyReducer, undefined, () => startHistory());
   const view = currentView(nav);
   const [theme, setTheme] = useState<ThemeChoice>(effectiveTheme);
-  // 取り込みの状態は、画面を移っても保つ（mjai の窓からの知らせを、取りこぼさないため）。
-  const flow = useImportFlow();
   const now = useToday();
   const undo = useUndo();
   const shortcutsBlocked = useShortcutsBlocked();
@@ -97,7 +95,10 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const { sessions, error: loadError, reload } = useSessions((list) =>
     dispatch({ type: 'listChanged', sessionIds: list.map((session) => session.id) }),
   );
-  const summaries = useSessionSummaries(sessions);
+  // 結果を取り込んだ半荘のまとめ（卓・段階・Rating）と、MAKA の評価から合わせ直した当てはめ（F10、U-31）。段階はどこでも、この当てはめで決める
+  const { summaries, fit } = useSummariesAndFit(sessions);
+  // 取り込みの状態は、画面を移っても保つ（mjai の窓からの知らせを、取りこぼさないため）。取り込んだ半荘の段階も、いまの当てはめで決める
+  const flow = useImportFlow(fit.fit.model);
   // 出題（今日の出題・解き直し・答え合わせ）のデータ。半荘の結果の再生・答えの記録・今日の組を、ここで 1 つだけ持つ
   const study = useStudyData(sessions, reload);
   // 前の作り方で読んだ半荘の読み直し（F11）。半荘の画面を開いたときに 1 回だけ。済んだら、一覧を読み直して、新しい読み取りを反映する。
@@ -486,6 +487,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
               importFlow={flow}
               rereads={rereads}
               onOpenReplay={openReplay}
+              fit={fit}
             />
           )}
           {sessions !== null && selectedSession === null && (view.kind === 'none' || view.kind === 'session') && (

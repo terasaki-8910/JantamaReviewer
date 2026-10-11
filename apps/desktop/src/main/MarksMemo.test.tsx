@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeSessionStore, REPORT_TEXTS, local } from '../../tests/fake-sessions';
 import { FX5_ID, FX5_STARTED, FX5_USER_CHOICES, fx4Ocr, fx4Session, fx5Ocr, fx5Session } from '../../tests/import-fixtures';
+import { withoutImagesAndFitLine } from '../../tests/fit-line';
 import { installTauriMock } from '../../tests/tauri-mock';
 import type { Memos, SessionRecord } from '../api/types';
 import { MARK_CHIPS_HINT } from './HandTable';
@@ -407,7 +408,7 @@ describe('U-28 迷いのカードのメモ', () => {
   it('メモの欄には、AI の候補・確率・順位は出ない（答えるまで隠す）', async () => {
     setup({ session: fx5Imported({ memos: { marks: { '2': { candidates: '3m', reason: 'x' } }, extras: [] } }), report: 'fx5' });
     await tableReady();
-    const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '');
+    const html = withoutImagesAndFitLine(document.body.innerHTML);
     expect(html).not.toMatch(/data-ai/i);
     expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
   });

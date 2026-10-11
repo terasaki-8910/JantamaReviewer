@@ -1,10 +1,11 @@
-import type { Grade } from '@jantama/engine';
+import { percentOf, type Grade } from '@jantama/engine';
 
 import type { Rating, SelfRatingValue } from '../api/types';
 import { RATING_GLYPH, RatingShape } from '../shared/RatingShape';
 import { DISPLAY_GRADES, GradeBadge } from './GradeBadge';
 import type { HandRow, HandTableData } from './handRows';
 import { Icon } from './Icon';
+import type { MakaFitState } from './makaFit';
 import type { MarkChip } from './markChips';
 import { MenuSelect } from './MenuSelect';
 
@@ -16,6 +17,7 @@ import { MenuSelect } from './MenuSelect';
  * - MAKA: 任意。入れていなければ点線の「入力」。押すと、14 段階（と「なし」）のメニュー
  * - 迷い（札が 1 つでもあるときだけ出る列。R11-9、U-27）: その局の迷いを、「迷い1 5巡目 打6s」の札で並べる。札を押すと、その迷いのカードへ移る（`onJumpToMark`）。
  *   選んだ（チェックつき）・推定（枠だけ）・巡目は未定（点線）は、形でも見分けられる。幅が狭いときは、局ごとのかたまりに「迷い」の行が付く
+ * 表の下: 旗の説明・当てはまらなかった評価の数・MAKA の当てはめの見込みの 1 行（U-31。入れたあとは「合わせ直しました」）。
  * 付け直す・入れるたびに保存し、取り消せる（`onSelfRating`・`onMaka`）。
  */
 
@@ -44,9 +46,13 @@ interface HandTableProps {
   chips?: ReadonlyMap<number, readonly MarkChip[]>;
   /** 札を押した（迷いの記録の番号。そのカードへ移る）。 */
   onJumpToMark?: (markId: number) => void;
+  /** MAKA の当てはめの状態。渡すと、表の下に見込みの 1 行を出す（U-31）。 */
+  fit?: MakaFitState;
+  /** MAKA の評価を入れて、当てはめを合わせ直したあとか（「合わせ直しました」を出す）。 */
+  refit?: boolean;
 }
 
-export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark }: HandTableProps) {
+export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fit, refit = false }: HandTableProps) {
   const { rows, hanchan } = table;
   const withChips = chips !== undefined && chips.size > 0;
   return (
@@ -118,6 +124,44 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark }: 
       {table.unplacedRatings > 0 && (
         <p className="tbl-note">
           ウィジェットで付けた評価のうち、{table.unplacedRatings}件は、どの局にも当てはまりませんでした
+        </p>
+      )}
+      {fit !== undefined && <FitLine state={fit} refit={refit} />}
+    </>
+  );
+}
+
+/** 割合の言い方: 「34%」。確かめられない（半荘が 1 つだけなど）ときは「—」。 */
+function percentText(ratio: number | null): string {
+  const percent = percentOf(ratio);
+  return percent === null ? '—' : `${percent}%`;
+}
+
+/**
+ * MAKA の当てはめの見込みの 1 行（U-31、R11-13）。入っている MAKA の評価の局数（基礎の 67 局を含む）と、半荘を 1 つずつ外して
+ * 確かめた「ぴったり」「±1段階以内」の割合。MAKA の評価を入れたあとは、数字が替わり、「合わせ直しました」が出る。
+ */
+function FitLine({ state, refit }: { state: MakaFitState; refit: boolean }) {
+  const { fit } = state;
+  return (
+    <>
+      <p className="tbl-note fit" id="fit-line">
+        <span className="fit-ic" aria-hidden="true">
+          <Icon name="info" />
+        </span>
+        <span className="fit-t">
+          {'MAKA の評価 '}
+          <b>{fit.recordCount}</b>
+          {'局ぶんで合わせた見込み: ぴったり '}
+          <b>{percentText(fit.exact)}</b>
+          {'・±1段階以内 '}
+          <b>{percentText(fit.withinOne)}</b>
+          <span className="fit-s">（1半荘ずつ外して確かめた値。MAKA の評価を入れるたびに合わせ直します）</span>
+        </span>
+      </p>
+      {refit && (
+        <p className="fit-done" role="status">
+          <span className="tag">合わせ直しました</span>
         </p>
       )}
     </>
