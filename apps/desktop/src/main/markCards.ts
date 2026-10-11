@@ -103,7 +103,7 @@ export function resolveMarks(
     if (stored !== undefined && stored !== LINK_MANUAL) {
       const ref = findDecisionRef(report, stored);
       if (ref !== null) {
-        const far = link !== undefined && isFarFromReading(link, stored);
+        const far = link !== undefined && isFarFromReading(report, link, stored);
         return { ...base, far, resolution: { kind: 'linked', ref, saved: true } };
       }
     }

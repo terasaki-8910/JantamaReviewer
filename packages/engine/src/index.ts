@@ -25,8 +25,9 @@
  *   （点 `markScore` = 残りの牌の数の差 + スルー 1.5 / 和了 3 + 読んだあとの判断 0.25。小さいほど上）。1位が推定（`estimate`）、
  *   1位との点の差が 0.75 以下の判断が、ほかの候補（`alternatives`。最大 4 つ）。判断の呼び名と保存用の鍵は `DecisionRef`
  *   （`listDecisionRefs` / `findDecisionRef` / `decisionKey`。「手で選ぶ」の一覧にも使う）
- * - `isFarFromReading(link, chosenKey)`（E-27）: ユーザーが選んだ判断（`links.json` の値）が、`linkMarks` の結果の推定にも
- *   ほかの候補にも入らないとき true（スクショの値から「離れている」）。推定が無い迷い（読めない・合う局が無い）は false
+ * - `isFarFromReading(report, link, chosenKey)`（E-27）: ユーザーが選んだ判断（`links.json` の値）が、`linkMarks` の結果の推定にも
+ *   ほかの候補にも入らず、読んだ局と違う局か、読んだ残りの牌の数との差が推定より大きいとき true（スクショの値から「離れている」）。
+ *   推定が無い迷い（読めない・合う局が無い）は false
  * - `linkRatings(report, ratings)`（E-18）: 局の評価（〇△✕）→ 局。評価は `t_ms` と読み取りを持つ記録。局の始め
  *   （残り `HAND_START_TILES_LEFT` 枚以上）に読めたら前の局、途中なら読んだ局、読めないものは前後の間へ押した順。
  *   戻り値は `alignRatings`（E-7）と同じ形（status・assigned・extra・missingHands・message）に、評価ごとの当てはめ方 `placements` を足したもの
