@@ -7,6 +7,7 @@
 
 mod common;
 
+use common::browser::{browser_frame, BROWSER_FRAMES};
 use common::{fill_rect, flat, load_png_bgra, scaled_onto_canvas, Bgra, FX6};
 use jantama_ocr::locate::{locate_block, locate_panel, panel_crop, Block};
 use jantama_ocr::CropRect;
@@ -186,6 +187,62 @@ fn e32_the_cutout_is_the_same_whatever_the_window_size() {
     }
 }
 
+#[test]
+fn e32_the_panel_is_found_in_a_browser_window_with_tabs_an_address_bar_and_margins() {
+    // 雀魂をブラウザ（Chrome など）で開いたときの画面: 上にタブとアドレスバーの帯（80〜130px）、まわりに余白の帯。
+    // FX-6 の中央を縮めて、帯と余白の中に置く（16:9・16:10・縦長・横長・ノート PC・4K・余白つき。帯・余白の色もいろいろ）。
+    // 帯にはおとりの水色（タブの小さな絵・読み込み中の線）もある。見つける箱は、縮めた元の箱と同じ所。
+    for frame in &BROWSER_FRAMES {
+        for case in [&FX6[0], &FX6[7], &FX6[13], &FX6[18]] {
+            let source = load_png_bgra(&case.path());
+            let (screen, placement) = browser_frame(&source, frame);
+            let (cw, ch) = frame.canvas;
+            let block = locate_block(&screen.pixels, cw, ch).unwrap_or_else(|| {
+                panic!("{} / {}: 板の文字が見つからない", frame.name, case.file)
+            });
+            let (x0, y0, x1, y1) = known_block(case.width);
+            let (ex0, ey0) = placement.map(x0, y0);
+            let (ex1, ey1) = placement.map(x1, y1);
+            let tolerance = 2 + i64::from(placement.factor_permille) / 1000;
+            let actual = block_box(&block);
+            assert!(
+                near(actual.0, ex0, tolerance)
+                    && near(actual.1, ey0, tolerance)
+                    && near(actual.2, ex1, tolerance)
+                    && near(actual.3, ey1, tolerance),
+                "{} / {}（{} 倍）: 見つけた箱 {actual:?} が、期待 {:?} と違う",
+                frame.name,
+                case.file,
+                f64::from(placement.factor_permille) / 1000.0,
+                (ex0, ey0, ex1, ey1)
+            );
+            // 切り出しは、板の文字の高さの約 2 倍で、画像の中に収まる。
+            let crop = panel_crop(&block, cw, ch).unwrap();
+            assert!(crop.x + crop.width <= cw && crop.y + crop.height <= ch);
+            let ratio = f64::from(crop.height) / f64::from(block.height());
+            assert!((1.9..=2.05).contains(&ratio), "{}: {ratio}", frame.name);
+        }
+    }
+}
+
+#[test]
+fn e32_a_browser_window_without_the_game_picture_gives_no_block() {
+    // ゲームの絵が無い（ブラウザの帯とおとりだけ）画面では、見つからない（今の箱で読む）。
+    for frame in &BROWSER_FRAMES {
+        let (cw, ch) = frame.canvas;
+        let empty = common::Bgra {
+            pixels: flat(cw, ch, frame.margin).pixels,
+            width: cw,
+            height: ch,
+        };
+        // 余白だけの「ゲームの絵」を置いた画面を作る（FX-6 の代わりに、一色の画像）。
+        let blank = flat(1368, 800, FLAT_BGR);
+        let (screen, _) = browser_frame(&blank, frame);
+        assert_eq!(locate_block(&screen.pixels, cw, ch), None, "{}", frame.name);
+        assert_eq!(locate_block(&empty.pixels, cw, ch), None, "{}", frame.name);
+    }
+}
+
 /// 窓の大きさを変えた画面（1920×1080。FX-5 の 15:37:02 の画像を 1.35 倍にして置いたもの）。まわりの塗りつぶしに、おとりを描き足す。
 fn decoy_base() -> (Bgra, CropRect) {
     let source = load_png_bgra(&FX6[0].path());
@@ -194,23 +251,56 @@ fn decoy_base() -> (Bgra, CropRect) {
     (screen, panel)
 }
 
+/// 画像の一部（左上と大きさ）を、行を詰めた BGRA の並びで取り出す。
+fn sub_image(screen: &Bgra, x: u32, y: u32, w: u32, h: u32) -> Vec<u8> {
+    let mut out = Vec::with_capacity((w * h * 4) as usize);
+    for row in y..y + h {
+        let from = ((row * screen.width + x) * 4) as usize;
+        out.extend_from_slice(&screen.pixels[from..from + (w * 4) as usize]);
+    }
+    out
+}
+
 #[test]
-fn e32_decoys_outside_the_search_region_do_not_matter() {
+fn e32_a_smaller_panel_shaped_decoy_anywhere_in_the_image_does_not_win() {
     let (clean, panel) = decoy_base();
     let mut screen = Bgra {
         pixels: clean.pixels.clone(),
         width: clean.width,
         height: clean.height,
     };
-    // 探す範囲（幅 35〜65%・高さ 25〜60%）の外に、板の文字と同じ大きさ・同じ色の塊を置く。
+    // 板と同じ形・同じ色で、水色の画素が少ないもの（半分の大きさの写し）を、画像の四隅に置く。板のまとまりのほうが選ばれる。
+    let block = locate_block(&clean.pixels, 1920, 1080).unwrap();
+    let (half_w, half_h) = (block.width() / 2, block.height() / 2);
+    let small = jantama_ocr::resample::resize(
+        &sub_image(&clean, block.x0, block.y0, block.width(), block.height()),
+        block.width(),
+        block.height(),
+        half_w,
+        half_h,
+    );
+    for (x, y) in [(40u32, 40u32), (1800, 40), (40, 1000), (1800, 1000)] {
+        for row in 0..half_h {
+            let to = (((y + row) * 1920 + x) * 4) as usize;
+            let from = (row * half_w * 4) as usize;
+            screen.pixels[to..to + (half_w * 4) as usize]
+                .copy_from_slice(&small[from..from + (half_w * 4) as usize]);
+        }
+    }
+    let found = locate_block(&screen.pixels, 1920, 1080).expect("板が見つかる");
+    assert_eq!(
+        (found.x0, found.y0, found.x1, found.y1),
+        (block.x0, block.y0, block.x1, block.y1)
+    );
+    assert_eq!(locate_panel(&screen.pixels, 1920, 1080), Some(panel));
+    // 板の形でない水色の塊を、四隅に置いても同じ。
     fill_rect(&mut screen, 100, 100, 80, 60, CYAN);
     fill_rect(&mut screen, 1700, 900, 80, 60, CYAN);
-    fill_rect(&mut screen, 900, 800, 80, 60, CYAN);
     assert_eq!(locate_panel(&screen.pixels, 1920, 1080), Some(panel));
 }
 
 #[test]
-fn e32_decoys_inside_the_search_region_with_the_wrong_shape_are_not_chosen() {
+fn e32_decoys_with_the_wrong_shape_are_not_chosen() {
     let (clean, panel) = decoy_base();
     let copy = |c: &Bgra| Bgra {
         pixels: c.pixels.clone(),
@@ -235,6 +325,14 @@ fn e32_decoys_inside_the_search_region_with_the_wrong_shape_are_not_chosen() {
     let y = panel.y.saturating_sub(70);
     fill_rect(&mut dot, panel.x + 10, y, 12, 6, CYAN);
     assert_eq!(locate_panel(&dot.pixels, 1920, 1080), Some(panel));
+    // 結果の画面の水色の文字の表に似た、横に長い（幅 ÷ 高さ 1.6）まとまり: 板のほうが選ばれる（水色の画素は、板より多い）。
+    let mut table = copy(&clean);
+    for row in 0..5u32 {
+        for col in 0..5u32 {
+            fill_rect(&mut table, 100 + col * 24, 100 + row * 13, 16, 8, CYAN);
+        }
+    }
+    assert_eq!(locate_panel(&table.pixels, 1920, 1080), Some(panel));
 }
 
 #[test]
@@ -245,12 +343,11 @@ fn e32_a_frame_with_only_decoys_gives_no_block() {
     fill_rect(&mut screen, 1140, 420, 90, 70, CYAN);
     fill_rect(&mut screen, 1100, 300, 6, 200, CYAN);
     assert_eq!(locate_block(&screen.pixels, 1920, 1080), None);
-    // 形は合うが、探す範囲の外だけ。
-    let mut outside = flat(1920, 1080, FLAT_BGR);
+    // 形が合うものは、画像のどこにあっても見つかる（左上の隅に写した板）。
+    let mut moved = flat(1920, 1080, FLAT_BGR);
     let source = load_png_bgra(&FX6[0].path());
     let (panel_frame, _) = scaled_onto_canvas(&source, 1350, 1920, 1080, FLAT_BGR);
     let block = locate_block(&panel_frame.pixels, 1920, 1080).unwrap();
-    // 板の文字を、探す範囲の外（左上）へ写す。
     for y in 0..block.height() {
         for x in 0..block.width() {
             let from = (((block.y0 + y) * 1920 + block.x0 + x) * 4) as usize;
@@ -260,10 +357,11 @@ fn e32_a_frame_with_only_decoys_gives_no_block() {
                 panel_frame.pixels[from + 1],
                 panel_frame.pixels[from + 2],
             ];
-            outside.pixels[to..to + 3].copy_from_slice(&pixel);
+            moved.pixels[to..to + 3].copy_from_slice(&pixel);
         }
     }
-    assert_eq!(locate_block(&outside.pixels, 1920, 1080), None);
+    let found = locate_block(&moved.pixels, 1920, 1080).expect("隅でも見つかる");
+    assert_eq!((found.x0, found.y0), (100, 100));
     // 何も無い画面・水色の点だけの画面。
     assert_eq!(
         locate_block(&flat(1920, 1080, FLAT_BGR).pixels, 1920, 1080),

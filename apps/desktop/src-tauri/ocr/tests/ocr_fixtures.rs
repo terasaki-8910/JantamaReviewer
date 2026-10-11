@@ -18,6 +18,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 
+use common::browser::{browser_frame, BROWSER_FRAMES};
 use common::{load_png_bgra, scaled_onto_canvas, strict_parse, FX6};
 use jantama_ocr::{center_crop, OcrWorker, Reading, Variant, UPSCALE};
 
@@ -396,6 +397,64 @@ fn e32_fx6_scaled_to_other_window_sizes_still_reads_through_the_retries() {
         "作り物の画面 {tried} 枚: 見つかった {located}、読めた {read}、1 回目で読めた {first}"
     );
     assert_eq!(located, tried, "どの大きさでも板の文字を見つける");
+    assert!(
+        read * 100 >= tried * 85,
+        "読み直しまで含めて {read}/{tried}"
+    );
+}
+
+#[test]
+fn e32_fx6_in_browser_windows_with_bands_and_margins_still_reads_through_the_retries() {
+    // 雀魂をブラウザで開いたときの作り物の画面（上のタブとアドレスバーの帯・まわりの余白つき。16:9・16:10・縦長・横長・ノート PC・4K・
+    // 余白つき。FX-6 の中央を縮めて置いたもの）。板を見つけて、読み直しまで含めて読める。
+    let worker = OcrWorker::start().expect("日本語の文字認識を使える");
+    let (mut tried, mut located, mut read, mut first) = (0, 0, 0, 0);
+    let (mut total, mut located_all) = (0, 0);
+    let mut per_frame: Vec<(String, usize, usize)> = Vec::new();
+    for frame in &BROWSER_FRAMES {
+        let (mut frame_tried, mut frame_read) = (0, 0);
+        for case in FX6.iter().step_by(3) {
+            let source = load_png_bgra(&case.path());
+            let (screen, _) = browser_frame(&source, frame);
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("screen.png");
+            write_bgra_png(&path, &screen);
+            let outcome = worker.read_center_outcome(&path).unwrap();
+            located_all += usize::from(outcome.located.is_some());
+            total += 1;
+            if !frame.ocr_readable {
+                // 字が小さすぎる窓: 板は見つかる（上で数える）が、読めるかは問わない（読めても、読み違えた値は取らない）。
+                if let Some(read_values) = first_readable(&outcome.readings) {
+                    assert_eq!(read_values, expected_of(case), "{}", frame.name);
+                }
+                continue;
+            }
+            tried += 1;
+            frame_tried += 1;
+            located += usize::from(outcome.located.is_some());
+            if let Some(read_values) = first_readable(&outcome.readings) {
+                assert_eq!(
+                    read_values,
+                    expected_of(case),
+                    "{} / {}: 読み違いを別の値として取った",
+                    frame.name,
+                    case.file
+                );
+                read += 1;
+                frame_read += 1;
+            }
+            first += usize::from(strict_parse(&outcome.readings[0].lines).is_some());
+        }
+        per_frame.push((frame.name.to_string(), frame_read, frame_tried));
+    }
+    for (name, frame_read, frame_tried) in &per_frame {
+        eprintln!("{name}: 読めた {frame_read}/{frame_tried}");
+    }
+    eprintln!(
+        "ブラウザの作り物の画面 {tried} 枚: 見つかった {located}、読めた {read}、1 回目で読めた {first}"
+    );
+    assert_eq!(located_all, total, "どの窓でも板の文字を見つける");
+    assert_eq!(located, tried);
     assert!(
         read * 100 >= tried * 85,
         "読み直しまで含めて {read}/{tried}"

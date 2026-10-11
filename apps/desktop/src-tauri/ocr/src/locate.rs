@@ -1,29 +1,33 @@
-//! 画面の中央の板の「水色の文字」（局の名前と、残りの牌の数）を色で探して、読む所の長方形を決める（E-32、F11）。
+//! 画面の「水色の文字」（局の名前と、残りの牌の数）を色で探して、読む所の長方形を決める（E-32、F11）。
 //!
 //! 割合の箱（`geometry::center_crop`）は、窓の縦横の比が変わると、板が箱の中で大きく写って、上の逆さの点数が半分に切れ、
 //! 左右の縦書きの点数が横に並んで、文字認識が行を取り違える（2026-10-11 の調べ）。板の大きさは窓の大きさで変わるが、
-//! 局の名前と残り枚数の文字の「色」と「形」は変わらない。そこで、探す範囲の中から水色の文字を探し、そのまとまりの位置から、
+//! 局の名前と残り枚数の文字の「色」と「形」は変わらない。そこで、水色の文字を探し、そのまとまりの位置から、
 //! 局・残り枚数・自分の点数だけを切り出す。
+//!
+//! 雀魂をブラウザ（Chrome など）で開くと、画像に、上のタブ・アドレスバーと、左右・上下の余白の帯が入り、ゲームの絵は画像の中の
+//! 一部になる（板は画像の中央ではなく、画像に対する大きさも小さくなる）。そのため、探す範囲を画像の割合の箱には頼らず、
+//! 画像全体から、水色の文字のまとまりを「形」で選ぶ。大きさは、画像に対する割合ではなく、まとまりの中の比（縦横の比・詰まり具合・
+//! つながりの数）で確かめる。
 //!
 //! 純粋な計算だけで、画像のファイルにも OS にも触れない。画素は、行を詰めた BGRA の並び（`resample` と同じ）。
 //!
 //! 決め方:
-//! 1. 探す範囲（幅 35〜65%・高さ 25〜60%）の中の、水色の画素（HSV で s > 0.45・v > 0.55・0.45 < h < 0.56）を拾う。
+//! 1. 画像全体の、水色の画素（HSV で s > 0.45・v > 0.55・0.45 < h < 0.56）を拾う。
 //! 2. 水色の画素のつながり（8 近傍）を数え、小さすぎるもの（ごみ）を捨てる。
-//! 3. つながりを、高さの 2% 以内に近いものどうしで 1 つのまとまりにする（局の行と余の行の間が高さの 1.5% ほどあるので、
-//!    それより大きく取る）。
+//! 3. つながりを、近いものどうしで 1 つのまとまりにする。近さ（外接の箱どうしの間）は、画像の高さの 0.4%・0.8%・1.6%・3.2% の
+//!    4 通りで試す（板の大きさが画像の中でどれだけかは分からず、局の行と余の行の間は板の高さの 0.3 倍ほどなので）。
 //! 4. まとまりごとに、大きさ・縦横の比・水色の画素の詰まり具合・つながりの数が、局と余の 2 行らしいかを調べる。
-//!    らしくないもの（結果の画面の表の線・上の方にだけ残った水色の点など）は捨てる。
+//!    らしくないもの（結果の画面の表の線・点・大きな水色の面・ブラウザの飾りなど）は捨てる。
+//!    近さの小さい試しで見つかったまとまりに重なる、近さの大きい試しのまとまりは使わない（余計な水色を巻き込んで大きくなったもの）。
 //! 5. 残ったもののうち、水色の画素がいちばん多いものを板の文字とする。残らなければ `None`（呼ぶ側は、今の箱で読む）。
 //! 6. 板の文字の上端の少し上から、下の自分の点数までを、文字の幅に少し足した幅で切り出す（`panel_crop`）。
+//!
+//! 見つけられない形: 板の文字が画像の高さの 0.8%（かつ 12 画素）より小さい画像（板の高さが 12 画素未満になる極端に小さい窓）、
+//! 水色の画素の閾値から外れる色の画面（色の補正が強い画面）、板が別のものに隠れている画面（結果の表示中など）。
+//! 板の文字と同じ形・同じ色の別のまとまりが、画像の中に、板より水色の画素が多い形であると、そちらを選ぶ。
 
 use crate::geometry::CropRect;
-
-/// 探す範囲（画面の幅・高さに対する割合。千分率）。局と残り枚数の文字は、画面の中央に出る。
-pub const SEARCH_LEFT_PERMILLE: u64 = 350;
-pub const SEARCH_RIGHT_PERMILLE: u64 = 650;
-pub const SEARCH_TOP_PERMILLE: u64 = 250;
-pub const SEARCH_BOTTOM_PERMILLE: u64 = 600;
 
 /// 水色の画素の条件（HSV。色相は 0〜1 に直した値）。雀魂の局・余の文字（明るい青緑）に合わせた値。
 const CYAN_MIN_SATURATION: f32 = 0.45;
@@ -31,32 +35,38 @@ const CYAN_MIN_VALUE: f32 = 0.55;
 const CYAN_HUE_ABOVE: f32 = 0.45;
 const CYAN_HUE_BELOW: f32 = 0.56;
 
-/// つながりの面積の下限: 画面の高さの 2 乗の 1/40000（高さ 800 で 16 画素。手元の板の文字のつながりは、最も小さいものでも
-/// 47 画素以上で、ごみ（1〜10 画素）はこれ未満）。ただし 4 画素より小さくはしない。
-const MIN_COMPONENT_AREA_DIVISOR: u64 = 40_000;
+/// つながりの面積の下限: 画像の高さの 2 乗の 1/640000（高さ 1600 で 4 画素、高さ 3200 で 16 画素）。ただし 4 画素より小さくはしない。
+/// 板の文字のつながりの面積は、板の高さの 2 乗に比例する（手元の画面で、板の高さ 43 画素に対して 47〜170 画素。板の高さ 20 画素の
+/// 縮めた画面では 10〜36 画素、12 画素では 4〜13 画素）ので、ほとんどの大きさで下限は 4 画素になる。
+/// ごみ（点）は、板のまとまりの形の確かめ（`looks_like_the_panel_text`）で捨てる。
+const MIN_COMPONENT_AREA_DIVISOR: u64 = 640_000;
 const MIN_COMPONENT_AREA_FLOOR: u64 = 4;
 
-/// つながりを 1 つのまとまりにする距離（外接の箱どうしの間。横も縦も）。画面の高さの 2%（千分率で 20）。
-/// 局の行と余の行の間は、手元の画面で高さの 1.3〜1.5%、1 行の中の字と字の間は 1% 未満。
-const MERGE_GAP_PERMILLE: u64 = 20;
+/// つながりを 1 つのまとまりにする近さ（外接の箱どうしの間。横も縦も）。画像の高さに対する千分率の 4 通り。
+/// 局の行と余の行の間は板の高さの 0.25〜0.3 倍、1 行の中の字と字の間は板の高さの 0.1 倍ほど。板の高さは、画像の高さの
+/// 5%（ゲームの絵が画像いっぱいのとき）から 1.5%（縦長の窓で、絵が幅に合わせて小さいとき）ほどなので、行の間は 0.3%〜1.6%。
+const MERGE_GAPS_PERMILLE: [u64; 4] = [4, 8, 16, 32];
 
-/// まとまりが板の文字らしい範囲。手元の 19 枚は、高さが画面の高さの 4.9〜5.4%、幅 ÷ 高さが 1.28〜1.30、
+/// まとまりが板の文字らしい範囲。手元の 19 枚は、高さが画像の高さの 4.9〜5.4%、幅 ÷ 高さが 1.28〜1.30、
 /// 水色の画素の詰まり具合（水色の画素の数 ÷ 外接の箱の面積）が 0.25〜0.28、つながりが 6〜8 個。
-/// 高さの割合は、窓の縦横の比で変わる（雀魂は 16:9 に収めて表示するので、16:9 より縦に長い窓では、
-/// 板は幅に合わせて小さくなる。1280×1024 で 3.9%）ので、広く取る。
-const BLOCK_MIN_HEIGHT_PERMILLE: u64 = 30;
-const BLOCK_MAX_HEIGHT_PERMILLE: u64 = 75;
+/// 0.35〜1.5 倍に拡大・縮小した画像では、幅 ÷ 高さが 1.26〜1.38、詰まり具合が 0.17〜0.27、つながりが 4〜9 個。
+/// 結果の画面の水色の文字の表（幅 ÷ 高さ 1.63・詰まり具合 0.14・つながり 5 個）は、形が外れる。
+/// 高さは、ゲームの絵が画像の一部になる（ブラウザの帯・余白・縦長の窓）ときに小さくなるので、画像の高さの 0.8%（かつ 12 画素）以上、
+/// 8% 以下とする（高さ 800 の画像で 12〜64 画素）。
+const BLOCK_MIN_HEIGHT_PERMILLE: u64 = 8;
+const BLOCK_MIN_HEIGHT_PIXELS: u64 = 12;
+const BLOCK_MAX_HEIGHT_PERMILLE: u64 = 80;
 /// 幅 ÷ 高さ（千分率）。
-const BLOCK_MIN_ASPECT_PERMILLE: u64 = 900;
-const BLOCK_MAX_ASPECT_PERMILLE: u64 = 1700;
-/// 詰まり具合（千分率）。
-const BLOCK_MIN_FILL_PERMILLE: u64 = 120;
-const BLOCK_MAX_FILL_PERMILLE: u64 = 450;
-/// まとまりを作るつながりの数（局の名前 3 文字・余・数字 2 つで 6〜8 個。つながったり、欠けたりしても 4〜16）。
+const BLOCK_MIN_ASPECT_PERMILLE: u64 = 1100;
+const BLOCK_MAX_ASPECT_PERMILLE: u64 = 1500;
+/// 詰まり具合（千分率）。画像を縮めると、文字の縁が薄くなって水色の画素が減る（0.35 倍で 0.17、1 倍で 0.26）。
+const BLOCK_MIN_FILL_PERMILLE: u64 = 140;
+const BLOCK_MAX_FILL_PERMILLE: u64 = 400;
+/// まとまりを作るつながりの数（局の名前 3 文字・余・数字 2 つで 6〜8 個。縮めると 4〜9 個。つながったり、欠けたりしても 4〜10）。
 const BLOCK_MIN_COMPONENTS: usize = 4;
-const BLOCK_MAX_COMPONENTS: usize = 16;
+const BLOCK_MAX_COMPONENTS: usize = 10;
 /// つながりの数がこれより多いときは、板の画面ではない（写真・大きな絵など）として探さない（計算量の上限も兼ねる）。
-const MAX_COMPONENTS: usize = 600;
+const MAX_COMPONENTS: usize = 6000;
 
 /// 切り出しの余白（板の文字の幅・高さに対する割合。千分率）。
 /// 上 30%: 局の行の上の枠まで（上の逆さの点数は入らない。手元の画面では、文字の上端の上 3 割までに点数の字は無い）。
@@ -127,44 +137,28 @@ struct Component {
     area: u64,
 }
 
-/// 探す範囲の長方形（画素。右端・下端は含まない）。範囲が空なら `None`。
-fn search_region(width: u32, height: u32) -> Option<(u32, u32, u32, u32)> {
-    let (w, h) = (u64::from(width), u64::from(height));
-    let x0 = w * SEARCH_LEFT_PERMILLE / 1000;
-    let x1 = (w * SEARCH_RIGHT_PERMILLE / 1000).min(w);
-    let y0 = h * SEARCH_TOP_PERMILLE / 1000;
-    let y1 = (h * SEARCH_BOTTOM_PERMILLE / 1000).min(h);
-    if x1 <= x0 || y1 <= y0 {
+/// 画像全体の水色のつながりを数える。小さすぎるものは捨てる。多すぎるときは `None`。
+fn components(bgra: &[u8], width: u32, height: u32) -> Option<Vec<Component>> {
+    let (w, h) = (width as usize, height as usize);
+    if w == 0 || h == 0 {
         return None;
     }
-    Some((x0 as u32, y0 as u32, x1 as u32, y1 as u32))
-}
-
-/// 探す範囲の水色のつながりを数える。小さすぎるものは捨てる。多すぎるときは `None`。
-fn components(bgra: &[u8], width: u32, height: u32) -> Option<Vec<Component>> {
-    let (rx0, ry0, rx1, ry1) = search_region(width, height)?;
-    let (rw, rh) = ((rx1 - rx0) as usize, (ry1 - ry0) as usize);
-    let stride = width as usize * 4;
-    let mut cyan = vec![false; rw * rh];
-    for y in 0..rh {
-        let row = (ry0 as usize + y) * stride;
-        for x in 0..rw {
-            let i = row + (rx0 as usize + x) * 4;
-            cyan[y * rw + x] = is_cyan(bgra[i], bgra[i + 1], bgra[i + 2]);
-        }
+    let mut cyan = vec![false; w * h];
+    for (flag, pixel) in cyan.iter_mut().zip(bgra.chunks_exact(4)) {
+        *flag = is_cyan(pixel[0], pixel[1], pixel[2]);
     }
     let min_area = (u64::from(height) * u64::from(height) / MIN_COMPONENT_AREA_DIVISOR)
         .max(MIN_COMPONENT_AREA_FLOOR);
-    let mut seen = vec![false; rw * rh];
+    let mut seen = vec![false; w * h];
     let mut found = Vec::new();
     let mut stack = Vec::new();
-    for start in 0..rw * rh {
+    for start in 0..w * h {
         if !cyan[start] || seen[start] {
             continue;
         }
         seen[start] = true;
         stack.push(start);
-        let (sx, sy) = ((start % rw) as u32, (start / rw) as u32);
+        let (sx, sy) = ((start % w) as u32, (start / w) as u32);
         let mut c = Component {
             x0: sx,
             y0: sy,
@@ -173,7 +167,7 @@ fn components(bgra: &[u8], width: u32, height: u32) -> Option<Vec<Component>> {
             area: 0,
         };
         while let Some(p) = stack.pop() {
-            let (px, py) = ((p % rw) as u32, (p / rw) as u32);
+            let (px, py) = ((p % w) as u32, (p / w) as u32);
             c.area += 1;
             c.x0 = c.x0.min(px);
             c.y0 = c.y0.min(py);
@@ -182,10 +176,10 @@ fn components(bgra: &[u8], width: u32, height: u32) -> Option<Vec<Component>> {
             for dy in -1i32..=1 {
                 for dx in -1i32..=1 {
                     let (nx, ny) = (px as i32 + dx, py as i32 + dy);
-                    if nx < 0 || ny < 0 || nx >= rw as i32 || ny >= rh as i32 {
+                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
                         continue;
                     }
-                    let n = ny as usize * rw + nx as usize;
+                    let n = ny as usize * w + nx as usize;
                     if cyan[n] && !seen[n] {
                         seen[n] = true;
                         stack.push(n);
@@ -194,13 +188,7 @@ fn components(bgra: &[u8], width: u32, height: u32) -> Option<Vec<Component>> {
             }
         }
         if c.area >= min_area {
-            found.push(Component {
-                x0: c.x0 + rx0,
-                y0: c.y0 + ry0,
-                x1: c.x1 + rx0,
-                y1: c.y1 + ry0,
-                area: c.area,
-            });
+            found.push(c);
             if found.len() > MAX_COMPONENTS {
                 return None;
             }
@@ -224,9 +212,8 @@ fn find_root(parent: &mut [usize], mut i: usize) -> usize {
     i
 }
 
-/// つながりを、近いものどうしでまとまりにする。
-fn group(parts: &[Component], height: u32) -> Vec<Block> {
-    let gap = (u64::from(height) * MERGE_GAP_PERMILLE / 1000).max(1) as u32;
+/// つながりを、外接の箱どうしの間が `gap` 画素以内のものどうしで、まとまりにする。
+fn group(parts: &[Component], gap: u32) -> Vec<Block> {
     let mut parent: Vec<usize> = (0..parts.len()).collect();
     for i in 0..parts.len() {
         for j in i + 1..parts.len() {
@@ -271,7 +258,8 @@ fn looks_like_the_panel_text(block: &Block, height: u32) -> bool {
         return false;
     }
     let screen = u64::from(height);
-    let tall_enough = h * 1000 >= screen * BLOCK_MIN_HEIGHT_PERMILLE;
+    let tall_enough =
+        h >= BLOCK_MIN_HEIGHT_PIXELS && h * 1000 >= screen * BLOCK_MIN_HEIGHT_PERMILLE;
     let not_too_tall = h * 1000 <= screen * BLOCK_MAX_HEIGHT_PERMILLE;
     let aspect = w * 1000 / h;
     let fill = block.cyan * 1000 / (w * h);
@@ -282,7 +270,12 @@ fn looks_like_the_panel_text(block: &Block, height: u32) -> bool {
         && (BLOCK_MIN_COMPONENTS..=BLOCK_MAX_COMPONENTS).contains(&block.components)
 }
 
-/// 幅 `width`・高さ `height` の画面（行を詰めた BGRA の並び）から、局と残り枚数の水色の文字のまとまりを探す。
+/// 2 つのまとまりの外接の箱が重なるか。
+fn overlaps(a: &Block, b: &Block) -> bool {
+    a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+}
+
+/// 幅 `width`・高さ `height` の画像（行を詰めた BGRA の並び）から、局と残り枚数の水色の文字のまとまりを探す。
 /// 板の文字らしいまとまりが無ければ `None`。
 ///
 /// 画素の数が大きさと合わないときは、`None`（読めない画像として、呼ぶ側が今の箱に戻る）。
@@ -291,13 +284,21 @@ pub fn locate_block(bgra: &[u8], width: u32, height: u32) -> Option<Block> {
         return None;
     }
     let parts = components(bgra, width, height)?;
-    group(&parts, height)
-        .into_iter()
-        .filter(|block| looks_like_the_panel_text(block, height))
-        .max_by_key(|block| block.cyan)
+    let mut accepted: Vec<Block> = Vec::new();
+    for permille in MERGE_GAPS_PERMILLE {
+        let gap = (u64::from(height) * permille / 1000).max(1) as u32;
+        for block in group(&parts, gap) {
+            if looks_like_the_panel_text(&block, height)
+                && !accepted.iter().any(|earlier| overlaps(earlier, &block))
+            {
+                accepted.push(block);
+            }
+        }
+    }
+    accepted.into_iter().max_by_key(|block| block.cyan)
 }
 
-/// 板の文字のまとまりから、読む所の長方形（局・残り枚数・自分の点数だけが入る）。画面の外にははみ出さない。
+/// 板の文字のまとまりから、読む所の長方形（局・残り枚数・自分の点数だけが入る）。画像の外にははみ出さない。
 pub fn panel_crop(block: &Block, width: u32, height: u32) -> Option<CropRect> {
     let (bw, bh) = (u64::from(block.width()), u64::from(block.height()));
     let side = bw * CROP_SIDE_PERMILLE / 1000;
@@ -318,7 +319,7 @@ pub fn panel_crop(block: &Block, width: u32, height: u32) -> Option<CropRect> {
     })
 }
 
-/// 画面から、局・残り枚数・自分の点数を切り出す長方形を探す（板の文字が見つからなければ `None`）。
+/// 画像から、局・残り枚数・自分の点数を切り出す長方形を探す（板の文字が見つからなければ `None`）。
 pub fn locate_panel(bgra: &[u8], width: u32, height: u32) -> Option<CropRect> {
     locate(bgra, width, height).map(|panel| panel.crop)
 }
@@ -330,7 +331,7 @@ pub struct Panel {
     pub crop: CropRect,
 }
 
-/// 画面から、板の文字のまとまりと切り出しの長方形を探す（見つからなければ `None`）。
+/// 画像から、板の文字のまとまりと切り出しの長方形を探す（見つからなければ `None`）。
 pub fn locate(bgra: &[u8], width: u32, height: u32) -> Option<Panel> {
     let block = locate_block(bgra, width, height)?;
     let crop = panel_crop(&block, width, height)?;
@@ -412,11 +413,13 @@ mod tests {
     }
 
     #[test]
-    fn the_search_region_is_the_middle_30_by_35_percent() {
-        assert_eq!(search_region(1000, 800), Some((350, 200, 650, 480)));
-        assert_eq!(search_region(1368, 800), Some((478, 200, 889, 480)));
-        assert_eq!(search_region(0, 0), None);
-        assert_eq!(search_region(1, 1), None);
+    fn the_whole_image_is_searched_so_a_panel_at_any_place_is_found() {
+        // ブラウザの帯・余白でゲームの絵が画像の一部になっても、板の文字は、画像のどこにあっても見つかる（四隅と中央で同じ形を試す）。
+        for (x, y) in [(5u32, 5u32), (930, 5), (5, 730), (930, 730), (475, 380)] {
+            let screen = screen_with(1000, 800, &two_lines(x, y, (10, 12)));
+            let block = locate_block(&screen, 1000, 800).unwrap_or_else(|| panic!("({x}, {y})"));
+            assert_eq!((block.x0, block.y0), (x, y), "({x}, {y})");
+        }
     }
 
     /// 局の行と余の行らしい、2 行 6 個の水色の塊（1 つが 10×12。1 行目は上の端が y、2 行目は 26 下）。
@@ -432,7 +435,7 @@ mod tests {
 
     #[test]
     fn two_text_lines_of_the_right_shape_are_found_and_a_single_stroke_is_not() {
-        // 1000×800 の画面（探す範囲は (350,200)–(650,480)）。幅 50 × 高さ 38、詰まり 0.38。
+        // 1000×800 の画面。幅 50 × 高さ 38、詰まり 0.38。
         let screen = screen_with(1000, 800, &two_lines(460, 300, (10, 12)));
         let block = locate_block(&screen, 1000, 800).expect("見つかる");
         assert_eq!(
@@ -448,7 +451,7 @@ mod tests {
 
     #[test]
     fn the_block_with_the_most_cyan_wins_among_blocks_of_the_right_shape() {
-        // 同じ形の塊が 2 つ（探す範囲の左と右）。水色の画素が多いほうを選ぶ。
+        // 同じ形の塊が 2 つ（画像の左と右）。水色の画素が多いほうを選ぶ。
         let mut rects = two_lines(370, 300, (8, 10));
         rects.extend(two_lines(560, 300, (10, 12)));
         let screen = screen_with(1000, 800, &rects);
@@ -463,11 +466,11 @@ mod tests {
 
     #[test]
     fn a_noisy_frame_with_too_many_pieces_is_not_searched() {
-        // つながりが多すぎる（600 個より多い）画面は、板の画面ではないとして探さない。
+        // つながりが多すぎる（6000 個より多い）画面は、板の画面ではないとして探さない。
         let mut rects = Vec::new();
-        for i in 0..40u32 {
-            for j in 0..20u32 {
-                rects.push((352 + i * 7, 202 + j * 13, 4, 4));
+        for i in 0..150u32 {
+            for j in 0..60u32 {
+                rects.push((i * 6, j * 12, 4, 4));
             }
         }
         let screen = screen_with(1000, 800, &rects);
