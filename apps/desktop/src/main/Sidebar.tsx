@@ -1,13 +1,15 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 
+import appIcon from '../../src-tauri/icons/128x128.png';
 import type { ThemeChoice } from '../shared/theme';
 import { Icon, type IconName } from './Icon';
 import type { View } from './views';
 
 /**
- * サイドバー（U-8、R7-1）。固定幅（640px 未満では、アイコンだけの細い列）。
- * 上から: 名前と ← →（見た画面の履歴）・主な操作「検討結果を取り込む」・行き先（今日の出題・解き直し。数つき。ログ・週の集計は
- * まだ作っていないので、押せない）・半荘の一覧（`children`）・設定とテーマの切り替え。
+ * サイドバー（U-8、U-22、R7-1、R9-9、R10-5）。固定幅（640px 未満では、アイコンだけの細い列）。
+ * 上から: 見出し（左にアプリのアイコン、右に枠の無い検索のアイコンと、そのすぐ右の ← →（見た画面の履歴）。細い列では、
+ * アイコン・検索・← → の順に縦に並べる）・主な操作「検討結果を取り込む」・行き先（今日の出題・解き直し。数つき。ログ・
+ * 週の集計はまだ作っていないので、押せない）・半荘の一覧（`children`）・設定とテーマの切り替え。
  */
 
 /** まだ作っていない行き先。押せない（aria-disabled）が、キーボードで止まれて、理由が読める。 */
@@ -24,6 +26,10 @@ interface SidebarProps {
   canGoForward: boolean;
   onGoBack: () => void;
   onGoForward: () => void;
+  /** 検索の重ね表示が開いているか（検索のアイコンの aria-expanded）。 */
+  searchOpen: boolean;
+  /** 検索の重ね表示を開く。`opener` は、閉じたときにキーボードの位置を戻す先（押したアイコン）。 */
+  onSearch: (opener: HTMLElement) => void;
   onImport: () => void;
   onSettings: () => void;
   onToggleTheme: () => void;
@@ -52,6 +58,8 @@ export function Sidebar({
   canGoForward,
   onGoBack,
   onGoForward,
+  searchOpen,
+  onSearch,
   onImport,
   onSettings,
   onToggleTheme,
@@ -84,43 +92,52 @@ export function Sidebar({
     <aside className="side" aria-label="サイドバー">
       <div className="side-in">
         <div className="side-head">
-          <div className="brand">
-            <span className="full">JantamaReviewer</span>
-            <span className="short" aria-hidden="true">
-              雀
-            </span>
-          </div>
-          <div className="side-hist" role="group" aria-label="画面の履歴">
+          <img className="app-mark" src={appIcon} width={30} height={30} alt="JantamaReviewer" draggable={false} />
+          <div className="side-tools">
             <button
               type="button"
-              className="icon-btn hist-btn"
-              aria-label="戻る"
-              title="戻る（Alt+←）"
-              aria-keyshortcuts="Alt+ArrowLeft"
-              ref={backRef}
-              disabled={!canGoBack}
-              onClick={() => {
-                pressed.current = 'back';
-                onGoBack();
-              }}
+              className="icon-btn search-btn"
+              aria-label="検索"
+              title="検索（Ctrl+K）"
+              aria-haspopup="dialog"
+              aria-expanded={searchOpen}
+              aria-keyshortcuts="Control+K"
+              onClick={(event) => onSearch(event.currentTarget)}
             >
-              <Icon name="arrowLeft" />
+              <Icon name="search" />
             </button>
-            <button
-              type="button"
-              className="icon-btn hist-btn"
-              aria-label="進む"
-              title="進む（Alt+→）"
-              aria-keyshortcuts="Alt+ArrowRight"
-              ref={forwardRef}
-              disabled={!canGoForward}
-              onClick={() => {
-                pressed.current = 'forward';
-                onGoForward();
-              }}
-            >
-              <Icon name="arrowRight" />
-            </button>
+            <div className="side-hist" role="group" aria-label="画面の履歴">
+              <button
+                type="button"
+                className="icon-btn hist-btn"
+                aria-label="戻る"
+                title="戻る（Alt+←）"
+                aria-keyshortcuts="Alt+ArrowLeft"
+                ref={backRef}
+                disabled={!canGoBack}
+                onClick={() => {
+                  pressed.current = 'back';
+                  onGoBack();
+                }}
+              >
+                <Icon name="arrowLeft" />
+              </button>
+              <button
+                type="button"
+                className="icon-btn hist-btn"
+                aria-label="進む"
+                title="進む（Alt+→）"
+                aria-keyshortcuts="Alt+ArrowRight"
+                ref={forwardRef}
+                disabled={!canGoForward}
+                onClick={() => {
+                  pressed.current = 'forward';
+                  onGoForward();
+                }}
+              >
+                <Icon name="arrowRight" />
+              </button>
+            </div>
           </div>
         </div>
         <div className="side-top">
