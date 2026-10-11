@@ -306,8 +306,10 @@ pub struct OcrEntry {
 }
 
 /// 半荘の画像の文字認識の結果の写し（`ocr.json`）。画像の、半荘のフォルダからの相対パスごとに持つ。
-/// 読み取りは取り込みのときだけ行い、結果をここに残して、同じ画像を読み直さない（S-3）。
+/// 読み取りは取り込みのとき（と、前の作り方で読んだ写しを読み直すとき。F11）だけ行い、結果をここに残して、同じ画像を読み直さない（S-3）。
+/// 項目が無い昔の写しも読める（無い項目は空として読む。決まりの名前が無ければ、いまの決まりとは違うので、読み直しの対象になる）。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct OcrCache {
     /// 画像の切り出しと拡大の決まりの名前（文字認識の側の `GEOMETRY_ID`）。決まりが変わったら、読み直す。
     /// この写しを作るのは取り込みのときだけ。ここ（保存）は、名前を文字として持つだけ。
@@ -2605,6 +2607,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cache.entries["marks/a.png"].retries, Vec::<OcrRetry>::new());
+    }
+
+    #[test]
+    fn an_ocr_cache_without_a_geometry_name_reads_with_an_empty_name() {
+        // 決まりの名前が無い昔の写しも読める。空の名前は、いまの決まりとは違うので、読み直しの対象になる（F11）。
+        let cache: OcrCache =
+            serde_json::from_str(r#"{"entries":{"marks/a.png":{"lines":["x"]}}}"#).unwrap();
+        assert_eq!(cache.geometry, "");
+        assert_eq!(cache.entries["marks/a.png"].lines, vec!["x".to_string()]);
+        let empty: OcrCache = serde_json::from_str("{}").unwrap();
+        assert_eq!(empty, OcrCache::default());
     }
 
     #[test]

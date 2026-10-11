@@ -31,6 +31,7 @@ run state/init-tools.sh myself. Never auto-install or enable tools.
 - 補助プログラムの手動確認（管理者の確認が出るので、自動の試験では確かめられない）: 設定ページの「管理者の補助プログラムを設定する」→ Windows の確認で「はい」→ 行が「動いています」になる。雀魂（管理者で動く）を前面にして、割り当てたサイドボタンを押すと、迷いが記録される。「設定を解除する」で、タスクと Program Files の写しが消える。
 - ボタンが効かないときの原因調べ: 環境変数 `JANTAMA_TRACE_INPUT=1` を付けて本体を起動し、標準エラーを見る（入力の流れが受け取った入力とやること、フックの手続きが受け取ったキーの仮想キーコード・フラグ・時刻、マウスの入力の数が出る）。実機で、本体が最後に入れたキーボードのフックには、前面が本体自身の窓（検討画面）のとき入力が届かず、先に入っているほかのアプリのフックにも届かなくなる（窓の中には届く。マウスのフックと、別のプロセスのフックは影響を受けない）と確かめた。そのため、検討画面が前面にある間は、本体のキーボードのフックを外し（`Effect::InProcessKeyboard`）、その間のキーは設定ページが拾って `report_page_key` で知らせる（登録とテスト）。
 - 試しに動かすときは、環境変数 `JANTAMA_CONFIG_DIR` に一時フォルダを指定し、そこの `settings.json` で `data_dir` も一時フォルダにする。本物のデータ（`%USERPROFILE%\JantamaReviewerData`）には触れない。`--show-main` を付けると検討画面も開く。
+- README の画面写真: `node scripts/readme-shots.mjs <迷いマークの画像のフォルダ>`（先に release を作っておく。フォルダには、プレイヤー名をぼかした雀魂の画面 `mark-1.jpg` ... `mark-6.jpg` を置く。一時フォルダだけを使い、本物のデータには触れない。出力は `docs/images`。機能が増えて写真を撮り直すときは、この道具に撮る画面を足し、README に説明を足す）。
 
 ## UI rules
 IMPORTANT: colors ONLY via design tokens; never hardcode hex. No emoji in UI or source.

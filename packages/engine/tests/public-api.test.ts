@@ -81,6 +81,10 @@ describe('公開 API（src/index.ts）', () => {
     }
   });
 
+  it('E-27 選んだ判断が、スクショの値から離れているかの入口が使える', () => {
+    expect(typeof engine.isFarFromReading).toBe('function');
+  });
+
   it('E-18 評価の結びつけの入口が使える', () => {
     expect(typeof engine.linkRatings).toBe('function');
     expect(engine.HAND_START_TILES_LEFT).toBe(66);

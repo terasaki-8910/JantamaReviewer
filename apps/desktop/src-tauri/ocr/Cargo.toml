@@ -2,6 +2,7 @@
 name = "jantama-ocr"
 version = "0.1.0"
 description = "取り込みのときだけ使う、保存済みのスクリーンショットの文字認識（Windows の日本語 OCR）。対局中に動く部分には入れない"
+license = "MIT"
 edition = "2021"
 rust-version = "1.90"
 publish = false

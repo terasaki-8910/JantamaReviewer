@@ -115,6 +115,17 @@ export const api = {
   /** 半荘の迷いマーク・評価の画像を文字認識にかけて、結果の写しを返す（読んだ分は半荘のフォルダに残る）。 */
   ocrSessions: (sessionIds: string[]) =>
     invoke<SessionOcr[]>('ocr_sessions', { sessionIds }),
+  /**
+   * 半荘の読み取りの写し（`ocr.json`）が、前の作り方で読んだものか（読み直しが要るか。F11、E-27）。
+   * 写しの決まりの名前が、いまの作り方と違う（または名前が無い）ときだけ true。写しが無いときは false。
+   */
+  needsOcrReread: (sessionId: string) => invoke<boolean>('needs_ocr_reread', { sessionId }),
+  /**
+   * 前の作り方で読んだ半荘の保存済みのスクショを、いまの作り方で読み直して、新しい写しを書く（取り込みの一部。F11、E-27）。
+   * 書き換わるのは `ocr.json` だけで、結びつけ（`links.json`）・評価・MAKA・結果には触らない。書き直したら true、
+   * 読み直しが要らなかったら false。失敗したら、前の写しを残して、理由を投げる。
+   */
+  rereadOcr: (sessionId: string) => invoke<boolean>('reread_ocr', { sessionId }),
   /** 取り込んだ結果を保存する。`sessionId` が null なら、記録の無い半荘として新しく作る。半荘の名前を返す。 */
   saveReport: (sessionId: string | null, text: string) =>
     invoke<string>('save_report', { sessionId, text }),

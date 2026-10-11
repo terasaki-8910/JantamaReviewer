@@ -120,6 +120,11 @@ export class FakeSessionStore {
     this.active[at] = change(this.active[at] as SessionRecord);
   }
 
+  /** 半荘の読み取りの写しを置き換える（試験から。Rust 側が読み直して、`ocr.json` を書き直したときと同じ）。 */
+  setOcr(id: string, ocr: OcrCache): void {
+    this.update(id, (s) => ({ ...s, ocr }));
+  }
+
   /** 半荘の今の中身（試験の確かめ用）。 */
   session(id: string): SessionRecord {
     const found = this.active.find((s) => s.id === id);
@@ -216,6 +221,37 @@ export class FakeSessionStore {
         this.log.push(`links:${sessionId}`);
         this.update(sessionId, (s) => ({ ...s, links }));
         return undefined;
+      },
+    };
+  }
+
+  /**
+   * 前の作り方で読んだ半荘の読み直し（F11、E-27）の偽物（`handlers` には入れない。読み直しの試験が、必要なときに足す）。
+   * Rust 側と同じ決まり: 写しの決まりの名前が `currentGeometry` と違う半荘だけ「読み直しが要る」（写しが無ければ、要らない）。
+   * 読み直しは、写しを `fresh` に置き換えて true を返す（結びつけ・評価・MAKA には触らない）。
+   * `hold` を渡すと、それが済むまで読み直しは終わらない。`failWith` を渡すと、読み直しは、その理由で失敗する（写しは、そのまま）。
+   * 呼ばれた順の記録は `log`（'needs:id'・'reread:id'）。
+   */
+  rereadHandlers(options: {
+    currentGeometry: string;
+    fresh: OcrCache;
+    hold?: Promise<unknown>;
+    failWith?: string;
+  }): Record<string, (args: unknown) => unknown> {
+    return {
+      needs_ocr_reread: (args) => {
+        const { sessionId } = args as { sessionId: string };
+        this.log.push(`needs:${sessionId}`);
+        const ocr = this.session(sessionId).ocr;
+        return ocr !== null && ocr.geometry !== options.currentGeometry;
+      },
+      reread_ocr: async (args) => {
+        const { sessionId } = args as { sessionId: string };
+        this.log.push(`reread:${sessionId}`);
+        await options.hold;
+        if (options.failWith !== undefined) throw options.failWith;
+        this.setOcr(sessionId, options.fresh);
+        return true;
       },
     };
   }
