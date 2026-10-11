@@ -24,6 +24,7 @@ pub mod import;
 #[cfg(windows)]
 pub mod input_effects;
 pub mod input_flow;
+pub mod memo;
 pub mod menu;
 pub mod navigation;
 pub mod ready;
@@ -120,6 +121,10 @@ pub fn run() {
             evaluation::clear_maka_grade,
             evaluation::set_maka_hanchan,
             evaluation::clear_maka_hanchan,
+            memo::set_memo,
+            memo::clear_memo,
+            memo::set_extra_memo,
+            memo::clear_extra_memo,
             study::commands::record_answer,
             study::commands::update_answer_notes,
             study::commands::list_answers,

@@ -166,7 +166,8 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
           info={info}
           anyCalled={calledSomewhere}
           scene={scene}
-          sessionId={session.id}
+          session={session}
+          resolved={resolved}
           existing={latestAnswerFor(study.answers, session.id, scene.key, 'quiz')}
           drafts={drafts}
           nextLabel={nextScene === undefined ? '続きを見る' : '次の場面へ'}

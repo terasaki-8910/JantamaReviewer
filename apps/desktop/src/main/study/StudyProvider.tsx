@@ -96,6 +96,11 @@ export interface StudyValue {
   recordAnswer: (answer: NewAnswer) => Promise<AnswerRow>;
   /** 答え合わせのあとに直す欄を直す。渡した欄だけを替え、ほかは、いまの保存の値のまま。 */
   updateNotes: (id: number, patch: Partial<AnswerNotes>) => Promise<AnswerRow>;
+  /**
+   * 半荘の一覧を読み直す（半荘を通して見る画面の中で保存したもの、場面でのメモなどを、一覧に反映する）。
+   * 保存のコマンドは、状態の変化も知らせるので、一覧はそれでも読み直される。これは、保存が済んだ直後に、確かに反映するため。
+   */
+  reloadSessions: () => Promise<void>;
 }
 
 const EMPTY_MODEL: StudyModel = {
@@ -130,7 +135,7 @@ export function thresholdOf(percent: number): number {
  * 出題のデータを作る（検討画面のシェルが 1 回だけ呼び、結果を `StudyProvider` で配る）。
  * `sessions` は、消していない半荘（一覧に出ているもの）。読み込み前は null。
  */
-export function useStudyData(sessions: readonly SessionRecord[] | null): StudyValue {
+export function useStudyData(sessions: readonly SessionRecord[] | null, reloadSessions: () => Promise<void>): StudyValue {
   const settings = useSettings();
   const studyDay = useStudyDay();
   const [answers, setAnswers] = useState<AnswerRow[] | null>(null);
@@ -278,6 +283,7 @@ export function useStudyData(sessions: readonly SessionRecord[] | null): StudyVa
       session,
       recordAnswer,
       updateNotes,
+      reloadSessions,
     }),
     [
       ready,
@@ -293,6 +299,7 @@ export function useStudyData(sessions: readonly SessionRecord[] | null): StudyVa
       session,
       recordAnswer,
       updateNotes,
+      reloadSessions,
     ],
   );
 }

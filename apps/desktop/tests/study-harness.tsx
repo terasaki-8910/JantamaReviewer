@@ -8,13 +8,13 @@ import userEvent from '@testing-library/user-event';
 import { useRef, useState } from 'react';
 import { vi, type Mock } from 'vitest';
 
-import type { AnswerMode, AnswerNotes, AnswerRow, NewAnswer } from '../src/api/types';
+import type { AnswerMode, AnswerNotes, AnswerRow, NewAnswer, SessionRecord } from '../src/api/types';
 import { QuizScreen } from '../src/main/study/QuizScreen';
 import { StudyProvider, type StudyValue } from '../src/main/study/StudyProvider';
 import type { StudyModel } from '../src/main/study/studyModel';
 import { UndoProvider } from '../src/main/undo/UndoProvider';
 import { answerRow, gameOf } from './fake-study';
-import type { ReportKey } from './fake-sessions';
+import { seedSession, type ReportKey } from './fake-sessions';
 
 const EMPTY_MODEL: StudyModel = {
   problems: [],
@@ -40,6 +40,8 @@ export interface QuizOptions {
   record?: (answer: NewAnswer) => Promise<AnswerRow>;
   /** 保存したメモの更新を差し替える。 */
   updateNotes?: (id: number, patch: Partial<AnswerNotes>) => Promise<void>;
+  /** 半荘（迷いマーク・結びつけ・終局直後のメモを持たせたいとき）。既定は、迷いも評価も無い半荘。 */
+  session?: SessionRecord;
 }
 
 export interface QuizProbe {
@@ -95,6 +97,7 @@ function Harness({ decision, imported, probe, ...options }: HarnessProps) {
     locate: () => null,
     gameState: () => undefined,
     session: () => undefined,
+    reloadSessions: async () => undefined,
     recordAnswer: async (answer) => {
       probe.recorded.push(answer);
       const row =
@@ -125,7 +128,7 @@ function Harness({ decision, imported, probe, ...options }: HarnessProps) {
     <UndoProvider>
       <StudyProvider value={value}>
         <QuizScreen
-          located={{ session: { id: 'sess', started_ms: 0 } as never, game: imported, decision }}
+          located={{ session: options.session ?? seedSession(0, { id: 'sess' }).session, game: imported, decision }}
           mode={options.mode ?? 'quiz'}
           progress={options.progress ?? null}
           markNumber={options.markNumber ?? null}

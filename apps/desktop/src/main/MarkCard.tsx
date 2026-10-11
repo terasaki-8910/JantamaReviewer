@@ -1,5 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react';
 
 import type { DecisionRef } from '@jantama/engine';
 
@@ -39,13 +39,22 @@ import { ReplayIcon } from './replay/ReplayIcons';
  *   局をどう決めたかの 1 文の下に、「手で選ぶ」（局のメニュー → 判断のメニュー）。選び肢は、局の幅の中の判断だけ
  *   （局が 1 つなら、局は選んである）
  * - 手で選ぶ（読めない・合う局が無い）: 「手で選ぶ」（局のメニュー → 判断のメニュー。半荘のすべての判断から）
+ * 結びつけの欄の下に、終局直後のメモの欄（`memo`。「候補」「理由（1行）」。F4、U-28）。取り込む前の半荘のカードにも出る。
  * 判断が決まっているカードには、下端に「この局面を解く」を置く（押すと、半荘を通して見る画面を、その局面で開く。F9・F12）。
  * 局面が決まっていない（手で選ぶ）カードには、置かない。
+ *
+ * 局の評価の表の「迷い」の札を押すと、このカードへ移る（U-27）。そのため、カードは、キーボードの位置を受けられ（`tabIndex=-1`）、
+ * 移ったあとの少しの間は、目立たせる（`flash`）。
  * AI の候補・確率・順位は出さない（SPEC F3。答えを書くまで隠す）。
  *
  * 選んだ瞬間に保存する（`onChoose`。取り消せる）。選んだあとは、「選び直す」にキーボードの位置を移す
  * （選ぶのに使ったボタンは、決まると消えるため）。
  */
+
+/** 迷いのカードの要素の名前（局の評価の表の札から移る先。画面に 1 つの半荘だけなので、番号で足りる）。 */
+export function markCardId(number: number): string {
+  return `mark-card-${number}`;
+}
 
 /** カードの下の欄の見せ方。`auto` は、結びつけの状態に任せる。 */
 type Mode = 'auto' | 'chips' | 'pick';
@@ -64,13 +73,25 @@ interface MarkCardProps {
   onChoose: (resolved: ResolvedMark, ref: DecisionRef) => Promise<void>;
   /** 「この局面を解く」（結びついた判断の鍵で、半荘を通して見る画面を開く）。渡さなければ、ボタンは出さない。 */
   onSolve?: (decisionKey: string) => void;
+  /** 終局直後のメモの欄（結びつけの欄の下に出す）。 */
+  memo?: ReactNode;
+  /** 局の評価の表の札から移ってきた直後で、目立たせているか。 */
+  flash?: boolean;
+  /** カード自身（札から移るときに、キーボードの位置を移す先）。 */
+  cardRef?: Ref<HTMLElement>;
 }
 
-export function MarkCard({ mark, number, resolved, decisions, onOpenImage, onChoose, onSolve }: MarkCardProps) {
+export function MarkCard({ mark, number, resolved, decisions, onOpenImage, onChoose, onSolve, memo, flash = false, cardRef }: MarkCardProps) {
   const clock = formatClock(mark.t_ms);
   const labelId = useId();
   return (
-    <article className="mcard" aria-labelledby={labelId}>
+    <article
+      className={flash ? 'mcard is-flash' : 'mcard'}
+      id={markCardId(number)}
+      ref={cardRef}
+      tabIndex={-1}
+      aria-labelledby={labelId}
+    >
       {mark.screenshot_path ? (
         <button
           type="button"
@@ -103,6 +124,7 @@ export function MarkCard({ mark, number, resolved, decisions, onOpenImage, onCho
           <span className="mclock">{clock}</span>
         </div>
         {resolved !== null && <LinkArea number={number} resolved={resolved} decisions={decisions} onChoose={onChoose} />}
+        {memo}
         {resolved !== null && resolved.resolution.kind === 'linked' && onSolve !== undefined && (
           <div className="msolve">
             <button

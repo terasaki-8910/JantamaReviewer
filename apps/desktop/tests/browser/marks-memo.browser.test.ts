@@ -1,0 +1,416 @@
+// @vitest-environment node
+/**
+ * 実ブラウザで、半荘のページの「迷い」の列（R11-9、U-27）と、終局直後のメモ（F4、U-28）を検査する（U-4・U-5・U-6）。
+ * FX-5（10月11日の半荘。迷い 13・局の評価 9）に、メモ・追加のメモを書いた状態で開く。
+ *
+ * - U-4: 幅 390・768・1280px で、通常・追加のメモのパネル・メニューを開いた状態に横スクロールが出ない。表の入れ物の中も、はみ出さない
+ * - U-5・U-6: axe の重大な違反が 0 件（色のコントラストを含む）。Tab で、札・メモの欄・追加のボタンなど、すべての操作に届く。ライトとダーク
+ * - 形: 広い幅では、札が表の「迷い」の列に並ぶ。幅 390px では、局ごとのかたまりに、小さな見出し「迷い」つきの行が付く
+ * - 札を押す・Enter で、そのカードへ移る（実際のスクロールと、キーボードの位置）。メモは、実際のキーで保存され、Ctrl+Z で戻る
+ * jsdom の試験（src/main/MarksMemo.test.tsx）と同じふるまいを、実際の描画・キー・時計で確かめる。
+ */
+import type { Browser, BrowserContext, Page } from 'playwright-core';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import type { Memos } from '../../src/api/types';
+import { REPORT_TEXTS } from '../fake-sessions';
+import { FX5_ID, FX5_STARTED, FX5_USER_CHOICES, fx5Ocr, fx5Session } from '../import-fixtures';
+import {
+  TINY_PNG,
+  launchBrowser,
+  runAxe,
+  seriousViolations,
+  startPageServer,
+  tauriMockScript,
+  unreachableByTab,
+  waitForMainReady,
+  type PageServer,
+  type Scenario,
+} from './harness';
+
+const SCHEMES = ['light', 'dark'] as const;
+type Scheme = (typeof SCHEMES)[number];
+
+/** 試験の「いま」: 2026 年 10 月 12 日 12:00。 */
+const NOW = new Date(2026, 9, 12, 12, 0, 0);
+
+const baseState = { status: 'idle', session_id: null, mark_count: 0, ratings: [], next_hand: 1, can_undo: false, error: null };
+const settings = {
+  trigger: { kind: 'mouse_x1' },
+  orientation: 'vertical',
+  widget_position: null,
+  sound: true,
+  capture_keywords: ['雀魂', 'Mahjong Soul'],
+  data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
+};
+
+/** メモを書いた状態: 迷い 3（記録の番号 4）と迷い 11（記録の番号 17）に「候補」「理由」、迷いマークの無い迷い（南1局2本場）に追加のメモ。 */
+const MEMOS: Memos = {
+  marks: {
+    '4': { candidates: '3m・6p', reason: '形を崩したくない' },
+    '17': { candidates: 'ポン・スルー', reason: '速さを取るか' },
+  },
+  extras: [{ id: 'x1', decision: 'k4h2e5', candidates: '5s・發', reason: '押すか引くか迷った' }],
+};
+
+/**
+ * ユーザーが選んだ 7 つ（迷い 1・3・4・5・6・8・13）のうち、迷い 5（記録の番号 8）だけ外す: 選んだ札（チェック）・推定の札（枠だけ）・
+ * 巡目は未定の札（点線。迷い 5）が、そろって出る。
+ */
+const LINKS = { marks: Object.fromEntries(Object.entries(FX5_USER_CHOICES).filter(([id]) => id !== '8')), ratings: {} };
+
+function fx5Imported(memos: Memos = MEMOS) {
+  return fx5Session(FX5_ID, FX5_STARTED, {
+    report_path: `C:\\data\\games\\${FX5_ID}\\report.json`,
+    ocr: fx5Ocr(),
+    links: LINKS,
+    memos,
+  });
+}
+
+function scenario(overrides: Partial<Scenario> = {}): Scenario {
+  return {
+    label: 'main',
+    state: baseState,
+    settings,
+    inputStatus: null,
+    sessions: [fx5Imported()],
+    reports: { [FX5_ID]: REPORT_TEXTS.fx5 },
+    thumb: TINY_PNG,
+    ...overrides,
+  };
+}
+
+let server: PageServer;
+let browser: Browser;
+
+beforeAll(async () => {
+  server = await startPageServer();
+  browser = await launchBrowser();
+});
+
+afterAll(async () => {
+  await browser?.close();
+  await server?.close();
+});
+
+interface Opened {
+  context: BrowserContext;
+  page: Page;
+  problems: string[];
+  external: string[];
+}
+
+async function open(options: { width?: number; height?: number; scheme?: Scheme; scenario?: Scenario; reduced?: boolean } = {}): Promise<Opened> {
+  const context = await browser.newContext({
+    viewport: { width: options.width ?? 1280, height: options.height ?? 800 },
+    colorScheme: options.scheme ?? 'light',
+    reducedMotion: options.reduced === false ? 'no-preference' : 'reduce',
+    deviceScaleFactor: 1,
+  });
+  const page = await context.newPage();
+  const problems: string[] = [];
+  const external: string[] = [];
+  const origin = new URL(server.url).origin;
+  page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error') problems.push(`console.error: ${message.text()}`);
+  });
+  page.on('request', (request) => {
+    const url = request.url();
+    if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:')) external.push(url);
+  });
+  await page.clock.setFixedTime(NOW);
+  await page.addInitScript(tauriMockScript(options.scenario ?? scenario()));
+  await page.goto(new URL('index.html', server.url).toString());
+  await waitForMainReady(page);
+  await page.getByRole('table', { name: '局の評価' }).waitFor();
+  // 画面に近い画像が読み終わるまで待つ（遅延読み込みの、まだ遠い画像は待たない）
+  await page.waitForFunction(() =>
+    Array.from(document.images)
+      .filter((img) => img.getBoundingClientRect().top < window.innerHeight)
+      .every((img) => img.complete),
+  );
+  return { context, page, problems, external };
+}
+
+const card = (page: Page, n: number) => page.getByRole('article', { name: `迷い${n}` });
+const isFocused = (locator: ReturnType<Page['locator']>) => locator.evaluate((el) => el === document.activeElement);
+const calls = (page: Page, cmd: string) =>
+  page.evaluate(
+    (name) =>
+      (window as unknown as { __jrCalls: Array<{ cmd: string; args: unknown }> }).__jrCalls.filter((c) => c.cmd === name).map((c) => c.args),
+    cmd,
+  );
+
+async function overflow(page: Page) {
+  return page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+    body: document.body.scrollWidth,
+    table: Array.from(document.querySelectorAll<HTMLElement>('.tbl-wrap')).map((el) => el.scrollWidth - el.clientWidth),
+  }));
+}
+
+/** その場の状態へ進める。 */
+const STATES: Record<string, (page: Page) => Promise<void>> = {
+  default: async () => undefined,
+  // 迷いマークの無い迷いを足すパネルを開いて、局のメニューも開く
+  addPanel: async (page) => {
+    await page.getByRole('button', { name: '迷いマークの無い迷いを足す' }).click();
+    await page.getByRole('region', { name: '迷いマークの無い迷いを足す' }).waitFor();
+  },
+  addMenu: async (page) => {
+    await page.getByRole('button', { name: '迷いマークの無い迷いを足す' }).click();
+    const panel = page.getByRole('region', { name: '迷いマークの無い迷いを足す' });
+    await panel.waitFor();
+    await panel.getByRole('button', { name: '追加するメモの局を選ぶ' }).click();
+    await page.getByRole('menu', { name: '追加するメモの局' }).waitFor();
+  },
+};
+
+describe('U-4・U-5・U-6: 迷いの列とメモ（FX-5。実ブラウザ）', () => {
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 768, 1280] as const) {
+      for (const [name, drive] of Object.entries(STATES)) {
+        if (width === 768 && name === 'addMenu') continue;
+        it(`${name} 幅${width}px ${scheme}: 横スクロールが無く、重大な a11y 違反が無く、Tab で札・メモの欄に届き、外へ通信しない`, async () => {
+          const { context, page, problems, external } = await open({ width, scheme });
+          try {
+            await drive(page);
+            await page.waitForTimeout(100);
+
+            const m = await overflow(page);
+            expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+            expect(m.body).toBeLessThanOrEqual(m.client);
+            for (const extra of m.table) expect(extra).toBeLessThanOrEqual(0);
+
+            const axe = await runAxe(page);
+            expect(seriousViolations(axe)).toEqual([]);
+            expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(5);
+
+            if (name === 'default') {
+              // 札 13 と、メモの欄（迷い 13 + 追加のメモ 1）× 2 が、画面にある
+              expect(await page.getByRole('button', { name: /カードへ移る$/ }).count()).toBe(13);
+              expect(await page.getByLabel('候補', { exact: true }).count()).toBe(14);
+              expect(await page.getByLabel('理由（1行）', { exact: true }).count()).toBe(14);
+              const reach = await unreachableByTab(page);
+              expect(reach.total).toBeGreaterThan(60);
+              expect(reach.missed).toEqual([]);
+            }
+            expect(problems).toEqual([]);
+            expect(external).toEqual([]);
+          } finally {
+            await context.close();
+          }
+        });
+      }
+    }
+  }
+});
+
+describe('U-27: 札の置き場所（実ブラウザ）', () => {
+  it('幅 1280px: 札は表の最後の列「迷い」に、その局の行の中で並ぶ。同じ局の札は同じ高さの行に収まる', async () => {
+    const { context, page } = await open();
+    try {
+      const layout = await page.evaluate(() => {
+        const table = document.querySelector('table.tbl') as HTMLTableElement;
+        const headers = Array.from(table.querySelectorAll('thead th')).map((th) => th.textContent);
+        const rows = Array.from(table.querySelectorAll('tbody tr')).map((tr) => {
+          const rect = tr.getBoundingClientRect();
+          const chips = Array.from(tr.querySelectorAll('.mk-chip')).map((chip) => {
+            const r = chip.getBoundingClientRect();
+            return r.top >= rect.top - 0.5 && r.bottom <= rect.bottom + 0.5 && r.left >= rect.left - 0.5 && r.right <= rect.right + 0.5;
+          });
+          const cell = tr.querySelector('td.marks-cell') as HTMLElement;
+          const cellRect = cell.getBoundingClientRect();
+          const last = Array.from(tr.children).at(-1);
+          return { chips, inLastColumn: last === cell, cellLeft: Math.round(cellRect.left), rowLeft: Math.round(rect.left) };
+        });
+        return { headers, rows };
+      });
+      expect(layout.headers.at(-1)).toBe('迷い');
+      expect(layout.rows).toHaveLength(10);
+      for (const row of layout.rows) {
+        expect(row.inLastColumn).toBe(true);
+        expect(row.chips.every(Boolean)).toBe(true);
+      }
+      // 列の左端は、どの行でもそろう
+      expect(new Set(layout.rows.map((row) => row.cellLeft)).size).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('幅 390px: 局ごとのかたまりに、小さな見出し「迷い」つきの行が付く。札が無い局には、行を出さない', async () => {
+    const { context, page } = await open({ width: 390 });
+    try {
+      const rows = await page.evaluate(() => {
+        const table = document.querySelector('table.tbl') as HTMLTableElement;
+        return Array.from(table.querySelectorAll('tbody tr')).map((tr) => {
+          const cell = tr.querySelector('td.marks-cell') as HTMLElement;
+          const style = getComputedStyle(cell);
+          const before = getComputedStyle(cell, '::before').content;
+          const cellRect = cell.getBoundingClientRect();
+          const trRect = tr.getBoundingClientRect();
+          const maka = tr.querySelector('td[data-label="MAKA"]') as HTMLElement;
+          return {
+            label: tr.querySelector('th')?.textContent ?? '',
+            hidden: style.display === 'none',
+            chips: tr.querySelectorAll('.mk-chip').length,
+            before,
+            below: cellRect.top >= maka.getBoundingClientRect().bottom - 1,
+            wide: Math.round(cellRect.width) >= Math.round(trRect.width) - 2,
+          };
+        });
+      });
+      for (const row of rows) {
+        if (row.chips === 0) {
+          expect(row.hidden, row.label).toBe(true);
+        } else {
+          expect(row.hidden, row.label).toBe(false);
+          expect(row.before, row.label).toBe('"迷い"');
+          expect(row.below, row.label).toBe(true);
+          expect(row.wide, row.label).toBe(true);
+        }
+      }
+      expect(rows.filter((row) => row.chips > 0)).toHaveLength(7);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('札の形: 選んだ札にはチェック、巡目は未定の札の枠は点線、推定の札は実線の枠だけ（枠の線種と中身で見分けられる）', async () => {
+    const { context, page } = await open();
+    try {
+      const shapes = await page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLElement>('.mk-chip')).map((chip) => ({
+          kind: chip.getAttribute('data-kind'),
+          border: getComputedStyle(chip).borderTopStyle,
+          check: chip.querySelector('svg.mk-ck') !== null,
+          background: getComputedStyle(chip).backgroundColor,
+          surface: getComputedStyle(document.body).getPropertyValue('--surface'),
+        })),
+      );
+      const by = (kind: string) => shapes.filter((shape) => shape.kind === kind);
+      expect(by('undecided').length).toBeGreaterThan(0);
+      expect(by('chosen').length).toBeGreaterThan(0);
+      expect(by('estimate').length).toBeGreaterThan(0);
+      for (const shape of by('undecided')) {
+        expect(shape.border).toBe('dashed');
+        expect(shape.check).toBe(false);
+      }
+      for (const shape of by('chosen')) {
+        expect(shape.border).toBe('solid');
+        expect(shape.check).toBe(true);
+      }
+      for (const shape of by('estimate')) {
+        expect(shape.border).toBe('solid');
+        expect(shape.check).toBe(false);
+      }
+      // 選んだ札だけ、塗りが違う（推定の札と背景色が違う）
+      expect(new Set(by('chosen').map((shape) => shape.background)).size).toBe(1);
+      expect(by('chosen')[0]?.background).not.toBe(by('estimate')[0]?.background);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('U-27: 札からカードへ移る（実ブラウザ）', () => {
+  it('札を押すと、そのカードが画面に入り、キーボードの位置が移り、少しの間目立って、そのあと戻る', async () => {
+    const { context, page } = await open({ scheme: 'light' });
+    try {
+      const chip = page.getByRole('button', { name: '迷い12 4巡目 打發（推定）。カードへ移る' });
+      await chip.scrollIntoViewIfNeeded();
+      await chip.click();
+      const target = card(page, 12);
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-labelledby') !== null && document.activeElement?.tagName === 'ARTICLE');
+      expect(await isFocused(target)).toBe(true);
+      expect(await target.evaluate((el) => el.classList.contains('is-flash'))).toBe(true);
+      const box = await target.boundingBox();
+      const viewport = page.viewportSize();
+      expect(box).not.toBeNull();
+      if (box !== null && viewport !== null) {
+        expect(box.y).toBeGreaterThanOrEqual(-1);
+        expect(box.y + box.height).toBeLessThanOrEqual(viewport.height + 1);
+      }
+      // 目立っている間は、縁取り（box-shadow）が付く
+      expect(await target.evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none');
+      await page.waitForFunction(() => document.querySelector('.mcard.is-flash') === null, undefined, { timeout: 5000 });
+      expect(await target.evaluate((el) => getComputedStyle(el).boxShadow)).toBe('none');
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('Tab で札に着いて Enter を押しても、同じ（巡目は未定の札も）。幅 390px でも', async () => {
+    const { context, page } = await open({ width: 390 });
+    try {
+      const chip = page.getByRole('button', { name: '迷い5 巡目は未定。カードへ移る' });
+      await chip.scrollIntoViewIfNeeded();
+      await chip.focus();
+      await page.keyboard.press('Enter');
+      expect(await isFocused(card(page, 5))).toBe(true);
+      expect(await card(page, 5).evaluate((el) => el.classList.contains('is-flash'))).toBe(true);
+      const box = await card(page, 5).boundingBox();
+      expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
+      const m = await overflow(page);
+      expect(m.scroll).toBeLessThanOrEqual(m.client);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('U-28: メモの保存と取り消し（実ブラウザ）', () => {
+  it('実際のキーで打って Tab で外へ出ると保存し、Enter でも保存する。欄の外での Ctrl+Z で戻る', async () => {
+    const { context, page } = await open();
+    try {
+      const memo = card(page, 5).getByRole('group', { name: '迷い5のメモ' });
+      await memo.getByLabel('候補', { exact: true }).click();
+      await page.keyboard.type('1p・8p');
+      await page.keyboard.press('Tab');
+      await page.waitForFunction(() => document.querySelectorAll('.mcard').length > 0);
+      await expect.poll(async () => (await calls(page, 'set_memo')).length, { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+      const first = (await calls(page, 'set_memo')).at(-1) as { sessionId: string; markId: number; candidates: string; reason: string };
+      // 迷い 5 の記録の番号は 8
+      expect(first).toMatchObject({ sessionId: FX5_ID, markId: 8, candidates: '1p・8p', reason: '' });
+      await page.keyboard.type('東を残す');
+      await page.keyboard.press('Enter');
+      await expect.poll(async () => ((await calls(page, 'set_memo')).at(-1) as { reason: string }).reason, { timeout: 5000 }).toBe('東を残す');
+      expect(await memo.getByLabel('理由（1行）', { exact: true }).inputValue()).toBe('東を残す');
+
+      // 欄の外では、直前の保存が戻る（理由だけが消える）
+      await page.locator('h1').click();
+      await page.keyboard.press('Control+z');
+      await expect.poll(async () => ((await calls(page, 'set_memo')).at(-1) as { reason: string }).reason, { timeout: 5000 }).toBe('');
+      await expect.poll(() => memo.getByLabel('理由（1行）', { exact: true }).inputValue(), { timeout: 5000 }).toBe('');
+      expect(await memo.getByLabel('候補', { exact: true }).inputValue()).toBe('1p・8p');
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('メモを足す（局 → 判断 → 候補 → 足す）と、追加のメモのカードが増え、保存が呼ばれる。足したカードの「候補」へキーボードの位置が移る', async () => {
+    const { context, page } = await open();
+    try {
+      await page.getByRole('button', { name: '迷いマークの無い迷いを足す' }).click();
+      const panel = page.getByRole('region', { name: '迷いマークの無い迷いを足す' });
+      await panel.getByRole('button', { name: '追加するメモの局を選ぶ' }).click();
+      await page.getByRole('menuitemradio', { name: '南3局' }).click();
+      await panel.getByRole('button', { name: '追加するメモの巡目と判断を選ぶ' }).click();
+      await page.getByRole('menuitemradio').first().click();
+      await panel.getByLabel('候補', { exact: true }).fill('發・白');
+      await panel.getByRole('button', { name: '足す' }).click();
+      await expect.poll(async () => (await calls(page, 'set_extra_memo')).length, { timeout: 5000 }).toBe(1);
+      expect(((await calls(page, 'set_extra_memo'))[0] as { id: string; decision: string }).id).toBe('x2');
+      expect(await page.getByRole('article', { name: '追加のメモ' }).count()).toBe(2);
+      await expect
+        .poll(() => page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.value ?? null), { timeout: 5000 })
+        .toBe('發・白');
+    } finally {
+      await context.close();
+    }
+  });
+});

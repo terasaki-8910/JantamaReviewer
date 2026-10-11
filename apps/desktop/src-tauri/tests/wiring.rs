@@ -386,3 +386,42 @@ fn every_evaluation_command_is_registered_and_none_of_them_writes_the_recording(
         );
     }
 }
+
+#[test]
+fn every_memo_command_is_registered_and_none_of_them_writes_the_recording() {
+    // memo.rs（終局直後のメモの保存。F4・U-28）の `#[tauri::command]` が、すべて登録されている（登録の忘れを防ぐ）。
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    let source = read(crate_dir().join("src").join("memo.rs"));
+    let mut names = Vec::new();
+    let mut lines = source.lines();
+    while let Some(line) = lines.next() {
+        if line.trim() == "#[tauri::command]" {
+            let signature = lines.next().expect("関数が続く");
+            let name = signature
+                .trim_start_matches("pub async fn ")
+                .split('(')
+                .next()
+                .expect("関数名");
+            names.push(name.to_string());
+        }
+    }
+    assert_eq!(
+        names,
+        [
+            "set_memo",
+            "clear_memo",
+            "set_extra_memo",
+            "clear_extra_memo"
+        ]
+    );
+    for name in &names {
+        assert!(
+            lib.contains(&format!("memo::{name},")),
+            "{name} を generate_handler に登録していない"
+        );
+    }
+    // ウィジェットの記録（追記だけの events.jsonl）は、ここからは書き換えない。
+    for forbidden in ["add_mark", "add_rating", "undo(", "append", "EVENTS_FILE"] {
+        assert!(!source.contains(forbidden), "memo.rs に {forbidden} がある");
+    }
+}

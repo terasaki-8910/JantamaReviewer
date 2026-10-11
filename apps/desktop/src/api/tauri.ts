@@ -11,6 +11,7 @@ import type {
   AppState,
   InputStatus,
   Links,
+  MemoEntry,
   MjaiWindowEvent,
   OcrProgress,
   Orientation,
@@ -169,6 +170,18 @@ export const api = {
     invoke<void>('set_maka_hanchan', { sessionId, grade }),
   /** 半荘全体の MAKA の評価を消す。 */
   clearMakaHanchan: (sessionId: string) => invoke<void>('clear_maka_hanchan', { sessionId }),
+
+  // ---- 終局直後のメモ（F4、U-28）。ウィジェットの記録は書き換えず、半荘のフォルダの memos.json に保存する ----
+  /** 迷いマークのメモを書く（置き換える）。「候補」も「理由」も空なら、メモを消す。 */
+  setMemo: (sessionId: string, markId: number, memo: MemoEntry) =>
+    invoke<void>('set_memo', { sessionId, markId, candidates: memo.candidates, reason: memo.reason }),
+  /** 迷いマークのメモを消す（取り消しに使う）。 */
+  clearMemo: (sessionId: string, markId: number) => invoke<void>('clear_memo', { sessionId, markId }),
+  /** 迷いマークの無い迷いのメモを書く（同じ名前があれば置き換え、無ければ足す）。`decision` は判断の鍵。 */
+  setExtraMemo: (sessionId: string, id: string, decision: string, memo: MemoEntry) =>
+    invoke<void>('set_extra_memo', { sessionId, id, decision, candidates: memo.candidates, reason: memo.reason }),
+  /** 迷いマークの無い迷いのメモを消す（取り消しに使う）。 */
+  clearExtraMemo: (sessionId: string, id: string) => invoke<void>('clear_extra_memo', { sessionId, id }),
 
   // ---- 答え・解き直しの予定・今日の出題（D-3。保存先の study.sqlite。検討画面だけが呼ぶ） ----
   /** 答えを記録する（答え合わせを押したとき）。番号を付けた行を返す。 */

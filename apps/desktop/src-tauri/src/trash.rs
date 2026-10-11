@@ -304,6 +304,24 @@ mod tests {
     }
 
     #[test]
+    fn u28_the_memos_file_goes_to_the_recycler_with_its_session_folder_and_not_on_its_own() {
+        // 半荘を確定して消すとき（アプリを閉じるとき）、メモ（memos.json）は半荘のフォルダごとごみ箱へ送られる。
+        // メモだけを別に送ることも、残すこともない（置き場の直下にあるのは、半荘のフォルダだけ）。
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data");
+        let session = make_session(&data, "20261009-190953");
+        fs::write(session.join("memos.json"), r#"{"marks":{},"extras":[]}"#).unwrap();
+
+        let recycler = FakeRecycler::new();
+        let report = recycle_trash(&data, &recycler);
+
+        assert_eq!(report.recycled, vec!["20261009-190953"]);
+        assert_eq!(recycler.asked(), vec![session.clone()]);
+        assert!(!session.exists(), "メモのファイルごと、置き場から無くなる");
+        assert!(!trash_dir(&data).exists());
+    }
+
+    #[test]
     fn u9_without_a_trash_folder_nothing_happens() {
         let tmp = tempfile::tempdir().unwrap();
         let recycler = FakeRecycler::new();
