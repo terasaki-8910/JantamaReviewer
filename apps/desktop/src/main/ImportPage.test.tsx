@@ -235,9 +235,12 @@ describe('取り込みの流れ（結果が見つかってから）', () => {
     expect(lastCall(mock, 'replace_links')).toEqual({
       sessionId: session.id,
       // 迷いマークの結びつけは、保存しない（推定は、読み取りの写しと結果から出せる。保存するのは、利用者が選んだものだけ）。
+      // 評価は、迷いと評価を押した時刻の順に当てはめる（E-29）。19:22:41 の評価は押し直しなので、どの局にも結びつけない（空の文字列）。
+      // 当てはめ方の版（ratings_version）も書く（E-31）
       links: {
         marks: {},
-        ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': 'k2h0', '11': 'k2h1' },
+        ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': '', '11': 'k2h1' },
+        ratings_version: 2,
       },
     });
 
@@ -248,7 +251,7 @@ describe('取り込みの流れ（結果が見つかってから）', () => {
     expect(panel.textContent).toMatch(/大きな不一致 \d+/);
     expect(panel.textContent).toContain('迷い 6');
     expect(panel.textContent).toContain('5つは推定で局面に結びつけました。1つは手で選んでください');
-    expect(panel.textContent).toContain('局の評価 5 件のうち、5 件を局に当てはめました');
+    expect(panel.textContent).toContain('局の評価 5 件のうち、4 件を局に当てはめました');
 
     // 取り込んだ半荘を、半荘のページで開く（サイドバーの一覧で、その半荘の行に印が付く）。
     await user.click(

@@ -134,10 +134,13 @@ export interface OcrCache {
  * 迷いマーク・評価の結びつけ（`links.json`）。無い項目は「まだ決めていない」。
  * - `marks`: 迷いマークの id（10 進の文字列）→ 結びつけた判断の鍵（エンジンの `DecisionRef.key`）か `"manual"`（局面を手で選ぶ）
  * - `ratings`: 評価の id → 結びつけた局の鍵（`kyokuKey`）。空の文字列は「どの局にも結びつけない」
+ * - `ratings_version`: `ratings` を当てはめたときの、当てはめ方の版（エンジンの `RATING_LINK_VERSION`）。無いか、いまの版より小さいときは、
+ *   半荘の画面を開いたとき、1 回だけ当てはめ直す（E-31）
  */
 export interface Links {
   marks: Record<string, string>;
   ratings: Record<string, string>;
+  ratings_version?: number;
 }
 
 /**

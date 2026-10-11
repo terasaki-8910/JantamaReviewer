@@ -65,10 +65,20 @@ describe('F10 局の評価の表の行（FX-4）', () => {
     expect(bad.rows.map((r) => r.flagged)).toEqual([true, true, true, true, true]);
   });
 
-  it('評価の結びつけが保存されていないときは、自動の当てはめ（読み取った局・押した順）を使う', () => {
-    // 評価のスクショの読み取りが無い FX-4 の評価は、押した順に、局の順へ当てはまる。
+  it('評価の結びつけが保存されていないときは、自動の当てはめ（迷いと評価を押した時刻の順。E-29）を使う', () => {
+    // 評価のスクショの読み取りが無い FX-4 の評価は、迷いの局（読み取りで決まる）の間に、時刻の順で当てはまる。
+    // 最後の 2 つの評価（19:22:41・19:23:54）は、どちらも最後の局 東3局1本場。押し直しとして、あとのものを残し、東3局は空欄になる
     const table = build(session({ links: { marks: {}, ratings: {} } }));
-    expect(table.rows.map((r) => r.self)).toEqual(['fair', 'bad', 'fair', 'bad', 'bad']);
+    expect(table.rows.map((r) => r.self)).toEqual(['fair', 'bad', 'fair', null, 'bad']);
+    expect(table.unplacedRatings).toBe(1);
+  });
+
+  it('利用者が選んだ迷いの結びつけは、評価の自動の当てはめの手がかりになる（保存した評価の結びつけは、それより先）', () => {
+    // 迷い 5（19:21:58）を 東3局（局 3）の判断に結びつけると、そのあとに押した評価は、東3局以降
+    const choice = 'k2h0e0';
+    const withChoice = build(session({ links: { marks: { '5': choice }, ratings: {} } }));
+    expect(withChoice.rows.map((r) => r.self)).toEqual(['fair', 'bad', 'fair', 'bad', 'bad']);
+    expect(withChoice.unplacedRatings).toBe(0);
   });
 
   it('保存した結びつけは、自動の当てはめに勝つ。空の鍵は「どの局にも結びつけない」', () => {

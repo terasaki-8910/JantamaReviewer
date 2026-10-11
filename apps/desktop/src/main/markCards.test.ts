@@ -1,12 +1,13 @@
 import { listDecisionRefs, parseReportText, type DecisionRef, type MortalReport } from '@jantama/engine';
 import { describe, expect, it } from 'vitest';
 
-import { FX4_TEXT, fx4Ocr, fx4Session } from '../../tests/import-fixtures';
+import { FX4_TEXT, FX5_ID, FX5_STARTED, FX5_TEXT, FX5_USER_CHOICES, fx4Ocr, fx4Session, fx5Ocr, fx5Session } from '../../tests/import-fixtures';
 import type { Links, OcrCache, SessionRecord } from '../api/types';
 import {
   ESTIMATE_SUFFIX,
   ESTIMATE_TAG,
   LINK_MANUAL,
+  UNDECIDED_JUNME_TEXT,
   UNDECIDED_TEXT,
   UNREADABLE_TEXT,
   alternativesOf,
@@ -16,8 +17,11 @@ import {
   farChipLabels,
   farLine,
   isEstimated,
+  isKyokuOnly,
   junmeSpanText,
+  kyokuChoices,
   kyokuOptions,
+  kyokuSpanText,
   markCaptionParts,
   markHeading,
   readingLine,
@@ -46,9 +50,9 @@ const refOf = (key: string): DecisionRef => {
 };
 
 describe('F9・E-17 迷いマークの結びつけの状態（FX-4。保存した選びは、自動の結果より先）', () => {
-  it('何も保存していないとき: 読めた迷い 1〜5 は、1 位を推定として結びつける（ユーザーの選び直しと一致）。迷い 6 は読めないので手で選ぶ', () => {
+  it('何も保存していないとき: 読めた迷い 1〜5 は、1 位を推定として結びつける（ユーザーの選び直しと一致）。迷い 6 は読めないが、前後の評価と迷いから局が分かる（局だけ分かった迷い）', () => {
     const resolved = resolveMarks(report, session());
-    expect(resolved.map((r) => r.resolution.kind)).toEqual(['linked', 'linked', 'linked', 'linked', 'linked', 'manual']);
+    expect(resolved.map((r) => r.resolution.kind)).toEqual(['linked', 'linked', 'linked', 'linked', 'linked', 'kyoku']);
     expect(resolved.map((r) => r.number)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(resolved.map((r) => r.markId)).toEqual([1, 2, 3, 4, 5, 6]);
 
@@ -61,10 +65,13 @@ describe('F9・E-17 迷いマークの結びつけの状態（FX-4。保存し�
       expect(r.stored).toBeUndefined();
     }
 
-    expect(resolved[5]?.resolution).toEqual({ kind: 'manual', reason: 'unreadable' });
+    // 迷い 6 は、前の迷い 5（東3局1本場と読めた）と、次の評価（東3局1本場）の間に押したので、東3局1本場。巡目は決まらない
+    expect(resolved[5]?.resolution).toEqual({ kind: 'kyoku' });
     expect(resolved[5]?.autoCandidates).toEqual([]);
     expect(resolved[5]?.reading).toBeNull();
     expect(isEstimated(resolved[5] as (typeof resolved)[number])).toBe(false);
+    expect(isKyokuOnly(resolved[5] as (typeof resolved)[number])).toBe(true);
+    expect(resolved[5] && kyokuChoices(resolved[5])).toHaveLength(17);
   });
 
   it('推定の迷いの、ほかの候補（1 位は含まない）と、スクショから読んだ値', () => {
@@ -139,15 +146,23 @@ describe('F9・E-17 迷いマークの結びつけの状態（FX-4。保存し�
     expect(resolved[0]?.resolution.kind === 'linked' && resolved[0].resolution.ref.key).toBe('k0h0e4');
     expect(resolved[0]?.resolution.kind === 'linked' && resolved[0].resolution.saved).toBe(false);
     expect(resolved[3]?.resolution.kind === 'linked' && resolved[3].resolution.ref.key).toBe('k1h1e10');
-    expect(resolved[5]?.resolution).toEqual({ kind: 'manual', reason: 'unreadable' });
+    expect(resolved[5]?.resolution).toEqual({ kind: 'kyoku' });
     // 取り消すときに戻す値は、保存してあった文字のまま。
     expect(resolved[0]?.stored).toBe('k9h9e1');
   });
 
-  it('読み取りの写しが無い（文字認識を使えなかった）ときは、すべて手で選ぶ', () => {
+  it('読み取りの写しが無い（文字認識を使えなかった）ときは、推定は 1 つも付かない。局は、評価と迷いを押した時刻の並びだけから決まる（局だけ分かった迷い）', () => {
     const resolved = resolveMarks(report, session({ marks: {}, ratings: {} }, null));
-    expect(resolved.map((r) => r.resolution)).toEqual(Array.from({ length: 6 }, () => ({ kind: 'manual', reason: 'unreadable' })));
+    expect(resolved.every((r) => r.resolution.kind === 'kyoku')).toBe(true);
     expect(resolved.every((r) => r.reading === null && r.autoCandidates.length === 0)).toBe(true);
+    // 評価は 5 つとも押した順に局へ入るので、迷いは、その評価の間の局（評価が押し忘れた局の分だけ、実際とずれうる）
+    expect(resolved.map(kyokuSpanText)).toEqual(['東1局', '東2局', '東2局1本場', '東2局1本場', '東3局', '東3局']);
+  });
+
+  it('読み取りの写しが無く、評価も無いときは、手で選ぶ（前後から何も分からない）', () => {
+    const noRatings = { ...session({ marks: {}, ratings: {} }, null), ratings: [] };
+    const resolved = resolveMarks(report, noRatings);
+    expect(resolved.map((r) => r.resolution)).toEqual(Array.from({ length: 6 }, () => ({ kind: 'manual', reason: 'unreadable' })));
   });
 
   it('読めても、この半荘に合う局が無い迷いは、手で選ぶ（理由は no-kyoku。読んだ値は残す）', () => {
@@ -159,7 +174,7 @@ describe('F9・E-17 迷いマークの結びつけの状態（FX-4。保存し�
   });
 
   it('迷いが 0 件なら、空', () => {
-    expect(resolveMarks(report, { marks: [], ocr: null, links: { marks: {}, ratings: {} } })).toEqual([]);
+    expect(resolveMarks(report, { marks: [], ratings: [], ocr: null, links: { marks: {}, ratings: {} } })).toEqual([]);
   });
 });
 
@@ -181,11 +196,15 @@ describe('U-13 カードの 2 行目と、スクショから読んだ値の 1 �
     expect(chosen[4] && markHeading(chosen[4])).toBe('東3局1本場 6巡目 · 打牌の迷い');
   });
 
-  it('手で選ぶ: 局面は決まっていません。読めなくても、利用者が手で選ぶと決めても、同じ文', () => {
-    expect(headings[5]).toBe(UNDECIDED_TEXT);
+  it('手で選ぶ: 局面は決まっていません。利用者が手で選ぶと決めても、同じ文', () => {
     expect(UNDECIDED_TEXT).toBe('局面は決まっていません');
     const chosen = resolveMarks(report, session({ marks: { '5': LINK_MANUAL }, ratings: {} }));
     expect(chosen[4] && markHeading(chosen[4])).toBe(UNDECIDED_TEXT);
+  });
+
+  it('局だけ分かった（巡目が決まっていない）: 局の名前と、「巡目は決まっていません」', () => {
+    expect(UNDECIDED_JUNME_TEXT).toBe('巡目は決まっていません');
+    expect(headings[5]).toBe('東3局1本場 · 巡目は決まっていません');
   });
 
   it('巡目の書き方: 1 つなら「8巡目」、またがるなら「8〜9巡目」（最小〜最大）', () => {
@@ -207,7 +226,9 @@ describe('U-13 カードの 2 行目と、スクショから読んだ値の 1 �
     expect(ESTIMATE_TAG).toBe('推定');
     expect(markCaptionParts(resolved[2] ?? null)).toEqual(['東2局1本場', '6巡目', '打牌の迷い', '推定']);
     expect(markCaptionParts(resolved[3] ?? null)).toEqual(['東2局1本場', '8〜9巡目', '鳴きの迷い', '推定']);
-    expect(markCaptionParts(resolved[5] ?? null)).toEqual([UNDECIDED_TEXT]);
+    expect(markCaptionParts(resolved[5] ?? null)).toEqual(['東3局1本場', '巡目は決まっていません']);
+    const manual = resolveMarks(report, session({ marks: { '5': LINK_MANUAL }, ratings: {} }));
+    expect(markCaptionParts(manual[4] ?? null)).toEqual([UNDECIDED_TEXT]);
     expect(markCaptionParts(null)).toEqual([]);
     const chosen = resolveMarks(report, session({ marks: { '3': 'k1h1e7' }, ratings: {} }));
     expect(markCaptionParts(chosen[2] ?? null)).toEqual(['東2局1本場', '6巡目', '打牌の迷い']);
@@ -388,5 +409,109 @@ describe('F9 「局面を手で選ぶ」の選択肢', () => {
   it('判断の文字が重なる局では、局の中の何番目かを足す（選び分けられる）', () => {
     const twin = [refOf('k0h0e0'), { ...refOf('k0h0e1'), junme: 1, actionLabel: refOf('k0h0e0').actionLabel, key: 'k0h0e1' }];
     expect(decisionOptions(twin, 0).map((o) => o.label)).toEqual(['1巡目 · 打9m（1番目）', '1巡目 · 打9m（2番目）']);
+  });
+});
+
+// ---- E-28〜E-30・U-24: FX-5（10月11日の半荘）の迷いのカードの文言 ----
+
+describe('U-24 局だけ分かった迷いと、崩れた読み取りの迷いのカード（FX-5）', () => {
+  const fx5Parsed = parseReportText(FX5_TEXT);
+  if (!fx5Parsed.ok) throw new Error(fx5Parsed.error.message);
+  const fx5Report: MortalReport = fx5Parsed.value;
+  const fx5Decisions = listDecisionRefs(fx5Report);
+  const fx5 = (links: Links = { marks: {}, ratings: {} }) => fx5Session(FX5_ID, FX5_STARTED, { ocr: fx5Ocr(), links, report_path: 'C:/data/report.json' });
+  /** カードの番号（1 から。記録の順）→ 結びつけの状態。迷い 13 は、記録の id 2・3・4・6・8・9・10・13・14・16・17・19・21。 */
+  const resolved = resolveMarks(fx5Report, fx5());
+  const card = (n: number) => resolved[n - 1] as (typeof resolved)[number];
+
+  it('迷い 13 のうち、局だけ分かった迷い（残り枚数が読めない）は 2 つ（15:38:10 = カード 3、15:42:37 = カード 5）。ほかの 11 は推定。手で選ぶものは無い', () => {
+    expect(resolved.map((r) => r.resolution.kind)).toEqual([
+      'linked',
+      'linked',
+      'kyoku',
+      'linked',
+      'kyoku',
+      'linked',
+      'linked',
+      'linked',
+      'linked',
+      'linked',
+      'linked',
+      'linked',
+      'linked',
+    ]);
+    expect(resolved.filter((r) => isEstimated(r))).toHaveLength(11);
+    expect(resolved.map((r) => r.markId)).toEqual([2, 3, 4, 6, 8, 9, 10, 13, 14, 16, 17, 19, 21]);
+  });
+
+  it('局だけ分かった迷いの 2 行目は、局の名前と「巡目は決まっていません」。推定の印も「選び直す」も無い（自動の候補が無い）', () => {
+    expect(markHeading(card(3))).toBe('東2局 · 巡目は決まっていません');
+    expect(markHeading(card(5))).toBe('東4局 · 巡目は決まっていません');
+    expect(kyokuSpanText(card(5))).toBe('東4局');
+    expect(isEstimated(card(5))).toBe(false);
+    expect(card(5).autoCandidates).toEqual([]);
+    expect(markCaptionParts(card(5))).toEqual(['東4局', '巡目は決まっていません']);
+  });
+
+  it('局だけ分かった迷いが選べる判断は、局の幅の中の判断だけ（15:38:10 は東2局の 15、15:42:37 は東4局の 16）。AI の答えは出ない', () => {
+    expect(kyokuChoices(card(3))).toHaveLength(15);
+    expect(kyokuChoices(card(5))).toHaveLength(16);
+    expect(kyokuChoices(card(5)).every((d) => d.kyokuLabel === '東4局')).toBe(true);
+    // 選び肢の呼び名は、局の判断の呼び名（自分が実際にした行動）だけ
+    expect(kyokuOptions(kyokuChoices(card(5)))).toEqual([{ position: 4, label: '東4局' }]);
+    expect(decisionOptions(kyokuChoices(card(5)), 4)[4]).toMatchObject({ key: 'k3h0e4', label: '5巡目 · 打2s' });
+    expect(kyokuChoices(card(1))).toEqual([]); // 推定の迷いは、局の幅の判断を並べない
+    expect(fx5Decisions.filter((d) => d.kyokuPosition === 4)).toHaveLength(16);
+  });
+
+  it('スクショの値の 1 行: 読めた部分を書き、読めなかった部分は「読めず」。全部読めたものは、これまでどおり', () => {
+    expect(readingLine(card(1))).toBe('スクショ: 風は読めず・2局・残り50・25,000点'); // 15:37:02
+    expect(readingLine(card(3))).toBe('スクショ: 風は読めず・2局・残りは読めず・25,000点'); // 15:38:10
+    expect(readingLine(card(4))).toBe('スクショ: 東・局の番号は読めず・残り59・23,700点'); // 15:40:03
+    expect(readingLine(card(5))).toBe(UNREADABLE_TEXT); // 15:42:37
+    expect(readingLine(card(8))).toBe('スクショ: 南・局の番号は読めず・残り60・33,700点'); // 15:50:36
+    expect(readingLine(card(2))).toBe('スクショ: 東2局・残り46・25,000点'); // 15:37:25
+    expect(readingLine(card(13))).toBe('スクショ: 南・局の番号は読めず・残り49・28,500点'); // 16:03:19
+  });
+
+  it('局をどう決めたかの 1 文: 崩れた読み取りは「読めた部分と点数から」。読めなかったものは、前後の評価・迷いの時刻から', () => {
+    expect(card(1).howText).toBe('局の名前の一部が読めなかったので、読めた部分と点数から、東2局です。');
+    expect(card(3).howText).toBe('局の名前の一部が読めなかったので、読めた部分と点数から、東2局です。');
+    expect(card(4).howText).toBe('局の名前の一部が読めなかったので、読めた部分と点数から、東3局1本場です。');
+    expect(card(8).howText).toBe('局の名前の一部が読めなかったので、読めた部分と点数から、南1局2本場です。');
+    expect(card(13).howText).toBe('局の名前の一部が読めなかったので、読めた部分と点数から、南4局です。');
+    // 15:42:37（カード 5）: 前の評価 15:41:44（東3局1本場）と、次の迷い 15:42:52（カード 6。東4局）の間
+    expect(card(5).howText).toBe('東3局1本場の評価（15:41:44）と東4局の迷い6（15:42:52）の間に押したので、東4局です。');
+  });
+
+  it('すべて読めた読み取りで決まった迷い・利用者が選んだ迷い・手で選ぶ迷いには、1 文は付かない', () => {
+    for (const n of [2, 6, 7, 9, 10, 11, 12]) expect(card(n).howText, `カード${n}`).toBeNull();
+    const chosen = resolveMarks(fx5Report, fx5({ marks: FX5_USER_CHOICES as Links['marks'], ratings: {} }));
+    expect(chosen.every((r) => r.howText === null || !r.stored)).toBe(true);
+    for (const r of chosen.filter((c) => c.stored !== undefined)) {
+      expect(r.howText, `迷い${r.number}`).toBeNull();
+      expect(r.resolution.kind === 'linked' && r.resolution.saved).toBe(true);
+    }
+    const manual = resolveMarks(fx5Report, fx5({ marks: { '8': LINK_MANUAL }, ratings: {} }));
+    expect(manual[4]?.resolution).toEqual({ kind: 'manual', reason: 'chosen' });
+    expect(manual[4]?.howText).toBeNull();
+  });
+
+  it('15:37:02・15:50:36・16:03:19 の推定は、ユーザーが選んだ判断と一致する（E-30）。カードの 2 行目も、局と巡目', () => {
+    expect([card(1), card(8), card(13)].map((r) => r.resolution.kind === 'linked' && r.resolution.ref.key)).toEqual(['k1h0e5', 'k4h2e2', 'k7h0e6']);
+    expect(markHeading(card(1))).toBe('東2局 5巡目 · 打牌の迷い');
+    expect(markHeading(card(13))).toBe('南4局 6巡目 · リーチの迷い');
+  });
+
+  it('利用者が選んだ迷いは、ほかの迷いの局を決める手がかりになる（選び直すと、近くの迷いの局の幅が変わる）', () => {
+    // 15:42:37（カード 5）に、東4局の判断を選ぶ。そのあとの迷い（カード 6・7）は、東4局以降
+    const chosen = resolveMarks(fx5Report, fx5({ marks: { '8': 'k3h0e4' }, ratings: {} }));
+    expect(chosen[4]?.resolution.kind === 'linked' && chosen[4].resolution.ref.key).toBe('k3h0e4');
+    expect(chosen[5]?.resolution.kind === 'linked' && chosen[5].resolution.ref.kyokuLabel).toBe('東4局');
+  });
+
+  it('局だけ分かった迷いと、崩れた読み取りの文に、AI の候補・確率・順位は出てこない', () => {
+    const texts = resolved.flatMap((r) => [markHeading(r), readingLine(r), r.howText ?? '', ...markCaptionParts(r)]);
+    for (const text of texts) expect(text).not.toMatch(/%|％|確率|順位|AI|prob/i);
   });
 });

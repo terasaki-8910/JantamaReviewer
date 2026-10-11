@@ -320,14 +320,18 @@ pub struct OcrCache {
 /// 迷いマーク・評価の結びつけ（`links.json`）。値は、画面（エンジン）が決める鍵を、そのまま持つ。
 /// - `marks`: 迷いマークの id → 結びつけた判断の鍵、または `"manual"`（局面を手で選ぶ）
 /// - `ratings`: 評価の id → 結びつけた局の鍵（空の文字列は「どの局にも結びつけない」）
+/// - `ratings_version`: `ratings` を当てはめたときの、当てはめ方の版（エンジンの `RATING_LINK_VERSION`。E-31）。
+///   無い（昔の当てはめ方）か、いまの版より小さいときは、半荘の画面を開いたとき、1 回だけ当てはめ直す。ここは数を持つだけ
 ///
-/// 無い項目は「まだ決めていない」。JSON の鍵は文字列なので、id は 10 進の文字列で持つ。
+/// 無い項目は「まだ決めていない」。JSON の鍵は文字列なので、id は 10 進の文字列で持つ。知らない項目があっても読める。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Links {
     #[serde(default)]
     pub marks: BTreeMap<String, String>,
     #[serde(default)]
     pub ratings: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ratings_version: Option<u32>,
 }
 
 /// 局の自己評価の上書きの値（`self-ratings.json`）。〇 = good、△ = fair、✕ = bad。
@@ -1077,6 +1081,28 @@ impl Store {
             check_link_value(value, true)?;
         }
         write_links(&dir, &links)
+    }
+
+    /// 評価の結びつけだけを、まるごと置き換える（前の当てはめ方で当てはめた評価を、半荘の画面を開いたときに当てはめ直す。E-31）。
+    /// 当てはめ方の版（`version`）も書く。迷いマークの結びつけ（`marks`）は変えない。
+    /// 評価の番号は、その半荘にある（取り消されていない）ものだけ受け付ける。1 つでも正しくなければ、何も書き換えない。
+    pub fn replace_rating_links(
+        &self,
+        session_id: &str,
+        ratings: BTreeMap<String, String>,
+        version: u32,
+    ) -> Result<(), StoreError> {
+        for value in ratings.values() {
+            check_link_value(value, true)?;
+        }
+        self.update_links(session_id, |links, view| {
+            for key in ratings.keys() {
+                check_record_id(key, "評価", view.ratings.iter().map(|r| r.id))?;
+            }
+            links.ratings = ratings;
+            links.ratings_version = Some(version);
+            Ok(())
+        })
     }
 
     /// 迷いマークを、判断の鍵（または `"manual"`）に結びつける。選び直しにも使う。
@@ -2546,7 +2572,7 @@ mod tests {
         let id = session_with_records(&mut store);
         assert_eq!(store.load_ocr(&id).unwrap(), None);
         let mut cache = OcrCache {
-            geometry: "center-v2-lanczos3x-variants".into(),
+            geometry: "center-v3-cyan-tight".into(),
             entries: BTreeMap::new(),
         };
         cache.entries.insert(
@@ -2793,6 +2819,106 @@ mod tests {
             value,
             serde_json::json!({"marks": {"1": "k0:d3"}, "ratings": {"3": ""}})
         );
+    }
+
+    #[test]
+    fn the_rating_version_is_written_only_when_set_and_old_files_without_it_still_load() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let path = store.root().join(GAMES_DIR).join(&id).join(LINKS_FILE);
+        // 版の無い昔の links.json（知らない項目つき）も読める。版は None（当てはめ直しの対象）
+        fs::write(
+            &path,
+            r#"{"marks": {"1": "k0h0e3"}, "ratings": {"3": "k0h0"}, "future": [1, 2]}"#,
+        )
+        .unwrap();
+        let old = store.load_links(&id).unwrap();
+        assert_eq!(old.ratings_version, None);
+        assert_eq!(old.marks.get("1").map(String::as_str), Some("k0h0e3"));
+        assert_eq!(only_session(&store).links, old);
+        // 版が無いときは、項目そのものを書かない。版を書くと、ファイルに版が出る
+        store.replace_links(&id, old.clone()).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"marks": {"1": "k0h0e3"}, "ratings": {"3": "k0h0"}})
+        );
+        let mut versioned = old;
+        versioned.ratings_version = Some(2);
+        store.replace_links(&id, versioned.clone()).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"marks": {"1": "k0h0e3"}, "ratings": {"3": "k0h0"}, "ratings_version": 2})
+        );
+        assert_eq!(store.load_links(&id).unwrap(), versioned);
+    }
+
+    #[test]
+    fn replacing_rating_links_keeps_the_mark_links_and_writes_the_version() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        store.set_mark_link(&id, 1, "k0h0e3").unwrap();
+        store.set_mark_link(&id, 2, LINK_MANUAL).unwrap();
+        store.set_rating_link(&id, 3, "k0h0").unwrap();
+        let ratings: BTreeMap<String, String> = [("3".to_string(), "k1h0".to_string())]
+            .into_iter()
+            .collect();
+        store.replace_rating_links(&id, ratings.clone(), 2).unwrap();
+        let links = store.load_links(&id).unwrap();
+        assert_eq!(links.ratings, ratings);
+        assert_eq!(links.ratings_version, Some(2));
+        assert_eq!(links.marks.get("1").map(String::as_str), Some("k0h0e3"));
+        assert_eq!(links.marks.get("2").map(String::as_str), Some(LINK_MANUAL));
+        // 一覧にも出る。自己評価・MAKA のファイルは触らない
+        assert_eq!(only_session(&store).links, links);
+        let dir = store.root().join(GAMES_DIR).join(&id);
+        assert!(!dir.join(SELF_RATINGS_FILE).exists());
+        assert!(!dir.join(MAKA_FILE).exists());
+        // 空の置き換えでも、版は書く（評価が無い半荘を、何度も確かめないため）
+        store.replace_rating_links(&id, BTreeMap::new(), 2).unwrap();
+        assert!(store.load_links(&id).unwrap().ratings.is_empty());
+        assert_eq!(store.load_links(&id).unwrap().ratings_version, Some(2));
+    }
+
+    #[test]
+    fn replacing_rating_links_checks_every_entry_before_writing() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        store.set_rating_link(&id, 3, "k0h0").unwrap();
+        let before = store.load_links(&id).unwrap();
+        let unknown: BTreeMap<String, String> = [
+            ("3".to_string(), "k1h0".to_string()),
+            ("77".to_string(), "k2h0".to_string()),
+        ]
+        .into_iter()
+        .collect();
+        assert!(matches!(
+            store.replace_rating_links(&id, unknown, 2),
+            Err(StoreError::UnknownRecord { .. })
+        ));
+        let bad: BTreeMap<String, String> = [("3".to_string(), "bad value".to_string())]
+            .into_iter()
+            .collect();
+        assert!(matches!(
+            store.replace_rating_links(&id, bad, 2),
+            Err(StoreError::InvalidLink(_))
+        ));
+        // 迷いマークの番号は、評価の番号としては受け付けない
+        let mark_id: BTreeMap<String, String> = [("1".to_string(), "k0h0".to_string())]
+            .into_iter()
+            .collect();
+        assert!(matches!(
+            store.replace_rating_links(&id, mark_id, 2),
+            Err(StoreError::UnknownRecord { .. })
+        ));
+        assert_eq!(store.load_links(&id).unwrap(), before);
+        assert!(matches!(
+            store.replace_rating_links("no-such-session", BTreeMap::new(), 2),
+            Err(StoreError::UnknownSession(_))
+        ));
     }
 
     #[test]

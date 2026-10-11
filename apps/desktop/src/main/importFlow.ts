@@ -9,15 +9,18 @@
  *    （1 つに決まる＝そのまま／決まらない＝一覧から選んでもらう／結果の無い半荘が無い＝記録の無い半荘として取り込む）
  *    取り込み前の半荘のページから、その半荘に取り込むとき（`PrepareOptions.target`。U-14）は、この当てはめをせず、その半荘だけを読み取って、
  *    読めたスクショが結果と合うかを調べる（`checkShotsAgainstReport`）。合わないものがあれば、保存の前に利用者に聞く
- * 4. 保存: 結果を半荘のフォルダに保存し、評価の結びつけ（`linkRatings`）を書く。
- *    迷いマークの結びつけ（`linkMarks`）は、保存しない（推定は、読み取りの写しと結果から、いつでも同じに出せる。
+ * 4. 保存: 結果を半荘のフォルダに保存し、評価の結びつけを書く。迷いと評価を押した時刻の順に並べて当てはめる `linkTimeline`
+ *    （E-29）の評価の結果を、当てはめ方の版（`RATING_LINK_VERSION`）つきで書く。
+ *    迷いマークの結びつけは、保存しない（推定は、読み取りの写しと結果から、いつでも同じに出せる。
  *    保存するのは、利用者が選んだものだけ。選んだものには「推定」の印が付かないため）
- * 5. まとめ: `summarizeHanchan` で、Rating・段階・推定で結びつけた迷いマークの数・手で選んでほしい数を出す
+ * 5. まとめ: `summarizeHanchan` で Rating・段階を、`linkTimeline` で、推定で結びつけた迷いマークの数・手で選んでほしい数
+ *    （局だけ分かった迷いも、判断を選ぶまでは、手で選んでほしい数に入れる）を出す
  */
 import {
+  RATING_LINK_VERSION,
   checkShotsAgainstReport,
   importReportText,
-  linkRatings,
+  linkTimeline,
   listDisagreements,
   matchSessionForReport,
   summarizeHanchan,
@@ -57,10 +60,14 @@ export interface ImportDeps {
   now(): number;
 }
 
-/** 迷いマーク 1 件と、そのスクショの文字認識の行（読めなければ `lines` が無い）。 */
+/**
+ * 迷いマーク 1 件と、そのスクショの文字認識の行（読めなければ `lines` が無い）。
+ * `chosen` は、保存した結びつけ（links.json の迷いの値。利用者が選んだ判断の鍵か `"manual"`）。あれば、時間の並びでの当てはめの手がかりになる。
+ */
 export interface MarkReading extends ScreenReading {
   id: number;
   t_ms: number;
+  chosen?: string;
 }
 
 /** 評価 1 件と、そのスクショの文字認識の行。 */
@@ -86,13 +93,20 @@ function shotOf(
     : { lines: entry.lines };
 }
 
-/** 半荘の迷いマークと、そのスクショの読み取り（記録の順）。 */
-export function markReadings(session: Pick<SessionRecord, 'marks'>, ocr: OcrCache | null | undefined): MarkReading[] {
-  return session.marks.map((mark) => ({
-    id: mark.id,
-    t_ms: mark.t_ms,
-    ...shotOf(ocr, mark.screenshot),
-  }));
+/** 半荘の迷いマークと、そのスクショの読み取り（記録の順）。結びつけ（`links`）があれば、利用者が選んだ結びつけも付ける。 */
+export function markReadings(
+  session: Pick<SessionRecord, 'marks'> & { links?: Pick<Links, 'marks'> },
+  ocr: OcrCache | null | undefined,
+): MarkReading[] {
+  return session.marks.map((mark) => {
+    const chosen = session.links?.marks[String(mark.id)];
+    return {
+      id: mark.id,
+      t_ms: mark.t_ms,
+      ...(chosen === undefined ? {} : { chosen }),
+      ...shotOf(ocr, mark.screenshot),
+    };
+  });
 }
 
 /** 半荘の評価と、そのスクショの読み取り（押した順）。 */
@@ -128,18 +142,27 @@ export function toSessionCandidate(session: SessionRecord, ocr: OcrCache | null 
 }
 
 /**
+ * 評価の当てはめを、保存する形（links.json の `ratings`）にする。当てはめた局の鍵。
+ * どの局にも当てはめられなかった評価は、空の文字列（「どの局にも結びつけない」）。
+ */
+export function ratingLinkValues<R extends { id: number }>(report: ImportedGame['report'], ratings: RatingLinking<R>): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const placement of ratings.placements) {
+    const kyoku = placement.position === null ? undefined : report.review.kyokus[placement.position];
+    values[String(placement.rating.id)] = kyoku ? kyokuKey(kyoku.kyoku, kyoku.honba) : '';
+  }
+  return values;
+}
+
+/**
  * 自動で決めた結びつけを、保存する形にする。
  * - 迷いマーク: 保存しない。1 位の推定は、読み取りの写しと結果から、いつでも同じに出せる。保存するのは、利用者が選んだものだけ
  *   （保存してあるものには、「推定」の印が付かない）
- * - 評価: 当てはめた局の鍵。どの局にも当てはめられなかった評価は、空の文字列（「どの局にも結びつけない」）
+ * - 評価: 当てはめた局の鍵（`ratingLinkValues`）と、当てはめ方の版（`RATING_LINK_VERSION`。E-31）。評価が無ければ、版も書かない
  */
-export function buildLinks(report: ImportedGame['report'], ratings: RatingLinking<RatingReading> | null): Links {
-  const links: Links = { marks: {}, ratings: {} };
-  for (const placement of ratings?.placements ?? []) {
-    const kyoku = placement.position === null ? undefined : report.review.kyokus[placement.position];
-    links.ratings[String(placement.rating.id)] = kyoku ? kyokuKey(kyoku.kyoku, kyoku.honba) : '';
-  }
-  return links;
+export function buildLinks<R extends { id: number }>(report: ImportedGame['report'], ratings: RatingLinking<R> | null): Links {
+  if (ratings === null) return { marks: {}, ratings: {} };
+  return { marks: {}, ratings: ratingLinkValues(report, ratings), ratings_version: RATING_LINK_VERSION };
 }
 
 /** 取り込んだあとに出すまとめ。 */
@@ -357,9 +380,11 @@ export async function completeImport(
   const report = context.game.report;
   const cache = session ? (context.ocr.get(session.id) ?? session.ocr) : null;
   const marks = session ? markReadings(session, cache) : [];
-  const hanchan = summarizeHanchan(report, { marks });
+  const hanchan = summarizeHanchan(report);
   const ratings = session ? ratingReadings(session, cache) : [];
-  const ratingLinking = session && ratings.length > 0 ? linkRatings(report, ratings) : null;
+  // 迷いと評価を、押した時刻の順に並べて、局に当てはめる（E-29）
+  const timeline = session ? linkTimeline(report, { marks, ratings }) : null;
+  const ratingLinking = timeline !== null && ratings.length > 0 ? timeline.ratings : null;
 
   const warnings: string[] = [];
   if (context.ocrWarning !== null) {
@@ -378,7 +403,8 @@ export async function completeImport(
     }
   }
 
-  const estimated = hanchan.marks.filter((m) => m.status === 'estimated').length;
+  // 推定を付けた迷い。局だけ分かった迷いは、判断を選ぶまで決まっていないので、手で選んでほしい数に入れる
+  const estimated = timeline === null ? 0 : timeline.marks.filter((m) => m.status === 'estimated').length;
   return {
     sessionId: savedId,
     startedMs: session ? session.started_ms : deps.now(),
@@ -388,9 +414,9 @@ export async function completeImport(
     grade: hanchan.grade,
     decisionCount: hanchan.decisionCount,
     disagreementCount: listDisagreements(context.game.decisions).total,
-    markCount: hanchan.marks.length,
+    markCount: marks.length,
     estimatedMarks: estimated,
-    manualMarks: hanchan.marks.length - estimated,
+    manualMarks: marks.length - estimated,
     ratingCount: ratings.length,
     placedRatings: ratingLinking ? ratingLinking.placements.filter((p) => p.position !== null).length : 0,
     warnings,

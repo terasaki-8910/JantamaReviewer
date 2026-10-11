@@ -1,4 +1,4 @@
-import type { CenterReading } from '@jantama/engine';
+import type { CenterReading, PartialCenterText } from '@jantama/engine';
 
 import type { Trigger } from '../api/types';
 
@@ -84,4 +84,28 @@ export function centerText(center: CenterReading): string {
   if (center.tilesLeft !== undefined) parts.push(`残り${center.tilesLeft}`);
   parts.push(`${groupedNumber(center.score)}点`);
   return parts.join('・');
+}
+
+/**
+ * 局の名前の、読めた部分の書き方（スクショから読んだ値。崩れた部分は「読めず」と書く）:
+ * 「東2局」・「風は読めず・2局」・「東・局の番号は読めず」・「局は読めず」。
+ */
+export function partialKyokuText(wind: PartialCenterText['wind'], number: PartialCenterText['number']): string {
+  if (wind !== null && number !== null) return `${WIND_NAMES[wind]}${number}局`;
+  if (number !== null) return `風は読めず・${number}局`;
+  if (wind !== null) return `${WIND_NAMES[wind]}・局の番号は読めず`;
+  return '局は読めず';
+}
+
+/**
+ * スクショから読めた部分の書き方（崩れていてもよい。E-28）: 「東2局・残り47・15,100点」。
+ * 読めなかった部分は「読めず」と書く（例: 「風は読めず・2局・残り50・25,000点」「東・局の番号は読めず・残り59・23,700点」
+ * 「局は読めず・残りは読めず・31,700点」）。すべて読めたときは、`centerText` と同じ。
+ */
+export function partialCenterText(reading: PartialCenterText): string {
+  return [
+    partialKyokuText(reading.wind, reading.number),
+    reading.tilesLeft === null ? '残りは読めず' : `残り${reading.tilesLeft}`,
+    `${groupedNumber(reading.score)}点`,
+  ].join('・');
 }

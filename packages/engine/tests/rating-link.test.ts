@@ -41,6 +41,8 @@ function ids(assigned: readonly (Rated | null)[]): (number | null)[] {
   return assigned.map((a) => a?.id ?? null);
 }
 
+// E-18 を置き換えた E-29（迷いと評価の時間の並びでの当てはめ）の、評価だけの入口 linkRatings の試験。
+// 決まりが E-18 から変わった所は、E-29 と書いてある（迷いを入れた通しの試験は、timeline-link.test.ts・timeline-rules.test.ts）。
 describe('E-18 評価の結びつけ（FX-4 の5局。作った評価の記録で確かめる）', () => {
   const report = load(FX4_ID);
   const mid = (position: number) => readingOf(report, position, 30);
@@ -123,8 +125,8 @@ describe('E-18 評価の結びつけ（FX-4 の5局。作った評価の記録�
     expect(result.missingHands).toEqual([2]);
   });
 
-  it('E-18 読めた評価が1つも無ければ、E-7 の押した順の割り当て（alignRatings）と同じ', () => {
-    for (const count of [0, 3, 5, 7]) {
+  it('E-18 読めた評価が1つも無く、評価が局より多くなければ、E-7 の押した順の割り当て（alignRatings）と同じ', () => {
+    for (const count of [0, 3, 5]) {
       const ratings = Array.from({ length: count }, (_, i) => rated(i, null));
       const result = linkRatings(report, ratings);
       const aligned = alignRatings(ratings, 5);
@@ -170,28 +172,47 @@ describe('E-18 評価の結びつけ（FX-4 の5局。作った評価の記録�
     expect(result.extra.map((r) => r.id)).toEqual([0]);
   });
 
-  it('E-18 局の順が押した順と食い違う評価は基準にせず、前後の間の空きに押した順で入れる', () => {
-    // 読んだ局は 0・3・2・4。最も多く両立する 0・2・4 を基準にし、3 と読めた評価（評価1）は、0 と 2 の間（局 1）に入る
-    const ratings = [rated(0, mid(0)), rated(1, mid(3)), rated(2, mid(2)), rated(3, mid(4))];
+  it('E-29 評価が局より多く、手がかりが無いときは、あとに押した評価を残し、先に押した評価から当てはめない（E-7 の押した順の割り当ては、最後を捨てる）', () => {
+    const ratings = Array.from({ length: 7 }, (_, i) => rated(i, null));
     const result = linkRatings(report, ratings);
-    expect(ids(result.assigned)).toEqual([0, 1, 2, null, 3]);
-    expect(result.placements.map((p) => [p.position, p.how])).toEqual([
-      [0, 'ocr'],
-      [1, 'order'],
-      [2, 'ocr'],
-      [4, 'ocr'],
+    expect(ids(result.assigned)).toEqual([2, 3, 4, 5, 6]);
+    expect(result.extra.map((r) => r.id)).toEqual([0, 1]);
+    expect(result.status).toBe('tooMany');
+    expect(result.placements.map((p) => [p.position, p.unplaced])).toEqual([
+      [null, 'duplicate'],
+      [null, 'duplicate'],
+      [0, null],
+      [1, null],
+      [2, null],
+      [3, null],
+      [4, null],
     ]);
   });
 
-  it('E-18 ひとつだけ読み間違えた評価（離れた局に読めた）は、前後の間の空きに入る', () => {
+  it('E-29 局の順が押した順と食い違う評価（局3と読めた評価のあとに、局2と読めた評価）は、あとに押したほうを残し、先に押したほうは当てはめない', () => {
+    // 読んだ局は 0・3・2・4。3 と読めた評価（評価1）と、2 と読めた評価（評価2）は両立しない。
+    // 食い違う局に当てはめるより、当てはめないほうが安いので、先に押した評価1を当てはめない
+    const ratings = [rated(0, mid(0)), rated(1, mid(3)), rated(2, mid(2)), rated(3, mid(4))];
+    const result = linkRatings(report, ratings);
+    expect(ids(result.assigned)).toEqual([0, null, 2, null, 3]);
+    expect(result.placements.map((p) => [p.position, p.how])).toEqual([
+      [0, 'ocr'],
+      [null, null],
+      [2, 'ocr'],
+      [4, 'ocr'],
+    ]);
+    expect(result.placements[1]?.unplaced).toBe('no-room');
+  });
+
+  it('E-29 ひとつだけ読み間違えた評価（離れた局に読めた）は、食い違う局に当てはめず、当てはめない（前後の評価はそのまま）', () => {
     const big = load('f9da87cbcd7af5e9'); // 12局
     const ratings = [rated(0, readingOf(big, 0, 30)), rated(1, readingOf(big, 1, 20)), rated(2, readingOf(big, 2, 30)), rated(3, readingOf(big, 11, 30)), rated(4, readingOf(big, 4, 30))];
     const result = linkRatings(big, ratings);
-    expect(ids(result.assigned).slice(0, 6)).toEqual([0, 1, 2, 3, 4, null]);
-    expect(result.placements[3]).toMatchObject({ position: 3, how: 'order' });
+    expect(ids(result.assigned).slice(0, 6)).toEqual([0, 1, 2, null, 4, null]);
+    expect(result.placements[3]).toMatchObject({ position: null, how: null, unplaced: 'no-room' });
   });
 
-  it('E-18 局が1つに決まらない評価（本場違いで点数が同じ）や、この半荘に合う局が無い評価は、読めない評価と同じに扱う', () => {
+  it('E-29 局が1つに決まらない評価（本場違いで点数が同じ）は、合う局のうち早い局から当てはめる。この半荘に合う局が無い評価は、読めない評価と同じに扱う', () => {
     const big = load('f738896995c33fed'); // 13局。東3局2本場と3本場は同じ 20700 点始まり
     const ambiguous = readingOf(big, 4, 40); // 東3局・20700 点: 局 4 と 5 の両方に当たる
     const ratings = [
@@ -207,7 +228,8 @@ describe('E-18 評価の結びつけ（FX-4 の5局。作った評価の記録�
     ];
     const result = linkRatings(big, ratings);
     expect(ids(result.assigned).slice(0, 9)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(result.placements.map((p) => p.how)).toEqual(['ocr', 'ocr', 'ocr', 'ocr', 'order', 'order', 'ocr', 'order', 'ocr']);
+    // 本場違いで点数が同じ評価（4・5）は、合う局（局4・局5）の早いほうから。合う局が無い評価（7）は、読めないのと同じ（order）
+    expect(result.placements.map((p) => p.how)).toEqual(['ocr', 'ocr', 'ocr', 'ocr', 'ocr', 'ocr', 'ocr', 'order', 'ocr']);
   });
 
   it('E-18 自分のリーチ棒を引いた点数で読めた評価も、局が決まる（点数の照合は E-17 と同じ）', () => {
