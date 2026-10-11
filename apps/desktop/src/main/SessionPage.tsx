@@ -10,7 +10,7 @@ import { formatClock, formatSessionTitle } from './format';
 import { GradeBadge } from './GradeBadge';
 import { ExtraMemos } from './ExtraMemos';
 import { buildHandTable, type HandRow } from './handRows';
-import { HandTable } from './HandTable';
+import { HandTable, MARK_CHIPS_HINT, MARK_CHIPS_HINT_ID } from './HandTable';
 import { makaCommand, markLinkCommand, selfRatingCommand } from './hanchanEdits';
 import { useSessionReport } from './hanchanReport';
 import type { ViewerItem, ViewerRequest } from './Lightbox';
@@ -22,6 +22,7 @@ import { memoOfMark } from './memos';
 import { ReplayIcon } from './replay/ReplayIcons';
 import { IDLE_REREADS, type Rereads } from './rereadStore';
 import type { SummaryState } from './sessionSummaries';
+import { InfoTip } from './InfoTip';
 import { ImportHereButton, TargetImportPanel } from './TargetImport';
 import { useUndo } from './undo/UndoProvider';
 import type { ImportFlow } from './useImportFlow';
@@ -301,9 +302,16 @@ export function SessionPage({
           </section>
           {table !== null ? (
             <section aria-labelledby={handsId}>
-              <h2 className="sec-title" id={handsId}>
-                局の評価
-              </h2>
+              <div className="sec-head">
+                <h2 className="sec-title" id={handsId}>
+                  局の評価
+                </h2>
+                {chips !== undefined && chips.size > 0 && (
+                  <InfoTip label="迷いの札の説明" id={MARK_CHIPS_HINT_ID}>
+                    {MARK_CHIPS_HINT}
+                  </InfoTip>
+                )}
+              </div>
               <HandTable
                 table={table}
                 onSelfRating={changeSelfRating}

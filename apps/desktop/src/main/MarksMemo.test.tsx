@@ -156,16 +156,34 @@ describe('U-27 局の評価の表の「迷い」の列（FX-5）', () => {
     expect(undecided.querySelector('svg')).toBeNull();
   });
 
-  it('表の下に、札の説明（押すとカードへ移る・点線・チェック）を 1 行出す。札が無いときは、列も説明も出ない', async () => {
-    setup({ session: fx5Imported(), report: 'fx5' });
-    await tableReady();
-    expect(screen.getByText(MARK_CHIPS_HINT)).toBeInTheDocument();
+  it('U-25 札の説明（押すとカードへ移る・点線・チェック）は、本文に出さず、表の見出し「局の評価」のそばの (i) に、乗せるか選ぶと重ねて出る。札が無いときは、列も (i) も出ない', async () => {
+    const { user } = setup({ session: fx5Imported(), report: 'fx5' });
+    const table = await tableReady();
     expect(MARK_CHIPS_HINT).toBe('迷いの札を押すと、その迷いのカードへ移ります。点線の札は巡目が未定、チェックの付いた札は選んだもの、ほかは推定です。');
+    // 本文（表のまわり）には、説明の文が出ていない。説明の重なりも、閉じている
+    expect(table.closest('section')?.textContent).not.toContain('迷いの札を押すと');
+    expect(document.querySelector('.marks-note')).toBeNull();
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    // (i) は、見出しのすぐ右。表は、同じ文を読み上げの説明として持つ
+    const heading = screen.getByRole('heading', { level: 2, name: '局の評価' });
+    const icon = within(heading.closest('.sec-head') as HTMLElement).getByRole('button', { name: '迷いの札の説明' });
+    expect(table).toHaveAccessibleDescription(MARK_CHIPS_HINT);
+    await user.hover(icon);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(MARK_CHIPS_HINT);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await user.unhover(icon);
+    icon.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('tooltip')).toHaveTextContent(MARK_CHIPS_HINT);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
     cleanup();
     setup({ session: fx4Imported({ marks: [], mark_count: 0 }), report: 'fx4' });
-    const table = await tableReady();
-    expect(within(table).queryByRole('columnheader', { name: '迷い' })).toBeNull();
-    expect(screen.queryByText(MARK_CHIPS_HINT)).toBeNull();
+    const empty = await tableReady();
+    expect(within(empty).queryByRole('columnheader', { name: '迷い' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '迷いの札の説明' })).toBeNull();
+    expect(empty).not.toHaveAttribute('aria-describedby');
   });
 
   it('札を押すと、その迷いのカードへ移る: カードへキーボードの位置が移り、少しの間目立ち（is-flash）、そのあと戻る。カードが画面の中ほどへ寄る', async () => {

@@ -19,9 +19,13 @@ import { MenuSelect } from './MenuSelect';
  * 付け直す・入れるたびに保存し、取り消せる（`onSelfRating`・`onMaka`）。
  */
 
-/** 迷いの札の説明（札が出ているときだけ、表の下に出す）。 */
+/**
+ * 迷いの札の説明（札が出ているときだけ）。本文には出さず、表の見出し「局の評価」のそばの説明のアイコン（InfoTip。U-25）に出す。
+ * 見出しは呼ぶ側（SessionPage）にあるので、アイコンもそこに置き、ここは文と id（表の説明として読み上げる）を持つ。
+ */
 export const MARK_CHIPS_HINT =
   '迷いの札を押すと、その迷いのカードへ移ります。点線の札は巡目が未定、チェックの付いた札は選んだもの、ほかは推定です。';
+export const MARK_CHIPS_HINT_ID = 'marks-chips-hint';
 
 const SELF_OPTIONS: ReadonlyArray<{ value: SelfRatingValue; label: string }> = [
   { value: 'good', label: RATING_GLYPH.good },
@@ -48,7 +52,7 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark }: 
   return (
     <>
       <div className={withChips ? 'tbl-wrap with-marks' : 'tbl-wrap'}>
-        <table className="tbl">
+        <table className="tbl" aria-describedby={withChips ? MARK_CHIPS_HINT_ID : undefined}>
           <caption className="sr-only">局の評価</caption>
           <thead>
             <tr>
@@ -111,7 +115,6 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark }: 
           結果が悪かった局を低く付けていないか
         </p>
       )}
-      {withChips && <p className="tbl-note marks-note">{MARK_CHIPS_HINT}</p>}
       {table.unplacedRatings > 0 && (
         <p className="tbl-note">
           ウィジェットで付けた評価のうち、{table.unplacedRatings}件は、どの局にも当てはまりませんでした

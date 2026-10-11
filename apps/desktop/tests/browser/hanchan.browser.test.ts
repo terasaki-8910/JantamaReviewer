@@ -17,7 +17,9 @@ import { REPORT_TEXTS, local } from '../fake-sessions';
 import { OCR_GEOMETRY, fx4Ocr, fx4Session } from '../import-fixtures';
 import {
   TINY_PNG,
+  boxesOverlap,
   launchBrowser,
+  measureInfoTip,
   runAxe,
   seriousViolations,
   startPageServer,
@@ -25,6 +27,7 @@ import {
   unreachableByTab,
   ensureSidebar,
   waitForMainReady,
+  type BoxRect,
   type PageServer,
   type Scenario,
 } from './harness';
@@ -421,6 +424,7 @@ describe('F10 局の評価の表の形（実ブラウザ）', () => {
       expect(table?.width ?? 0).toBeLessThanOrEqual(761);
       expect(await page.getByRole('table', { name: '局の評価' }).getByRole('columnheader').count()).toBe(6);
       expect(await page.getByText('迷いの札を押すと').count()).toBe(0);
+      expect(await page.getByRole('button', { name: '迷いの札の説明' }).count()).toBe(0);
       const heights = await page.locator('.tbl tbody tr').evaluateAll((rows) => rows.map((r) => Math.round(r.getBoundingClientRect().height)));
       expect(new Set(heights).size).toBe(1);
       expect(heights[0]).toBeLessThanOrEqual(44);
@@ -941,4 +945,54 @@ describe('F11・U-23 前の作り方で読んだ半荘の読み直し（実ブ�
       await context.close();
     }
   });
+});
+
+describe('U-25: 説明のアイコン（局の評価の表の迷いの札）', () => {
+  const HINT = '迷いの札を押すと、その迷いのカードへ移ります。点線の札は巡目が未定、チェックの付いた札は選んだもの、ほかは推定です。';
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 説明の文は本文に出ず、見出し「局の評価」のそばの (i) に乗せるかキーボードで選ぶと、窓の中に、表（札）にかからずに重なって出る。Esc で閉じる。axe の重大な違反が 0 件（ライト・ダーク）`, { timeout: 120_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const { context, page, problems } = await open({ width, scheme });
+        try {
+          const head = page.locator('.sec-head').filter({ has: page.getByRole('heading', { name: '局の評価' }) });
+          const icon = head.getByRole('button', { name: '迷いの札の説明' });
+          await icon.waitFor();
+          // 見える文字には、説明が無い（重なりの文は、閉じている間は hidden で、innerText に入らない）
+          expect(await page.locator('.tbl-wrap').evaluate((el) => (el.closest('section') as HTMLElement).innerText)).not.toContain('迷いの札を押すと');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          await icon.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+          await icon.hover();
+          await page.getByRole('tooltip').waitFor();
+          let m = await measureInfoTip(page, '.tbl-wrap');
+          expect(m, `${width} ${scheme}`).not.toBeNull();
+          expect(m!.text).toBe(HINT);
+          expect(m!.tip.left).toBeGreaterThanOrEqual(7);
+          expect(m!.tip.right).toBeLessThanOrEqual(m!.innerWidth - 7);
+          expect(m!.tip.top).toBeGreaterThanOrEqual(0);
+          expect(m!.tip.bottom).toBeLessThanOrEqual(m!.innerHeight);
+          // 表（札を含む）にも、アイコンにも、かからない。見出しの上に出る
+          expect(m!.side).toBe('above');
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          expect(boxesOverlap(m!.tip, m!.icon)).toBe(false);
+          expect(seriousViolations(await runAxe(page)), `${width} ${scheme}`).toEqual([]);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          await page.mouse.move(2, 2);
+          await icon.focus();
+          await page.keyboard.press('Shift+Tab');
+          await page.keyboard.press('Tab');
+          expect(await icon.evaluate((el) => el === document.activeElement)).toBe(true);
+          await page.getByRole('tooltip').waitFor();
+          m = await measureInfoTip(page, '.tbl-wrap');
+          expect(m!.text).toBe(HINT);
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          expect(problems).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      }
+    });
+  }
 });

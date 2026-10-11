@@ -914,10 +914,6 @@ body.lb-open {
   stroke-width: 2.6;
 }
 
-.marks-note {
-  margin-bottom: var(--s5);
-}
-
 .mcard:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
