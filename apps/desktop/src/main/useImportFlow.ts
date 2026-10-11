@@ -546,6 +546,10 @@ export function useImportFlow(): ImportFlow {
       contextRef.current = null;
       setLink(found);
       setTarget(next);
+      // 窓を開く間に、検討画面が前面を外れたり戻ったりして、クリップボードの確認や「牌譜リンクを待つ」状態の書き換えが
+      // 割り込まないよう、先に「窓を待つ」状態にする（その間に取り込み先が消えない）。開けなければ、失敗にする。
+      setOffer(null);
+      setState({ phase: 'window' });
       try {
         await api.openMjaiWindow(found.url, readPageBackground(), next.label);
       } catch (error) {
@@ -553,10 +557,7 @@ export function useImportFlow(): ImportFlow {
         setState({ phase: 'error', title: 'mjai の窓を開けませんでした', message: errorMessage(error) });
         return { started: true };
       }
-      if (!isCurrent(token)) return { started: true };
-      remember(found.paipuId);
-      setOffer(null);
-      setState({ phase: 'window' });
+      if (isCurrent(token)) remember(found.paipuId);
       return { started: true };
     },
     [begin, isCurrent, remember, setLink, setState, setTarget],

@@ -481,6 +481,29 @@ describe('U-14 取り込み先は、次の取り込みに残らない（取り�
     expect(result.current.target).toBeNull();
   });
 
+  it('mjai の窓を開いている間に、検討画面が前面に戻っても（クリップボードの確認が走っても）、取り込み先は消えない', async () => {
+    const store = new FakeSessionStore([{ session: fx4Session(ID, local(2026, 10, 9, 19, 9)) }]);
+    const mock = installTauriMock({
+      handlers: {
+        ...importHandlers([]),
+        ...store.handlers,
+        // 窓を開く命令が、まだ終わらない
+        open_mjai_window: () => new Promise(() => undefined),
+      },
+    });
+    const { result } = renderHook(() => useImportFlow());
+    act(() => {
+      void result.current.startForSession(TARGET);
+    });
+    await waitFor(() => expect(result.current.state.phase).toBe('window'));
+    expect(result.current.target).toEqual(TARGET);
+    // 前面に戻った知らせ（クリップボードの確認）が、窓を開いている間に来る。
+    act(() => mock.emit('main-window-focused', null));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(result.current.state.phase).toBe('window');
+    expect(result.current.target).toEqual(TARGET);
+  });
+
   it('取り込み先を決めた取り込みが失敗して、牌譜リンクを待つ状態に戻ったあとの、結果の URL を貼る取り込みは、取り込み先を決めない（結びつけ先の照合をする）', async () => {
     const { result, mock } = hook();
     await act(async () => {
