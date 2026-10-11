@@ -83,6 +83,7 @@ export function fx4Session(
     links: { marks: {}, ratings: {} },
     self_ratings: { kyokus: {} },
     maka: { kyokus: {} },
+    memos: { marks: {}, extras: [] },
     ...overrides,
   };
 }
@@ -164,6 +165,7 @@ export function fx5Session(id: string = FX5_ID, startedMs: number = FX5_STARTED,
     links: { marks: {}, ratings: {} },
     self_ratings: { kyokus: {} },
     maka: { kyokus: {} },
+    memos: { marks: {}, extras: [] },
     ...overrides,
   };
 }

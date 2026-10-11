@@ -167,6 +167,31 @@ export interface MakaGrades {
 }
 
 /**
+ * メモ 1 つの文（`memos.json`）。`candidates` は「候補」（短い文。例: `3m・6p`）、`reason` は「理由（1行）」。
+ * 保存するときに前後の空白を除く（空のメモは持たない）。
+ */
+export interface MemoEntry {
+  candidates: string;
+  reason: string;
+}
+
+/** 迷いマークの無い迷いのメモ。局・巡目は、判断の鍵（エンジンの `DecisionRef.key`）で持つ。`id` は画面が付ける名前（英数字）。 */
+export interface ExtraMemo extends MemoEntry {
+  id: string;
+  decision: string;
+}
+
+/**
+ * 終局直後のメモ（`memos.json`。F4、U-28）。
+ * - `marks`: 迷いマークの id（10 進の文字列）→ メモ
+ * - `extras`: 迷いマークの無い迷いのメモ（足した順）
+ */
+export interface Memos {
+  marks: Record<string, MemoEntry>;
+  extras: ExtraMemo[];
+}
+
+/**
  * 半荘 1 つ分。取り消された記録は marks / ratings に含まれない。
  * 結果だけの半荘（記録の無いまま取り込んだもの）は、marks・ratings が空で、`report_path` がある。
  */
@@ -188,6 +213,8 @@ export interface SessionRecord {
   self_ratings: SelfRatings;
   /** MAKA の評価（局の評価の表で入れたもの）。 */
   maka: MakaGrades;
+  /** 終局直後のメモ（迷いのカードと、半荘を通して見る画面で書いたもの）。 */
+  memos: Memos;
 }
 
 /** 文字認識の結果の写しを、半荘ごとに返したもの（`ocr_sessions` の返り値）。 */

@@ -5,6 +5,7 @@ import { RATING_GLYPH, RatingShape } from '../shared/RatingShape';
 import { DISPLAY_GRADES, GradeBadge } from './GradeBadge';
 import type { HandRow, HandTableData } from './handRows';
 import { Icon } from './Icon';
+import type { MarkChip } from './markChips';
 import { MenuSelect } from './MenuSelect';
 
 /**
@@ -13,8 +14,14 @@ import { MenuSelect } from './MenuSelect';
  *   AI 基準と大きく食い違う局には、小さな旗（規則はエンジンの `disagreesWithGrade`）
  * - AI 基準: 局の Rating から当てはめた段階と、その Rating。候補・確率・順位は出さない（SPEC F3）
  * - MAKA: 任意。入れていなければ点線の「入力」。押すと、14 段階（と「なし」）のメニュー
+ * - 迷い（札が 1 つでもあるときだけ出る列。R11-9、U-27）: その局の迷いを、「迷い1 5巡目 打6s」の札で並べる。札を押すと、その迷いのカードへ移る（`onJumpToMark`）。
+ *   選んだ（チェックつき）・推定（枠だけ）・巡目は未定（点線）は、形でも見分けられる。幅が狭いときは、局ごとのかたまりに「迷い」の行が付く
  * 付け直す・入れるたびに保存し、取り消せる（`onSelfRating`・`onMaka`）。
  */
+
+/** 迷いの札の説明（札が出ているときだけ、表の下に出す）。 */
+export const MARK_CHIPS_HINT =
+  '迷いの札を押すと、その迷いのカードへ移ります。点線の札は巡目が未定、チェックの付いた札は選んだもの、ほかは推定です。';
 
 const SELF_OPTIONS: ReadonlyArray<{ value: SelfRatingValue; label: string }> = [
   { value: 'good', label: RATING_GLYPH.good },
@@ -29,13 +36,18 @@ interface HandTableProps {
   onSelfRating: (row: HandRow, value: SelfRatingValue) => void;
   /** MAKA の評価を入れた・消した（`row` が無いときは半荘全体）。`undefined` は、消した。 */
   onMaka: (row: HandRow | null, grade: Grade | undefined) => void;
+  /** 局ごとの迷いの札（局の添字 → 札）。渡さない・札が 1 つも無いときは、「迷い」の列を出さない。 */
+  chips?: ReadonlyMap<number, readonly MarkChip[]>;
+  /** 札を押した（迷いの記録の番号。そのカードへ移る）。 */
+  onJumpToMark?: (markId: number) => void;
 }
 
-export function HandTable({ table, onSelfRating, onMaka }: HandTableProps) {
+export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark }: HandTableProps) {
   const { rows, hanchan } = table;
+  const withChips = chips !== undefined && chips.size > 0;
   return (
     <>
-      <div className="tbl-wrap">
+      <div className={withChips ? 'tbl-wrap with-marks' : 'tbl-wrap'}>
         <table className="tbl">
           <caption className="sr-only">局の評価</caption>
           <thead>
@@ -48,6 +60,7 @@ export function HandTable({ table, onSelfRating, onMaka }: HandTableProps) {
               <th scope="col">自分</th>
               <th scope="col">AI 基準</th>
               <th scope="col">MAKA</th>
+              {withChips && <th scope="col">迷い</th>}
             </tr>
           </thead>
           <tbody>
@@ -65,6 +78,11 @@ export function HandTable({ table, onSelfRating, onMaka }: HandTableProps) {
                 <td data-label="MAKA">
                   <MakaCell label={row.label} value={row.maka} onChange={(grade) => onMaka(row, grade)} />
                 </td>
+                {withChips && (
+                  <td className="marks-cell" data-label="迷い">
+                    <KyokuChips chips={chips.get(row.position) ?? []} onJump={onJumpToMark} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -80,6 +98,7 @@ export function HandTable({ table, onSelfRating, onMaka }: HandTableProps) {
               <td data-label="MAKA">
                 <MakaCell label="半荘全体" value={hanchan.maka} onChange={(grade) => onMaka(null, grade)} />
               </td>
+              {withChips && <td className="marks-cell" />}
             </tr>
           </tfoot>
         </table>
@@ -92,12 +111,35 @@ export function HandTable({ table, onSelfRating, onMaka }: HandTableProps) {
           結果が悪かった局を低く付けていないか
         </p>
       )}
+      {withChips && <p className="tbl-note marks-note">{MARK_CHIPS_HINT}</p>}
       {table.unplacedRatings > 0 && (
         <p className="tbl-note">
           ウィジェットで付けた評価のうち、{table.unplacedRatings}件は、どの局にも当てはまりませんでした
         </p>
       )}
     </>
+  );
+}
+
+/** 1 つの局の迷いの札（無ければ、何も出さない）。 */
+function KyokuChips({ chips, onJump }: { chips: readonly MarkChip[]; onJump: HandTableProps['onJumpToMark'] }) {
+  if (chips.length === 0) return null;
+  return (
+    <span className="mk-chips">
+      {chips.map((chip) => (
+        <button
+          key={chip.markId}
+          type="button"
+          className="mk-chip"
+          data-kind={chip.kind}
+          aria-label={chip.label}
+          onClick={() => onJump?.(chip.markId)}
+        >
+          {chip.kind === 'chosen' && <Icon name="check" className="mk-ck" />}
+          <b>{chip.head}</b> <span>{chip.what}</span>
+        </button>
+      ))}
+    </span>
   );
 }
 

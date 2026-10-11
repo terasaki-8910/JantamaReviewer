@@ -72,6 +72,7 @@ export function seedSession(startedMs: number, options: SeedOptions = {}): { ses
     links: { marks: {}, ratings: {} },
     self_ratings: { kyokus: {} },
     maka: { kyokus: {} },
+    memos: { marks: {}, extras: [] },
   };
   return options.report ? { session, report: options.report } : { session };
 }
@@ -89,6 +90,10 @@ export class FakeSessionStore {
   /** 次の削除・元に戻すを失敗させたいときの理由。 */
   failNextDelete: string | null = null;
   failNextRestore: string | null = null;
+  /** メモの保存の呼び出しの記録（'set:1:3m・6p|理由'・'clear:1'・'set-extra:x1:k0h0e3:候補|理由'・'clear-extra:x1'）。 */
+  readonly memoCalls: string[] = [];
+  /** 次のメモの保存を失敗させたいときの理由（1 回だけ）。 */
+  failNextMemo: string | null = null;
 
   constructor(seeds: Array<{ session: SessionRecord; report?: ReportKey }>) {
     this.active = seeds.map((s) => s.session);
@@ -119,6 +124,14 @@ export class FakeSessionStore {
     const at = this.active.findIndex((s) => s.id === id);
     if (at < 0) throw `半荘が見つかりません: ${id}`;
     this.active[at] = change(this.active[at] as SessionRecord);
+  }
+
+  /** `failNextMemo` が入っていれば、その理由で失敗させる（1 回だけ）。 */
+  private failMemoWith(): void {
+    if (this.failNextMemo === null) return;
+    const reason = this.failNextMemo;
+    this.failNextMemo = null;
+    throw reason;
   }
 
   /** 半荘の読み取りの写しを置き換える（試験から。Rust 側が読み直して、`ocr.json` を書き直したときと同じ）。 */
@@ -195,6 +208,55 @@ export class FakeSessionStore {
     clear_maka_hanchan: (args) => {
       const { sessionId } = args as { sessionId: string };
       this.update(sessionId, (s) => ({ ...s, maka: { kyokus: s.maka.kyokus } }));
+      return undefined;
+    },
+    // 終局直後のメモ（F4、U-28）。Rust 側と同じく、前後の空白を除き、「候補」も「理由」も空なら消す。迷いマークの無い迷いのメモは、名前ごとに置き換える
+    set_memo: (args) => {
+      const { sessionId, markId, candidates, reason } = args as { sessionId: string; markId: number; candidates: string; reason: string };
+      this.memoCalls.push(`set:${markId}:${candidates}|${reason}`);
+      this.failMemoWith();
+      const memo = { candidates: candidates.trim(), reason: reason.trim() };
+      this.update(sessionId, (s) => {
+        const marks = { ...s.memos.marks };
+        if (memo.candidates === '' && memo.reason === '') delete marks[String(markId)];
+        else marks[String(markId)] = memo;
+        return { ...s, memos: { ...s.memos, marks } };
+      });
+      return undefined;
+    },
+    clear_memo: (args) => {
+      const { sessionId, markId } = args as { sessionId: string; markId: number };
+      this.memoCalls.push(`clear:${markId}`);
+      this.failMemoWith();
+      this.update(sessionId, (s) => {
+        const marks = { ...s.memos.marks };
+        delete marks[String(markId)];
+        return { ...s, memos: { ...s.memos, marks } };
+      });
+      return undefined;
+    },
+    set_extra_memo: (args) => {
+      const { sessionId, id, decision, candidates, reason } = args as {
+        sessionId: string;
+        id: string;
+        decision: string;
+        candidates: string;
+        reason: string;
+      };
+      this.memoCalls.push(`set-extra:${id}:${decision}:${candidates}|${reason}`);
+      this.failMemoWith();
+      const extra = { id, decision, candidates: candidates.trim(), reason: reason.trim() };
+      this.update(sessionId, (s) => {
+        const extras = s.memos.extras.some((e) => e.id === id) ? s.memos.extras.map((e) => (e.id === id ? extra : e)) : [...s.memos.extras, extra];
+        return { ...s, memos: { ...s.memos, extras } };
+      });
+      return undefined;
+    },
+    clear_extra_memo: (args) => {
+      const { sessionId, id } = args as { sessionId: string; id: string };
+      this.memoCalls.push(`clear-extra:${id}`);
+      this.failMemoWith();
+      this.update(sessionId, (s) => ({ ...s, memos: { ...s.memos, extras: s.memos.extras.filter((e) => e.id !== id) } }));
       return undefined;
     },
   };

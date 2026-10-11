@@ -5,11 +5,14 @@
  * - 卓は雀魂と同じ配置。判断の 2〜3 巡前から「前の巡目」「次の巡目」で見られる（判断より先は見せない）。過去の盤面は、手牌を押せない
  * - 見出しの実戦の行動（「実戦：打3m」）は、出題だけ。解き直しは、答え合わせまで実戦の行動も AI の答えも出さない（U-1・U-17）
  * - 問題ごとに作り直す（呼ぶ側が `key` に問題の識別を入れる）。答えるまでの時間は、この画面を出した時刻から数える
+ * - 答え合わせのあと、自分の答えの下に「終局直後のメモ」（その問題に結びつく迷いのメモ・追加のメモ。F4、U-28）。答える前は、DOM にも無い
  */
-import { actualText, shantenTag } from '@jantama/engine';
+import { actualText, keyOfDecision, shantenTag } from '@jantama/engine';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { AnswerMode, AnswerRow } from '../../api/types';
+import { resolveMarks } from '../markCards';
+import { memosForDecision } from '../memos';
 import { anyCalled, boardInfoOf } from './Board';
 import { QuizWork } from './QuizWork';
 import { replaySteps } from './steps';
@@ -70,6 +73,18 @@ export function QuizScreen({
   const past = step < last;
   const work = useQuizWork({ decision, sessionId: session.id, mode, board, past, existing, previousIntervalDays });
   const info = useMemo(() => boardInfoOf(decision.board, steps), [decision.board, steps]);
+  // 答え合わせのあとにだけ、その問題に結びつくメモを探す（答える前は、探しも、出しもしない）
+  const memoShown = useMemo(
+    () =>
+      work.revealed
+        ? memosForDecision({
+            memos: session.memos,
+            resolved: resolveMarks(game.report, session),
+            decisionKey: keyOfDecision(decision),
+          })
+        : undefined,
+    [work.revealed, session, game.report, decision],
+  );
 
   // 巡目の行き来。押したボタンが端で押せなくなったとき、キーボードの位置が消えないよう、もう一方へ移す
   const prevRef = useRef<HTMLButtonElement>(null);
@@ -163,6 +178,7 @@ export function QuizScreen({
         anyCalled={anyCalled(steps)}
         nextLabel={nextLabel}
         onNext={onNext}
+        memoShown={memoShown}
       />
     </div>
   );

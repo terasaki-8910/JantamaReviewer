@@ -3,8 +3,10 @@
  * 状態は `useQuizWork` が持つ（呼ぶ側が、いちばん外の `.qz` の `data-state` に、答え合わせのあとかを入れる）。
  */
 import type { BoardState, Decision } from '@jantama/engine';
+import type { ReactNode } from 'react';
 
 import type { AnswerMode } from '../../api/types';
+import type { ShownMemo } from '../memos';
 import { AnswerPanel } from './AnswerPanel';
 import { Board, Legend, type BoardInfo } from './Board';
 import { Hand } from './Hand';
@@ -23,9 +25,13 @@ export interface QuizWorkProps {
   anyCalled: boolean;
   nextLabel: string;
   onNext: () => void;
+  /** 答える前に出す、終局直後のメモの欄（半荘を通して見る画面の迷いの場面）。 */
+  memoEditor?: ReactNode;
+  /** 答え合わせのあとに、自分の答えの下へ出す「終局直後のメモ」。 */
+  memoShown?: readonly ShownMemo[];
 }
 
-export function QuizWork({ work, decision, mode, info, board, past, anyCalled, nextLabel, onNext }: QuizWorkProps) {
+export function QuizWork({ work, decision, mode, info, board, past, anyCalled, nextLabel, onNext, memoEditor, memoShown }: QuizWorkProps) {
   return (
     <div className="work">
       <section className="board-col" aria-label="盤面と手牌" data-view={past ? 'past' : 'now'}>
@@ -55,6 +61,8 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
         threshold={work.threshold}
         nextLabel={nextLabel}
         onNext={onNext}
+        memoEditor={memoEditor}
+        memoShown={memoShown}
       />
     </div>
   );

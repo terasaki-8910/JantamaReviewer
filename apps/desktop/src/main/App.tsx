@@ -99,7 +99,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   );
   const summaries = useSessionSummaries(sessions);
   // 出題（今日の出題・解き直し・答え合わせ）のデータ。半荘の結果の再生・答えの記録・今日の組を、ここで 1 つだけ持つ
-  const study = useStudyData(sessions);
+  const study = useStudyData(sessions, reload);
   // 前の作り方で読んだ半荘の読み直し（F11）。半荘の画面を開いたときに 1 回だけ。済んだら、一覧を読み直して、新しい読み取りを反映する。
   const [rereads] = useState(
     () =>

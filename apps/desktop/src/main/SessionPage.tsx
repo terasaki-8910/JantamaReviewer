@@ -1,5 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
 
@@ -8,13 +8,17 @@ import type { RatingEntry, SelfRatingValue, SessionRecord } from '../api/types';
 import { RATING_GLYPH, RatingShape } from '../shared/RatingShape';
 import { formatClock, formatSessionTitle } from './format';
 import { GradeBadge } from './GradeBadge';
+import { ExtraMemos } from './ExtraMemos';
 import { buildHandTable, type HandRow } from './handRows';
 import { HandTable } from './HandTable';
 import { makaCommand, markLinkCommand, selfRatingCommand } from './hanchanEdits';
 import { useSessionReport } from './hanchanReport';
 import type { ViewerItem, ViewerRequest } from './Lightbox';
+import { chipsByKyoku } from './markChips';
 import { markCaptionParts, resolveMarks, type ResolvedMark } from './markCards';
 import { MarkCard } from './MarkCard';
+import { MarkMemoFields } from './MarkMemoFields';
+import { memoOfMark } from './memos';
 import { ReplayIcon } from './replay/ReplayIcons';
 import { IDLE_REREADS, type Rereads } from './rereadStore';
 import type { SummaryState } from './sessionSummaries';
@@ -52,6 +56,9 @@ interface SessionPageProps {
 }
 
 const noop = () => Promise.resolve();
+
+/** 局の評価の表の札から移ったあと、迷いのカードを目立たせておく時間（ミリ秒）。 */
+export const FLASH_MS = 1800;
 
 /**
  * 半荘 1 つのページ。見出し（日時・卓・段階・Rating）・迷いのカード（F9）・局の評価の表（F10）。
@@ -106,6 +113,29 @@ export function SessionPage({
     () => (report === null || ready === null ? null : buildHandTable({ report, summary: ready, session })),
     [report, ready, session],
   );
+  // 局の評価の表の「迷い」の列の札（迷いのカードと同じ結びつけから。U-27）
+  const chips = useMemo(() => (resolved === null ? undefined : chipsByKyoku(resolved)), [resolved]);
+
+  // 札を押すと、その迷いのカードへ移って、少しの間目立たせる（キーボードの位置もカードへ移す）
+  const cards = useRef(new Map<number, HTMLElement>());
+  const [flash, setFlash] = useState<number | null>(null);
+  const flashTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    },
+    [],
+  );
+  const jumpToMark = useCallback((markId: number) => {
+    const card = cards.current.get(markId);
+    if (card === undefined) return;
+    const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    card.scrollIntoView?.({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
+    card.focus({ preventScroll: true });
+    setFlash(markId);
+    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), FLASH_MS);
+  }, []);
 
   // 保存して、取り消せる命令にする。失敗は、取り消しの積み重ねの知らせが通知に出す（ここでは握りつぶさず、呼び出し元へ返す）。
   const chooseDecision = (item: ResolvedMark, ref: DecisionRef): Promise<void> =>
@@ -248,18 +278,39 @@ export function SessionPage({
                       onOpenImage={(opener) => openImage(mark.id, opener)}
                       onChoose={chooseDecision}
                       onSolve={replayable ? (key) => onOpenReplay?.(session.id, key) : undefined}
+                      flash={flash === mark.id}
+                      cardRef={(element) => {
+                        if (element === null) cards.current.delete(mark.id);
+                        else cards.current.set(mark.id, element);
+                      }}
+                      memo={
+                        <MarkMemoFields
+                          sessionId={session.id}
+                          markId={mark.id}
+                          number={index + 1}
+                          saved={memoOfMark(session.memos, mark.id)}
+                          reload={onChanged}
+                        />
+                      }
                     />
                   </li>
                 ))}
               </ul>
             )}
+            <ExtraMemos session={session} decisions={decisions} reload={onChanged} />
           </section>
           {table !== null ? (
             <section aria-labelledby={handsId}>
               <h2 className="sec-title" id={handsId}>
                 局の評価
               </h2>
-              <HandTable table={table} onSelfRating={changeSelfRating} onMaka={changeMaka} />
+              <HandTable
+                table={table}
+                onSelfRating={changeSelfRating}
+                onMaka={changeMaka}
+                chips={chips}
+                onJumpToMark={jumpToMark}
+              />
             </section>
           ) : readingReport ? (
             <section aria-labelledby={handsId}>
