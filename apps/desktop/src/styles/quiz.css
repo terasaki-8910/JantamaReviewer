@@ -214,7 +214,7 @@
   flex: none;
   width: var(--tw, 26px);
   aspect-ratio: 3 / 4;
-  background: url("tiles/Front.svg") center / 100% 100% no-repeat;
+  background: url("/tiles/Front.svg") center / 100% 100% no-repeat;
   border-radius: 10% / 7.5%;
   box-shadow: 0 0 0 1px var(--line-strong);
 }
@@ -2143,4 +2143,35 @@ li:has(> .qrow.next) + li > .qrow {
 
 .qz:not([data-dora="on"]) .lg-dora {
   display: none;
+}
+
+/* ---------- 今日の出題の行は、押すと開く（ボタン） ---------- */
+button.qrow {
+  width: 100%;
+  background: none;
+  border-inline: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.qrow:hover {
+  background: var(--hover);
+}
+
+button.qrow:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+button.qrow.next {
+  border-radius: var(--r2);
+}
+
+/* ---------- 設定ページ: 数を入れる欄 ---------- */
+.input.num {
+  width: 7em;
 }

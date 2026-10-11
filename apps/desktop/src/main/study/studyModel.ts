@@ -63,6 +63,8 @@ export interface StudyModel {
   problems: Problem[];
   today: TodayModel;
   due: DueEntry[];
+  /** 今日より先の、いちばん近い解き直しの日（YYYY-MM-DD）。無ければ null。 */
+  nextDue: string | null;
 }
 
 export interface StudyInput {
@@ -201,7 +203,9 @@ export function buildStudyModel(input: StudyInput, collected?: CollectedProblems
     const state = games.get(row.session_id);
     return sessionById.has(row.session_id) && state !== undefined && state.status === 'ready';
   });
-  for (const entry of dueAnswers(latestAnswers(present.map(toAnswerLike)), today)) {
+  const latest = latestAnswers(present.map(toAnswerLike));
+  const later = latest.map((entry) => entry.dueDate).filter((date) => date > today);
+  for (const entry of dueAnswers(latest, today)) {
     const session = sessionById.get(entry.sessionId);
     const state = games.get(entry.sessionId);
     if (session === undefined || state === undefined || state.status !== 'ready') continue;
@@ -229,5 +233,6 @@ export function buildStudyModel(input: StudyInput, collected?: CollectedProblems
       sessionCount: new Set(items.map((item) => item.problem.sessionId)).size,
     },
     due,
+    nextDue: later.length === 0 ? null : later.reduce((a, b) => (a <= b ? a : b)),
   };
 }

@@ -14,6 +14,10 @@ import { buildListRows, neighborAfterDelete } from './sessionRows';
 import { SessionPage } from './SessionPage';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
+import { QuizPage } from './study/QuizPage';
+import { ReviewPage } from './study/ReviewPage';
+import { StudyProvider, useStudyData } from './study/StudyProvider';
+import { TodayPage } from './study/TodayPage';
 import { TOAST_MS, Toast, type ToastModel } from './Toast';
 import { UndoProvider, useUndo, useUndoEvents } from './undo/UndoProvider';
 import { useShortcutsBlocked } from './undo/shortcutGuard';
@@ -22,17 +26,17 @@ import { useImportFlow } from './useImportFlow';
 import { useNarrow } from './useNarrow';
 import { useSessionSummaries, useSessions, useToday } from './useSessions';
 import { currentView, historyReducer, isViewAvailable, startHistory, stepTarget } from './viewHistory';
-import { sessionView, type View } from './views';
+import { quizView, sessionView, viewSessionId, type View } from './views';
 
 /** 取り消したあとの「元に戻しました」の通知の長さ（ミリ秒）。 */
 const UNDONE_TOAST_MS = 3500;
 
 export interface AppProps {
   /**
-   * 消す半荘に、解いた問題がいくつあるか（確認の文に足す）。解き直しの記録（クイズの DB）ができたら、本物を渡す。
-   * 既定は 0 を返す（まだ記録が無い）。
+   * 消す半荘に、解いた問題がいくつあるか（確認の文に足す）。既定は、答えの記録（study.sqlite）に数えてもらう。
+   * 試験では、数をすぐ返す関数を渡せる。
    */
-  solvedProblems?: (sessionIds: readonly string[]) => number;
+  solvedProblems?: (sessionIds: readonly string[]) => number | Promise<number>;
 }
 
 /**
@@ -83,6 +87,8 @@ function Shell({ solvedProblems }: Required<AppProps>) {
     dispatch({ type: 'listChanged', sessionIds: list.map((session) => session.id) }),
   );
   const summaries = useSessionSummaries(sessions);
+  // 出題（今日の出題・解き直し・答え合わせ）のデータ。半荘の結果の再生・答えの記録・今日の組を、ここで 1 つだけ持つ
+  const study = useStudyData(sessions);
   // 前の作り方で読んだ半荘の読み直し（F11）。半荘の画面を開いたときに 1 回だけ。済んだら、一覧を読み直して、新しい読み取りを反映する。
   const [rereads] = useState(
     () => new RereadStore({ needed: api.needsOcrReread, reread: api.rereadOcr, changed: reload }),
@@ -231,6 +237,9 @@ function Shell({ solvedProblems }: Required<AppProps>) {
     [push, reset],
   );
   const openFromList = useCallback((sessionId: string) => push(sessionView(sessionId)), [push]);
+  const openToday = useCallback(() => push({ kind: 'today' }), [push]);
+  const openReview = useCallback(() => push({ kind: 'review' }), [push]);
+  const openProblem = useCallback((sessionId: string, key: string) => push(quizView(sessionId, key)), [push]);
 
   // 取り込みが終わったら、一覧を読み直す（保存した結果の段階・Rating を出すため。Rust 側の知らせの取りこぼしにも備える）。
   useEffect(() => {
@@ -245,6 +254,24 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const requestDelete = useCallback((ids: string[], opener: HTMLElement | null) => {
     if (ids.length > 0) setPending({ ids, opener });
   }, []);
+
+  // 消す半荘の、解いた問題の数（確認の文に足す。答えの記録に数えてもらう）。数えている間は 0 として、行を出さない
+  const [solvedCount, setSolvedCount] = useState<{ key: string; count: number } | null>(null);
+  const pendingKey = pending === null ? null : pending.ids.join(',');
+  useEffect(() => {
+    if (pending === null || pendingKey === null) return undefined;
+    let alive = true;
+    Promise.resolve(solvedProblems(pending.ids)).then(
+      (count) => {
+        if (alive) setSolvedCount({ key: pendingKey, count });
+      },
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [pending, pendingKey, solvedProblems]);
+  const solved = pendingKey !== null && solvedCount?.key === pendingKey ? solvedCount.count : 0;
 
   const cancelDelete = () => {
     focusAfterClose.current = pending?.opener ?? null;
@@ -261,8 +288,10 @@ function Shell({ solvedProblems }: Required<AppProps>) {
 
   const deleteCommand = (ids: string[]): UndoCommand => {
     const count = ids.length;
-    // いま見ている半荘を消すなら、隣の半荘へ移す。履歴は増やさず、見ている項目を置き換える。元に戻したら、もとの半荘に戻る。
-    const here = view.kind === 'session' && ids.includes(view.id) ? view : null;
+    // いま見ている半荘（と、その半荘の出題）を消すなら、隣の半荘へ移す。履歴は増やさず、見ている項目を置き換える。
+    // 元に戻したら、もとの画面に戻る。
+    const hereSession = viewSessionId(view);
+    const here = hereSession !== null && ids.includes(hereSession) ? view : null;
     const neighbor = here === null ? null : neighborAfterDelete(
       rows.map((row) => row.id),
       new Set(ids),
@@ -336,11 +365,10 @@ function Shell({ solvedProblems }: Required<AppProps>) {
 
   const selectedSession = view.kind === 'session' ? (sessions?.find((s) => s.id === view.id) ?? null) : null;
   const currentId = view.kind === 'session' ? view.id : null;
-  const solved = pending === null ? 0 : solvedProblems(pending.ids);
   const solvedLine = solvedProblemsLine(solved);
 
   return (
-    <>
+    <StudyProvider value={study}>
       <div className="app" inert={pending !== null || viewer !== null}>
         <Sidebar
           view={view}
@@ -352,6 +380,10 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           onImport={openImport}
           onSettings={() => push({ kind: 'settings' })}
           onToggleTheme={toggleTheme}
+          todayCount={study.todayUnanswered}
+          dueCount={study.dueCount}
+          onToday={openToday}
+          onReview={openReview}
         >
           <SessionList
             ref={listRef}
@@ -372,6 +404,18 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           )}
           {view.kind === 'settings' && <SettingsPage />}
           {view.kind === 'import' && <ImportPage flow={flow} onOpenSession={openSession} />}
+          {view.kind === 'today' && <TodayPage onOpen={openProblem} />}
+          {view.kind === 'review' && <ReviewPage />}
+          {view.kind === 'quiz' && (
+            <QuizPage
+              sessionId={view.sessionId}
+              decisionKey={view.key}
+              mode={view.mode}
+              onOpen={openProblem}
+              onToday={openToday}
+              onReview={openReview}
+            />
+          )}
           {selectedSession !== null && (
             <SessionPage
               key={selectedSession.id}
@@ -416,7 +460,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
       <p className="sr-only" aria-live="polite">
         {live}
       </p>
-    </>
+    </StudyProvider>
   );
 }
 

@@ -102,12 +102,14 @@ const EMPTY_MODEL: StudyModel = {
   problems: [],
   today: { items: [], answered: 0, unanswered: 0, rest: [], undecidedMarks: 0, sessionCount: 0 },
   due: [],
+  nextDue: null,
 };
 
 const StudyContext = createContext<StudyValue | null>(null);
 
-/** 半荘の一覧が読み込み前のときの、空の一覧（毎回新しい配列を作らない）。 */
+/** 半荘の一覧・答えの記録が読み込み前のときの、空の一覧（毎回新しい配列を作らない）。 */
 const NO_SESSIONS: readonly SessionRecord[] = [];
+const NO_ANSWERS: readonly AnswerRow[] = [];
 
 export function StudyProvider({ value, children }: { value: StudyValue; children: ReactNode }) {
   return <StudyContext.Provider value={value}>{children}</StudyContext.Provider>;
@@ -256,21 +258,41 @@ export function useStudyData(sessions: readonly SessionRecord[] | null): StudyVa
   const gameState = useCallback((sessionId: string) => games.get(sessionId), [games]);
   const session = useCallback((sessionId: string) => sessionList.find((s) => s.id === sessionId), [sessionList]);
 
-  return {
-    ready,
-    error,
-    studyDay,
-    threshold,
-    dailyCount,
-    highlightDora: settings?.highlight_dora ?? false,
-    answers: answers ?? [],
-    model,
-    todayUnanswered: ready ? model.today.unanswered : null,
-    dueCount: ready ? model.due.length : null,
-    locate,
-    gameState,
-    session,
-    recordAnswer,
-    updateNotes,
-  };
+  const highlightDora = settings?.highlight_dora ?? false;
+  const answerList = answers ?? NO_ANSWERS;
+  // 描き直しのたびに別の値にならないよう、中身が変わったときだけ作り直す（配った先の画面が、無駄に描き直されない）
+  return useMemo(
+    () => ({
+      ready,
+      error,
+      studyDay,
+      threshold,
+      dailyCount,
+      highlightDora,
+      answers: answerList,
+      model,
+      todayUnanswered: ready ? model.today.unanswered : null,
+      dueCount: ready ? model.due.length : null,
+      locate,
+      gameState,
+      session,
+      recordAnswer,
+      updateNotes,
+    }),
+    [
+      ready,
+      error,
+      studyDay,
+      threshold,
+      dailyCount,
+      highlightDora,
+      answerList,
+      model,
+      locate,
+      gameState,
+      session,
+      recordAnswer,
+      updateNotes,
+    ],
+  );
 }

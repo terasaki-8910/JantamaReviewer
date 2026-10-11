@@ -115,8 +115,8 @@ function optionIdOfAction(action: ActionEvent): string {
   }
 }
 
-/** 他家の打牌への判断のとき、鳴く牌。自分の手番の判断なら null。 */
-function calledTileOf(decision: Pick<Decision, 'entry' | 'board'>): Tile | null {
+/** 他家の打牌への判断のとき、鳴く牌（画面では、手牌の右に離して置く）。自分の手番の判断なら null。 */
+export function calledTileOf(decision: Pick<Decision, 'entry' | 'board'>): Tile | null {
   const { entry, board } = decision;
   return entry.last_actor !== board.playerId && !entry.at_self_chi_pon && !entry.at_self_riichi ? entry.tile : null;
 }

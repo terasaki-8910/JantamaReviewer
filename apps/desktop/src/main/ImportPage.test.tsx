@@ -74,9 +74,9 @@ describe('サイドバーの「検討結果を取り込む」', () => {
     const button = within(side).getByRole('button', { name: IMPORT_BUTTON });
     expect(button).toHaveClass('primary');
     expect(button).not.toHaveAttribute('aria-current');
-    // ブランドと ← → のすぐ下、行き先（解き直し・ログ・週の集計）より前にある。
+    // ブランドと ← → のすぐ下、行き先（今日の出題・解き直し・ログ・週の集計）より前にある。
     const order = Array.from(side.querySelectorAll('button')).map((b) => b.getAttribute('title'));
-    expect(order.slice(0, 4)).toEqual(['戻る（Alt+←）', '進む（Alt+→）', IMPORT_BUTTON, 'あとで作ります']);
+    expect(order.slice(0, 5)).toEqual(['戻る（Alt+←）', '進む（Alt+→）', IMPORT_BUTTON, '今日の出題', '解き直し']);
 
     await user.click(button);
     expect(await screen.findByRole('heading', { level: 1, name: IMPORT_BUTTON })).toBeInTheDocument();

@@ -6,32 +6,54 @@
  * 画面の行き来（← → と Alt+← / Alt+→）も、アプリの中の履歴（`viewHistory.ts`）で持つ。
  */
 
+import type { AnswerMode } from '../api/types';
+
 /**
  * 見ている画面。
  * - `none`: まだ何も選んでいない（起動の直後・半荘が 1 つも無い）。半荘の一覧が読めたら、いちばん新しい半荘になる
  * - `session`: 半荘 1 つ（`id` は半荘のフォルダの名前）
  * - `import`: 検討結果を取り込む
  * - `settings`: 設定
+ * - `today`: 今日の出題の一覧（U-15）
+ * - `quiz`: 出題 1 問（半荘の名前と判断の鍵。`mode` は、出題か解き直しか）。今日の出題・残りから開く
+ * - `review`: 解き直し（今日が期限の問題を 1 問ずつ。U-17）
  */
 export type View =
   | { kind: 'none' }
   | { kind: 'session'; id: string }
   | { kind: 'import' }
-  | { kind: 'settings' };
+  | { kind: 'settings' }
+  | { kind: 'today' }
+  | { kind: 'quiz'; sessionId: string; key: string; mode: AnswerMode }
+  | { kind: 'review' };
 
 export type ViewKind = View['kind'];
 
-export const VIEW_KINDS: readonly ViewKind[] = ['none', 'session', 'import', 'settings'];
+export const VIEW_KINDS: readonly ViewKind[] = ['none', 'session', 'import', 'settings', 'today', 'quiz', 'review'];
 
 /** 最初に出す画面。知らない画面が来たときも、ここに戻る。 */
 export const START_VIEW: View = { kind: 'none' };
 
 export const sessionView = (id: string): View => ({ kind: 'session', id });
 
+export const quizView = (sessionId: string, key: string, mode: AnswerMode = 'quiz'): View => ({
+  kind: 'quiz',
+  sessionId,
+  key,
+  mode,
+});
+
+/** 半荘に結びついた画面なら、その半荘の名前（半荘の画面・その半荘の出題）。 */
+export function viewSessionId(view: View): string | null {
+  if (view.kind === 'session') return view.id;
+  if (view.kind === 'quiz') return view.sessionId;
+  return null;
+}
+
 /** 画面を表す値を、画面に直す。知らない種類・形の合わない値（や、半荘の名前が空のもの）は、最初の画面。 */
 export function resolveView(value: unknown): View {
   if (typeof value !== 'object' || value === null) return START_VIEW;
-  const record = value as { kind?: unknown; id?: unknown };
+  const record = value as { kind?: unknown; id?: unknown; sessionId?: unknown; key?: unknown; mode?: unknown };
   switch (record.kind) {
     case 'session':
       return typeof record.id === 'string' && record.id !== '' ? sessionView(record.id) : START_VIEW;
@@ -39,13 +61,27 @@ export function resolveView(value: unknown): View {
       return { kind: 'import' };
     case 'settings':
       return { kind: 'settings' };
+    case 'today':
+      return { kind: 'today' };
+    case 'review':
+      return { kind: 'review' };
+    case 'quiz':
+      return typeof record.sessionId === 'string' &&
+        record.sessionId !== '' &&
+        typeof record.key === 'string' &&
+        record.key !== '' &&
+        (record.mode === 'quiz' || record.mode === 'review')
+        ? quizView(record.sessionId, record.key, record.mode)
+        : START_VIEW;
     default:
       return START_VIEW;
   }
 }
 
-/** 同じ画面か（半荘は、名前まで同じ）。 */
+/** 同じ画面か（半荘は名前まで、出題は半荘の名前・判断の鍵・種類まで同じ）。 */
 export function sameView(a: View, b: View): boolean {
   if (a.kind !== b.kind) return false;
-  return a.kind === 'session' && b.kind === 'session' ? a.id === b.id : true;
+  if (a.kind === 'session' && b.kind === 'session') return a.id === b.id;
+  if (a.kind === 'quiz' && b.kind === 'quiz') return a.sessionId === b.sessionId && a.key === b.key && a.mode === b.mode;
+  return true;
 }

@@ -16,6 +16,10 @@ const ORIENTATION_CHOICES: ReadonlyArray<{ value: Orientation; label: string }> 
   { value: 'horizontal', label: '横長' },
 ];
 
+/** 出題の設定の範囲（settings.rs と同じ。範囲の外は、保存側が断る）。 */
+const DAILY_COUNT_RANGE = { min: 1, max: 50 } as const;
+const DISAGREEMENT_RANGE = { min: 1, max: 50 } as const;
+
 const PROBE_IDLE = 'ボタンを押すと、ここに表示されます。迷いマークは記録しません';
 
 /** 修飾キーそのものの `KeyboardEvent.code`（単独では、割り当てにも登録にも使わない）。 */
@@ -54,6 +58,9 @@ export function SettingsPage() {
   const [saved, setSaved] = useState('');
   // 窓を探す語の編集中の文字（確定するまで設定は変えない）。
   const [keywordsDraft, setKeywordsDraft] = useState<string | null>(null);
+  // 数の欄の編集中の文字（欄の外へ出る・Enter で確定するまで設定は変えない）。
+  const [dailyDraft, setDailyDraft] = useState<string | null>(null);
+  const [percentDraft, setPercentDraft] = useState<string | null>(null);
   const startButton = useRef<HTMLButtonElement>(null);
   const listening = useRef<HTMLParagraphElement>(null);
   const wasRegistering = useRef(false);
@@ -184,6 +191,27 @@ export function SettingsPage() {
   const probeMs = input?.probe_ms ?? null;
   const helper = input?.helper ?? null;
 
+  /** 数の欄を確定する。範囲の外・数でないときは、理由を出して元の値に戻す。 */
+  const commitNumber = (
+    draft: string | null,
+    clear: () => void,
+    current: number,
+    range: { min: number; max: number },
+    name: string,
+    unit: string,
+    patch: (value: number) => Partial<Settings>,
+  ) => {
+    if (draft === null) return;
+    clear();
+    const value = Number(draft.trim());
+    if (draft.trim() === '' || !Number.isInteger(value) || value < range.min || value > range.max) {
+      setError(`${name}は ${range.min}${unit} から ${range.max}${unit} の間の整数で指定してください`);
+      setSaved('');
+      return;
+    }
+    if (value !== current) void update(patch(value));
+  };
+
   const commitKeywords = () => {
     if (keywordsDraft === null) return;
     const words = keywordsDraft
@@ -299,6 +327,84 @@ export function SettingsPage() {
               />
               迷いを記録したら音を鳴らす
             </label>
+          </div>
+
+          <div className="setting field">
+            <label htmlFor="daily-count">1日に出す数</label>
+            <input
+              id="daily-count"
+              className="input num"
+              type="number"
+              inputMode="numeric"
+              min={DAILY_COUNT_RANGE.min}
+              max={DAILY_COUNT_RANGE.max}
+              step={1}
+              value={dailyDraft ?? String(settings.daily_count)}
+              aria-describedby="daily-count-help"
+              onChange={(e) => setDailyDraft(e.target.value)}
+              onBlur={() =>
+                commitNumber(dailyDraft, () => setDailyDraft(null), settings.daily_count, DAILY_COUNT_RANGE, '1日に出す数', '', (value) => ({
+                  daily_count: value,
+                }))
+              }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+              }}
+            />
+            <p className="quiet" id="daily-count-help">
+              今日の出題に入れる問題の数です（既定は5）。
+            </p>
+          </div>
+
+          <div className="setting field">
+            <label htmlFor="disagreement-percent">大きな不一致の基準</label>
+            <div className="setting-row">
+              <input
+                id="disagreement-percent"
+                className="input num"
+                type="number"
+                inputMode="numeric"
+                min={DISAGREEMENT_RANGE.min}
+                max={DISAGREEMENT_RANGE.max}
+                step={1}
+                value={percentDraft ?? String(settings.disagreement_percent)}
+                aria-describedby="disagreement-percent-help"
+                onChange={(e) => setPercentDraft(e.target.value)}
+                onBlur={() =>
+                  commitNumber(
+                    percentDraft,
+                    () => setPercentDraft(null),
+                    settings.disagreement_percent,
+                    DISAGREEMENT_RANGE,
+                    '大きな不一致の基準',
+                    '%',
+                    (value) => ({ disagreement_percent: value }),
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
+              />
+              <span aria-hidden="true">%</span>
+            </div>
+            <p className="quiet" id="disagreement-percent-help">
+              実戦の行動の確率がこの値より低い判断を、大きな不一致として出題します。答え合わせで正解とする確率の下限にも使います（既定は5%）。
+            </p>
+          </div>
+
+          <div className="setting">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.highlight_dora}
+                aria-describedby="highlight-dora-help"
+                onChange={(e) => void update({ highlight_dora: e.target.checked })}
+              />
+              ドラを目立たせる
+            </label>
+            <p className="quiet" id="highlight-dora-help">
+              出題の画面で、ドラ表示牌が指す牌の面を黄色にします。赤五は、指される牌でもあるときだけ黄色になります（既定は切）。
+            </p>
           </div>
 
           <div className="setting">
