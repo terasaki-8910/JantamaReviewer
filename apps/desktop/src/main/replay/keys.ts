@@ -44,8 +44,8 @@ export interface ReplayActionDef {
 
 /** 操作の一覧（キーの説明に出す順。settings.rs の `ACTIONS` と同じ名前・同じ既定）。 */
 export const REPLAY_ACTIONS: readonly ReplayActionDef[] = [
-  { id: 'step_back', label: '1手戻る', note: '全員の打牌と鳴きを 1 つずつ', key: 'Comma' },
-  { id: 'step_forward', label: '1手進む', note: '全員の打牌と鳴きを 1 つずつ', key: 'Period' },
+  { id: 'step_back', label: '1手戻る', note: '全員の打牌と鳴きを 1つずつ', key: 'Comma' },
+  { id: 'step_forward', label: '1手進む', note: '全員の打牌と鳴きを 1つずつ', key: 'Period' },
   { id: 'prev_decision', label: '前の自分の判断', note: '鳴きを含む', key: 'ArrowLeft' },
   { id: 'next_decision', label: '次の自分の判断', note: '鳴きを含む', key: 'ArrowRight' },
   { id: 'prev_mismatch', label: '前の不一致', key: 'ArrowUp' },
