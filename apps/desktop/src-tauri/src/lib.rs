@@ -102,6 +102,8 @@ pub fn run() {
             import::commands::fetch_report,
             import::commands::read_report_file_text,
             import::commands::ocr_sessions,
+            import::commands::needs_ocr_reread,
+            import::commands::reread_ocr,
             import::commands::save_report,
             import::commands::read_report,
             import::commands::set_mark_link,
