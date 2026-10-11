@@ -17,18 +17,29 @@ import {
   shantenTag,
   type ImportedGame,
 } from '@jantama/engine';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 
 import type { SessionRecord } from '../../api/types';
 import { resolveMarks } from '../markCards';
+import { anyCalled, boardInfoOf } from '../study/Board';
 import { latestAnswerFor } from '../study/QuizPage';
 import { useStudy } from '../study/StudyProvider';
 import { ControlBar } from './ControlBar';
 import { REPLAY_ACTIONS } from './keys';
-import { replayNav, replayStops, sceneTags, turnLabel } from './replayModel';
+import { compactBelowHeight, replayNav, replayStops, sceneTags, turnLabel } from './replayModel';
 import { BrowseWork, SceneWork, type SceneDrafts } from './ReplayWork';
 import { useReplayKeys, type ReplayHandlers } from './useReplayKeys';
 import { useReplaySettings } from './useReplaySettings';
+
+function subscribeResize(onChange: () => void): () => void {
+  window.addEventListener('resize', onChange);
+  return () => window.removeEventListener('resize', onChange);
+}
+
+/** 窓の高さ。 */
+function useWindowHeight(): number {
+  return useSyncExternalStore(subscribeResize, () => window.innerHeight);
+}
 
 export interface ReplayScreenProps {
   session: SessionRecord;
@@ -66,7 +77,15 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   const nav = useMemo(() => replayNav(timeline, stops, g), [timeline, stops, g]);
 
   const step = timeline.steps[g];
+  const kyoku = step === undefined ? undefined : timeline.kyokus[step.kyokuPosition];
   const scene = scenes.find((item) => item.step === g) ?? null;
+
+  // 卓の外の決まり（河の段の数など）は、局の中でそろえる（手を進めても、卓の大きさが変わらないように）
+  const boards = useMemo(() => (kyoku === undefined ? [] : kyoku.steps.map((item) => item.board)), [kyoku]);
+  const info = useMemo(() => (step === undefined ? null : boardInfoOf(step.board, boards)), [step, boards]);
+  const calledSomewhere = useMemo(() => anyCalled(boards), [boards]);
+  // 窓の高さが足りないときは、卓を小さい配置にする（操作の段・卓・手牌が、1 画面に入るように）
+  const windowHeight = useWindowHeight();
   const [drafts] = useState<SceneDrafts>(() => new Map());
 
   const answered = useMemo(
@@ -89,15 +108,15 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   }, [nav, go]);
   useReplayKeys(settings.keys, handlers);
 
-  if (step === undefined) return null;
-  const kyoku = timeline.kyokus[step.kyokuPosition];
+  if (step === undefined || info === null) return null;
+  const compact = windowHeight < compactBelowHeight(info.rows, info.riichiAny);
 
   // 「次の場面へ」: いまより後ろの、次の場面（迷いでも不一致でも）。無ければ、1 手先
   const nextScene = scenes.find((item) => item.step > g);
   const afterReveal = () => go(nextScene === undefined ? g + 1 : nextScene.step);
 
   return (
-    <div className="rp">
+    <div className="rp" data-compact={compact ? '1' : undefined}>
       <header className="head qhead">
         <div className="q-main">
           <div className="q-l">
@@ -131,12 +150,21 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
         onChangeKeys={(next) => settings.update({ replay_keys: next })}
       />
       {scene === null ? (
-        <BrowseWork timeline={timeline} step={step} scenes={scenes} answered={answered} go={go} />
+        <BrowseWork
+          timeline={timeline}
+          step={step}
+          info={info}
+          anyCalled={calledSomewhere}
+          scenes={scenes}
+          answered={answered}
+          go={go}
+        />
       ) : (
         <SceneWork
           key={scene.key}
-          timeline={timeline}
           step={step}
+          info={info}
+          anyCalled={calledSomewhere}
           scene={scene}
           sessionId={session.id}
           existing={latestAnswerFor(study.answers, session.id, scene.key, 'quiz')}

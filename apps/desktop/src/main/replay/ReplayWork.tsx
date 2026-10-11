@@ -8,7 +8,7 @@ import type { ReplayScene, ReplayTimeline, TimelineStep } from '@jantama/engine'
 import { useMemo } from 'react';
 
 import type { AnswerRow } from '../../api/types';
-import { Board, Legend, anyCalled, boardInfoOf } from '../study/Board';
+import { Board, Legend, type BoardInfo } from '../study/Board';
 import { doraKinds } from '../study/dora';
 import { Hand, type HandMark } from '../study/Hand';
 import { buildHandItems } from '../study/handMarks';
@@ -25,21 +25,17 @@ const noop = () => undefined;
 interface BrowseWorkProps {
   timeline: ReplayTimeline;
   step: TimelineStep;
+  /** 卓の外の決まり（局の中でそろえた、河の段の数など）。 */
+  info: BoardInfo;
+  /** 局の中のどこかに、鳴かれた牌があるか（凡例）。 */
+  anyCalled: boolean;
   scenes: readonly ReplayScene[];
   answered: ReadonlySet<string>;
   go: (g: number) => void;
 }
 
-/** 局の中の盤面（卓の大きさを、局の中でそろえるのに使う）。 */
-function useKyokuBoards(timeline: ReplayTimeline, step: TimelineStep) {
-  const kyoku = timeline.kyokus[step.kyokuPosition];
-  return useMemo(() => (kyoku === undefined ? [step.board] : kyoku.steps.map((item) => item.board)), [kyoku, step.board]);
-}
-
-export function BrowseWork({ timeline, step, scenes, answered, go }: BrowseWorkProps) {
+export function BrowseWork({ timeline, step, info, anyCalled, scenes, answered, go }: BrowseWorkProps) {
   const study = useStudy();
-  const boards = useKyokuBoards(timeline, step);
-  const info = useMemo(() => boardInfoOf(step.board, boards), [step.board, boards]);
   const items = useMemo(() => buildHandItems(step.board, null), [step.board]);
   const dora = useMemo(() => (study.highlightDora ? doraKinds(step.board.doraMarkers) : null), [study.highlightDora, step.board]);
   // 直前の打牌を、その席の河の最後の牌に印する
@@ -49,7 +45,7 @@ export function BrowseWork({ timeline, step, scenes, answered, go }: BrowseWorkP
       <div className="work">
         <section className="board-col" aria-label="盤面と手牌" data-view="now">
           <Board info={info} step={step.board} dora={dora} latest={latest} />
-          <Legend riichi={info.riichiAny} called={anyCalled(boards)} call={false} pastView={false} latest={latest !== null} />
+          <Legend riichi={info.riichiAny} called={anyCalled} call={false} pastView={false} latest={latest !== null} />
           <Hand
             items={items}
             interactive={false}
@@ -73,8 +69,9 @@ export function BrowseWork({ timeline, step, scenes, answered, go }: BrowseWorkP
 export type SceneDrafts = Map<string, QuizDraft>;
 
 interface SceneWorkProps {
-  timeline: ReplayTimeline;
   step: TimelineStep;
+  info: BoardInfo;
+  anyCalled: boolean;
   scene: ReplayScene;
   sessionId: string;
   /** すでに答えた場面の、保存してある答え。 */
@@ -84,10 +81,8 @@ interface SceneWorkProps {
   onNext: () => void;
 }
 
-export function SceneWork({ timeline, step, scene, sessionId, existing, drafts, nextLabel, onNext }: SceneWorkProps) {
+export function SceneWork({ step, info, anyCalled, scene, sessionId, existing, drafts, nextLabel, onNext }: SceneWorkProps) {
   const study = useStudy();
-  const boards = useKyokuBoards(timeline, step);
-  const info = useMemo(() => boardInfoOf(step.board, boards), [step.board, boards]);
   const key = scene.key;
   const draft = useMemo(
     () => ({ initial: drafts.get(key) ?? null, save: (value: QuizDraft) => void drafts.set(key, value) }),
@@ -112,7 +107,7 @@ export function SceneWork({ timeline, step, scene, sessionId, existing, drafts, 
         info={info}
         board={step.board}
         past={false}
-        anyCalled={anyCalled(boards)}
+        anyCalled={anyCalled}
         nextLabel={nextLabel}
         onNext={onNext}
       />

@@ -520,6 +520,7 @@
 /* ---- キーの一覧と割り当て（操作の段のキーボードのアイコンを押す・マウスを乗せると、重なって出る） ---- */
 .keyhelp {
   position: relative;
+  flex: none;
   margin-left: auto;
 }
 
@@ -540,7 +541,7 @@
 .keypanel {
   position: fixed;
   z-index: 80;
-  width: min(420px, calc(100vw - 16px));
+  width: min(720px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   padding: var(--s3) var(--s4) var(--s3);
   background: var(--surface);
@@ -575,8 +576,11 @@
   margin: -4px -8px -4px 0;
 }
 
+/* 前・次の組を 1 行に並べる（2 列。狭いときは 1 列） */
 .kp-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--s5);
   margin: var(--s2) 0 0;
   padding: 0;
   list-style: none;
@@ -592,7 +596,7 @@
   border-top: 1px solid var(--line);
 }
 
-.kp-row:first-child {
+.kp-row:nth-child(-n + 2) {
   border-top: 0;
 }
 
@@ -681,29 +685,39 @@
   font-size: 12px;
 }
 
-/* ---- 窓が低いとき（1280×800 など）: 操作の段と卓の間を詰めて、操作の段・卓・手牌が 1 画面に入るようにする ---- */
-@media (height < 900px) {
-  .rp {
-    --chrome-h: 336px;
-  }
-
-  .rp .head {
-    padding-bottom: 8px;
-  }
-
-  .pbar {
-    gap: 6px;
-    margin-top: 10px;
-    padding-top: 8px;
-  }
-
-  .rp .work {
-    padding-top: 10px;
-  }
+/*
+  ---- 窓の高さが足りないとき（1280×800 など）: 操作の段・卓・手牌が 1 画面に入るようにする ----
+  卓が大きい配置のままでは入らない高さのとき（河の段の数で決まる。replayModel.ts の `compactBelowHeight`）、画面が
+  `.rp` に data-compact を付ける。そのとき、卓の列を 560px までにして、狭い窓のときと同じ配置にする（局・本場・残り・ドラ表示牌を
+  卓の上の 1 行にして、卓の中央は点数だけ。quiz.css の `@container board (width <= 579px)`）。牌の大きさは、窓の高さから決まる
+  （`--chrome-h` は、そのとき卓の外にあるもの: 見出し・操作の段・情報の 1 行・凡例・手牌の高さ）。見出しと操作の段の余白も、少し詰める。
+*/
+.rp[data-compact="1"] {
+  --chrome-h: 404px;
 }
 
-/* ---- 狭いとき（640px 未満） ---- */
-@media (width < 640px) {
+.rp[data-compact="1"] .head {
+  padding-bottom: 8px;
+}
+
+.rp[data-compact="1"] .pbar {
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.rp[data-compact="1"] .work {
+  padding-top: 10px;
+}
+
+.rp[data-compact="1"] .board-col {
+  justify-self: center;
+  width: 100%;
+  max-width: 560px;
+}
+
+/* ---- 狭いとき: 主の欄が 600px 未満（窓が 780px 前後までのとき。サイドバーが細い列になっても、幅の広いサイドバーのままでも） ---- */
+@container main (width < 600px) {
   .pb-steps .btn .lbl {
     position: absolute;
     width: 1px;
@@ -739,9 +753,16 @@
     justify-content: space-between;
   }
 
+  /* 局の選択と、キーの一覧のアイコンを 1 行目に、進める・戻るを 2 行目に */
   .pb-row.top {
     display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px;
+  }
+
+  .pb-row.top .pb-steps {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .jump {
@@ -770,7 +791,25 @@
   }
 
   .keyhelp {
+    grid-column: 2;
+    grid-row: 1;
     margin-left: 0;
+  }
+
+  .key-btn {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+/* キーの一覧は、窓（画面）の幅で決める（窓に重ねて出すので、主の欄の幅は関係しない） */
+@media (width < 640px) {
+  .kp-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kp-row:nth-child(2) {
+    border-top: 1px solid var(--line);
   }
 }
 
