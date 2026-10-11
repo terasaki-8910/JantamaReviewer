@@ -2765,7 +2765,7 @@ mod tests {
         let id = session_with_records(&mut store);
         assert_eq!(store.load_ocr(&id).unwrap(), None);
         let mut cache = OcrCache {
-            geometry: "center-v2-lanczos3x-variants".into(),
+            geometry: "center-v3-cyan-tight".into(),
             entries: BTreeMap::new(),
         };
         cache.entries.insert(

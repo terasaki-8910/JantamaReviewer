@@ -5,7 +5,8 @@
 //! 同じ画像は読み直さない。ウィジェット・ボタンを拾う部分・撮影・記録・補助プログラムのコードは、文字認識を使わない
 //! （文字認識のクレート `jantama-ocr` を使ってよいソースは、このファイルだけ。`tests/safety.rs` の S-3 が確かめる）。
 //!
-//! 1 枚の画像は、1 回目の画像（切り出して 3 倍にしたもの）に加えて、読み直し用の画像（コントラストを上げたもの・1.5 倍に広げたもの。
+//! 1 枚の画像は、1 回目の画像（局と残り枚数の水色の文字の位置から、局・残り枚数・自分の点数だけを切り出して拡大したもの。見つからなければ、
+//! 画面の大きさに対する割合の箱で切り出したもの。E-32）に加えて、読み直し用の画像（コントラストを上げたもの・1.5 倍に広げたもの。
 //! E-20）でも読み、すべて写しに残す。1 回目で局・残り枚数・点数が取れなければ、読み直しの最初に取れたものを使うが、
 //! その選びは、行から取り出す側（エンジンの `parseCenterText`）が決める（ここには、同じ取り出しの規則を持たない）。
 //!
@@ -39,7 +40,8 @@ pub trait LineReader {
     fn read(&self, png: &Path) -> Result<ShotReading, OcrError>;
 }
 
-/// 製品の読み取り: 専用のスレッドで動く、Windows の日本語の文字認識（画面中央の板を切り出して、3 倍にして読む。
+/// 製品の読み取り: 専用のスレッドで動く、Windows の日本語の文字認識（局と残り枚数の水色の文字の位置から、局・残り枚数・自分の点数だけを
+/// 切り出して、文字の高さをそろえて拡大して読む。見つからなければ、画面の大きさに対する割合の箱で切り出して 3 倍にして読む。
 /// 読み直し用に、コントラストを上げた画像と 1.5 倍に広げた画像も読む）。
 pub struct WindowsReader {
     worker: OcrWorker,
@@ -406,6 +408,24 @@ mod tests {
         run_job(&FakeReader::ok(), &mut job, &mut || {}).unwrap();
         assert_eq!(job.cache.geometry, GEOMETRY_ID);
         assert_eq!(job.cache.entries["marks/a.png"].retries.len(), 1);
+    }
+
+    #[test]
+    fn a_cache_from_the_second_geometry_is_read_again_with_the_tight_cutout() {
+        // v2（割合の箱で切り出して、読み直しの画像も読んだ写し）の半荘は、決まりの名前が違うので、水色の文字の位置から切り出す
+        // v3 で全部を読み直す（E-32、E-27）。読み直しは 1 回だけ（v3 で読んだ写しは、もう読み直さない）。
+        let v2 = cache(
+            "center-v2-lanczos3x-variants",
+            &[("a", entry(&["第 2 局", "个 5 0", "25000"]))],
+        );
+        assert!(needs_reread(Some(&v2)));
+        let mut job = plan_session("s", vec![shot("a")], Some(v2));
+        assert_eq!(job.todo, vec![shot("a")]);
+        assert!(job.cache.entries.is_empty(), "前の読み取りは写しに残さない");
+        run_job(&FakeReader::ok(), &mut job, &mut || {}).unwrap();
+        assert_eq!(job.cache.geometry, "center-v3-cyan-tight");
+        assert_eq!(job.cache.geometry, GEOMETRY_ID);
+        assert!(!needs_reread(Some(&job.cache)));
     }
 
     #[test]

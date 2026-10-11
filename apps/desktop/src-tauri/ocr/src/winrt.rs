@@ -22,8 +22,9 @@ use windows::Storage::Streams::{Buffer, DataReader, DataWriter};
 use windows::Storage::{FileAccessMode, StorageFile};
 
 use crate::error::OcrError;
-use crate::geometry::{center_crop, Variant, UPSCALE};
-use crate::resample::{crop_and_upscale, variant_pixels};
+use crate::geometry::{center_crop, CropRect, Variant, TIGHT_BLOCK_HEIGHT, TIGHT_PADDING, UPSCALE};
+use crate::locate::locate;
+use crate::resample::{crop_and_upscale, crop_normalize_and_pad, variant_pixels};
 
 /// 文字認識にかける言語（日本語）。
 const LANGUAGE_TAG: &str = "ja";
@@ -31,8 +32,10 @@ const LANGUAGE_TAG: &str = "ja";
 /// 画像をどう切り出して文字認識にかけるか。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Region {
-    /// 中央の板を切り出して、`UPSCALE` 倍にする。
+    /// 局と残り枚数の水色の文字の位置から、局・残り枚数・自分の点数だけを切り出して読む（E-32）。見つからなければ、`CenterBox` と同じ。
     Center,
+    /// 画面の大きさに対する割合の箱で、中央の板を切り出して、`UPSCALE` 倍にする（E-32 より前の読み方。見つからないときの代わり）。
+    CenterBox,
     /// 切り出さず、画像そのまま（試験の切り出し済みの画像・全体を読みたいとき）。
     Whole,
 }
@@ -46,13 +49,21 @@ pub struct Reading {
     pub lines: Vec<String>,
 }
 
+/// 画像 1 枚の読み取りの結果と、どこを読んだか。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Outcome {
+    /// 水色の文字の位置から決めた切り出し（画面の画素。見つからず、割合の箱や画像そのままで読んだときは `None`）。
+    pub located: Option<CropRect>,
+    pub readings: Vec<Reading>,
+}
+
 enum Request {
     Read {
         path: PathBuf,
         region: Region,
         /// true なら、読み直し用の画像（コントラストを上げたもの・1.5 倍に広げたもの）でも読む。
         variants: bool,
-        reply: Sender<Result<Vec<Reading>, OcrError>>,
+        reply: Sender<Result<Outcome, OcrError>>,
     },
 }
 
@@ -91,32 +102,43 @@ impl OcrWorker {
 
     /// 迷いマーク・評価の画面（雀魂の窓のスクリーンショット）の中央の板を読んで、行ごとの文字を返す（1 回目の画像だけ）。
     pub fn read_center_lines(&self, png: &Path) -> Result<Vec<String>, OcrError> {
-        Ok(first_lines(self.request(png, Region::Center, false)?))
+        Ok(first_lines(
+            self.request(png, Region::Center, false)?.readings,
+        ))
     }
 
     /// 切り出さずに、画像そのままを読む。切り出し・拡大が済んだ画像（試験の素材）を読むためのもの。
     pub fn read_lines_uncropped(&self, png: &Path) -> Result<Vec<String>, OcrError> {
-        Ok(first_lines(self.request(png, Region::Whole, false)?))
+        Ok(first_lines(
+            self.request(png, Region::Whole, false)?.readings,
+        ))
     }
 
-    /// 中央の板を、1 回目の画像（3 倍）と、読み直し用の画像（コントラストを上げたもの・1.5 倍に広げたもの）で読む（E-20）。
+    /// 中央の板を、1 回目の画像と、読み直し用の画像（コントラストを上げたもの・1.5 倍に広げたもの）で読む（E-20、E-32）。
+    /// 局と残り枚数の水色の文字の位置から切り出す（見つからなければ、画面の大きさに対する割合の箱）。
     /// 先頭は必ず 1 回目（`Variant::Plain`。これが読めなければ失敗）。読み直しの画像が文字認識の上限より大きくなるときなどは、
     /// その画像だけを飛ばす（返す結果に入れない）。
     pub fn read_center_variants(&self, png: &Path) -> Result<Vec<Reading>, OcrError> {
+        Ok(self.request(png, Region::Center, true)?.readings)
+    }
+
+    /// `read_center_variants` と同じ読み取りに、どこを切り出したか（水色の文字が見つからなければ `None`）を添えて返す。
+    pub fn read_center_outcome(&self, png: &Path) -> Result<Outcome, OcrError> {
         self.request(png, Region::Center, true)
+    }
+
+    /// 水色の文字を探さずに、画面の大きさに対する割合の箱で切り出して、1 回目の画像と読み直し用の画像で読む（E-32 より前の読み方）。
+    /// 読み方を比べるための道具（`examples/survey.rs`）と試験が使う。
+    pub fn read_center_variants_in_the_box(&self, png: &Path) -> Result<Vec<Reading>, OcrError> {
+        Ok(self.request(png, Region::CenterBox, true)?.readings)
     }
 
     /// 切り出さずに、画像そのままを 1 回目の画像として、読み直し用の画像も作って読む（試験の素材用）。
     pub fn read_variants_uncropped(&self, png: &Path) -> Result<Vec<Reading>, OcrError> {
-        self.request(png, Region::Whole, true)
+        Ok(self.request(png, Region::Whole, true)?.readings)
     }
 
-    fn request(
-        &self,
-        png: &Path,
-        region: Region,
-        variants: bool,
-    ) -> Result<Vec<Reading>, OcrError> {
+    fn request(&self, png: &Path, region: Region, variants: bool) -> Result<Outcome, OcrError> {
         let (reply, answer) = mpsc::channel();
         let tx = self
             .tx
@@ -206,7 +228,7 @@ fn read_one(
     path: &Path,
     region: Region,
     variants: bool,
-) -> Result<Vec<Reading>, OcrError> {
+) -> Result<Outcome, OcrError> {
     let base = decode_base(path, region)?;
     let plain = bitmap_of(path, &base.pixels, base.width, base.height)?;
     let mut readings = vec![Reading {
@@ -224,7 +246,10 @@ fn read_one(
             }
         }
     }
-    Ok(readings)
+    Ok(Outcome {
+        located: base.located,
+        readings,
+    })
 }
 
 /// 行を詰めた BGRA の並びから、文字認識にかける `SoftwareBitmap` を作る（失敗は、画像を読めなかった失敗にする）。
@@ -267,10 +292,14 @@ struct Base {
     pixels: Vec<u8>,
     width: u32,
     height: u32,
+    /// 水色の文字の位置から決めた切り出し（画面の画素）。割合の箱や画像そのままのときは `None`。
+    located: Option<CropRect>,
 }
 
 /// 画像のファイルを読んで、1 回目の画像の画素にする。
-/// `Region::Center` なら、中央の板を切り出して `UPSCALE` 倍にした画像（WinRT で読み、切り出しと拡大は `resample`）。
+/// `Region::Center` なら、局と残り枚数の水色の文字の位置から、局・残り枚数・自分の点数だけを切り出して、文字の高さをそろえて拡大・縮小し、
+/// まわりに余白を足した画像（E-32。WinRT で読み、切り出し・拡大は `resample`）。水色の文字が見つからなければ、`CenterBox` と同じ。
+/// `Region::CenterBox` なら、割合の箱で中央の板を切り出して `UPSCALE` 倍にした画像。
 /// `Region::Whole` なら、画像そのまま。
 fn decode_base(path: &Path, region: Region) -> Result<Base, OcrError> {
     let shown = path.display().to_string();
@@ -287,7 +316,27 @@ fn decode_base(path: &Path, region: Region) -> Result<Base, OcrError> {
             pixels,
             width,
             height,
+            located: None,
         });
+    }
+    if region == Region::Center {
+        if let Some(panel) = locate(&pixels, width, height) {
+            let (tight, tight_width, tight_height) = crop_normalize_and_pad(
+                &pixels,
+                width,
+                height,
+                panel.crop,
+                panel.block.height(),
+                TIGHT_BLOCK_HEIGHT,
+                TIGHT_PADDING,
+            );
+            return Ok(Base {
+                pixels: tight,
+                width: tight_width,
+                height: tight_height,
+                located: Some(panel.crop),
+            });
+        }
     }
     let crop = center_crop(width, height)
         .ok_or_else(|| decode_err(format!("画像が小さすぎます（{width}×{height}）")))?;
@@ -296,6 +345,7 @@ fn decode_base(path: &Path, region: Region) -> Result<Base, OcrError> {
         pixels: crop_and_upscale(&pixels, width, height, crop, UPSCALE),
         width: big_width,
         height: big_height,
+        located: None,
     })
 }
 
@@ -449,7 +499,7 @@ mod tests {
         let path = dir.path().join("screen.png");
         write_png(&path, width, height, &paint);
 
-        let bitmap = decode(&path, Region::Center).unwrap();
+        let bitmap = decode(&path, Region::CenterBox).unwrap();
         let (w, h, bytes) = pixels(&bitmap);
         assert_eq!((w, h), crop.scaled(UPSCALE), "切り出して 3 倍の大きさ");
         let px = |x: u32, y: u32| at(&bytes, w, x, y);

@@ -138,6 +138,63 @@ pub fn crop_and_upscale(
     )
 }
 
+/// 4 チャンネル 8 ビットの画像（`width`×`height`）の `crop` の部分を、中の水色の文字のまとまりの高さ `block_height` が
+/// `target_block_height` 画素になる倍率で拡大・縮小（Lanczos）して、まわりに `padding` 画素の余白を足した画像を返す（E-32）。
+/// 余白の色は、拡大・縮小した画像の左上の画素。返すのは (画素, 幅, 高さ)。
+pub fn crop_normalize_and_pad(
+    src: &[u8],
+    width: u32,
+    height: u32,
+    crop: CropRect,
+    block_height: u32,
+    target_block_height: u32,
+    padding: u32,
+) -> (Vec<u8>, u32, u32) {
+    assert!(block_height > 0, "文字の高さが 0");
+    let width_usize = width as usize;
+    assert_eq!(
+        src.len(),
+        width_usize * height as usize * CHANNELS,
+        "画素の数が大きさと合わない"
+    );
+    assert!(
+        crop.x + crop.width <= width && crop.y + crop.height <= height,
+        "切り出しが画像の外にはみ出す"
+    );
+    let (cx, cy) = (crop.x as usize, crop.y as usize);
+    let (cw, ch) = (crop.width as usize, crop.height as usize);
+    let mut cropped = vec![0u8; cw * ch * CHANNELS];
+    for y in 0..ch {
+        let from = ((cy + y) * width_usize + cx) * CHANNELS;
+        cropped[y * cw * CHANNELS..(y + 1) * cw * CHANNELS]
+            .copy_from_slice(&src[from..from + cw * CHANNELS]);
+    }
+    // 四捨五入した整数の大きさ（Pillow の `round(size * target / block)` と同じ）。
+    let scaled = |size: u32| -> u32 {
+        let numerator = u64::from(size) * u64::from(target_block_height);
+        let denominator = u64::from(block_height);
+        ((numerator * 2 + denominator) / (denominator * 2)).max(1) as u32
+    };
+    let (sw, sh) = (scaled(crop.width), scaled(crop.height));
+    let resized = resize(&cropped, crop.width, crop.height, sw, sh);
+    if padding == 0 {
+        return (resized, sw, sh);
+    }
+    let (out_width, out_height) = (sw + 2 * padding, sh + 2 * padding);
+    let corner = [resized[0], resized[1], resized[2], resized[3]];
+    let mut out = Vec::with_capacity(out_width as usize * out_height as usize * CHANNELS);
+    for _ in 0..out_width as usize * out_height as usize {
+        out.extend_from_slice(&corner);
+    }
+    for y in 0..sh as usize {
+        let to = ((y + padding as usize) * out_width as usize + padding as usize) * CHANNELS;
+        let from = y * sw as usize * CHANNELS;
+        out[to..to + sw as usize * CHANNELS]
+            .copy_from_slice(&resized[from..from + sw as usize * CHANNELS]);
+    }
+    (out, out_width, out_height)
+}
+
 /// 4 チャンネル 8 ビットの画像（`width`×`height`）を、`out_width`×`out_height` に Lanczos で拡大・縮小した画像を返す
 /// （Pillow の `resize(..., Image.LANCZOS)` と同じ計算。先に横、次に縦。間は 8 ビットに丸める）。
 /// 横（縦）の大きさが変わらないときは、その向きは計算しない（Pillow と同じ）。
@@ -518,5 +575,66 @@ mod tests {
             "下端は黄: {:?}",
             px(ow / 2, oh - 1)
         );
+    }
+    /// 画素が (x, y) で決まる、`width`×`height` の BGRA の画像。
+    fn gradient(width: u32, height: u32) -> Vec<u8> {
+        let mut pixels = Vec::new();
+        for y in 0..height {
+            for x in 0..width {
+                pixels.extend_from_slice(&[(x * 3 % 256) as u8, (y * 5 % 256) as u8, 77, 255]);
+            }
+        }
+        pixels
+    }
+
+    #[test]
+    fn the_tight_cutout_is_scaled_so_that_the_block_gets_the_target_height_and_padded() {
+        // 200×150 の画像の (20, 30)–(80, 100)（幅 60・高さ 70）を切り出す。中の文字のまとまりの高さが 35 画素 → 70 にする（2 倍）。
+        let (width, height) = (200u32, 150u32);
+        let source = gradient(width, height);
+        let crop = CropRect {
+            x: 20,
+            y: 30,
+            width: 60,
+            height: 70,
+        };
+        let (out, ow, oh) = crop_normalize_and_pad(&source, width, height, crop, 35, 70, 10);
+        assert_eq!((ow, oh), (60 * 2 + 20, 70 * 2 + 20));
+        assert_eq!(out.len(), (ow * oh * 4) as usize);
+        // 中は、切り出しを 2 倍にした画像（`crop_and_upscale` と同じ画素）。
+        let inner = crop_and_upscale(&source, width, height, crop, 2);
+        for y in 0..140usize {
+            let from = y * 120 * 4;
+            let to = ((y + 10) * ow as usize + 10) * 4;
+            assert_eq!(out[to..to + 120 * 4], inner[from..from + 120 * 4], "行 {y}");
+        }
+        // 余白の色は、拡大した画像の左上の画素。四隅も、余白の真ん中も同じ色。
+        let corner = [inner[0], inner[1], inner[2], inner[3]];
+        for (x, y) in [
+            (0usize, 0usize),
+            (ow as usize - 1, oh as usize - 1),
+            (5, 80),
+        ] {
+            let i = (y * ow as usize + x) * 4;
+            assert_eq!(out[i..i + 4], corner, "({x}, {y})");
+        }
+    }
+
+    #[test]
+    fn the_scaled_size_rounds_to_the_nearest_pixel_and_zero_padding_adds_nothing() {
+        let source = gradient(100, 100);
+        let crop = CropRect {
+            x: 0,
+            y: 0,
+            width: 33,
+            height: 41,
+        };
+        // 高さ 46 の文字を 100 にする: 33·100/46 = 71.7 → 72、41·100/46 = 89.1 → 89。
+        let (out, w, h) = crop_normalize_and_pad(&source, 100, 100, crop, 46, 100, 0);
+        assert_eq!((w, h), (72, 89));
+        assert_eq!(out.len(), 72 * 89 * 4);
+        // 縮小もできる（高さ 200 の文字を 100 に: 半分）。
+        let (_, w, h) = crop_normalize_and_pad(&source, 100, 100, crop, 200, 100, 4);
+        assert_eq!((w, h), (17 + 8, 21 + 8));
     }
 }
