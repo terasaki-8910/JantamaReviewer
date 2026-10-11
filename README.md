@@ -1,150 +1,154 @@
-<div align="right">
+# JantamaReviewer
 
-[![English](https://img.shields.io/badge/lang-English-2b7489?style=flat-square)](./README.en.md)
+雀魂の四人麻雀（半荘）を、AI（Mortal）の答えを見る前に自分の答えと理由を確定させてから検討するための、個人用の Windows アプリです。
 
-</div>
+対局中は、小さなウィジェットで「迷った」瞬間と、局ごとの出来（〇△✕）を記録します。対局のあとは、mjai.ekyu.moe の検討結果を取り込み、記録と結びつけて見直します。今できるのは、ここまでです。AI の答えを隠したまま自分の答えを書く出題と、解き直しは、作っているところです（[作っているもの](#作っているもの)）。
 
-# claude-pipeline-template
+## できること
 
-Claude Code で **1 つのプロジェクト**を、ざっくりした案からゲート付き・テスト済みの
-成果物まで進めるための **GitHub テンプレートリポジトリ**。複数プロジェクトは別リポジトリ
-として並列に走らせるだけでよい（共有状態なし）。Ralph 式の反復は build ステージの内部に
-だけ、テストで束ねた有界ループとして使う（無人の朝までグラインドではない）。
+画面の写真は、試験用のデータで撮っています。雀魂の画面は、プレイヤー名をぼかしたものだけを使っています。検討結果は、プレイヤー名を A〜D に置き換えた固定データです。撮り方は `scripts/readme-shots.mjs` にあります。
 
-## ファイル構成
-- `pipeline.yaml`  — 宣言的な仕様（単一の真実）。run.sh と同期を保つこと。
-- `scripts/run.sh` — POSIX ドライバ本体：段階を進め、人間ゲートで通知して停止。
-- `scripts/gates.sh` — 機械ゲート（テスト / lint / ui）。プロジェクトごとに調整。
-- `prompts/0X-*.md` — 各段階の「契約」。
-- `CLAUDE.md`      — プロジェクト記憶（グローバルの UI ルールを取り込む）。
-- `.claude/settings.json` — スコープ付き権限（安全性の項参照）。素の skip-permissions は使わない。
-- `Makefile`       — 任意の短縮（`make plan`, `make build`, `make auto` …）。
+### 対局中のウィジェット
 
-## マシン全体の一度きり設定（このリポジトリ外）
-1. git の co-author 行を全プロジェクトで止める：
-   `~/.claude/settings.json` → `{ "includeCoAuthoredBy": false }`
-2. 全プロジェクト共通の UI 方針：
-   `docs/ui-rules.starter.md` を `~/.claude/rules/ui.md` にコピーして継続的に洗練する。
-   `~/.claude/CLAUDE.md` と `~/.claude/rules/` は全プロジェクトで読み込まれる。フロントエンドの
-   glob にスコープすれば UI 作業時のみ読み込まれる（rules ディレクトリのドキュメント参照）。
+<p>
+  <img src="docs/images/widget-vertical.png" alt="縦長のウィジェット。記録中、次は4局目、〇△✕のボタン、迷い4、取り消しが並ぶ" width="114">
+  <img src="docs/images/widget-horizontal.png" alt="横長のウィジェット。同じ内容が横に並ぶ" width="510">
+</p>
 
-## プロジェクトごとの使い方
-1. GitHub でこのリポジトリを Template repository に設定（Settings → Template repository）。
-2. 新規プロジェクトごとに Use this template → 新リポジトリ → clone。
-3. `CLAUDE.md` に**プロジェクト名と一行の目的だけ**手で記入（test/lint コマンド欄は空でよい
-   ——intake がスタック確定後に埋め、あなたが確認する）。生成物の言語は `Language` 欄（既定=
-   英語、会話言語とは別）で指定。UI があるなら `touch state/has_ui`。
-4. パイプライン実行：`sh scripts/run.sh all`（段階ごとにも：`… intake` など）。**丸ごと無人で
-   回すなら `sh scripts/run.sh auto`**（下記「無人実行」）。
-   intake は**案内型**：一行のざっくり指示から始め、Claude が各論点で選択肢を出し、あなたは
-   選ぶだけ（重い判断が先・細部は後）。合わなければ自分で指定も可。
-5. intake の最後に**プロジェクト別の道具提案**（MCP/プラグイン/スキル）が出る。承認すると
-   `state/TOOLING.md`（提案書）と `state/init-tools.sh`（導入コマンド）が生成される。入れる場合は
-   中身を確認し `sh state/init-tools.sh` を**自分で**実行する（Claude は自動導入しない）。intake は
-   **プロジェクト固有の .gitignore 追加**も提案する（大きな fixture・生成物を build の `git add -A`
-   がコミットしないように）。
-6. （任意）`sh scripts/run.sh slim` — このプロジェクトの git から**パイプライン機構**（`scripts/`,
-   `prompts/`, `pipeline.yaml`, `Makefile`, `docs/ui-rules.starter.md`）を untrack + gitignore し、
-   **git に成果物だけ**を残す（機構はディスクに残り実行可）。仕上げに `git commit`。※テンプレート
-   本体では拒否される（Use this template で配布するため全追跡が必須）。
+雀魂の窓の横に置く小さな窓です。常に手前に出ますが、クリックしても雀魂からフォーカスを奪いません。位置は覚えます。
 
-## 段階（ゲート）
-0 intake（人間・1回：仕様確定＋プロジェクト別の道具提案 → `TOOLING.md` / `init-tools.sh`）／
-1 criteria（人間）／2 design_gate（UI のみ・人間・1回）／
-3 plan（目視）／4 build（機械ゲート・worktree・既定は逐次）／
-5 feature_accept（機械＋軽い人間・ローカルマージ）／6 integration_accept（機械＋人間・1回）
+- 迷ったら、割り当てたボタン（既定はマウスのサイドボタン「戻る」。設定で、ほかのマウスのボタンやキーにも変えられます）を押します。その時刻と雀魂の窓のスクリーンショットを保存します。ウィジェットの「迷い」ボタンでも同じです。
+- 局が終わったら、〇△✕を押して、その局の出来を付けます。これも画面を保存します。「取り消し」で、最後の記録を 1 つ取り消せます。
+- 縦長（既定）と横長があり、右クリックのメニューで切り替えます。記録中かどうか、この半荘の迷いの数、次の評価が何局目になるかが出ます。
+- 雀魂の窓は、題名に「雀魂」か「Mahjong Soul」を含む窓を探して撮ります。見つからないときは、画面全体を保存します。
+- 雀魂のクライアントが管理者の権限で動いていると、その窓が前面にある間、普通の権限のアプリにはマウスのボタンが届きません。そこで、ボタンを拾う部分だけを、管理者で動く小さな補助プログラム（`jantama-helper.exe`）に分けています。設定ページで最初の 1 回だけ Windows の確認を許可すると、以後は確認なしでアプリと一緒に起動します。補助プログラムは入力を本体に知らせるだけで、画面もネットもファイルも扱いません。補助プログラムを設定していなくても、管理者ではない窓の上なら、本体だけで動きます。
 
-## 進捗確認・復旧
-- `sh scripts/run.sh status` — 完了したステージ（`[x]`）と、**次に進むコマンド**を表示。各
-  ステージは人間ゲートを通った時点で `state/done/<stage>` に記録される（UI 無しなら design は
-  `[-] n/a`）。「どこまで終わって、次に何を打てばいいか」が一目で分かる。
-- ゲート失敗時は**その場で修復メニュー**:`1) auto`（直るまで自動修復）/ `2) hybrid`〔既定・Enter・
-  数回で人間へ〕/ `3) stop`（**対話 Claude をエラー付きで起動**して自分で直す→`/exit` 後に再判定）。
-  auto/hybrid は失敗出力をエージェントに渡して直させる（盲目リトライでなく実デバッグ）。無進捗で自動
-  停止、テストを弱める/消すのは禁止。
-- 完了（DONE）時に **NEXT STEPS** を出力:設定すべき env/シークレット（SPEC から抽出）・外部ツール・
-  使い方（README 参照）・integration で skip された未検証テストの回し方。
-- `sh scripts/run.sh reset` — **失敗からの復旧**。build の worktree・`feature/*` ブランチ・
-  チェックポイントを消し、仕様/基準/計画（SPEC・ACCEPTANCE・PLAN・tests・gates）は残す。→
-  `from build` で作り直せる。
+### 検討結果の取り込み
 
-## 無人実行：`sh scripts/run.sh auto`（= `make auto`）
-intake **だけ**は今まで通り対話（仕様はあなたの判断点なので Q&A と承認をそのまま残す）。
-**承認した瞬間から先は一切の入力なし**で integration まで走る。席を立ってよい。
+![検討結果を取り込むページ。コピーした牌譜リンクを見つけました、と出ている](docs/images/import-link.png)
 
-- **人間ゲートは全て自動 y**：criteria 承認 / design 承認 / plan の Enter 待ち /
-  feature ごとのマージ確認 / 最終スモークテスト確認。どのゲートを飛ばしたかは
-  `>>> [auto] … -- auto-approved` としてログに残る。
-- **ゲート失敗時は自動で `2) hybrid`**：失敗出力をエージェントに渡して最大 `REPAIR_ITERS`
-  回（既定 4）修復を試み、無進捗なら打ち切る。**あなたに聞き返さない**。
-- **直らなかった feature はスキップして続行**（＝止まらない）。その feature は
-  `state/BLOCKED.txt` に記録され、**main にマージされない**。緑になった feature だけが
-  `--no-ff` でローカルマージされる（**push は一切しない**）。
-- **最後に AUTO RUN SUMMARY** を出力：スキップされた feature、原因ログの場所、再開コマンド。
-- **終了コード**：`0` = 全部マージ＋受理／`2` = 完走したがスキップあり／`1` = 途中で停止。
-- **緩めないもの**：機械ゲート（テスト/lint/ui）は通常通り。権限も `PERMISSION_MODE`
-  （既定 acceptEdits）と settings.json の deny のまま——`--dangerously-skip-permissions` は
-  使わない。道具（MCP/plugin/skill）の自動導入もしない。
-- **無限ループ防止**：同じ wave が 2 連続で計画され何もマージされなければ停止する
-  （スキップした feature を planner が再提示し続けるケース）。
-- intake 済み（`state/done/intake` あり）なら **criteria から**無人再開する。
-- 任意のステージにも付けられる：`AUTO=1 sh scripts/run.sh from build`。
+![取り込み完了の表示。判断70、大きな不一致5、迷い6を推定で局面に結びつけた、と出ている](docs/images/import-done.png)
 
-失敗した feature を直すときは**有人**に戻すのが速い：`sh scripts/run.sh from build`
-（修復メニューが出るので `3) stop` で対話 Claude を開ける）。
+雀魂で牌譜を共有（コピー）してからアプリの窓に戻ると、クリップボードの牌譜リンクを見つけて、「この半荘を取り込みますか」と案内します。クリップボードは、文字だけを読みます。「mjai で検討する」を押すと、アプリの中の小さな窓で mjai.ekyu.moe が開き、リンクが URL 欄に入ります。Submit と Cloudflare の確認は、自分で押します。結果が出ると窓は閉じて、結果の JSON を取り込みます。窓が使えないときは、結果の URL を貼るか、JSON ファイルを開いても取り込めます。取り込んだ時点の結果を写しとして保存するので、サイト側の結果が消えても残ります。
 
-## 任意コマンド：先行事例調査（build 前）
-`sh scripts/run.sh survey` — 一から作る前に、似た既存プロジェクトを**実検索**して提示（記憶
-からの列挙は禁止＝幻覚回避）。`all` には含まない。選択は「一から作る（既定）／既存を base に
-採用」。base 採用時は `state/BASE.md` に記録するがコードは複製しない——採用しても通常の
-criteria/build ゲートを通し、ライセンスも自分で満たす（"存在するだけ"では信用しない）。
-**要件**：WebSearch の有効化が必要（現状 `.claude/settings.json` は WebFetch を deny）。
+取り込みのときに、迷いと評価のスクリーンショットから、画面中央の局・残りの牌の数・自分の点数を、Windows の日本語 OCR で読み取ります。読んだ値から、記録がどの半荘のどの局のどの判断に当たるかを決めます。迷いは、いちばん合う判断を「推定」として結びつけ、近い判断を「ほかの候補」に出します。読めないときは、手で選びます。AI の候補や確率は、取り込みの画面には出ません。
 
-## 任意コマンド：自動化提案（build 後）
-`sh scripts/run.sh recommend` — **完成したコード**を解析し、Hooks/MCP/subagent/skill を**提案**
-（実装はせず `state/RECOMMENDATIONS.md` に出力、あなたが採否を決める）。`claude-code-setup`
-プラグインがあればその `automation-recommender` スキルを使い、無ければ内蔵で代替。**DONE で自動
-実行**される（`RECOMMEND=0` で無効化）。コードが無いと意味が無いので intake ではなく完成後。
+### 半荘の一覧
 
-## モデル
-仕様・基準 = Opus、design・build = Sonnet。段階ごとに環境変数で指定
-（`MODEL_BUILD=sonnet` など）。`opus-plan` は対話モードでありヘッドレスのモデル文字列では
-ないので、ヘッドレスの plan では `MODEL_PLAN` は実在モデルのまま。Fable は**手動エスカレー
-ションのみ**（ブロッカーを `state/BLOCKED-*.md` に書いて手で上げる）。一部の Fable クエリは
-Opus に迂回し可用性・セーフガードの注意もあるため、自動化はしない。
+<p>
+  <img src="docs/images/sessions-list.png" alt="サイドバーの半荘の一覧。検索欄と段階の絞り込み、日付ごとの行。行には開始時刻、段階と Rating、迷いの数が出る" width="248">
+</p>
 
-## 安全性（重要）
-- 各機能は隔離された `git worktree` でビルドする。この隔離が安全境界。
-- `.claude/settings.json` はスコープ付き許可リストを与え、`rm -rf` と WebFetch を deny する。
-  本番マシンで `--dangerously-skip-permissions` を使わないこと。使う場合も worktree /
-  サンドボックス内に限定する。
-- **push は機械的にはブロックしていない**（deny リストに `Bash(git push:*)` は入っていない）。
-  抑止は `CLAUDE.md` の指示レベル＝「明示的に頼まれない限り push しない」だけ。ハードな
-  ガードが欲しければ deny に `"Bash(git push:*)"` を戻す（リポジトリを追跡させたくない場合は
-  gitignore 済みの `.claude/settings.local.json` に書く）。
-- パイプライン自身は push しない — `run.sh` の全ステージはローカル git で完結する
-  （`auto` の自動マージもローカル `--no-ff` のみ）。
+![半荘を2件選んで削除する確認。記録とスクショも消えること、アプリを閉じるまでは元に戻せることが書いてある](docs/images/sessions-delete.png)
 
-## claude の起動（移植可能・全プロジェクト共通）
-run.sh は文書化された安定形で claude を呼ぶ。マシン依存の調整は不要:
-- 対話（intake）: `claude "<プロンプト>"` — REPL を開き、それを最初のメッセージとして送る。
-- ヘッドレス（criteria/plan/build 等）: `claude -p "<プロンプト>"`。
-権限は `.claude/settings.json` のスコープ付き許可リストで統一。将来 CLI がこの中核フラグを
-変えた時だけ、`claude_interactive` / `claude_run` の1箇所を直す（マシンごとではなくテンプレ
-1箇所の修正）。`--model` は段階別に環境変数で渡す。
+左のサイドバーに、半荘を日付ごと（本日・昨日・日付）に新しい順で並べます。各行に、開始時刻、段階と Rating、迷いの数が出ます。段階の印は、卓の緑 1 色の濃さで表します（S・A・B は + と − で濃さが変わり、C 以下は線だけです）。結果を取り込む前の半荘は、「取り込み前」と出ます。
 
-## 実行の環境変数（見ながら回す / コスト制御）
-- `INTERACTIVE=1` — criteria/design/plan を**ヘッドレスでなく Claude Code の TUI** で開く。
-  進捗が見え、通知が来て、途中で指示を変えられ、`/exit` で次段へ進む。既定 0 はヘッドレス
-  （無人）。**intake は常に TUI、build は常にヘッドレス**（機能ごとに worktree で回すため）。
-  例：`INTERACTIVE=1 sh scripts/run.sh from plan`
-- `REPAIR_ITERS`（既定 4）/ `REPAIR_HARD_CAP`（既定 12）— ゲート失敗時の自動修復の試行上限
-  （hybrid は REPAIR_ITERS 回で人間へ、絶対上限は HARD_CAP）。各試行は有料実行。
-- `PARALLEL=1` — build を並列化（既定は逐次＝コストと停止性で安全）。
-- `AUTO=1` — **無人モード**（`run.sh auto` が intake の後に自動で立てるフラグ）。人間ゲートを
-  全て自動承認し、修復メニューは 2) hybrid 固定、緑にならない feature はスキップして続行。
-  単体のステージにも付けられる：`AUTO=1 sh scripts/run.sh from criteria`。
-- `PERMISSION_MODE`（既定 acceptEdits）— ヘッドレスの権限モード。
-- `MODEL_*`（INTAKE/CRITERIA/DESIGN/PLAN/BUILD）— 段階別モデル。
-- 入力待ちの通知：人間ゲート（承認・plan の Enter 待ち）で macOS 通知を鳴らす。**ターミナルが
-  最前面の時は抑制**（見ているので不要）。常に鳴らすなら `NOTIFY_ALWAYS=1`。
+- 検索欄では、日付（10/9、10月9日、昨日 など）、時刻、卓（玉の間 など）、段階、Rating、「取り込み前」の文字で探せます。語を空白で区切ると、すべてに当たる半荘だけが残ります。「段階」では、A 以下・B 以下・C 以下に絞れます。絞っている間は、件数と「解除」が出ます。
+- 削除は、行の「…」から 1 件ずつ、一覧の上の「選択」から複数をまとめてできます。消す前に確認を出し、消したあとは 8 秒間「元に戻す」の通知が出ます（Ctrl+Z でも戻せます）。消した半荘はアプリを閉じるまで戻せて、閉じたときに半荘のフォルダが Windows のごみ箱に移ります。
+
+### 半荘の画面
+
+![半荘の画面。見出しに日時と卓と段階とRating、その下に迷いのカードが6枚並ぶ](docs/images/hanchan-cards.png)
+
+![局の評価の表。局ごとの結果、点の増減、自分の〇△✕、AI基準の段階、MAKAの入力欄が並ぶ](docs/images/hanchan-table.png)
+
+![ダークテーマの半荘の画面](docs/images/hanchan-dark.png)
+
+見出しに、日時・卓・段階・Rating（Mortal の Rating）が出ます。「迷い」の欄には、迷いマークのカードが並びます。カードは、スクリーンショット（押すと大きく表示します）、局・本場・巡目と迷いの種類、スクリーンショットから読んだ値、結びつけた判断を持ちます。「推定」で結びついたカードは、「選び直す」や「ほかの候補」で付け替えられます。AI の候補や確率は出しません。
+
+「局の評価」の表には、局ごとの結果・点の増減・自分の〇△✕・AI 基準の段階（Mortal の Rating から付けた S+〜E）・MAKA（もう 1 つの検討 AI）の評価（任意で手入力）が並びます。自分の評価は、表から付け直せます。AI 基準と大きく食い違う局には旗が付き、結果が悪かった局を低く付けていないかを見直せます。付け直しや選び直しは、Ctrl+Z で取り消せます。テーマは、ライトとダークを、サイドバーの下のボタンで切り替えます。
+
+### 設定
+
+![設定ページ。迷いマークのボタン、テスト、補助プログラム、ウィジェットの形、音、データの保存先、雀魂の窓を探す語が並ぶ](docs/images/settings.png)
+
+迷いマークのボタンの登録（押したマウスのボタンやキーを、そのまま覚えます）とテスト、管理者の補助プログラムの設定と解除、ウィジェットの形、音、データの保存先、雀魂の窓を探す語を決めます。変えるとその場で反映して保存します（保存ボタンはありません）。保存先の既定は `%USERPROFILE%\JantamaReviewerData` です。写真は、補助プログラムが動いているときの表示で、保存先は例のパスに置き換えています。
+
+## 作っているもの
+
+- 出題: AI の答えを隠したまま、自分の答えと理由を書いてから答え合わせをします。今日の出題には、迷いを結びつけた局面と、AI と大きく違った局面を出します。
+- 解き直し: 間隔を空けて（1・3・7・14・30・60 日）、保存した局面を出し直します。
+- 半荘を通して見る画面: 卓の配置で半荘を再生し、迷いの場面や大きな不一致へ飛びます。
+- 検索の重ね表示: 半荘と問題を、日付・卓・局などで探します。
+- ログ: 答え合わせをした局面の一覧です。
+- 週の集計: 差の原因と局面の種類の件数、局の自己評価と AI 基準のずれ、成績（手入力）を見ます。
+
+## 雀魂の規約について
+
+雀魂の規約に触れないよう、次の線引きを守って作っています。これは作者が引いた線引きで、運営者の承認を受けたものではありません。
+
+- 対局中に、ゲームの画面やデータを機械で読み取りません。スクリーンショットは保存するだけです。画像の文字認識（局・残りの牌・点数の読み取り）は、対局後の取り込みのときにしか行いません。
+- ゲームの中でスクリプトや拡張機能を動かしません。ゲームの通信を中継せず、ゲームのプロセスにも触れません。
+- 対局中に、画面や情報を外部（人や AI）に送りません。
+- 対局中に動くのはウィジェットだけです。ウィジェットは、ユーザーの操作（マウスのボタン、クリック）を受けたときに、画面の保存と記録の追記だけを行います。
+- 牌譜リンクを mjai.ekyu.moe に渡すのは、対局後にユーザー自身が行います。Submit も Cloudflare の確認も、自分で押します。アプリが自動で送ることはありません。
+- アプリ自身が行う通信は、mjai.ekyu.moe の結果の JSON の取得だけです。mjai の小さな窓は、サイトを開いて見せるだけで、押すのはユーザーです。
+
+このうち、ゲームのプロセスに触れないこと、雀魂のドメインと通信しないこと、対局中に画面を読まないこと、ウィジェットの操作で外へ送らないことは、ソースの静的検査と単体テスト（`apps/desktop/src-tauri/tests/safety.rs` など）で確かめています。基準は `ACCEPTANCE.md` の「安全」の項にあります。
+
+## 動く環境
+
+- Windows 10 / 11（開発と確認は Windows 11 で行っています）
+- Microsoft Edge WebView2 ランタイム（画面の表示に使います）
+- Windows の日本語の文字認識（OCR）。取り込みのとき、スクリーンショットから局と点数を読むのに使います。入っていなくても取り込みはできますが、迷いの結びつけを、すべて手で選ぶことになります。
+
+## 入れ方と作り方
+
+インストーラーはありません。ソースから作ります。必要なものは次のとおりです。
+
+- Node.js（動作確認は v25.2.1）と pnpm 11（`packageManager` は `pnpm@11.9.0`）
+- Rust 1.90 以上（Windows では MSVC のツールチェーン。Visual Studio の C++ ビルドツールが要ります）
+- Microsoft Edge WebView2 ランタイム
+
+```powershell
+git clone https://github.com/terasaki-8910/JantamaReviewer.git
+cd JantamaReviewer
+pnpm install
+pnpm --filter @jantama/desktop tauri build --no-bundle
+```
+
+`apps\desktop\src-tauri\target\release\` に、本体の `jantama-reviewer.exe` と、管理者の補助プログラムの `jantama-helper.exe` ができます。2 つは同じフォルダに置いておきます。`jantama-reviewer.exe` を起動すると、ウィジェットが出ます。検討画面は、ウィジェットを右クリックして「検討画面を開く」か、タスクトレイのアイコンから開きます。
+
+雀魂が管理者の権限で動いている場合は、設定ページの「管理者の補助プログラムを設定する」を押して、Windows の確認で「はい」を選びます。最初の 1 回だけです。補助プログラムは Program Files に写され、確認なしで起動するタスクが登録されます。「設定を解除する」を押すと、その写しとタスクが消えます。
+
+## 使い方
+
+1. 対局中: 迷ったら、割り当てたボタンを押します。局が終わったら、ウィジェットで〇△✕を付けます。
+2. 対局のあと: 雀魂で牌譜を共有（コピー）して、アプリの窓に戻ります。「この半荘を取り込みますか」で「取り込む」を押し、「mjai で検討する」で開く小さな窓で Submit を押します。mjai の設定は、サイトの既定のまま（Mortal 4.1b balanced・温度は既定）にします。毎回同じ設定にすると、結果を比べられます。
+3. 取り込みが終わったら、半荘の画面を開きます。迷いのカードの結びつけを確かめ（違っていたら選び直します）、局の評価の表で、自分の〇△✕と AI 基準を見比べます。
+
+データは、半荘ごとのフォルダに保存します（既定は `%USERPROFILE%\JantamaReviewerData\games\<開始時刻>\`）。ウィジェットの記録（`events.jsonl`。追記式）、迷いと評価のスクリーンショット（`marks\`・`ratings\`）、取り込んだ結果（`report.json`）、文字認識の写し（`ocr.json`）、結びつけ（`links.json`）が入ります。保存先は、Git のリポジトリの外に限ります。
+
+## 開発
+
+構成は、Tauri v2 のデスクトップアプリ（`apps/desktop`。画面は React と TypeScript、`apps/desktop/src-tauri` は Rust の本体・`input`・`helper`・`ocr`）と、牌譜の再生や評価の計算を受け持つ TypeScript の `packages/engine` です。
+
+```powershell
+pnpm install          # 依存の取得
+pnpm test             # 全 vitest と cargo test --workspace
+pnpm lint             # eslint・stylelint・tsc・cargo clippy・cargo fmt
+pnpm dev              # tauri dev（先に pnpm build:helper で補助プログラムを作っておく）
+pnpm build:debug      # デバッグビルド（本体と補助プログラム）
+```
+
+- 実機の入力を通す手動の試験は、`pnpm test:hook`（本物のフックに入力を注入）と `pnpm test:task`（本物のタスクスケジューラ）です。`pnpm test` には含めていません。
+- 試しに動かすときは、環境変数 `JANTAMA_CONFIG_DIR` に一時フォルダを指定し、そこの `settings.json` の `data_dir` も一時フォルダにします。本物のデータには触れません。
+- README の画面写真は、`node scripts/readme-shots.mjs <迷いマークの画像のフォルダ>` で、作った実行ファイルから撮り直せます（一時フォルダだけを使います）。
+- 仕様は [SPEC.md](SPEC.md)、受け入れ基準は [ACCEPTANCE.md](ACCEPTANCE.md)、決めたことの記録は [docs/decisions.md](docs/decisions.md) にあります。コード内のコメント・文書・コミットメッセージは日本語で、識別子だけ英語です。
+
+## ライセンス
+
+このリポジトリのコードは、MIT ライセンスです（[LICENSE](LICENSE)）。
+
+ほかの人の作品は、次のように使っています。
+
+- 文字（アプリに同梱）: `@fontsource` のパッケージ 2 つです。どちらも、パッケージの記載のライセンスは SIL Open Font License 1.1 です。
+  - IBM Plex Mono（ラテン文字の 400・500）: `@fontsource/ibm-plex-mono` 5.3.0。Copyright 2017 IBM Corp.
+  - Zen Old Mincho（ラテン文字の 700）: `@fontsource/zen-old-mincho` 5.3.0。Copyright 2021 The Zen Old Mincho Project Authors (https://github.com/googlefonts/zen-oldmincho)
+  - ライセンスの全文は、`pnpm install` のあと、`apps/desktop/node_modules/@fontsource/ibm-plex-mono/LICENSE` と `apps/desktop/node_modules/@fontsource/zen-old-mincho/LICENSE` にあります。
+  - 本文の文字は、Windows に入っている書体（BIZ UDPGothic、Yu Gothic UI、Meiryo の順）を使い、同梱していません。
+- 牌の画像（使う予定）: [FluffyStuff/riichi-mahjong-tiles](https://github.com/FluffyStuff/riichi-mahjong-tiles)（パブリックドメイン）を使います。使う画面（出題など）はまだ作っていないので、今のリポジトリには、画像のファイルは入っていません。
+
+そのほかの依存パッケージ（Tauri・React・Rust のクレートなど）は、それぞれのライセンスに従います。`docs/images` の画面写真に写っている雀魂の画面の権利は、それぞれの権利者にあります。
+
+このアプリは個人が作った道具で、雀魂の運営者、Mortal の作者、mjai.ekyu.moe の運営者とは関係がありません。
