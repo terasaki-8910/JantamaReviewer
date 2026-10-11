@@ -12,7 +12,7 @@ import { FakeSessionStore, local, seedSession } from '../../tests/fake-sessions'
 import { FakeStudyStore, answerRow } from '../../tests/fake-study';
 import { fx4Ocr, fx4Session } from '../../tests/import-fixtures';
 import { renderQuiz } from '../../tests/study-harness';
-import { baseSettings, installTauriMock } from '../../tests/tauri-mock';
+import { installTauriMock } from '../../tests/tauri-mock';
 import type { Links, Memos, SessionRecord } from '../api/types';
 import { App } from './App';
 

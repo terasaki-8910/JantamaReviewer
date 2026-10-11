@@ -36,8 +36,6 @@ afterEach(() => {
   cleanup();
 });
 
-const emptyMemos = (): Memos => ({ marks: {}, extras: [] });
-
 function fx5Imported(overrides: Partial<SessionRecord> = {}): SessionRecord {
   return fx5Session(FX5_ID, FX5_STARTED, {
     report_path: `C:\\data\\games\\${FX5_ID}\\report.json`,

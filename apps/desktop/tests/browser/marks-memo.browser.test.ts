@@ -61,7 +61,7 @@ const LINKS = { marks: Object.fromEntries(Object.entries(FX5_USER_CHOICES).filte
 
 function fx5Imported(memos: Memos = MEMOS) {
   return fx5Session(FX5_ID, FX5_STARTED, {
-    report_path: `C:\data\games\${FX5_ID}\report.json`,
+    report_path: `C:\\data\\games\\${FX5_ID}\\report.json`,
     ocr: fx5Ocr(),
     links: LINKS,
     memos,

@@ -49,6 +49,9 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--r3);
   overflow: hidden;
+  transition:
+    box-shadow 400ms ease,
+    background-color 400ms ease;
 }
 
 /* 画像の箱は 16:9 に固定する。画像は切り取らず、箱の中に収める（窓の形が違う画像でも、全体が見える） */
@@ -355,6 +358,10 @@
   line-height: 1.2;
   text-align: left;
   transition: border-color 120ms ease;
+}
+
+.where .sel-btn {
+  min-height: 34px;
 }
 
 .sel-btn:disabled {
@@ -910,12 +917,6 @@ body.lb-open {
   margin-bottom: var(--s5);
 }
 
-.mcard {
-  transition:
-    box-shadow 400ms ease,
-    background-color 400ms ease;
-}
-
 .mcard:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
@@ -992,10 +993,6 @@ body.lb-open {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-}
-
-.where .sel-btn {
-  min-height: 34px;
 }
 
 .marks.extras {
