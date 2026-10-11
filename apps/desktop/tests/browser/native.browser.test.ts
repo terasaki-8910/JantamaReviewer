@@ -200,7 +200,7 @@ describe('検討画面（半荘のページ）', () => {
   it('N-8: 文字は選択できない（三連クリックしても、選択範囲が空のまま）', async () => {
     const { context, page, problems } = await openMain();
     try {
-      for (const selector of ['.head .title', '.brand .full', '.s-time', '.empty, .sec-title']) {
+      for (const selector of ['.head .title', '.date-head', '.s-time', '.empty, .sec-title']) {
         await page.locator(selector).first().click({ clickCount: 3 });
         const selected = await page.evaluate(() => window.getSelection()?.toString() ?? '');
         expect(selected, selector).toBe('');
@@ -285,7 +285,7 @@ describe('検討画面（半荘のページ）', () => {
   it('N-3: 文字や余白の上で右クリックしても、ブラウザのメニューを出さない（既定の動作が止められる）', async () => {
     const { context, page } = await openMain();
     try {
-      for (const selector of ['.head .title', '.brand .full', '.s-time', '.thumb', 'main.main']) {
+      for (const selector of ['.head .title', '.app-mark', '.s-time', '.thumb', 'main.main']) {
         await clearEvents(page);
         const box = (await page.locator(selector).first().boundingBox())!;
         await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' });

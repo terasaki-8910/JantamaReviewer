@@ -9,6 +9,8 @@ import { ImportOffer } from './ImportOffer';
 import { ImportPage } from './ImportPage';
 import { Lightbox, type ViewerRequest } from './Lightbox';
 import { RereadStore } from './rereadStore';
+import { SearchOverlay } from './search/SearchOverlay';
+import { useSearchOverlay } from './search/useSearchOverlay';
 import { SessionList, type SessionListHandle } from './SessionList';
 import { buildListRows, neighborAfterDelete } from './sessionRows';
 import { SessionPage } from './SessionPage';
@@ -81,6 +83,8 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const narrow = useNarrow();
   const undo = useUndo();
   const shortcutsBlocked = useShortcutsBlocked();
+  // 検索の重ね表示（検索のアイコンと Ctrl+K で開く。U-22）
+  const search = useSearchOverlay();
 
   // 半荘の一覧。読めるたびに、いま見ている半荘が残っているかを確かめる（何も選んでいなければ、いちばん新しい半荘にする）。
   const { sessions, error: loadError, reload } = useSessions((list) =>
@@ -369,7 +373,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
 
   return (
     <StudyProvider value={study}>
-      <div className="app" inert={pending !== null || viewer !== null}>
+      <div className="app" inert={pending !== null || viewer !== null || search.open}>
         <Sidebar
           view={view}
           theme={theme}
@@ -377,6 +381,8 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           canGoForward={canGoForward}
           onGoBack={() => step(-1)}
           onGoForward={() => step(1)}
+          searchOpen={search.open}
+          onSearch={search.show}
           onImport={openImport}
           onSettings={() => push({ kind: 'settings' })}
           onToggleTheme={toggleTheme}
@@ -434,6 +440,16 @@ function Shell({ solvedProblems }: Required<AppProps>) {
         {toast !== null && <Toast toast={toast} onClose={() => setToast(null)} />}
       </div>
       {viewer !== null && <Lightbox items={viewer.items} start={viewer.start} onClose={closeViewer} />}
+      {search.open && (
+        <SearchOverlay
+          rows={rows}
+          summaries={summaries}
+          now={now}
+          onOpenGame={openFromList}
+          onOpenProblem={openProblem}
+          onClose={search.hide}
+        />
+      )}
       {pending !== null && (
         <ConfirmDialog
           title={`${pending.ids.length}件の半荘を削除します。`}

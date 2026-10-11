@@ -125,18 +125,13 @@
   background: transparent;
 }
 
-/* ---- 名前と、戻る・進む（画面の履歴） ---- */
+/* ---- 見出し: アプリのアイコン・検索・戻る・進む（画面の履歴）。アイコンと検索は search.css ---- */
 .side-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s2);
   min-height: 32px;
-}
-
-.side-head .brand {
-  min-width: 0;
-  white-space: nowrap;
 }
 
 .side-hist {
