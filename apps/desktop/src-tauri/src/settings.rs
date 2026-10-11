@@ -1,7 +1,7 @@
 //! 設定。JSON で保存し、欠けた項目は既定値で補う（W-5）。
 //!
 //! 保存する項目: 迷いマークのボタン（マウスのボタン、または修飾キー付きのキー）、ウィジェットの形と位置、音、
-//! 雀魂の窓を探す語、データの保存先。
+//! 雀魂の窓を探す語、データの保存先、出題の設定（1 日に出す数・大きな不一致の基準・ドラを目立たせる）。
 
 use std::ffi::OsString;
 use std::fs;
@@ -18,6 +18,16 @@ pub const DEFAULT_CAPTURE_KEYWORDS: [&str; 2] = ["雀魂", "Mahjong Soul"];
 
 /// 設定ファイルの名前。
 pub const SETTINGS_FILE_NAME: &str = "settings.json";
+
+/// 1 日に出す数（今日の出題。F2）の既定値と、設定できる範囲。
+pub const DEFAULT_DAILY_COUNT: u32 = 5;
+pub const MIN_DAILY_COUNT: u32 = 1;
+pub const MAX_DAILY_COUNT: u32 = 50;
+
+/// 大きな不一致の基準（AI が実戦の行動に付けた確率が、この %（未満）の判断を不一致とする。F2）の既定値と、設定できる範囲。
+pub const DEFAULT_DISAGREEMENT_PERCENT: u32 = 5;
+pub const MIN_DISAGREEMENT_PERCENT: u32 = 1;
+pub const MAX_DISAGREEMENT_PERCENT: u32 = 50;
 
 /// データの保存先の既定のフォルダ名（ユーザーのフォルダの直下）。
 pub const DEFAULT_DATA_DIR_NAME: &str = "JantamaReviewerData";
@@ -138,6 +148,12 @@ pub struct Settings {
     pub sound: bool,
     pub capture_keywords: Vec<String>,
     pub data_dir: PathBuf,
+    /// 1 日に出す問題の数（今日の出題。既定 5）。
+    pub daily_count: u32,
+    /// 大きな不一致の基準（%。既定 5）。
+    pub disagreement_percent: u32,
+    /// 出題・半荘を通して見る画面で、ドラ表示牌が指す牌の面を黄色にする（既定は切。U-19）。
+    pub highlight_dora: bool,
 }
 
 impl Default for Settings {
@@ -152,6 +168,9 @@ impl Default for Settings {
                 .map(|s| s.to_string())
                 .collect(),
             data_dir: default_data_dir(),
+            daily_count: DEFAULT_DAILY_COUNT,
+            disagreement_percent: DEFAULT_DISAGREEMENT_PERCENT,
+            highlight_dora: false,
         }
     }
 }
@@ -161,6 +180,10 @@ impl Default for Settings {
 pub enum SettingsError {
     /// 割り当てられないキー。
     UnsupportedKey(String),
+    /// 1 日に出す数が範囲の外。
+    DailyCountOutOfRange(u32),
+    /// 大きな不一致の基準が範囲の外。
+    DisagreementPercentOutOfRange(u32),
 }
 
 impl std::fmt::Display for SettingsError {
@@ -169,6 +192,14 @@ impl std::fmt::Display for SettingsError {
             SettingsError::UnsupportedKey(code) => {
                 write!(f, "このキーは割り当てられません: {code}")
             }
+            SettingsError::DailyCountOutOfRange(value) => write!(
+                f,
+                "1日に出す数は {MIN_DAILY_COUNT} から {MAX_DAILY_COUNT} の間で指定してください: {value}"
+            ),
+            SettingsError::DisagreementPercentOutOfRange(value) => write!(
+                f,
+                "大きな不一致の基準は {MIN_DISAGREEMENT_PERCENT}% から {MAX_DISAGREEMENT_PERCENT}% の間で指定してください: {value}"
+            ),
         }
     }
 }
@@ -210,6 +241,14 @@ impl Settings {
             sound: field(value, "sound").unwrap_or(defaults.sound),
             capture_keywords: field(value, "capture_keywords").unwrap_or(defaults.capture_keywords),
             data_dir: data_dir.unwrap_or(defaults.data_dir),
+            // 範囲の外の値（手で書き換えた設定ファイル）は、既定値にする。
+            daily_count: field::<u32>(value, "daily_count")
+                .filter(|n| (MIN_DAILY_COUNT..=MAX_DAILY_COUNT).contains(n))
+                .unwrap_or(defaults.daily_count),
+            disagreement_percent: field::<u32>(value, "disagreement_percent")
+                .filter(|n| (MIN_DISAGREEMENT_PERCENT..=MAX_DISAGREEMENT_PERCENT).contains(n))
+                .unwrap_or(defaults.disagreement_percent),
+            highlight_dora: field(value, "highlight_dora").unwrap_or(defaults.highlight_dora),
         }
     }
 
@@ -233,6 +272,16 @@ impl Settings {
             if vk_from_code(code).is_none() {
                 return Err(SettingsError::UnsupportedKey(code.clone()));
             }
+        }
+        if !(MIN_DAILY_COUNT..=MAX_DAILY_COUNT).contains(&self.daily_count) {
+            return Err(SettingsError::DailyCountOutOfRange(self.daily_count));
+        }
+        if !(MIN_DISAGREEMENT_PERCENT..=MAX_DISAGREEMENT_PERCENT)
+            .contains(&self.disagreement_percent)
+        {
+            return Err(SettingsError::DisagreementPercentOutOfRange(
+                self.disagreement_percent,
+            ));
         }
         Ok(())
     }
@@ -310,6 +359,80 @@ mod tests {
         assert_eq!(s.capture_keywords, vec!["雀魂", "Mahjong Soul"]);
         assert_eq!(s.widget_position, None);
         assert!(s.data_dir.ends_with(DEFAULT_DATA_DIR_NAME));
+    }
+
+    #[test]
+    fn u19_the_study_settings_default_to_5_a_day_5_percent_and_no_dora_emphasis() {
+        let s = Settings::default();
+        assert_eq!(s.daily_count, 5);
+        assert_eq!(s.disagreement_percent, 5);
+        assert!(!s.highlight_dora);
+        // ファイルに無い項目は、既定値（昔の設定ファイル）
+        let old = Settings::from_json_str(r#"{ "sound": false }"#).unwrap();
+        assert_eq!(old.daily_count, 5);
+        assert_eq!(old.disagreement_percent, 5);
+        assert!(!old.highlight_dora);
+        assert!(!old.sound);
+    }
+
+    #[test]
+    fn u19_the_study_settings_are_saved_and_read_back() {
+        let dir = temp_dir();
+        let path = settings_path(dir.path());
+        let saved = Settings {
+            daily_count: 8,
+            disagreement_percent: 10,
+            highlight_dora: true,
+            ..Settings::default()
+        };
+        saved.save(&path).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert_eq!(loaded, saved);
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"daily_count\": 8"), "{text}");
+        assert!(text.contains("\"highlight_dora\": true"), "{text}");
+    }
+
+    #[test]
+    fn u19_study_settings_outside_their_ranges_are_validated_and_a_file_with_such_values_falls_back(
+    ) {
+        for bad in [0, 51, 1000] {
+            let s = Settings {
+                daily_count: bad,
+                ..Settings::default()
+            };
+            assert_eq!(s.validate(), Err(SettingsError::DailyCountOutOfRange(bad)));
+        }
+        for bad in [0, 51] {
+            let s = Settings {
+                disagreement_percent: bad,
+                ..Settings::default()
+            };
+            assert_eq!(
+                s.validate(),
+                Err(SettingsError::DisagreementPercentOutOfRange(bad))
+            );
+        }
+        for good in [1, 5, 50] {
+            let s = Settings {
+                daily_count: good,
+                disagreement_percent: good,
+                ..Settings::default()
+            };
+            assert_eq!(s.validate(), Ok(()));
+        }
+        // 手で書き換えた設定ファイルの範囲の外・型の違う値は、その項目だけ既定値にする（ほかの項目は守る）
+        let s = Settings::from_json_str(
+            r#"{ "daily_count": 0, "disagreement_percent": "five", "highlight_dora": true, "sound": false }"#,
+        )
+        .unwrap();
+        assert_eq!(s.daily_count, 5);
+        assert_eq!(s.disagreement_percent, 5);
+        assert!(s.highlight_dora);
+        assert!(!s.sound);
+        assert!(SettingsError::DailyCountOutOfRange(0)
+            .to_string()
+            .contains("1 から 50"));
     }
 
     #[test]

@@ -9,7 +9,7 @@
     "dev:web": "vite",
     "build:web": "tsc --noEmit && vite build",
     "tauri": "tauri",
-    "test": "vitest run",
+    "test": "vitest run --exclude \"tests/browser/**\" && vitest run tests/browser --maxWorkers=3",
     "lint:types": "tsc --noEmit"
   },
   "dependencies": {

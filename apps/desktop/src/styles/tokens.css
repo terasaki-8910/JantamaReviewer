@@ -91,6 +91,14 @@
   --grn-fg: var(--muted);
   --grn-bd: var(--line-strong);
 
+  /*
+    Round 10 (R10-7): the dora emphasis (setting 「ドラを目立たせる」, off by default).
+    --dora-fill is the colour multiplied onto the face of a tile that a dora indicator points to (the tile art stays dark;
+    only the face turns yellow). The value is the one approved in round 10 (tokens.css of the sample), copied as it is.
+    It is the same in light and dark, because the tile face is the same in both themes. Nothing else should use it.
+  */
+  --dora-fill: #FFE680;
+
   color-scheme: light;
 }
 
@@ -132,6 +140,7 @@
     --gr7-fg: var(--grade-on-deep);
     --gr8-fg: var(--grade-on-deep);
     --gr9-fg: var(--grade-on-deep);
+    --dora-fill: #FFE680;
     color-scheme: dark;
   }
 }
@@ -173,6 +182,7 @@
   --gr7-fg: var(--grade-on-deep);
   --gr8-fg: var(--grade-on-deep);
   --gr9-fg: var(--grade-on-deep);
+  --dora-fill: #FFE680;
   color-scheme: dark;
 }
 

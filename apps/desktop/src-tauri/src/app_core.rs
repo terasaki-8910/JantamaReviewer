@@ -533,6 +533,30 @@ mod tests {
     }
 
     #[test]
+    fn u19_study_settings_are_validated_saved_and_kept_after_a_restart() {
+        let mut f = fixture();
+        let mut next = f.core.settings().clone();
+        next.daily_count = 9;
+        next.disagreement_percent = 8;
+        next.highlight_dora = true;
+        let change = f.core.apply_settings(next).unwrap();
+        // 出題の設定は、窓・フックに反映するものではない
+        assert_eq!(change, SettingsChange::default());
+        let reloaded = Core::load(f.config_dir(), FakeCapturer::ok(&[1]), CountingSound::new());
+        assert_eq!(reloaded.settings().daily_count, 9);
+        assert_eq!(reloaded.settings().disagreement_percent, 8);
+        assert!(reloaded.settings().highlight_dora);
+        // 範囲の外は、何も変えずにエラー
+        let mut bad = f.core.settings().clone();
+        bad.daily_count = 0;
+        bad.sound = false;
+        let error = f.core.apply_settings(bad).unwrap_err();
+        assert!(error.contains("1日に出す数"), "{error}");
+        assert_eq!(f.core.settings().daily_count, 9);
+        assert!(f.core.settings().sound);
+    }
+
+    #[test]
     fn keywords_are_normalized_when_applied() {
         let mut f = fixture();
         let mut next = f.core.settings().clone();

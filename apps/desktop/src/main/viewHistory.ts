@@ -8,7 +8,7 @@
  *
  * ここは、純粋な関数だけ（画面に依存しない）。
  */
-import { sameView, sessionView, START_VIEW, type View } from './views';
+import { sameView, sessionView, START_VIEW, viewSessionId, type View } from './views';
 
 /** 覚えておく画面の数の上限。これを超えたら、いちばん古いものから忘れる。 */
 export const HISTORY_LIMIT = 100;
@@ -27,16 +27,14 @@ export function currentView(history: ViewHistory): View {
   return history.entries[history.index] ?? START_VIEW;
 }
 
-/** いま行ける画面か。半荘は、一覧にあるものだけ（消した半荘は行けない）。何も選んでいない画面には、行き来では行かない。 */
+/**
+ * いま行ける画面か。半荘と、その半荘の出題は、一覧にあるものだけ（消した半荘は行けない）。
+ * 何も選んでいない画面には、行き来では行かない。
+ */
 export function isViewAvailable(view: View, sessionIds: ReadonlySet<string>): boolean {
-  switch (view.kind) {
-    case 'none':
-      return false;
-    case 'session':
-      return sessionIds.has(view.id);
-    default:
-      return true;
-  }
+  if (view.kind === 'none') return false;
+  const sessionId = viewSessionId(view);
+  return sessionId === null || sessionIds.has(sessionId);
 }
 
 /**
@@ -87,7 +85,8 @@ export function historyReducer(history: ViewHistory, action: HistoryAction): Vie
       const here = currentView(history);
       const newest = action.sessionIds[0];
       const fallback = newest === undefined ? START_VIEW : sessionView(newest);
-      const lost = here.kind === 'session' && !action.sessionIds.includes(here.id);
+      const hereSession = viewSessionId(here);
+      const lost = hereSession !== null && !action.sessionIds.includes(hereSession);
       const unset = here.kind === 'none' && newest !== undefined;
       if (!lost && !unset) return history;
       return historyReducer(history, { type: 'swap', from: here, to: fallback });

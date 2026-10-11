@@ -6,6 +6,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import type {
+  AnswerNotes,
+  AnswerRow,
   AppState,
   InputStatus,
   Links,
@@ -18,6 +20,9 @@ import type {
   SessionOcr,
   SessionRecord,
   Settings,
+  NewAnswer,
+  SolvedCount,
+  StoredProblemRef,
 } from './types';
 
 /** 記録の状態が変わったときのイベント名（Rust の `EVENT_STATE_CHANGED`）。 */
@@ -158,6 +163,22 @@ export const api = {
     invoke<void>('set_maka_hanchan', { sessionId, grade }),
   /** 半荘全体の MAKA の評価を消す。 */
   clearMakaHanchan: (sessionId: string) => invoke<void>('clear_maka_hanchan', { sessionId }),
+
+  // ---- 答え・解き直しの予定・今日の出題（D-3。保存先の study.sqlite。検討画面だけが呼ぶ） ----
+  /** 答えを記録する（答え合わせを押したとき）。番号を付けた行を返す。 */
+  recordAnswer: (answer: NewAnswer) => invoke<AnswerRow>('record_answer', { answer }),
+  /** 答え合わせのあとに、差の原因・学んだ原則・MAKA の打牌を置き換える（取り消しは、前の値で置き換える）。 */
+  updateAnswerNotes: (id: number, notes: AnswerNotes) =>
+    invoke<AnswerRow>('update_answer_notes', { id, notes }),
+  /** すべての答え（答えた順）。 */
+  listAnswers: () => invoke<AnswerRow[]>('list_answers'),
+  /** 日付（YYYY-MM-DD）の今日の出題の組。まだ作っていなければ null。 */
+  getDailySet: (date: string) => invoke<StoredProblemRef[] | null>('get_daily_set', { date }),
+  /** その日の今日の出題の組を作る。その日の組がすでにあれば、入れ替えずに、あるものを返す（E-24）。 */
+  saveDailySet: (date: string, items: StoredProblemRef[]) =>
+    invoke<StoredProblemRef[]>('save_daily_set', { date, items }),
+  /** 半荘ごとの、答えた問題の数（半荘を消す確認の「解いた問題 N問」に使う）。 */
+  countSolved: (sessionIds: string[]) => invoke<SolvedCount[]>('count_solved', { sessionIds }),
 };
 
 export function onStateChanged(handler: (state: AppState) => void): Promise<UnlistenFn> {

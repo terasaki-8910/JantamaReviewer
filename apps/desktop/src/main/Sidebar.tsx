@@ -6,13 +6,12 @@ import type { View } from './views';
 
 /**
  * サイドバー（U-8、R7-1）。固定幅（640px 未満では、アイコンだけの細い列）。
- * 上から: 名前と ← →（見た画面の履歴）・主な操作「検討結果を取り込む」・行き先（解き直し・ログ・週の集計。まだ作っていないので、
- * 押せない）・半荘の一覧（`children`）・設定とテーマの切り替え。
+ * 上から: 名前と ← →（見た画面の履歴）・主な操作「検討結果を取り込む」・行き先（今日の出題・解き直し。数つき。ログ・週の集計は
+ * まだ作っていないので、押せない）・半荘の一覧（`children`）・設定とテーマの切り替え。
  */
 
 /** まだ作っていない行き先。押せない（aria-disabled）が、キーボードで止まれて、理由が読める。 */
 const COMING_SOON: ReadonlyArray<{ label: string; icon: IconName }> = [
-  { label: '解き直し', icon: 'review' },
   { label: 'ログ', icon: 'log' },
   { label: '週の集計', icon: 'chart' },
 ];
@@ -28,8 +27,22 @@ interface SidebarProps {
   onImport: () => void;
   onSettings: () => void;
   onToggleTheme: () => void;
+  /** 今日の出題の、まだ答えていない問題の数。読み込み中は null（数を出さない）。 */
+  todayCount: number | null;
+  /** 解き直しの、今日が期限の問題の数。読み込み中は null。 */
+  dueCount: number | null;
+  onToday: () => void;
+  onReview: () => void;
   /** 半荘の一覧。 */
   children: ReactNode;
+}
+
+/** この画面が、サイドバーのどの行き先に当たるか。 */
+function destinationOf(view: View): 'today' | 'review' | null {
+  if (view.kind === 'today') return 'today';
+  if (view.kind === 'review') return 'review';
+  if (view.kind === 'quiz') return view.mode === 'review' ? 'review' : 'today';
+  return null;
 }
 
 export function Sidebar({
@@ -42,8 +55,13 @@ export function Sidebar({
   onImport,
   onSettings,
   onToggleTheme,
+  todayCount,
+  dueCount,
+  onToday,
+  onReview,
   children,
 }: SidebarProps) {
+  const here = destinationOf(view);
   const themeLabel = theme === 'dark' ? 'ライトテーマに切り替え' : 'ダークテーマに切り替え';
   const backRef = useRef<HTMLButtonElement>(null);
   const forwardRef = useRef<HTMLButtonElement>(null);
@@ -118,6 +136,42 @@ export function Sidebar({
           </button>
           <nav aria-label="メイン">
             <ul className="nav">
+              <li>
+                <button
+                  type="button"
+                  className="nav-item"
+                  aria-current={here === 'today' ? 'page' : undefined}
+                  title="今日の出題"
+                  onClick={onToday}
+                >
+                  <Icon name="today" />
+                  <span className="label">今日の出題</span>
+                  {todayCount !== null && (
+                    <>
+                      {' '}
+                      <span className="count">{todayCount}</span>
+                    </>
+                  )}
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  className="nav-item"
+                  aria-current={here === 'review' ? 'page' : undefined}
+                  title="解き直し"
+                  onClick={onReview}
+                >
+                  <Icon name="review" />
+                  <span className="label">解き直し</span>
+                  {dueCount !== null && (
+                    <>
+                      {' '}
+                      <span className="count">{dueCount}</span>
+                    </>
+                  )}
+                </button>
+              </li>
               {COMING_SOON.map((item) => (
                 <li key={item.label}>
                   <button type="button" className="nav-item" aria-disabled="true" title="あとで作ります">

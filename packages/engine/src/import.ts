@@ -14,6 +14,7 @@ import { type ParseIssue, parseReport } from './report';
 import type { Fuuro, MjaiEvent, MortalReport, ReportEntry, Seat } from './report-types';
 import { KyokuReplayer, type KyokuLog, type ReplayFrame, ReplayLogError, replayFrames, splitKyokus } from './replay';
 import { type Result, err, ok } from './result';
+import { sceneShanten } from './scene-shanten';
 import { type Tile, sortTiles } from './tiles';
 
 export type ImportErrorCode =
@@ -265,6 +266,7 @@ function alignKyoku(
       entry,
       board,
       kind,
+      shanten: sceneShanten(board),
       tags: classifyTags(entry, kind, board),
     });
     next++;

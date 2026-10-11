@@ -1,15 +1,19 @@
 /**
  * 打牌の判断の受け入れ枚数の比較（F6）。
- * 自分の答え・実戦・AI の 1 位・最大の受け入れ枚数を並べる。数えるのは自分の手牌だけ（天鳳牌理と同じ）。
+ * 自分の答え・実戦・AI の 1 位・最大の受け入れ枚数を並べる。枚数は、自分の手牌だけで数えた数（天鳳牌理と同じ）と、
+ * 場に見えている牌も除いた「残り」（`details`。E-22）を並べて返す。
  */
 import type { Decision } from './decision';
 import { type DiscardOption, bestDiscardOptions, discardOptions, findDiscardOption } from './shanten';
 import { tenhouPairiUrl } from './tenhou-url';
 import type { Tile } from './tiles';
+import { type DiscardDetail, discardDetails } from './ukeire-remaining';
 
 export interface DiscardComparison {
   /** 切る牌の種類ごとの、切った後のシャンテン数と受け入れ枚数（手牌の牌の順）。 */
   options: DiscardOption[];
+  /** `options` と同じ並びで、受け入れ牌ごとの手牌だけの枚数と、場に見えている牌も除いた残り（E-22）。 */
+  details: DiscardDetail[];
   /** 自分の答え（打牌）の結果。答えを渡していないとき、または手牌に無い牌のときは undefined。 */
   answer?: DiscardOption;
   /** 実戦の打牌の結果。実戦が打牌でない（リーチ・鳴きなど）ときは undefined。 */
@@ -35,6 +39,7 @@ export function compareDiscardUkeire(decision: Pick<Decision, 'board' | 'entry'>
   const top = entry.details[0]?.action;
   const result: DiscardComparison = {
     options,
+    details: discardDetails(board, options),
     best: bestDiscardOptions(options),
     pairiUrl: tenhouPairiUrl(tiles),
   };

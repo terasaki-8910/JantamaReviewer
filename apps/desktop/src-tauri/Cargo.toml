@@ -45,6 +45,9 @@ jantama-ocr = { path = "ocr" }
 ureq = { version = "3", default-features = false, features = ["native-tls"] }
 # クリップボードの文字を読む（文字だけ。画像やファイルは読まない）。src/clipboard.rs の 1 か所からだけ使う。
 clipboard-win = "5"
+# 答え・解き直しの予定・今日の出題を置く SQLite（D-3。保存先の study.sqlite）。SQLite 本体は同梱（bundled）で、通信はしない。
+# src/study/ の中だけで使う（検討画面だけが使う。ウィジェット・ボタンを拾う部分・補助プログラムには入れない）。
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [target.'cfg(windows)'.dependencies]
 # WebView2 の設定を変える（webview_win.rs）。Tauri（wry 0.57）が使う版にそろえる。
