@@ -93,8 +93,8 @@ function OptionGroup({ options, choice, calledFrom, dora, onChoose }: OptionGrou
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const { key } = event;
     if (!['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'].includes(key)) return;
-    // Alt+← → は画面の戻る・進む。ここでは使わない
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    // Alt+← → は画面の戻る・進む、Shift+矢印は通して見る画面の前・次の迷い・局。ここでは使わない
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     event.preventDefault();
     event.stopPropagation();
     const last = options.length - 1;

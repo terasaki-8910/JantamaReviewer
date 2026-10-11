@@ -252,6 +252,7 @@ export function Legend({
   called,
   call,
   pastView,
+  latest = false,
 }: {
   riichi: boolean;
   called: boolean;
@@ -259,6 +260,8 @@ export function Legend({
   call: boolean;
   /** 過去の盤面を見ているか（印を出す）。 */
   pastView: boolean;
+  /** 直前の打牌の印を出すか（半荘を通して見る画面）。 */
+  latest?: boolean;
 }) {
   const face = <img src="/tiles/Chun.svg" alt="" draggable={false} />;
   return (
@@ -277,6 +280,11 @@ export function Legend({
       {called && (
         <li>
           <span className="tile called">{face}</span>鳴かれた牌
+        </li>
+      )}
+      {latest && (
+        <li>
+          <span className="tile latest">{face}</span>直前の打牌
         </li>
       )}
       {call && (

@@ -15,6 +15,8 @@ export interface MenuSelectItem {
   icon?: ReactNode;
   /** true なら、文字は読み上げだけにする（図だけで意味が伝わるとき）。 */
   hideLabel?: boolean;
+  /** 右に添える、静かな文字（局の選択の、迷いと不一致の数など）。 */
+  hint?: string;
   /** いま選ばれているもの。 */
   checked: boolean;
   onSelect: () => void;
@@ -42,6 +44,7 @@ export function MenuSelect({ label, menuLabel, items, className, disabled, child
       label: item.label,
       icon: item.icon,
       hideLabel: item.hideLabel,
+      hint: item.hint,
       checked: item.checked,
       onSelect: () => {
         // 選んだあと、キーボードの位置はこのボタンに戻す（メニューの項目は、閉じると消えるため）。
