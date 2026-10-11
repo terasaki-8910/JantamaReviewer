@@ -10,6 +10,7 @@ import '../styles/hanchan.css';
 import '../styles/quiz.css';
 import '../styles/replay.css';
 import '../styles/search.css';
+import '../styles/log.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
