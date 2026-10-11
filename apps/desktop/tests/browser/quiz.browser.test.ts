@@ -11,14 +11,11 @@
  * - U-1: 答える前の DOM に AI の情報は無い。牌の画像はすべて読み込めて、引きずれない（N-8）。外へ通信しない
  * jsdom の試験（src/main/study）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { importReportText, listProblems } from '@jantama/engine';
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { contrast, parseCssColor, parseHex, type Rgb } from '../color-math';
+import { contrast, parseCssColor } from '../color-math';
 import { REPORT_TEXTS, local, seedSession } from '../fake-sessions';
 import { fx4Ocr, fx4Session } from '../import-fixtures';
 import {
@@ -33,6 +30,7 @@ import {
   type PageServer,
   type Scenario,
 } from './harness';
+import { faceColor, multiply, patternColors } from './tile-colors';
 
 const SCHEMES = ['light', 'dark'] as const;
 type Scheme = (typeof SCHEMES)[number];
@@ -576,46 +574,6 @@ describe('U-1・N-8: 答える前の DOM と、牌の画像', () => {
     }
   });
 });
-
-/** 描いた牌の面の色（牌の中の、図柄にかからない隅の 1 点）を、画面の絵から読む。 */
-async function faceColor(page: Page, tile: Locator): Promise<Rgb> {
-  const png = await tile.screenshot({ type: 'png', animations: 'disabled' });
-  const [r, g, b] = await page.evaluate(async (base64) => {
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
-    const canvas = document.createElement('canvas');
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const context = canvas.getContext('2d');
-    if (context === null) throw new Error('canvas が使えません');
-    context.drawImage(bitmap, 0, 0);
-    const x = Math.floor(bitmap.width * 0.1);
-    const y = Math.floor(bitmap.height * 0.06);
-    const data = context.getImageData(x, y, 1, 1).data;
-    return [data[0] ?? 0, data[1] ?? 0, data[2] ?? 0];
-  }, png.toString('base64'));
-  return { r: r ?? 0, g: g ?? 0, b: b ?? 0 };
-}
-
-/** 牌の図柄（SVG）で使われている色（注釈・定義・見本の色を除く。白は面と同じ扱いなので除く）。 */
-function patternColors(): Rgb[] {
-  const dir = join(import.meta.dirname, '../../public/tiles');
-  const found = new Set<string>();
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith('.svg') || file === 'Front.svg') continue;
-    const text = readFileSync(join(dir, file), 'utf8')
-      .replace(/<metadata[\s\S]*?<\/metadata>/g, '')
-      .replace(/<defs[\s\S]*?<\/defs>/g, '');
-    for (const match of text.matchAll(/(?:fill|stroke)\s*[:=]\s*"?(#[0-9a-fA-F]{6})\b/g)) found.add((match[1] ?? '').toLowerCase());
-    for (const match of text.matchAll(/(?:fill|stroke)\s*[:=]\s*"?rgb\((\d+),\s*(\d+),\s*(\d+)\)/g)) {
-      found.add(`#${[match[1], match[2], match[3]].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`);
-    }
-  }
-  found.delete('#ffffff');
-  return [...found].map(parseHex);
-}
-
-const multiply = (a: Rgb, b: Rgb): Rgb => ({ r: (a.r * b.r) / 255, g: (a.g * b.g) / 255, b: (a.b * b.b) / 255 });
 
 describe('U-19: ドラを目立たせる', () => {
   it('既定は切: どの牌にも黄色を重ねない', { timeout: 60_000 }, async () => {

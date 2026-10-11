@@ -25,6 +25,12 @@ export interface WidgetPosition {
   y: number;
 }
 
+/**
+ * 半荘を通して見る画面のキーの割り当て（操作の名前 → キー。割り当て無しは null）。キーは、`KeyboardEvent.code` に、押していた
+ * 修飾キーを `Ctrl+` `Alt+` `Shift+` の順に付けた文字（例: `Shift+ArrowUp`・`Comma`）。操作の一覧と既定は `main/replay/keys.ts`。
+ */
+export type ReplayKeys = Record<string, string | null>;
+
 export interface Settings {
   trigger: Trigger;
   orientation: Orientation;
@@ -38,6 +44,10 @@ export interface Settings {
   disagreement_percent: number;
   /** ドラ表示牌が指す牌の面を黄色にする（既定は切。U-19）。 */
   highlight_dora: boolean;
+  /** 半荘を通して見る画面で、AI の1位と違う判断もすべて不一致として出す（既定は切。出題の基準は変えない。R10-4、E-26）。 */
+  show_all_mismatches: boolean;
+  /** 半荘を通して見る画面のキーの割り当て（R10-3、U-21）。 */
+  replay_keys: ReplayKeys;
 }
 
 /** idle = 半荘がまだ始まっていない、recording = 記録中、error = 保存先を開けない。 */

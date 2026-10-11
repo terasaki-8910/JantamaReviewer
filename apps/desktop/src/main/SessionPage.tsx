@@ -15,6 +15,7 @@ import { useSessionReport } from './hanchanReport';
 import type { ViewerItem, ViewerRequest } from './Lightbox';
 import { markCaptionParts, resolveMarks, type ResolvedMark } from './markCards';
 import { MarkCard } from './MarkCard';
+import { ReplayIcon } from './replay/ReplayIcons';
 import { IDLE_REREADS, type Rereads } from './rereadStore';
 import type { SummaryState } from './sessionSummaries';
 import { ImportHereButton, TargetImportPanel } from './TargetImport';
@@ -43,6 +44,11 @@ interface SessionPageProps {
    * 迷いの見出しのとなりに、静かな 1 行を出す。渡さなければ、読み直さない。
    */
   rereads?: Rereads;
+  /**
+   * 半荘を通して見る画面を開く（F12）。渡すと、結果を取り込んだ半荘に「この半荘を通して見る」を出し、迷いのカードに「この局面を解く」
+   * （そのカードの局面で開く）を出す。
+   */
+  onOpenReplay?: (sessionId: string, key?: string) => void;
 }
 
 const noop = () => Promise.resolve();
@@ -59,6 +65,7 @@ export function SessionPage({
   onOpenImage,
   importFlow,
   rereads = IDLE_REREADS,
+  onOpenReplay,
 }: SessionPageProps) {
   const titleId = useId();
   const marksId = useId();
@@ -73,6 +80,8 @@ export function SessionPage({
   }, [rereads, session.id, hasReadings]);
   const ready = summary?.status === 'ready' ? summary.summary : null;
   const report = reportState.status === 'ready' ? reportState.report : null;
+  // 結果を取り込んで、読めている半荘は、通して見られる
+  const replayable = onOpenReplay !== undefined && session.report_path !== null && ready !== null;
   const when = formatSessionTitle(session.started_ms);
   // この半荘に取り込む（U-14）: 取り込み前なら、主な操作を見出しに出す。始められなかった理由は、ページの上に出す。
   const [importNotice, setImportNotice] = useState<string | null>(null);
@@ -184,10 +193,20 @@ export function SessionPage({
           </h1>
           <p className="quiet">{subtitle(session, summary)}</p>
         </div>
-        {ready !== null && ready.grade !== null && (
-          <div className="head-score">
-            <GradeBadge grade={ready.grade} size="lg" />{' '}
-            <span className="rate-num">{ready.ratingText}</span> <span className="rate-lbl">Rating</span>
+        {(replayable || (ready !== null && ready.grade !== null)) && (
+          <div className="head-actions">
+            {replayable && (
+              <button type="button" className="btn primary" onClick={() => onOpenReplay?.(session.id)}>
+                <ReplayIcon name="play" />
+                この半荘を通して見る
+              </button>
+            )}
+            {ready !== null && ready.grade !== null && (
+              <div className="head-score">
+                <GradeBadge grade={ready.grade} size="lg" />{' '}
+                <span className="rate-num">{ready.ratingText}</span> <span className="rate-lbl">Rating</span>
+              </div>
+            )}
           </div>
         )}
         {canImportHere && (
@@ -226,6 +245,7 @@ export function SessionPage({
                       decisions={decisions}
                       onOpenImage={(opener) => openImage(mark.id, opener)}
                       onChoose={chooseDecision}
+                      onSolve={replayable ? (key) => onOpenReplay?.(session.id, key) : undefined}
                     />
                   </li>
                 ))}

@@ -7,6 +7,8 @@
  *   （保存できなければ、答える前の画面に戻して、理由を出す。何も記録しない）
  * - 答え合わせの内容（AI の評価）は、保存に成功してから、画面に出す（答える前の画面には、AI の情報を一切出さない。U-1）
  * すでに答えた問題（出題）を開いたときは、保存してある答えから、答え合わせのあとの形で始める。
+ * 半荘を通して見る画面は、場面を離れても戻ってこられるので、答える前の下書き（選んだ答え・理由・選び直した回数・見せた時刻）を、
+ * 呼ぶ側の置き場（`draft`）に預けられる。戻ったときは、その下書きから始める（答えるまでの時間は、最初に見せたときから数える）。
  */
 import {
   keyOfDecision,
@@ -17,13 +19,30 @@ import {
   type Decision,
   type QuizChoice,
 } from '@jantama/engine';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 import { errorMessage } from '../../api/tauri';
 import type { AnswerMode, AnswerRow, NewAnswer } from '../../api/types';
 import { buildReveal, type RevealModel } from './reveal';
 
 export type QuizStage = 'answering' | 'saving' | 'revealed';
+
+/** 答える前の下書き。 */
+export interface QuizDraft {
+  choice: QuizChoice | null;
+  reason: string;
+  reselects: number;
+  /** 最後に選んだ答えの鍵（選び直しの数え方に使う）。 */
+  committed: string | null;
+  /** 問題を最初に見せた時刻（ミリ秒）。 */
+  shownAt: number;
+}
+
+/** 下書きの置き場。`initial` は、前に預けた下書き（無ければ null）。 */
+export interface QuizDraftStore {
+  initial: QuizDraft | null;
+  save: (draft: QuizDraft) => void;
+}
 
 export interface QuizAnswerOptions {
   decision: Decision;
@@ -36,6 +55,8 @@ export interface QuizAnswerOptions {
   /** すでに答えた出題。あれば、答え合わせのあとの形で始める。 */
   existing: AnswerRow | null;
   record: (answer: NewAnswer) => Promise<AnswerRow>;
+  /** 答える前の下書きの置き場（任意）。すでに答えた問題には使わない。 */
+  draft?: QuizDraftStore;
 }
 
 /** 解き直しの結果（E-5・R8-6）。 */
@@ -77,17 +98,29 @@ function keyOf(choice: QuizChoice): string {
 }
 
 export function useQuizAnswer(options: QuizAnswerOptions): QuizAnswer {
-  const { decision, sessionId, mode, threshold, previousIntervalDays, existing, record } = options;
-  // 問題を見せた時刻（見せたあとの最初の描画で決める。呼ぶ側は、問題ごとに作り直す）
-  const shownAt = useRef(0);
+  const { decision, sessionId, mode, threshold, previousIntervalDays, existing, record, draft } = options;
+  // 前に預けた下書き（すでに答えた問題では使わない）
+  const [restored] = useState(() => (existing === null ? (draft?.initial ?? null) : null));
+  // 問題を見せた時刻（見せたあとの最初の描画で決める。呼ぶ側は、問題ごとに作り直す。下書きがあれば、最初に見せた時刻のまま）
+  const shownAt = useRef(restored?.shownAt ?? 0);
   useEffect(() => {
-    shownAt.current = Date.now();
+    if (shownAt.current === 0) shownAt.current = Date.now();
   }, []);
-  const committed = useRef<string | null>(null);
+  const committed = useRef<string | null>(restored?.committed ?? null);
   const [stage, setStage] = useState<QuizStage>(existing === null ? 'answering' : 'revealed');
-  const [choice, setChoice] = useState<QuizChoice | null>(existing === null ? null : (existing.choice as QuizChoice));
-  const [reason, setReason] = useState(existing?.reason ?? '');
-  const [reselects, setReselects] = useState(existing?.reselect_count ?? 0);
+  const [choice, setChoice] = useState<QuizChoice | null>(
+    existing === null ? (restored?.choice ?? null) : (existing.choice as QuizChoice),
+  );
+  const [reason, setReason] = useState(existing?.reason ?? restored?.reason ?? '');
+  const [reselects, setReselects] = useState(existing?.reselect_count ?? restored?.reselects ?? 0);
+
+  // 答える前の下書きを、置き場に預ける（選んだ答え・理由・選び直した回数が変わるたびに）
+  const hasDraft = draft !== undefined;
+  const saveDraft = useEffectEvent((snapshot: QuizDraft) => draft?.save(snapshot));
+  useEffect(() => {
+    if (!hasDraft || stage !== 'answering') return;
+    saveDraft({ choice, reason, reselects, committed: committed.current, shownAt: shownAt.current });
+  }, [hasDraft, stage, choice, reason, reselects]);
   const [row, setRow] = useState<AnswerRow | null>(existing);
   const [elapsedSec, setElapsedSec] = useState<number | null>(existing === null ? null : existing.duration_ms / 1000);
   const [error, setError] = useState<string | null>(null);

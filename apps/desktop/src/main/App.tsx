@@ -8,6 +8,7 @@ import { solvedProblemCount, solvedProblemsLine } from './deleteImpact';
 import { ImportOffer } from './ImportOffer';
 import { ImportPage } from './ImportPage';
 import { Lightbox, type ViewerRequest } from './Lightbox';
+import { ReplayPage } from './replay/ReplayPage';
 import { RereadStore } from './rereadStore';
 import { SearchOverlay } from './search/SearchOverlay';
 import { useSearchOverlay } from './search/useSearchOverlay';
@@ -28,7 +29,7 @@ import { useImportFlow } from './useImportFlow';
 import { useNarrow } from './useNarrow';
 import { useSessionSummaries, useSessions, useToday } from './useSessions';
 import { currentView, historyReducer, isViewAvailable, startHistory, stepTarget } from './viewHistory';
-import { quizView, sessionView, viewSessionId, type View } from './views';
+import { quizView, replayView, sessionView, viewSessionId, type View } from './views';
 
 /** 取り消したあとの「元に戻しました」の通知の長さ（ミリ秒）。 */
 const UNDONE_TOAST_MS = 3500;
@@ -244,6 +245,8 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const openToday = useCallback(() => push({ kind: 'today' }), [push]);
   const openReview = useCallback(() => push({ kind: 'review' }), [push]);
   const openProblem = useCallback((sessionId: string, key: string) => push(quizView(sessionId, key)), [push]);
+  // 半荘を通して見る画面。`key` は、開く判断の鍵（迷いのカードの「この局面を解く」）。無ければ半荘の頭から
+  const openReplay = useCallback((sessionId: string, key?: string) => push(replayView(sessionId, key)), [push]);
 
   // 取り込みが終わったら、一覧を読み直す（保存した結果の段階・Rating を出すため。Rust 側の知らせの取りこぼしにも備える）。
   useEffect(() => {
@@ -368,7 +371,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   // ---- 描く ----
 
   const selectedSession = view.kind === 'session' ? (sessions?.find((s) => s.id === view.id) ?? null) : null;
-  const currentId = view.kind === 'session' ? view.id : null;
+  const currentId = view.kind === 'session' ? view.id : view.kind === 'replay' ? view.sessionId : null;
   const solvedLine = solvedProblemsLine(solved);
 
   return (
@@ -412,6 +415,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           {view.kind === 'import' && <ImportPage flow={flow} onOpenSession={openSession} />}
           {view.kind === 'today' && <TodayPage onOpen={openProblem} />}
           {view.kind === 'review' && <ReviewPage />}
+          {view.kind === 'replay' && <ReplayPage sessionId={view.sessionId} startKey={view.key} />}
           {view.kind === 'quiz' && (
             <QuizPage
               sessionId={view.sessionId}
@@ -431,6 +435,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
               onOpenImage={setViewer}
               importFlow={flow}
               rereads={rereads}
+              onOpenReplay={openReplay}
             />
           )}
           {sessions !== null && selectedSession === null && (view.kind === 'none' || view.kind === 'session') && (

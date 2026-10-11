@@ -431,6 +431,21 @@ export function SettingsPage() {
             <label className="check">
               <input
                 type="checkbox"
+                checked={settings.show_all_mismatches === true}
+                aria-describedby="show-all-mismatches-help"
+                onChange={(e) => void update({ show_all_mismatches: e.target.checked })}
+              />
+              AI の1位と違う判断も、不一致として出す
+            </label>
+            <p className="quiet" id="show-all-mismatches-help">
+              半荘を通して見る画面で、確率が基準以上でも、AI の1位と違う判断を不一致の場面に入れます。出題の基準は変わりません（既定は切）。
+            </p>
+          </div>
+
+          <div className="setting">
+            <label className="check">
+              <input
+                type="checkbox"
                 checked={settings.highlight_dora}
                 aria-describedby="highlight-dora-help"
                 onChange={(e) => void update({ highlight_dora: e.target.checked })}
@@ -438,7 +453,7 @@ export function SettingsPage() {
               ドラを目立たせる
             </label>
             <p className="quiet" id="highlight-dora-help">
-              出題の画面で、ドラ表示牌が指す牌の面を黄色にします。赤五は、指される牌でもあるときだけ黄色になります（既定は切）。
+              出題と半荘を通して見る画面で、ドラ表示牌が指す牌の面を黄色にします。赤五は、指される牌でもあるときだけ黄色になります（既定は切）。
             </p>
           </div>
         </div>
