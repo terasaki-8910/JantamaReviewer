@@ -63,6 +63,22 @@ describe('FX-4 の文字認識の写し（fx4-ocr.json）に個人を特定で�
   });
 });
 
+describe('FX-6 の文字認識の写し（fx6-ocr.json）に個人を特定できる値が入っていない', () => {
+  const text = JSON.stringify(loadFixtureJson('fx6-ocr.json'));
+
+  it('牌譜リンク・雀魂のドメイン・アカウントの番号・プレイヤー名・保存先のパスが無い', () => {
+    expect(text).not.toMatch(/paipu|mahjong-?soul|maj-?soul|yo-star/i);
+    expect(text).not.toMatch(/_a\d+|account|nickname|user_?id/i);
+    expect(text).not.toMatch(/[A-D]さん/);
+    expect(text).not.toMatch(/\d{6}-[0-9a-f]{8}-/i);
+    expect(text).not.toMatch(/Users|JantamaReviewerData|[A-Za-z]:[/\\]/);
+  });
+
+  it('絵文字として扱われる文字が無い', () => {
+    expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+});
+
 describe('FX-4・FX-5 のウィジェットの記録と FX-5 の文字認識の写しに、個人を特定できる値が入っていない', () => {
   for (const name of ['fx4-widget.json', 'fx5-widget.json', 'fx5-ocr.json']) {
     describe(name, () => {
