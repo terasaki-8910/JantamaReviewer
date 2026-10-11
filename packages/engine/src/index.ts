@@ -60,8 +60,13 @@
  * - `summarizeHanchan(report, { gradeModel?, marks? })`: 半荘の一覧と局の表に出すまとめ（卓・Rating・段階・局ごとの結果と
  *   点の増減・Rating・段階・迷いマークの結びつけ）。段階の当てはめの既定は `DEFAULT_GRADE_MODEL`
  *   （analysis/maka-fit/dataset.csv を `fitGradeModel` で当てはめた定数）
+ * - `fitMaka(users, sessions)`（F10、U-31）: 基礎の 67 局（`MAKA_BASE_RECORDS`。dataset.csv から作った定数）に、利用者が入れた MAKA の評価を
+ *   足して当てはめ直し、見込み（半荘を 1 つずつ外した「ぴったり」「±1段階以内」。`percentOf` で %）を返す。基礎の記録と同じ局の評価は、
+ *   その記録を置き換える。取り込んだ半荘が基礎のどの半荘かは、局の名前と点数が全部同じかで決める（`matchBaseGame`）。
+ *   `baseMakaFit()` は基礎だけの当てはめ。当てはめ直した段階をまとめに反映するのは `regradeSummary(summary, model)`
  * - `disagreesWithGrade(mark, grade)`（F10）: 局の自己評価（〇△✕）と AI 基準の段階が大きく食い違うか（局の表の印）。
- *   帯（〇 = S+〜A-、△ = B+〜B-、✕ = C+〜E）が 2 つ離れたら印。暫定の規則で、直すのはこの 1 つの関数のファイルだけ
+ *   帯（〇 = S+〜A-、△ = B+〜B-、✕ = C+〜E）が 2 つ離れたら印。暫定の規則で、直すのはこの 1 つの関数のファイルだけ。
+ *   週の集計（U-30）の「一致」（`agreesWithGrade`）と「ずれ」（`markOffsetFromGrade`。自分 - AI 基準、-2 から 2）も、同じ帯で決める
  */
 export const ENGINE_PACKAGE = '@jantama/engine' as const;
 
@@ -80,6 +85,8 @@ export * from './isotonic';
 export * from './kyoku';
 export * from './kyoku-locate';
 export * from './maka';
+export * from './maka-fit';
+export * from './maka-fit-base';
 export * from './mark-link';
 export * from './outcome';
 export * from './paipu-link';
