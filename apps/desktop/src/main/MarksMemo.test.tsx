@@ -273,6 +273,15 @@ describe('U-28 迷いのカードのメモ', () => {
     expect(candidates(1)).toHaveValue('');
   });
 
+  it('欄の外へ出ずに、打つのをやめて少し経つ前に画面が替わっても（半荘のページが外れても）、打った文は書き込む', async () => {
+    const { user, store, reopen } = setup({ session: recorded() });
+    await user.type(candidates(1), '3m・6p');
+    expect(calls(store)).toEqual([]);
+    reopen();
+    await waitFor(() => expect(calls(store)).toEqual(['set:1:3m・6p|']));
+    expect(candidates(1)).toHaveValue('3m・6p');
+  });
+
   it('Enter でも保存する（欄の位置は動かない）。変えていないときは、保存しない', async () => {
     const { user, store } = setup({ session: recorded() });
     await user.type(candidates(1), '3m・6p{Enter}');

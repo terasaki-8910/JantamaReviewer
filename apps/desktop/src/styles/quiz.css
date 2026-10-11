@@ -2268,7 +2268,13 @@ button.qrow.next {
   overflow-wrap: anywhere;
 }
 
-/* 半荘を通して見る画面で、答える前に出す、終局直後のメモの欄（答えの欄の上）。欄の罫線は、メモの欄どうしの間だけ */
+/* 半荘を通して見る画面で、答える前に出す、終局直後のメモの欄（答えのフォームの下に、罫線で区切って置く）。欄の罫線は、メモの欄どうしの間だけ */
+.answer > .memo-editor {
+  margin-top: var(--s4);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
+}
+
 .memo-editor .memo {
   margin-top: var(--s1);
   padding-top: 0;
