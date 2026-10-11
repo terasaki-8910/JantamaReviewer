@@ -16,7 +16,7 @@ import { SessionList, type SessionListHandle } from './SessionList';
 import { buildListRows, neighborAfterDelete } from './sessionRows';
 import { SessionPage } from './SessionPage';
 import { SettingsPage } from './SettingsPage';
-import { Sidebar } from './Sidebar';
+import { Sidebar, TopBar } from './Sidebar';
 import { QuizPage } from './study/QuizPage';
 import { ReviewPage } from './study/ReviewPage';
 import { StudyProvider, useStudyData } from './study/StudyProvider';
@@ -26,8 +26,8 @@ import { UndoProvider, useUndo, useUndoEvents } from './undo/UndoProvider';
 import { useShortcutsBlocked } from './undo/shortcutGuard';
 import type { UndoCommand, UndoEvent } from './undo/undoStack';
 import { useImportFlow } from './useImportFlow';
-import { useNarrow } from './useNarrow';
 import { useSessionSummaries, useSessions, useToday } from './useSessions';
+import { useSidebar } from './useSidebar';
 import { currentView, historyReducer, isViewAvailable, startHistory, stepTarget } from './viewHistory';
 import { quizView, replayView, sessionView, viewSessionId, type View } from './views';
 
@@ -43,7 +43,8 @@ export interface AppProps {
 }
 
 /**
- * 検討画面（メインの窓）。承認済みのシェル: 左に固定幅のサイドバー（幅 640px 未満ではアイコンだけの細い列）、右に本文。
+ * 検討画面（メインの窓）。承認済みのシェル: 左に固定幅のサイドバー、右に本文。幅 640px 未満では、サイドバーは隠れ、左上のボタンで
+ * 引き出しとして重ねて開く。広い窓でも、同じボタンでサイドバーをしまえる（U-32。出す・しまう・開く・閉じるは useSidebar.ts）。
  * サイドバーに、主な操作「検討結果を取り込む」・半荘の一覧（日付ごと・検索・段階の絞り込み・削除）・設定とテーマの切り替え。
  * 見た画面の履歴（← → と Alt+← / Alt+→）と、操作の取り消し（Ctrl+Z・Ctrl+Y。半荘の削除が最初の利用者）は、ここで受ける。
  */
@@ -81,7 +82,6 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   // 取り込みの状態は、画面を移っても保つ（mjai の窓からの知らせを、取りこぼさないため）。
   const flow = useImportFlow();
   const now = useToday();
-  const narrow = useNarrow();
   const undo = useUndo();
   const shortcutsBlocked = useShortcutsBlocked();
   // 検索の重ね表示（検索のアイコンと Ctrl+K で開く。U-22）
@@ -370,44 +370,76 @@ function Shell({ solvedProblems }: Required<AppProps>) {
 
   // ---- 描く ----
 
+  // サイドバーの出す・しまう・引き出し（U-32）。検索・削除の確認・画像の大きな表示が開いている間は、Esc と Tab をそちらに任せる
+  const sidebar = useSidebar({ suspended: pending !== null || viewer !== null || search.open });
+  // 引き出しの項目（取り込み・今日の出題・解き直し・設定・半荘）を選んだら、引き出しを閉じて、左上のボタンへキーボードの位置を戻す
+  const choose = <Args extends unknown[]>(action: (...args: Args) => void) => (...args: Args) => {
+    action(...args);
+    sidebar.closeDrawer(true);
+  };
+  // 検索の結果を開いたときは、引き出しだけ閉じる（開いた画面が、キーボードの位置を決める）
+  const chooseFromSearch = <Args extends unknown[]>(action: (...args: Args) => void) => (...args: Args) => {
+    action(...args);
+    sidebar.closeDrawer(false);
+  };
+  const tools = {
+    canGoBack,
+    canGoForward,
+    onGoBack: () => step(-1),
+    onGoForward: () => step(1),
+    searchOpen: search.open,
+    onSearch: search.show,
+  };
+
   const selectedSession = view.kind === 'session' ? (sessions?.find((s) => s.id === view.id) ?? null) : null;
   const currentId = view.kind === 'session' ? view.id : view.kind === 'replay' ? view.sessionId : null;
   const solvedLine = solvedProblemsLine(solved);
 
   return (
     <StudyProvider value={study}>
-      <div className="app" inert={pending !== null || viewer !== null || search.open}>
+      <div
+        className="app"
+        data-sb={sidebar.shown ? 'shown' : 'hidden'}
+        data-drawer={sidebar.drawerOpen ? 'open' : 'closed'}
+        inert={pending !== null || viewer !== null || search.open}
+      >
         <Sidebar
           view={view}
           theme={theme}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-          onGoBack={() => step(-1)}
-          onGoForward={() => step(1)}
-          searchOpen={search.open}
-          onSearch={search.show}
-          onImport={openImport}
-          onSettings={() => push({ kind: 'settings' })}
+          {...tools}
+          expanded={sidebar.expanded}
+          drawer={sidebar.drawerOpen}
+          onToggleSidebar={sidebar.toggle}
+          toggleRef={sidebar.sideToggleRef}
+          sideRef={sidebar.sideRef}
+          onImport={choose(openImport)}
+          onSettings={choose(() => push({ kind: 'settings' }))}
           onToggleTheme={toggleTheme}
           todayCount={study.todayUnanswered}
           dueCount={study.dueCount}
-          onToday={openToday}
-          onReview={openReview}
+          onToday={choose(openToday)}
+          onReview={choose(openReview)}
         >
           <SessionList
             ref={listRef}
             rows={rows}
             now={now}
             currentId={currentId}
-            narrow={narrow}
             loaded={sessions !== null}
             loadError={loadError}
-            onOpen={openFromList}
+            onOpen={choose(openFromList)}
             onRequestDelete={requestDelete}
             announce={announce}
           />
         </Sidebar>
-        <main className="main">
+        {/* 引き出しの幕。押すと閉じる（キーボードでは Esc。Tab の順には入れない） */}
+        {sidebar.drawerOpen && (
+          <button type="button" className="scrim" tabIndex={-1} aria-hidden="true" onClick={() => sidebar.closeDrawer(true)} />
+        )}
+        <main className="main" inert={sidebar.drawerOpen}>
+          {(sidebar.narrow || !sidebar.shown) && (
+            <TopBar onToggle={sidebar.toggle} toggleRef={sidebar.topToggleRef} tools={tools} />
+          )}
           {flow.offer && view.kind !== 'import' && (
             <ImportOffer link={flow.offer} onAccept={acceptImportOffer} onDismiss={flow.dismissOffer} />
           )}
@@ -450,8 +482,8 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           rows={rows}
           summaries={summaries}
           now={now}
-          onOpenGame={openFromList}
-          onOpenProblem={openProblem}
+          onOpenGame={chooseFromSearch(openFromList)}
+          onOpenProblem={chooseFromSearch(openProblem)}
           onClose={search.hide}
         />
       )}

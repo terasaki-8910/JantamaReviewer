@@ -31,21 +31,14 @@
   color: var(--ink);
 }
 
+/* 重ね表示が開いている間も、閉じたあとも、緑の塗り・緑の輪は付けない（R11-5）。開いている間は、押したときと同じ灰色の塗り */
 .search-btn[aria-expanded="true"] {
-  background: var(--accent-fill);
+  background: var(--hover);
 }
 
-/* 細い列: アイコン・検索・← → の順に、縦に並べる */
-@media (width < 640px) {
-  .side-tools {
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .search-btn {
-    width: 44px;
-    height: 36px;
-  }
+/* キーボードで選んだときの輪も、緑ではなく灰色（--muted は、ライト・ダークとも、背景との差が 3:1 を大きく超える） */
+.search-btn:focus-visible {
+  outline-color: var(--muted);
 }
 
 /* ================= 検索の重ね表示 ================= */
