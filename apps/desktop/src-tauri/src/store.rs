@@ -51,6 +51,14 @@ const MAX_LINK_VALUE_LEN: usize = 64;
 pub const SELF_RATINGS_FILE: &str = "self-ratings.json";
 /// MAKA の評価（局ごと・半荘全体。任意の入力）のファイル名（半荘のフォルダの中。F10）。
 pub const MAKA_FILE: &str = "maka.json";
+/// 終局直後メモ（迷いマークごとの「候補」と「理由」・迷いマークの無い迷いのメモ）のファイル名（半荘のフォルダの中。F4）。
+pub const MEMOS_FILE: &str = "memos.json";
+/// メモの「候補」の長さの上限（文字数）。「3m・6p」のような短い文。
+pub const MAX_MEMO_CANDIDATES_CHARS: usize = 40;
+/// メモの「理由」の長さの上限（文字数）。1 行。出題の理由の欄（80 文字）と同じ。
+pub const MAX_MEMO_REASON_CHARS: usize = 80;
+/// 迷いマークの無い迷いのメモの、1 つの半荘での数の上限。
+pub const MAX_EXTRA_MEMOS: usize = 200;
 /// MAKA の評価の段階（14 段階。強い順）。エンジンの `GRADES` と同じ並びの名前。
 pub const MAKA_GRADES: [&str; 14] = [
     "S+", "S", "S-", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D", "E",
@@ -365,6 +373,47 @@ pub struct Maka {
     pub hanchan: Option<String>,
 }
 
+/// メモ 1 つの文（`memos.json`）。「候補」は短い文（例: `3m・6p`）、「理由」は 1 行。どちらも、前後の空白を除いて持つ。
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct MemoText {
+    #[serde(default)]
+    pub candidates: String,
+    #[serde(default)]
+    pub reason: String,
+}
+
+impl MemoText {
+    /// 「候補」も「理由」も空か（空のメモは、持たない）。
+    pub fn is_empty(&self) -> bool {
+        self.candidates.is_empty() && self.reason.is_empty()
+    }
+}
+
+/// 迷いマークの無い迷いのメモ。局・巡目は、判断の鍵（`decision`。エンジンの `DecisionRef.key`）で持つ。
+/// `id` は、メモを呼ぶ名前（英数字だけ。画面が付ける）。
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ExtraMemo {
+    pub id: String,
+    pub decision: String,
+    #[serde(default)]
+    pub candidates: String,
+    #[serde(default)]
+    pub reason: String,
+}
+
+/// 終局直後のメモ（`memos.json`）。
+/// - `marks`: 迷いマークの id（10 進の文字列）→ メモ。空のメモは持たない
+/// - `extras`: 迷いマークの無い迷いのメモ（足した順）
+///
+/// 知らない項目があっても読める。
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Memos {
+    #[serde(default)]
+    pub marks: BTreeMap<String, MemoText>,
+    #[serde(default)]
+    pub extras: Vec<ExtraMemo>,
+}
+
 /// 半荘 1 つ分の一覧用の情報。記録（迷いマークか評価）も結果も無い半荘は、一覧に入れない（W-14）。
 /// 結果だけの半荘（記録の無いまま取り込んだもの）は入れる。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -386,6 +435,8 @@ pub struct SessionRecord {
     pub self_ratings: SelfRatings,
     /// MAKA の評価（局の評価の表で入れたもの）。
     pub maka: Maka,
+    /// 終局直後のメモ（迷いのカードと、半荘を通して見る画面で書いたもの）。
+    pub memos: Memos,
 }
 
 #[derive(Debug)]
@@ -412,6 +463,8 @@ pub enum StoreError {
     InvalidLink(String),
     /// 局の評価（自己評価の上書き・MAKA の評価）の値が正しくない。
     InvalidEvaluation(String),
+    /// 終局直後のメモの値が正しくない。
+    InvalidMemo(String),
     /// 消した半荘の置き場に、同じ名前の半荘が残っている（消せない。置き場は、アプリを開き直すと片づく）。
     TrashOccupied(String),
     /// 消した半荘の中に、その名前が無い（戻せない）。
@@ -451,6 +504,7 @@ impl fmt::Display for StoreError {
             StoreError::InvalidEvaluation(reason) => {
                 write!(f, "局の評価の値が正しくありません: {reason}")
             }
+            StoreError::InvalidMemo(reason) => write!(f, "メモの値が正しくありません: {reason}"),
             StoreError::TrashOccupied(id) => write!(
                 f,
                 "消した半荘の置き場に、同じ名前の半荘が残っているため、消せません: {id}。アプリを開き直すと片づきます。"
@@ -885,6 +939,7 @@ impl Store {
                 self_ratings: read_json_file::<SelfRatings>(&dir.join(SELF_RATINGS_FILE))
                     .unwrap_or_default(),
                 maka: read_json_file::<Maka>(&dir.join(MAKA_FILE)).unwrap_or_default(),
+                memos: read_json_file::<Memos>(&dir.join(MEMOS_FILE)).unwrap_or_default(),
             });
         }
         sessions.sort_by(|a, b| {
@@ -1239,6 +1294,89 @@ impl Store {
         })
     }
 
+    // ---- 終局直後のメモ（F4）: 迷いマークごとの「候補」「理由」と、迷いマークの無い迷いのメモ。events.jsonl は書き換えない ----
+
+    /// 終局直後のメモ。まだ無い・読めないときは空。
+    pub fn load_memos(&self, session_id: &str) -> Result<Memos, StoreError> {
+        let dir = self.session_path(session_id)?;
+        Ok(read_json_file::<Memos>(&dir.join(MEMOS_FILE)).unwrap_or_default())
+    }
+
+    /// 迷いマークのメモを書く（置き換える）。前後の空白は除く。「候補」も「理由」も空なら、メモを消す（空のメモは持たない）。
+    /// 迷いマークの番号は、その半荘にある（取り消されていない）ものだけ受け付ける。
+    pub fn set_memo(
+        &self,
+        session_id: &str,
+        mark_id: u64,
+        candidates: &str,
+        reason: &str,
+    ) -> Result<(), StoreError> {
+        let text = checked_memo_text(candidates, reason)?;
+        let dir = self.session_path(session_id)?;
+        let events = read_events(&dir.join(EVENTS_FILE))?.unwrap_or_default();
+        let view = reduce(&events);
+        let key = mark_id.to_string();
+        check_record_id(&key, "迷いマーク", view.marks.iter().map(|m| m.id))?;
+        self.update_json::<Memos>(session_id, MEMOS_FILE, |memos| {
+            if text.is_empty() {
+                memos.marks.remove(&key);
+            } else {
+                memos.marks.insert(key, text);
+            }
+        })
+    }
+
+    /// 迷いマークのメモを消す（取り消しにも使う）。無いメモを消してもエラーにならない。
+    pub fn clear_memo(&self, session_id: &str, mark_id: u64) -> Result<(), StoreError> {
+        self.update_json::<Memos>(session_id, MEMOS_FILE, |memos| {
+            memos.marks.remove(&mark_id.to_string());
+        })
+    }
+
+    /// 迷いマークの無い迷いのメモを書く。`id` が同じメモがあれば置き換え、無ければ足す。`decision` は判断の鍵（局・巡目を手で選んだもの）。
+    /// 「候補」「理由」は、空でもよい（足したあとに書く）。前後の空白は除く。
+    pub fn set_extra_memo(
+        &self,
+        session_id: &str,
+        id: &str,
+        decision: &str,
+        candidates: &str,
+        reason: &str,
+    ) -> Result<(), StoreError> {
+        check_extra_memo_id(id)?;
+        check_memo_decision(decision)?;
+        let text = checked_memo_text(candidates, reason)?;
+        let dir = self.session_path(session_id)?;
+        let existing = read_json_file::<Memos>(&dir.join(MEMOS_FILE)).unwrap_or_default();
+        if !existing.extras.iter().any(|extra| extra.id == id)
+            && existing.extras.len() >= MAX_EXTRA_MEMOS
+        {
+            return Err(StoreError::InvalidMemo(format!(
+                "迷いマークの無い迷いのメモは、{MAX_EXTRA_MEMOS} 件までです"
+            )));
+        }
+        let extra = ExtraMemo {
+            id: id.to_string(),
+            decision: decision.to_string(),
+            candidates: text.candidates,
+            reason: text.reason,
+        };
+        self.update_json::<Memos>(session_id, MEMOS_FILE, |memos| {
+            match memos.extras.iter_mut().find(|e| e.id == extra.id) {
+                Some(found) => *found = extra,
+                None => memos.extras.push(extra),
+            }
+        })
+    }
+
+    /// 迷いマークの無い迷いのメモを消す（取り消しにも使う）。無いメモを消してもエラーにならない。
+    pub fn clear_extra_memo(&self, session_id: &str, id: &str) -> Result<(), StoreError> {
+        check_extra_memo_id(id)?;
+        self.update_json::<Memos>(session_id, MEMOS_FILE, |memos| {
+            memos.extras.retain(|extra| extra.id != id);
+        })
+    }
+
     /// 半荘のフォルダの JSON のファイルを読んで（無い・読めないときは空）、`change` で書き換えて、書き戻す。
     fn update_json<T>(
         &self,
@@ -1339,6 +1477,61 @@ fn check_kyoku_key(key: &str) -> Result<(), StoreError> {
     } else {
         Err(StoreError::InvalidEvaluation(format!(
             "局の鍵の形ではありません: {key:?}（例: k1h1）"
+        )))
+    }
+}
+
+/// メモの 1 つの文が正しいか（前後の空白を除いた長さの上限・改行や制御文字が無いこと）。正しければ、空白を除いた文を返す。
+fn checked_memo_field(label: &str, value: &str, max_chars: usize) -> Result<String, StoreError> {
+    let trimmed = value.trim();
+    if trimmed.chars().any(char::is_control) {
+        return Err(StoreError::InvalidMemo(format!(
+            "{label}に、改行や制御文字は使えません"
+        )));
+    }
+    if trimmed.chars().count() > max_chars {
+        return Err(StoreError::InvalidMemo(format!(
+            "{label}は {max_chars} 文字以内にしてください"
+        )));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// メモの「候補」と「理由」を確かめて、前後の空白を除いた文にする。
+fn checked_memo_text(candidates: &str, reason: &str) -> Result<MemoText, StoreError> {
+    Ok(MemoText {
+        candidates: checked_memo_field("候補", candidates, MAX_MEMO_CANDIDATES_CHARS)?,
+        reason: checked_memo_field("理由", reason, MAX_MEMO_REASON_CHARS)?,
+    })
+}
+
+/// 迷いマークの無い迷いのメモの名前（英数字だけ・16 文字まで）が正しい形か。
+fn check_extra_memo_id(id: &str) -> Result<(), StoreError> {
+    if !id.is_empty() && id.len() <= 16 && id.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        Ok(())
+    } else {
+        Err(StoreError::InvalidMemo(format!(
+            "メモの名前の形ではありません: {id:?}（英数字 16 文字まで）"
+        )))
+    }
+}
+
+/// メモが結びつく判断の鍵（`k<局の通し番号>h<本場>e<局の中の番号>`。例: `k1h1e7`）の形か。画面（エンジン）が決める鍵で、ここでは形だけを確かめる。
+fn check_memo_decision(key: &str) -> Result<(), StoreError> {
+    let digits = |s: &str| !s.is_empty() && s.len() <= 6 && s.bytes().all(|b| b.is_ascii_digit());
+    let valid = key
+        .strip_prefix('k')
+        .and_then(|rest| rest.split_once('h'))
+        .and_then(|(kyoku, rest)| {
+            rest.split_once('e')
+                .map(|(honba, entry)| (kyoku, honba, entry))
+        })
+        .is_some_and(|(kyoku, honba, entry)| digits(kyoku) && digits(honba) && digits(entry));
+    if valid {
+        Ok(())
+    } else {
+        Err(StoreError::InvalidMemo(format!(
+            "判断の鍵の形ではありません: {key:?}（例: k1h1e7）"
         )))
     }
 }
@@ -3326,6 +3519,374 @@ mod tests {
         let maka = store.load_maka(&older).unwrap();
         assert_eq!(maka.kyokus.get("k0h0").map(String::as_str), Some("C+"));
         assert_eq!(maka.hanchan.as_deref(), Some("B"));
+    }
+
+    // ---- U-28: 終局直後のメモの保存（memos.json） ----
+
+    fn memo(candidates: &str, reason: &str) -> MemoText {
+        MemoText {
+            candidates: candidates.to_string(),
+            reason: reason.to_string(),
+        }
+    }
+
+    #[test]
+    fn u28_a_mark_memo_can_be_written_replaced_and_cleared_and_comes_back_in_the_list() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        assert_eq!(store.load_memos(&id).unwrap(), Memos::default());
+        assert_eq!(only_session(&store).memos, Memos::default());
+
+        store
+            .set_memo(&id, 1, "3m・6p", "形を崩したくない")
+            .unwrap();
+        store.set_memo(&id, 2, "ポン・スルー", "").unwrap();
+        let memos = store.load_memos(&id).unwrap();
+        assert_eq!(
+            memos.marks.get("1"),
+            Some(&memo("3m・6p", "形を崩したくない"))
+        );
+        assert_eq!(memos.marks.get("2"), Some(&memo("ポン・スルー", "")));
+        assert_eq!(only_session(&store).memos, memos);
+
+        // 置き換え（前後の空白は除く）
+        store.set_memo(&id, 1, "  3m  ", "　速さ　").unwrap();
+        assert_eq!(
+            store.load_memos(&id).unwrap().marks.get("1"),
+            Some(&memo("3m", "速さ"))
+        );
+        // 「候補」も「理由」も空にすると、メモを消す（空のメモは持たない）
+        store.set_memo(&id, 1, " ", "").unwrap();
+        assert!(!store.load_memos(&id).unwrap().marks.contains_key("1"));
+        assert!(store.load_memos(&id).unwrap().marks.contains_key("2"));
+        // 消す（無いメモを消しても、エラーにならない）
+        store.clear_memo(&id, 2).unwrap();
+        store.clear_memo(&id, 2).unwrap();
+        assert_eq!(store.load_memos(&id).unwrap(), Memos::default());
+    }
+
+    #[test]
+    fn u28_the_memos_file_has_a_stable_json_shape() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        store.set_memo(&id, 2, "南・6m", "東を残したい").unwrap();
+        store
+            .set_extra_memo(&id, "x1", "k4h2e5", "5s・發", "押すか引くか")
+            .unwrap();
+        let path = session_dir_of(&store, &id).join(MEMOS_FILE);
+        let value: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "marks": {"2": {"candidates": "南・6m", "reason": "東を残したい"}},
+                "extras": [{"id": "x1", "decision": "k4h2e5", "candidates": "5s・發", "reason": "押すか引くか"}]
+            })
+        );
+        // 一時ファイルは残らない（別の名前で書いてから置き換える）
+        assert!(!path.with_file_name("memos.json.tmp").exists());
+    }
+
+    #[test]
+    fn u28_memo_text_is_checked_before_anything_is_written() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let dir = session_dir_of(&store, &id);
+        let long_candidates = "a".repeat(MAX_MEMO_CANDIDATES_CHARS + 1);
+        let long_reason = "あ".repeat(MAX_MEMO_REASON_CHARS + 1);
+        for (candidates, reason) in [
+            (long_candidates.as_str(), ""),
+            ("", long_reason.as_str()),
+            ("3m\n6p", ""),
+            ("", "一行目\r\n二行目"),
+            ("3m\u{0}", ""),
+        ] {
+            assert!(
+                matches!(
+                    store.set_memo(&id, 1, candidates, reason),
+                    Err(StoreError::InvalidMemo(_))
+                ),
+                "{candidates:?} {reason:?}"
+            );
+            assert!(
+                matches!(
+                    store.set_extra_memo(&id, "x1", "k0h0e0", candidates, reason),
+                    Err(StoreError::InvalidMemo(_))
+                ),
+                "{candidates:?} {reason:?}"
+            );
+        }
+        assert!(!dir.join(MEMOS_FILE).exists(), "何も書いていない");
+        // タブだけは、前後の空白として除かれて、空のメモ（何も書かない）になる
+        store.set_memo(&id, 1, "", "\t").unwrap();
+        assert_eq!(store.load_memos(&id).unwrap(), Memos::default());
+        // ちょうど上限の長さは書ける（文字の数で数える。日本語は 1 文字）
+        store
+            .set_memo(
+                &id,
+                1,
+                &"a".repeat(MAX_MEMO_CANDIDATES_CHARS),
+                &"あ".repeat(MAX_MEMO_REASON_CHARS),
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn u28_a_mark_memo_needs_a_mark_that_is_in_the_session() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        // 評価の番号（3）・無い番号は受け付ける迷いマークではない
+        assert!(matches!(
+            store.set_memo(&id, 3, "3m", ""),
+            Err(StoreError::UnknownRecord { .. })
+        ));
+        assert!(matches!(
+            store.set_memo(&id, 99, "3m", ""),
+            Err(StoreError::UnknownRecord { .. })
+        ));
+        assert!(!session_dir_of(&store, &id).join(MEMOS_FILE).exists());
+        // 取り消した迷いマークには書けない（評価 3、迷い 2 の順に取り消す）
+        store.undo(T0 + 10).unwrap();
+        store.undo(T0 + 11).unwrap();
+        assert!(matches!(
+            store.set_memo(&id, 2, "3m", ""),
+            Err(StoreError::UnknownRecord { .. })
+        ));
+        store.set_memo(&id, 1, "3m", "").unwrap();
+    }
+
+    #[test]
+    fn u28_extra_memos_are_added_in_order_replaced_by_name_and_removed() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        store
+            .set_extra_memo(&id, "x1", "k4h2e5", "5s・發", "押すか引くか")
+            .unwrap();
+        // 足したあとに書く（候補も理由も空でよい）
+        store.set_extra_memo(&id, "x2", "k1h0e3", "", "").unwrap();
+        let memos = store.load_memos(&id).unwrap();
+        assert_eq!(
+            memos
+                .extras
+                .iter()
+                .map(|e| (e.id.as_str(), e.decision.as_str()))
+                .collect::<Vec<_>>(),
+            [("x1", "k4h2e5"), ("x2", "k1h0e3")]
+        );
+        // 同じ名前は置き換え（場所は変わらない）。前後の空白は除く
+        store
+            .set_extra_memo(&id, "x1", "k4h2e6", " 1m ", " 速い ")
+            .unwrap();
+        let memos = store.load_memos(&id).unwrap();
+        assert_eq!(memos.extras.len(), 2);
+        assert_eq!(
+            memos.extras[0],
+            ExtraMemo {
+                id: "x1".into(),
+                decision: "k4h2e6".into(),
+                candidates: "1m".into(),
+                reason: "速い".into()
+            }
+        );
+        assert_eq!(only_session(&store).memos, memos);
+        // 消す（無い名前を消しても、エラーにならない）
+        store.clear_extra_memo(&id, "x1").unwrap();
+        store.clear_extra_memo(&id, "x1").unwrap();
+        assert_eq!(
+            store
+                .load_memos(&id)
+                .unwrap()
+                .extras
+                .iter()
+                .map(|e| e.id.as_str())
+                .collect::<Vec<_>>(),
+            ["x2"]
+        );
+        // 迷いマークのメモとは別の入れ物で、互いに消さない
+        store.set_memo(&id, 1, "3m", "").unwrap();
+        store.clear_extra_memo(&id, "x2").unwrap();
+        assert!(store.load_memos(&id).unwrap().marks.contains_key("1"));
+    }
+
+    #[test]
+    fn u28_extra_memo_names_and_decision_keys_must_have_the_right_shape() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let too_long = "x".repeat(17);
+        for bad_id in ["", "x 1", "x-1", "あ", "../x", too_long.as_str()] {
+            assert!(
+                matches!(
+                    store.set_extra_memo(&id, bad_id, "k0h0e0", "", ""),
+                    Err(StoreError::InvalidMemo(_))
+                ),
+                "{bad_id:?}"
+            );
+            assert!(store.clear_extra_memo(&id, bad_id).is_err(), "{bad_id:?}");
+        }
+        for bad_key in [
+            "",
+            "k0h0",
+            "k0h0e",
+            "k0h0e1x",
+            "0h0e1",
+            "k-1h0e1",
+            "k0h0e1 ",
+            "manual",
+            "k1234567h0e1",
+        ] {
+            assert!(
+                matches!(
+                    store.set_extra_memo(&id, "x1", bad_key, "", ""),
+                    Err(StoreError::InvalidMemo(_))
+                ),
+                "{bad_key:?}"
+            );
+        }
+        assert!(!session_dir_of(&store, &id).join(MEMOS_FILE).exists());
+    }
+
+    #[test]
+    fn u28_the_number_of_extra_memos_is_limited() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        for n in 0..MAX_EXTRA_MEMOS {
+            store
+                .set_extra_memo(&id, &format!("x{n}"), "k0h0e0", "", "")
+                .unwrap();
+        }
+        assert!(matches!(
+            store.set_extra_memo(&id, "over", "k0h0e0", "", ""),
+            Err(StoreError::InvalidMemo(_))
+        ));
+        // 上限でも、いまあるメモの書き換えはできる
+        store.set_extra_memo(&id, "x0", "k0h0e1", "3m", "").unwrap();
+        assert_eq!(store.load_memos(&id).unwrap().extras.len(), MAX_EXTRA_MEMOS);
+    }
+
+    #[test]
+    fn u28_memo_commands_refuse_a_session_that_is_not_a_plain_existing_folder() {
+        let (_tmp, store) = open_store();
+        for bad in [
+            "",
+            "..",
+            "../x",
+            "a/b",
+            "a\\b",
+            "x y",
+            "あ",
+            "20991231-235959",
+        ] {
+            assert!(
+                matches!(
+                    store.set_memo(bad, 1, "3m", ""),
+                    Err(StoreError::UnknownSession(_))
+                ),
+                "{bad:?}"
+            );
+            assert!(store.clear_memo(bad, 1).is_err(), "{bad:?}");
+            assert!(
+                store.set_extra_memo(bad, "x1", "k0h0e0", "", "").is_err(),
+                "{bad:?}"
+            );
+            assert!(store.clear_extra_memo(bad, "x1").is_err(), "{bad:?}");
+            assert!(store.load_memos(bad).is_err(), "{bad:?}");
+        }
+        assert!(!store
+            .root()
+            .join(GAMES_DIR)
+            .join("20991231-235959")
+            .exists());
+    }
+
+    #[test]
+    fn u28_a_broken_memos_file_does_not_stop_the_list_and_the_next_write_replaces_it() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let dir = session_dir_of(&store, &id);
+        for broken in [
+            "{broken",
+            "[]",
+            "42",
+            "",
+            r#"{"marks": 7}"#,
+            r#"{"extras": {}}"#,
+        ] {
+            fs::write(dir.join(MEMOS_FILE), broken).unwrap();
+            assert_eq!(only_session(&store).memos, Memos::default(), "{broken:?}");
+            assert_eq!(store.load_memos(&id).unwrap(), Memos::default());
+        }
+        store.set_memo(&id, 1, "3m", "").unwrap();
+        assert_eq!(
+            store.load_memos(&id).unwrap().marks.get("1"),
+            Some(&memo("3m", ""))
+        );
+        // 知らない項目（あとの版が足したもの）があっても読める
+        fs::write(
+            dir.join(MEMOS_FILE),
+            r#"{"marks": {"1": {"candidates": "3m", "reason": "", "later": 1}}, "extras": [], "later": [1]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            only_session(&store).memos.marks.get("1"),
+            Some(&memo("3m", ""))
+        );
+    }
+
+    #[test]
+    fn u28_memos_never_touch_the_recording_or_the_other_session_files() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let before = event_lines(&store);
+        let view_before = store.view();
+        store.set_mark_link(&id, 1, "k0h0e1").unwrap();
+        store.set_maka_hanchan(&id, "A+").unwrap();
+        store.set_memo(&id, 1, "3m", "速さ").unwrap();
+        store.set_extra_memo(&id, "x1", "k0h0e1", "", "").unwrap();
+        assert_eq!(event_lines(&store), before);
+        assert_eq!(store.view(), view_before);
+        // 記録の続きは、これまでどおり同じ半荘に入る
+        store.add_mark(T0 + 5, shot()).unwrap();
+        assert_eq!(store.current_session_id(), Some(id.as_str()));
+        // 結びつけ・MAKA は変わらない
+        assert_eq!(
+            store
+                .load_links(&id)
+                .unwrap()
+                .marks
+                .get("1")
+                .map(String::as_str),
+            Some("k0h0e1")
+        );
+        assert_eq!(store.load_maka(&id).unwrap().hanchan.as_deref(), Some("A+"));
+        // メモは、結びつけを書き直しても残る
+        store.set_mark_link(&id, 1, "k0h0e2").unwrap();
+        assert!(store.load_memos(&id).unwrap().marks.contains_key("1"));
+    }
+
+    #[test]
+    fn u28_memos_move_with_the_session_folder_to_the_trash_and_back() {
+        let (_tmp, mut store) = open_store();
+        let (older, _newer) = two_sessions(&mut store);
+        store.set_memo(&older, 1, "3m・6p", "形").unwrap();
+        store
+            .set_extra_memo(&older, "x1", "k2h0e4", "發", "押す")
+            .unwrap();
+        let before = store.load_memos(&older).unwrap();
+        store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+        assert!(
+            trash(&store).join(&older).join(MEMOS_FILE).is_file(),
+            "メモのファイルも、半荘のフォルダと一緒に置き場へ移る"
+        );
+        assert!(!store.root().join(GAMES_DIR).join(&older).exists());
+        store
+            .restore_sessions(std::slice::from_ref(&older))
+            .unwrap();
+        assert_eq!(store.load_memos(&older).unwrap(), before);
+        assert!(store
+            .list_sessions()
+            .unwrap()
+            .iter()
+            .any(|s| s.id == older && s.memos == before));
     }
 
     // ---- U-9: 半荘の削除（trash/ へ移す）と、元に戻す ----
