@@ -10,6 +10,7 @@ import { listen } from '@tauri-apps/api/event';
 import { vi } from 'vitest';
 
 import type { AppState, InputStatus, SessionRecord, Settings } from '../src/api/types';
+import { defaultReplayKeys } from '../src/main/replay/keys';
 
 export const baseState: AppState = {
   status: 'recording',
@@ -31,6 +32,8 @@ export const baseSettings: Settings = {
   daily_count: 5,
   disagreement_percent: 5,
   highlight_dora: false,
+  show_all_mismatches: false,
+  replay_keys: defaultReplayKeys(),
 };
 
 /** ボタンの登録・テスト・補助プログラムの、既定の状態（補助プログラムは未設定で、本体のフックだけで動いている）。 */

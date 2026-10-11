@@ -10,7 +10,7 @@ import {
   type HistoryAction,
   type ViewHistory,
 } from './viewHistory';
-import { sessionView, type View } from './views';
+import { replayView, sessionView, type View } from './views';
 
 const s = sessionView;
 const IMPORT: View = { kind: 'import' };
@@ -137,5 +137,39 @@ describe('U-10: 画面の履歴（戻る・進む）', () => {
     expect(isViewAvailable(SETTINGS, ids)).toBe(true);
     expect(isViewAvailable(s('a'), ids)).toBe(true);
     expect(isViewAvailable(s('b'), ids)).toBe(false);
+  });
+
+  it('U-21 通して見る画面も、← → と Alt+← / Alt+→ で行き来できる。消した半荘の通して見る画面は飛ばす', () => {
+    // 半荘の画面 → その半荘を通して見る（迷いのカードから、判断の場面で）→ 設定
+    const h = run([
+      { type: 'push', view: replayView('a', 'k1h0e12') },
+      { type: 'push', view: SETTINGS },
+    ]);
+    expect(h.entries).toEqual([s('a'), replayView('a', 'k1h0e12'), SETTINGS]);
+    expect(stepTarget(h, -1, all(['a']))).toBe(1);
+    const back = historyReducer(h, { type: 'go', index: 1 });
+    expect(currentView(back)).toEqual(replayView('a', 'k1h0e12'));
+    // 半荘の画面に戻れる。そこから進むと、また通して見る画面
+    const session = historyReducer(back, { type: 'go', index: 0 });
+    expect(currentView(session)).toEqual(s('a'));
+    expect(stepTarget(session, 1, all(['a']))).toBe(1);
+    // 半荘 a を消すと、a の通して見る画面にも行けない
+    const ids = new Set(['b']);
+    expect(isViewAvailable(replayView('a'), ids)).toBe(false);
+    expect(isViewAvailable(replayView('b'), ids)).toBe(true);
+    expect(stepTarget(h, -1, all(['b']))).toBeNull();
+    // 同じ半荘の、開く判断が違う通して見る画面は、別の画面（同じ画面どうしは増えない）
+    const pushed = run([
+      { type: 'push', view: replayView('a', 'k1h0e12') },
+      { type: 'push', view: replayView('a', 'k1h0e12') },
+      { type: 'push', view: replayView('a', 'k1h1e7') },
+    ]);
+    expect(pushed.entries).toEqual([s('a'), replayView('a', 'k1h0e12'), replayView('a', 'k1h1e7')]);
+  });
+
+  it('U-21 いま見ている半荘が一覧から無くなったとき、その半荘の通して見る画面も、いちばん新しい半荘に替わる', () => {
+    const h = run([{ type: 'push', view: replayView('a', 'k1h0e12') }], startHistory(s('b')));
+    const after = historyReducer(h, { type: 'listChanged', sessionIds: ['c', 'b'] });
+    expect(currentView(after)).toEqual(s('c'));
   });
 });

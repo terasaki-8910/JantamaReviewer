@@ -17,6 +17,7 @@ import type { AnswerMode } from '../api/types';
  * - `today`: 今日の出題の一覧（U-15）
  * - `quiz`: 出題 1 問（半荘の名前と判断の鍵。`mode` は、出題か解き直しか）。今日の出題・残りから開く
  * - `review`: 解き直し（今日が期限の問題を 1 問ずつ。U-17）
+ * - `replay`: 半荘を通して見る画面（半荘の名前と、開く判断の鍵。鍵が無ければ、半荘の頭から。F12、U-21）
  */
 export type View =
   | { kind: 'none' }
@@ -25,11 +26,12 @@ export type View =
   | { kind: 'settings' }
   | { kind: 'today' }
   | { kind: 'quiz'; sessionId: string; key: string; mode: AnswerMode }
-  | { kind: 'review' };
+  | { kind: 'review' }
+  | { kind: 'replay'; sessionId: string; key?: string };
 
 export type ViewKind = View['kind'];
 
-export const VIEW_KINDS: readonly ViewKind[] = ['none', 'session', 'import', 'settings', 'today', 'quiz', 'review'];
+export const VIEW_KINDS: readonly ViewKind[] = ['none', 'session', 'import', 'settings', 'today', 'quiz', 'review', 'replay'];
 
 /** 最初に出す画面。知らない画面が来たときも、ここに戻る。 */
 export const START_VIEW: View = { kind: 'none' };
@@ -43,10 +45,14 @@ export const quizView = (sessionId: string, key: string, mode: AnswerMode = 'qui
   mode,
 });
 
-/** 半荘に結びついた画面なら、その半荘の名前（半荘の画面・その半荘の出題）。 */
+/** 半荘を通して見る画面。`key` は、開く判断の鍵（迷いのカードの「この局面を解く」から開くとき）。無ければ半荘の頭から。 */
+export const replayView = (sessionId: string, key?: string): View =>
+  key === undefined ? { kind: 'replay', sessionId } : { kind: 'replay', sessionId, key };
+
+/** 半荘に結びついた画面なら、その半荘の名前（半荘の画面・その半荘の出題・その半荘を通して見る画面）。 */
 export function viewSessionId(view: View): string | null {
   if (view.kind === 'session') return view.id;
-  if (view.kind === 'quiz') return view.sessionId;
+  if (view.kind === 'quiz' || view.kind === 'replay') return view.sessionId;
   return null;
 }
 
@@ -65,6 +71,10 @@ export function resolveView(value: unknown): View {
       return { kind: 'today' };
     case 'review':
       return { kind: 'review' };
+    case 'replay':
+      return typeof record.sessionId === 'string' && record.sessionId !== ''
+        ? replayView(record.sessionId, typeof record.key === 'string' && record.key !== '' ? record.key : undefined)
+        : START_VIEW;
     case 'quiz':
       return typeof record.sessionId === 'string' &&
         record.sessionId !== '' &&
@@ -78,10 +88,11 @@ export function resolveView(value: unknown): View {
   }
 }
 
-/** 同じ画面か（半荘は名前まで、出題は半荘の名前・判断の鍵・種類まで同じ）。 */
+/** 同じ画面か（半荘は名前まで、出題は半荘の名前・判断の鍵・種類まで、通して見る画面は半荘の名前と開く判断の鍵まで同じ）。 */
 export function sameView(a: View, b: View): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'session' && b.kind === 'session') return a.id === b.id;
   if (a.kind === 'quiz' && b.kind === 'quiz') return a.sessionId === b.sessionId && a.key === b.key && a.mode === b.mode;
+  if (a.kind === 'replay' && b.kind === 'replay') return a.sessionId === b.sessionId && a.key === b.key;
   return true;
 }
