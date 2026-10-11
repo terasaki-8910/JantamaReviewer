@@ -18,6 +18,7 @@ import type { AnswerMode } from '../api/types';
  * - `quiz`: 出題 1 問（半荘の名前と判断の鍵。`mode` は、出題か解き直しか）。今日の出題・残りから開く
  * - `review`: 解き直し（今日が期限の問題を 1 問ずつ。U-17）
  * - `replay`: 半荘を通して見る画面（半荘の名前と、開く判断の鍵。鍵が無ければ、半荘の頭から。F12、U-21）
+ * - `log`: 検討ログ（答えた問題を 1 行ずつ。絞り込みと「答えを出す」は、画面の外（シェル）が持つので、ここには入れない。F5、U-29）
  */
 export type View =
   | { kind: 'none' }
@@ -27,11 +28,22 @@ export type View =
   | { kind: 'today' }
   | { kind: 'quiz'; sessionId: string; key: string; mode: AnswerMode }
   | { kind: 'review' }
+  | { kind: 'log' }
   | { kind: 'replay'; sessionId: string; key?: string };
 
 export type ViewKind = View['kind'];
 
-export const VIEW_KINDS: readonly ViewKind[] = ['none', 'session', 'import', 'settings', 'today', 'quiz', 'review', 'replay'];
+export const VIEW_KINDS: readonly ViewKind[] = [
+  'none',
+  'session',
+  'import',
+  'settings',
+  'today',
+  'quiz',
+  'review',
+  'log',
+  'replay',
+];
 
 /** 最初に出す画面。知らない画面が来たときも、ここに戻る。 */
 export const START_VIEW: View = { kind: 'none' };
@@ -71,6 +83,8 @@ export function resolveView(value: unknown): View {
       return { kind: 'today' };
     case 'review':
       return { kind: 'review' };
+    case 'log':
+      return { kind: 'log' };
     case 'replay':
       return typeof record.sessionId === 'string' && record.sessionId !== ''
         ? replayView(record.sessionId, typeof record.key === 'string' && record.key !== '' ? record.key : undefined)

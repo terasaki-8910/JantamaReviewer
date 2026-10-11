@@ -25,7 +25,23 @@ export type PopupItem =
       checked: boolean;
       onSelect: () => void;
     }
+  | {
+      /** 押しても閉じないチェックの項目（いくつでも選べるメニュー。検討ログの絞り込み）。 */
+      kind: 'check';
+      key: string;
+      label: string;
+      hint?: string;
+      checked: boolean;
+      onSelect: () => void;
+    }
   | { kind: 'separator'; key: string };
+
+/**
+ * メニューを出す場所。
+ * `below`: 開いたボタンの下に、右端をそろえて出す（下に入らなければ上）。ふつうの「…」や、段階のボタン。
+ * `start`: 開いたボタンの下に、左端をそろえて出す（下に入らなければ上）。左から並べたボタンの下に出すとき（検討ログの絞り込み）。
+ */
+export type PopupPlacement = 'below' | 'start';
 
 interface PopupProps {
   /** メニューの名前（読み上げ用）。 */
@@ -33,11 +49,13 @@ interface PopupProps {
   items: readonly PopupItem[];
   /** メニューを開いたボタン。この近くに出す。閉じるときの、キーボードの位置の戻り先。画面に出ている物でなければならない。 */
   anchor: HTMLElement;
+  /** 既定は `below`。 */
+  placement?: PopupPlacement;
   /** 閉じた。項目を選んだときは、先にこれを呼んでから、項目の `onSelect` を呼ぶ。 */
   onClose: () => void;
 }
 
-export function Popup({ label, items, anchor, onClose }: PopupProps) {
+export function Popup({ label, items, anchor, placement = 'below', onClose }: PopupProps) {
   const popRef = useRef<HTMLDivElement>(null);
   useShortcutBlocker(true);
 
@@ -50,13 +68,13 @@ export function Popup({ label, items, anchor, onClose }: PopupProps) {
     const height = pop.offsetHeight;
     const viewWidth = document.documentElement.clientWidth;
     const viewHeight = document.documentElement.clientHeight;
-    // 開いたボタンの下に、右端をそろえて出す（下に入らなければ上）
-    const left = Math.max(8, Math.min(rect.right - width, viewWidth - width - 8));
+    // 開いたボタンの下に、右端（`start` なら左端）をそろえて出す（下に入らなければ上）
+    const left = Math.max(8, Math.min(placement === 'start' ? rect.left : rect.right - width, viewWidth - width - 8));
     let top = rect.bottom + 4;
     if (top + height > viewHeight - 8) top = Math.max(8, rect.top - height - 4);
     pop.style.left = `${left}px`;
     pop.style.top = `${top}px`;
-  }, [anchor]);
+  }, [anchor, placement]);
 
   // 最初の項目（選んである項目があれば、それ）に、キーボードの位置を移す。
   useEffect(() => {
@@ -120,6 +138,26 @@ export function Popup({ label, items, anchor, onClose }: PopupProps) {
           onClose();
           item.onSelect();
         };
+        if (item.kind === 'check') {
+          // 押しても閉じない（続けて選べる）。選んだ印は、呼ぶ側が描き直した項目の `checked` で変わる
+          return (
+            <button
+              key={item.key}
+              type="button"
+              className="pi"
+              role="menuitemcheckbox"
+              aria-checked={item.checked}
+              tabIndex={-1}
+              onClick={item.onSelect}
+            >
+              <span className="tick">
+                <Icon name="check" />
+              </span>
+              <span>{item.label}</span>
+              {item.hint !== undefined && <span className="pi-r">{item.hint}</span>}
+            </button>
+          );
+        }
         return item.kind === 'radio' ? (
           <button
             key={item.key}

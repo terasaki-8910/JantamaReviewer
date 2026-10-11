@@ -319,6 +319,23 @@ describe('U-32 細い窓: 引き出し', () => {
     expect(topToggle()).toHaveFocus();
   });
 
+  it('引き出しの「ログ」を選ぶと、ログが開き、引き出しが閉じて、位置が左上のボタンへ戻る（ログは、引き出しの項目のひとつ）', async () => {
+    installWidth('narrow');
+    const { user } = start();
+    await ready();
+    await user.click(topToggle());
+    const nav = within(side()).getByRole('navigation', { name: 'メイン' });
+    expect(within(nav).getAllByRole('button').map((b) => b.querySelector('.label')?.textContent)).toEqual(['今日の出題', '解き直し', 'ログ', '週の集計']);
+    await user.click(within(nav).getByRole('button', { name: 'ログ' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'ログ' })).toBeInTheDocument();
+    expect(app()).toHaveAttribute('data-drawer', 'closed');
+    expect(topToggle()).toHaveFocus();
+    // 開き直すと、ログに印が付いている
+    await user.click(topToggle());
+    expect(within(side()).getByRole('button', { name: 'ログ' })).toHaveAttribute('aria-current', 'page');
+  });
+
+
   it('Tab は引き出しの中だけを回る（最後から先頭へ、先頭から Shift+Tab で最後へ）', async () => {
     installWidth('narrow');
     stubLayout();
