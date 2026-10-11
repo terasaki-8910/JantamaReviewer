@@ -19,14 +19,17 @@ interface MarkMemoFieldsProps {
   saved: MemoEntry | undefined;
   /** 保存したあとに、半荘の一覧を読み直す。 */
   reload: () => Promise<void>;
+  /** 「理由」の欄の名前（`MemoFields` を見る）。 */
+  reasonLabel?: string;
 }
 
-export function MarkMemoFields({ sessionId, markId, number, saved, reload }: MarkMemoFieldsProps) {
+export function MarkMemoFields({ sessionId, markId, number, saved, reload, reasonLabel }: MarkMemoFieldsProps) {
   const undo = useUndo();
   return (
     <MemoFields
       name={`迷い${number}のメモ`}
       saved={saved}
+      {...(reasonLabel === undefined ? {} : { reasonLabel })}
       onPersist={async (after) => {
         if (after === undefined) await api.clearMemo(sessionId, markId);
         else await api.setMemo(sessionId, markId, after);

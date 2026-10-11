@@ -695,7 +695,7 @@ describe('F9 画像を大きく表示する求め', () => {
 });
 
 describe('F10 局の評価の表（FX-4）', () => {
-  it('局・結果・点・自分・AI 基準・MAKA の列。1 行 = 1 局と、最後に半荘全体', async () => {
+  it('局・結果・点・自分・AI 基準・MAKA の列と、迷いの札が 1 つでもあるときの「迷い」の列（U-27）。1 行 = 1 局と、最後に半荘全体', async () => {
     setup();
     const table = await tableReady();
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
@@ -705,6 +705,7 @@ describe('F10 局の評価の表（FX-4）', () => {
       '自分',
       'AI 基準',
       'MAKA',
+      '迷い',
     ]);
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows).toHaveLength(6);

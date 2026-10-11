@@ -121,6 +121,7 @@ export function SceneWork({ step, info, anyCalled, scene, session, resolved, exi
               number={number}
               saved={memoOfMark(session.memos, mark.id)}
               reload={reload}
+              reasonLabel="理由"
             />
           );
         })}

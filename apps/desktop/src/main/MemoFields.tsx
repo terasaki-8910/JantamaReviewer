@@ -33,9 +33,14 @@ interface MemoFieldsProps {
   onPersist: (after: MemoEntry | undefined) => Promise<void>;
   /** 最初の欄（「候補」）に、キーボードの位置を移すための参照。 */
   firstRef?: Ref<HTMLInputElement>;
+  /**
+   * 「理由」の欄の名前。既定は「理由（1行）」。出題と同じ画面（半荘を通して見る画面の場面）では、答えの理由の欄が「理由（1行）」なので、
+   * 同じ名前の欄が 2 つ並ばないよう、「理由」にする。
+   */
+  reasonLabel?: string;
 }
 
-export function MemoFields({ name, saved, onCommit, onPersist, firstRef }: MemoFieldsProps) {
+export function MemoFields({ name, saved, onCommit, onPersist, firstRef, reasonLabel = '理由（1行）' }: MemoFieldsProps) {
   const candidatesId = useId();
   const reasonId = useId();
   const [draft, setDraft] = useState<MemoEntry>(saved ?? EMPTY_MEMO);
@@ -146,7 +151,7 @@ export function MemoFields({ name, saved, onCommit, onPersist, firstRef }: MemoF
         />
       </div>
       <div className="field">
-        <label htmlFor={reasonId}>理由（1行）</label>
+        <label htmlFor={reasonId}>{reasonLabel}</label>
         <input
           className="input sm"
           id={reasonId}
