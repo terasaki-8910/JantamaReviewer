@@ -2,15 +2,14 @@
  * 検索の重ね表示の、検索・絞り込み・並べ替え（ACCEPTANCE の U-22）。
  * 半荘と問題は、エンジンの試験の固定データ（FX-1 の 5 半荘と FX-4）を、日付をずらして並べたものから作る。
  */
-import { keyOfDecision, listProblems, type ImportedGame } from '@jantama/engine';
 import { describe, expect, it } from 'vitest';
 
-import { REPORT_TEXTS, local, seedSession, type ReportKey } from '../../../tests/fake-sessions';
-import { answerRow, gameOf } from '../../../tests/fake-study';
+import { SEARCH_NOW as NOW, SEARCH_SEEDS as SEEDS, SEARCH_THRESHOLD as THRESHOLD, searchFixture, type SearchSeed } from '../../../tests/search-fixtures';
+import { local } from '../../../tests/fake-sessions';
+import { answerRow } from '../../../tests/fake-study';
 import type { AnswerRow } from '../../api/types';
 import { DISPLAY_GRADES } from '../GradeBadge';
-import { buildListRows } from '../sessionRows';
-import { summarizeReportText, type SummaryMap } from '../sessionSummaries';
+import { queryTerms } from '../sessionFilter';
 import {
   FRESH_SEARCH,
   GAME_LIMIT,
@@ -19,6 +18,7 @@ import {
   SORTS,
   buildSearchModel,
   dateHits,
+  dateParts,
   hasAnyCondition,
   hasConditions,
   limitResult,
@@ -26,70 +26,19 @@ import {
   type SearchModel,
   type SearchState,
 } from './searchModel';
-import { queryTerms } from '../sessionFilter';
 
-/** 試験の「いま」: 2026 年 10 月 9 日 22:00。 */
-const NOW = local(2026, 10, 9, 22, 0);
-const THRESHOLD = 0.05;
-
-interface Seed {
-  id: string;
-  at: number;
-  report?: ReportKey;
-  /** 迷いマークの数（一覧の「迷い N」）。 */
-  marks?: number;
-  /** 迷いに結びつけた判断（半荘の判断の通し番号）。迷いの問題になる。 */
-  marked?: number[];
-  memo?: string;
-}
-
-/** 日付をずらした 7 半荘（新しい順）。g7 は、結果を取り込む前。 */
-const SEEDS: Seed[] = [
-  { id: 'g1', at: local(2026, 10, 9, 19, 9), report: 'fx4', marks: 3, marked: [3, 20, 40], memo: '放銃を見直す' },
-  { id: 'g2', at: local(2026, 10, 9, 17, 12), report: 'fx1a', memo: '3mを切った場面が悪かった' },
-  { id: 'g3', at: local(2026, 10, 8, 21, 40), report: 'fx1d' },
-  { id: 'g4', at: local(2026, 10, 8, 20, 55), report: 'fx1c', memo: '親番で押しすぎた' },
-  { id: 'g5', at: local(2026, 10, 7, 22, 10), report: 'fx1b', marks: 2, marked: [5, 60] },
-  { id: 'g6', at: local(2026, 10, 4, 20, 12), report: 'fx1e' },
-  { id: 'g7', at: local(2026, 10, 2, 22, 5), marks: 1 },
-];
-
-interface Built {
-  model: SearchModel;
-  games: Map<string, ImportedGame>;
-}
-
-function build(options: { answers?: AnswerRow[]; ready?: boolean; seeds?: Seed[] } = {}): Built {
-  const seeds = options.seeds ?? SEEDS;
-  const sessions = seeds.map((seed) =>
-    seedSession(seed.at, { id: seed.id, marks: seed.marks ?? 0, ...(seed.report ? { report: seed.report } : {}) }).session,
-  );
-  const summaries = new Map(
-    seeds.flatMap((seed) => (seed.report ? [[seed.id, summarizeReportText(REPORT_TEXTS[seed.report])] as const] : [])),
-  ) as SummaryMap;
-  const rows = buildListRows(sessions, summaries).map((row) => {
-    const memo = seeds.find((seed) => seed.id === row.id)?.memo;
-    return memo === undefined ? row : { ...row, memo };
-  });
-  const games = new Map<string, ImportedGame>();
-  const sources = seeds.flatMap((seed) => {
-    if (!seed.report) return [];
-    const game = gameOf(seed.report);
-    games.set(seed.id, game);
-    const markKeys = (seed.marked ?? []).map((index) => keyOfDecision(game.decisions[index] as never));
-    return [{ sessionId: seed.id, startedMs: seed.at, game, markKeys }];
-  });
-  const ready = options.ready ?? true;
+function build(options: { answers?: AnswerRow[]; ready?: boolean; seeds?: readonly SearchSeed[] } = {}): { model: SearchModel } {
+  const fixture = searchFixture({ ...(options.seeds ? { seeds: options.seeds } : {}), ...(options.ready === undefined ? {} : { ready: options.ready }) });
   const model = buildSearchModel({
-    rows,
-    summaries,
-    problems: ready ? listProblems(sources, { threshold: THRESHOLD }) : [],
-    problemsReady: ready,
+    rows: fixture.rows,
+    summaries: fixture.summaries,
+    problems: fixture.problems,
+    problemsReady: options.ready ?? true,
     answers: options.answers ?? [],
     threshold: THRESHOLD,
     now: NOW,
   });
-  return { model, games };
+  return { model };
 }
 
 const { model: MODEL } = build();
@@ -459,6 +408,15 @@ describe('U-22: 「すべて表示（あと N件）」', () => {
     expect(cut.games).toHaveLength(1);
     expect(cut.problems).toHaveLength(PROBLEM_LIMIT);
     expect(cut.hidden).toBe(result.problems.length - PROBLEM_LIMIT);
+  });
+});
+
+describe('U-22: 日付の文字', () => {
+  it('10月9日と、本日・昨日（それ以外は無し）。今年でなければ、年も付ける', () => {
+    expect(dateParts(local(2026, 10, 9, 19, 9), NOW)).toEqual({ monthDay: '10月9日', relative: '本日' });
+    expect(dateParts(local(2026, 10, 8, 23, 59), NOW)).toEqual({ monthDay: '10月8日', relative: '昨日' });
+    expect(dateParts(local(2026, 10, 7, 22, 10), NOW)).toEqual({ monthDay: '10月7日', relative: null });
+    expect(dateParts(local(2025, 1, 5, 10, 0), NOW)).toEqual({ monthDay: '2025年1月5日', relative: null });
   });
 });
 

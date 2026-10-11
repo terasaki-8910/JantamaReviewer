@@ -406,6 +406,17 @@ export function limitResult(result: SearchResult, showAll: boolean): ShownResult
 
 // ---- 当たりの印（日付） ----
 
+/** 半荘の日付の文字: 10月9日（今年でなければ 2025年1月1日）と、本日・昨日（それ以外は null）。 */
+export function dateParts(ms: number, now: number): { monthDay: string; relative: '本日' | '昨日' | null } {
+  const d = new Date(ms);
+  const year = d.getFullYear() === new Date(now).getFullYear() ? '' : `${d.getFullYear()}年`;
+  const diff = daysBefore(now, ms);
+  return {
+    monthDay: `${year}${d.getMonth() + 1}月${d.getDate()}日`,
+    relative: diff === 0 ? '本日' : diff === 1 ? '昨日' : null,
+  };
+}
+
 const RELATIVE_DAYS: ReadonlySet<string> = new Set(['本日', '今日', '昨日']);
 
 /**

@@ -1,0 +1,451 @@
+/*
+  search.css: サイドバーの見出し（アプリのアイコン・検索のアイコン・← →）と、検索の重ね表示。
+  承認済みのサンプル（10回目のシートの round10-samples/round10.css）を、実際の画面の部品に合わせて移したもの。
+  方針:
+  - 新しい見た目は足さない。既存の部品（.icon-btn、.link-btn、.btn、.q-tag、.grade、メニュー）を言い換えて作る。
+  - ここでは色を書かない。すべて tokens.css のトークンから。
+  - accent は「選択・フォーカス」と当たった文字の印だけ。
+  - 見出しの検索のアイコンは、枠の無いアイコンだけにして、右に寄せ、← → のすぐ左に置く（R10-5。サンプルの枠は外した）。
+*/
+
+/* ================= サイドバーの見出し: アプリのアイコン + 検索 + ← → ================= */
+.app-mark {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+/* 右の組: 検索のアイコンと、そのすぐ右の ← → */
+.side-tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s1);
+}
+
+/* 枠は無い（.icon-btn は、押したときに塗るだけ）。大きさと色は ← → と同じ */
+.search-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--ink);
+}
+
+.search-btn[aria-expanded="true"] {
+  background: var(--accent-fill);
+}
+
+/* 細い列: アイコン・検索・← → の順に、縦に並べる */
+@media (width < 640px) {
+  .side-tools {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .search-btn {
+    width: 44px;
+    height: 36px;
+  }
+}
+
+/* ================= 検索の重ね表示 ================= */
+.sx-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: start center;
+  padding: min(12vh, 96px) var(--s4) var(--s4);
+  background: var(--scrim-soft);
+}
+
+.sx {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  width: min(700px, 100%);
+  max-height: min(660px, calc(100vh - min(12vh, 96px) - var(--s4)));
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  box-shadow: 0 16px 40px var(--menu-shadow);
+  overflow: hidden;
+}
+
+.sx:focus {
+  outline: none;
+}
+
+.sx-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 0 var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.sx-top > .ic {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.sx-in {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 var(--s1);
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.sx-in::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.sx-in::-webkit-search-cancel-button {
+  display: none;
+}
+
+.sx-in:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  border-radius: var(--r2);
+}
+
+.sx-clear {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r2);
+  color: var(--muted);
+}
+
+.sx-clear:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.sx-clear .ic {
+  width: 16px;
+  height: 16px;
+}
+
+/* 「Esc」の印。押しても閉じる（閉じるボタンが無いと、キーを知らない人が出られないため） */
+.sx-esc,
+.sx kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.sx-esc {
+  flex: none;
+}
+
+.sx-esc:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.sx-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 5px;
+  padding: 10px var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.sx-fl {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 9px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 13px;
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.fchip:hover {
+  border-color: var(--ink);
+}
+
+.fchip .ic {
+  width: 14px;
+  height: 14px;
+}
+
+.fchip .chip-tick {
+  display: none;
+}
+
+.fchip[aria-pressed="true"],
+.fchip.is-on {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.fchip[aria-pressed="true"] .chip-tick {
+  display: inline-block;
+  color: var(--accent);
+  stroke-width: 2.6;
+}
+
+.fchip[aria-expanded="true"] {
+  border-color: var(--ink);
+}
+
+.fsel .ic {
+  color: var(--muted);
+}
+
+.sx-fl + .fchip {
+  margin-left: -2px;
+}
+
+.sx-gap {
+  flex: 1 1 8px;
+}
+
+.sx-clearall {
+  min-height: 30px;
+}
+
+.sx-sortbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px var(--s3);
+  min-height: 44px;
+  padding: 6px var(--s3);
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.sx-count b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.sx-count .link-btn {
+  margin-left: var(--s3);
+}
+
+.sx-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 34px var(--s2);
+  padding: 0 var(--s2) var(--s2);
+}
+
+.sx-gh {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+  padding: 10px var(--s2) 4px;
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.sx-gh b {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.sx-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sx-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px var(--s3);
+  min-height: 48px;
+  padding: 6px var(--s2);
+  border-radius: var(--r2);
+  cursor: pointer;
+}
+
+.sx-row:hover {
+  background: var(--hover);
+}
+
+.sx-row[aria-selected="true"] {
+  background: var(--accent-fill);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.sx-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.sx-main .s-time {
+  min-width: 3.2em;
+}
+
+.sx-main .t {
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.sx-sub {
+  grid-column: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.sx-r {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.sx-r .s-doubt {
+  margin-left: 0;
+}
+
+/* 当たった文字の印（下線 + accent の淡い塗り） */
+.sx mark.hit {
+  padding: 0 1px;
+  background: var(--accent-fill);
+  border-radius: 2px;
+  box-shadow: inset 0 -2px 0 var(--accent);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.sx-empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--s2);
+  margin: 0;
+  padding: var(--s5) var(--s3);
+}
+
+.sx-empty p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.sx-empty .quiet {
+  font-size: 12.5px;
+}
+
+.sx-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px var(--s4);
+  min-height: 40px;
+  padding: 6px var(--s3);
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sx-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sx-keys li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+body.sx-open {
+  overflow: hidden;
+}
+
+@media (width < 640px) {
+  .sx-wrap {
+    padding: var(--s2);
+  }
+
+  .sx {
+    max-height: calc(100vh - 2 * var(--s2));
+  }
+
+  .sx-foot {
+    display: none;
+  }
+
+  .sx-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sx-r {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
