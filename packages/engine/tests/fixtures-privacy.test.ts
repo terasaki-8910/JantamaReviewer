@@ -71,7 +71,7 @@ describe('FX-6 の文字認識の写し（fx6-ocr.json）に個人を特定で�
     expect(text).not.toMatch(/_a\d+|account|nickname|user_?id/i);
     expect(text).not.toMatch(/[A-D]さん/);
     expect(text).not.toMatch(/\d{6}-[0-9a-f]{8}-/i);
-    expect(text).not.toMatch(/Users|JantamaReviewerData|[A-Za-z]:[\/]/);
+    expect(text).not.toMatch(/Users|JantamaReviewerData|[A-Za-z]:[/\\]/);
   });
 
   it('絵文字として扱われる文字が無い', () => {
