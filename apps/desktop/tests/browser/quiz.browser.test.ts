@@ -21,6 +21,7 @@ import { fx4Ocr, fx4Session } from '../import-fixtures';
 import {
   TINY_PNG,
   boxesOverlap,
+  ensureSidebar,
   launchBrowser,
   measureInfoTip,
   runAxe,
@@ -169,6 +170,7 @@ const sideButton = (page: Page, name: RegExp) =>
 
 /** 今日の出題の一覧を開く。 */
 async function openToday(page: Page): Promise<void> {
+  await ensureSidebar(page);
   await sideButton(page, /^今日の出題/).click();
   await page.getByRole('list', { name: '今日の出題' }).waitFor();
 }
@@ -182,6 +184,7 @@ async function openRow(page: Page, n: number): Promise<void> {
 
 /** 解き直しを開く。 */
 async function openReview(page: Page): Promise<void> {
+  await ensureSidebar(page);
   await sideButton(page, /^解き直し/).click();
   await page.locator('.qz').waitFor();
 }

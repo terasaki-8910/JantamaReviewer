@@ -23,6 +23,7 @@ import {
   startPageServer,
   tauriMockScript,
   unreachableByTab,
+  ensureSidebar,
   waitForMainReady,
   type PageServer,
   type Scenario,
@@ -162,6 +163,7 @@ async function open(options: OpenOptions = {}): Promise<Opened> {
   await page.goto(new URL('index.html', server.url).toString());
   await waitForMainReady(page);
   if (options.session === 'older') {
+    await ensureSidebar(page);
     await page.locator('.session-scroll [data-open]').nth(1).click();
     await page.getByRole('heading', { level: 1, name: /10月8日/ }).waitFor();
   } else {
@@ -260,7 +262,8 @@ describe('U-4・U-5・U-6: 半荘のページの各状態（実ブラウザ）',
             if (name !== 'lightbox') expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(5);
 
             const reach = await unreachableByTab(page);
-            expect(reach.total).toBeGreaterThan(3);
+            // 画像の表示の間は、裏の画面は inert（Tab で届かないのが正しい）なので、数えるのは画像の表示の中の操作だけ
+            expect(reach.total).toBeGreaterThan(name === 'lightbox' ? 1 : 3);
             // メニューと画像の表示は、中だけに留まるので、Tab で全部には届かない。
             if (name === 'default') expect(reach.missed).toEqual([]);
             if (name === 'lightbox') expect(reach.missed.filter((label) => /前の画像|次の画像|閉じる/.test(label))).toEqual([]);
@@ -901,8 +904,10 @@ describe('F11・U-23 前の作り方で読んだ半荘の読み直し（実ブ�
         expect(await calls(page, cmd), cmd).toEqual([]);
       }
       // 別の半荘へ移って戻っても、もう読み直さない。
+      await ensureSidebar(page);
       await page.locator('.session-scroll [data-open]').nth(1).click();
       await page.getByRole('heading', { level: 1, name: /10月8日/ }).waitFor();
+      await ensureSidebar(page);
       await page.locator('.session-scroll [data-open]').nth(0).click();
       await page.getByRole('table', { name: '局の評価' }).waitFor();
       expect(await calls(page, 'reread_ocr')).toHaveLength(1);
