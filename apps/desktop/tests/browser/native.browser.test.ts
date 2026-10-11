@@ -68,6 +68,7 @@ const sessions = [
     links: { marks: {}, ratings: {} },
     self_ratings: { kyokus: {} },
     maka: { kyokus: {} },
+    memos: { marks: {}, extras: [] },
   },
 ];
 

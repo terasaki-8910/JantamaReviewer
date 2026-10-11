@@ -72,6 +72,7 @@ export function seedSession(startedMs: number, options: SeedOptions = {}): { ses
     links: { marks: {}, ratings: {} },
     self_ratings: { kyokus: {} },
     maka: { kyokus: {} },
+    memos: { marks: {}, extras: [] },
   };
   return options.report ? { session, report: options.report } : { session };
 }

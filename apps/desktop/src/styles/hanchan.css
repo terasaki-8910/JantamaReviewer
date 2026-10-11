@@ -826,3 +826,213 @@ body.lb-open {
     transform: none;
   }
 }
+
+/*
+  ================= 局の評価の表の「迷い」の列（R11-9、U-27） =================
+  承認済みの見本（11回目の marks-b）を、実際の画面の部品に移したもの。札が 1 つでもあるときだけ、列が出る。
+  - 札の形で、状態を見分ける（色だけに頼らない）: 推定 = 枠だけ / 選んだ = チェックと accent の淡い塗り / 巡目は未定 = 点線。
+    accent は「選んである」の印だけ
+  - 押すと、その迷いのカードへ移る。移った先のカードは、accent の細い縁と淡い塗りで、少しの間目立たせる（動きを減らす設定では、色だけが変わる）
+  - 幅が狭いとき（下の @container）は、局ごとのかたまりに「迷い」の行（小さな見出し付き）が付く
+*/
+.tbl-wrap.with-marks {
+  max-width: 1000px;
+}
+
+.with-marks .tbl th:last-child,
+.with-marks .tbl td:last-child,
+.with-marks .tbl th:nth-child(6),
+.with-marks .tbl td:nth-child(6) {
+  text-align: left;
+}
+
+.with-marks .tbl th:last-child,
+.with-marks .tbl td:last-child {
+  padding-left: var(--s4);
+}
+
+.with-marks .tbl td.marks-cell {
+  white-space: normal;
+}
+
+.mk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 7px 0;
+}
+
+.mk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.mk-chip b {
+  font-weight: 700;
+}
+
+.mk-chip:hover {
+  border-color: var(--ink);
+}
+
+.mk-chip[data-kind="chosen"] {
+  padding-left: 8px;
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.mk-chip[data-kind="undecided"] {
+  border-style: dashed;
+}
+
+.mk-chip .mk-ck {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--accent);
+  stroke-width: 2.6;
+}
+
+.marks-note {
+  margin-bottom: var(--s5);
+}
+
+.mcard {
+  transition:
+    box-shadow 400ms ease,
+    background-color 400ms ease;
+}
+
+.mcard:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.mcard.is-flash {
+  background: var(--accent-fill);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mcard {
+    transition: none;
+  }
+}
+
+@container main (width < 600px) {
+  .with-marks .tbl td.marks-cell {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+
+  .with-marks .tbl td.marks-cell:empty {
+    display: none;
+  }
+
+  .with-marks .tbl td:nth-child(6) {
+    text-align: right;
+  }
+
+  .with-marks .tbl th:last-child,
+  .with-marks .tbl td:last-child {
+    padding-left: 0;
+  }
+
+  .mk-chips {
+    padding: 0;
+  }
+}
+
+/*
+  ================= 終局直後のメモ（F4、U-28） =================
+  承認済みの見本（11回目の memo-a）を移したもの。新しい見た目は足さず、既存の部品（.field・.input・.btn・.link-btn・.sel-btn・.panel）を
+  言い換える。迷いのカードの中では、結びつけの欄の下に、細い罫線で区切って「候補」「理由（1行）」を並べる。
+  迷いマークの無い迷いのメモは、同じカードの並びの下に置き、画像の代わりに、同じ大きさの「迷いマークなし」の箱を置く
+*/
+.input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.input.sm {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.memo {
+  display: grid;
+  gap: var(--s3);
+  margin-top: var(--s2);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
+}
+
+.memo .field > label,
+.memo .field > .lbl {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.where .sel-btn {
+  min-height: 34px;
+}
+
+.marks.extras {
+  margin-top: var(--s4);
+}
+
+.memo-foot {
+  margin-top: var(--s4);
+}
+
+.memo-foot .btn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.memo-add {
+  max-width: 640px;
+  margin-top: var(--s4);
+  gap: var(--s3);
+  padding: var(--s4);
+}
+
+.memo-add .memo {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.memo-add .mlabel:focus {
+  outline: none;
+}
+
+.mcard .mctl {
+  margin-top: var(--s1);
+}
+
+/* 迷いマークの無いメモのカード: 画像の代わりに、同じ大きさの箱（カードの高さがそろう） */
+.mcard .mthumb-empty {
+  border-bottom: 0;
+}

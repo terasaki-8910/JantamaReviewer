@@ -18,12 +18,14 @@ import {
   type QuizChoice,
   type Tile as TileCode,
 } from '@jantama/engine';
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 import type { AnswerMode, AnswerRow } from '../../api/types';
 import { Icon } from '../Icon';
+import type { ShownMemo } from '../memos';
 import { isDoraTile } from './dora';
 import { formatElapsed, formatMonthDay } from './labels';
+import { MemoShown } from './MemoShown';
 import { formatProbability, type RevealModel } from './reveal';
 import { Tile } from './Tile';
 import { tileName } from './tiles';
@@ -46,6 +48,13 @@ export interface AnswerPanelProps {
   threshold: number;
   nextLabel: string;
   onNext: () => void;
+  /**
+   * 答える前に出す、終局直後のメモの欄（半荘を通して見る画面の迷いの場面だけ。F4、U-28）。AI の情報は含まない。
+   * 答え合わせのあとは、`memoShown` に替わる。
+   */
+  memoEditor?: ReactNode;
+  /** 答え合わせのあとに、自分の答えの下へ出す「終局直後のメモ」（無ければ出さない）。答える前は渡さない（DOM にも無い）。 */
+  memoShown?: readonly ShownMemo[];
 }
 
 /** 「答え合わせ」を押せない理由（何を選ぶと押せるか）。 */
@@ -366,7 +375,7 @@ interface RevealProps extends AnswerPanelProps {
   focusOnMount: boolean;
 }
 
-function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount }: RevealProps) {
+function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown }: RevealProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
@@ -404,6 +413,7 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
           </p>
         </div>
       </div>
+      {memoShown !== undefined && <MemoShown memos={memoShown} />}
       <Evaluation model={model} discard={discard} dora={dora} />
       {model.ukeire !== null && <UkeireSection box={model.ukeire} dora={dora} />}
       <form className="q-sec learn" noValidate data-ai="learn" onSubmit={(event) => event.preventDefault()}>
@@ -476,6 +486,12 @@ export function AnswerPanel(props: AnswerPanelProps) {
   const revealed = quiz.stage === 'revealed' && quiz.model !== null && quiz.row !== null;
   return (
     <section className="answer" aria-label="答え" id="answer">
+      {quiz.stage !== 'revealed' && props.memoEditor !== undefined && (
+        <div className="q-sec memo-editor" data-memo="editor">
+          <h2 className="sec-title">終局直後のメモ</h2>
+          {props.memoEditor}
+        </div>
+      )}
       {quiz.stage !== 'revealed' && <AnsweringForm {...props} />}
       {revealed && quiz.model !== null && quiz.row !== null && (
         <Reveal {...props} model={quiz.model} row={quiz.row} focusOnMount={startedAnswering} />

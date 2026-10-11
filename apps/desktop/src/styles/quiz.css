@@ -2228,3 +2228,54 @@ button.qrow.next {
 .nw {
   white-space: nowrap;
 }
+
+/*
+  答え合わせのあとの「終局直後のメモ」（F4、U-28）: 自分の答えの下。見出しは他の欄と同じ（.sec-title）。
+  「候補」「理由」は、小さな見出しと文の組を、静かに並べる（承認済みの見本 memo-shown）。メモが 2 つ以上のときだけ、メモの名前を付ける
+*/
+.memo-shown .memo-item + .memo-item {
+  margin-top: var(--s3);
+}
+
+.memo-shown .memo-from {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.memo-dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.memo-dl > div {
+  display: grid;
+  grid-template-columns: 2.8em minmax(0, 1fr);
+  gap: var(--s2);
+  align-items: baseline;
+}
+
+.memo-dl dt {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.memo-dl dd {
+  margin: 0;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+/* 半荘を通して見る画面で、答える前に出す、終局直後のメモの欄（答えの欄の上）。欄の罫線は、メモの欄どうしの間だけ */
+.memo-editor .memo {
+  margin-top: var(--s1);
+  padding-top: 0;
+  border-top: 0;
+}
+
+.memo-editor .memo + .memo {
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
+}

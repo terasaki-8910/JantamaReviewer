@@ -51,6 +51,7 @@ function studyValue(fixture: SearchFixture, options: Options): StudyValue {
     locate: () => null,
     gameState: () => undefined,
     session: () => undefined,
+    reloadSessions: () => Promise.resolve(),
     recordAnswer: () => Promise.reject(new Error('使わない')),
     updateNotes: () => Promise.reject(new Error('使わない')),
   };
