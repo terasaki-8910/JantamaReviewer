@@ -429,6 +429,14 @@ describe('U-22: 閉じる', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
+  it('押した物が消えて、キーボードの位置がどこにも無くなっても、Esc で閉じられる（ページ全体でキーを受ける）', async () => {
+    const { user, onClose } = setup();
+    (document.activeElement as HTMLElement).blur();
+    expect(document.body).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledWith(false);
+  });
+
   it('Tab は、ダイアログの中だけを回る（最後から先頭へ、先頭から最後へ）', async () => {
     const { user } = setup();
     const d = dialog();
@@ -472,6 +480,18 @@ describe('U-22: 絞り込み（種類・段階・期間・迷いあり・未解�
     // 押したチップに、キーボードの位置が残っている（絞り込んでも、位置が消えない）
     await user.click(gameChip);
     expect(gameChip).toHaveFocus();
+  });
+
+  it('「条件を解除」は、押すと消えるので、キーボードの位置は検索欄へ移る（位置が失われない）', async () => {
+    const { user, onClose } = setup();
+    await user.click(screen.getByRole('button', { name: '迷いあり' }));
+    const clear = screen.getByRole('button', { name: '条件を解除' });
+    clear.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('button', { name: '条件を解除' })).toBeNull();
+    expect(input()).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledWith(false);
   });
 
   it('迷いあり: 迷いのある半荘と、迷いの問題。未解答: まだ答えていない問題と半荘（答えると、その問題は出ない）', async () => {
@@ -621,6 +641,21 @@ describe('U-22: 「すべて表示（あと N件）」', () => {
     expect(within(dialog()).queryByRole('button', { name: /^すべて表示/ })).toBeNull();
     await user.click(within(dialog()).getByRole('button', { name: '上位だけ表示' }));
     expect(options()).toHaveLength(GAME_LIMIT + PROBLEM_LIMIT);
+  });
+
+  it('キーボードで押しても、同じボタンにキーボードの位置が残る（名前だけが変わる）。そのまま Esc で閉じられる', async () => {
+    const { user, fixture, onClose } = setup();
+    const more = within(dialog()).getByRole('button', { name: /^すべて表示/ });
+    more.focus();
+    await user.keyboard('{Enter}');
+    const collapse = within(dialog()).getByRole('button', { name: '上位だけ表示' });
+    expect(collapse).toBe(more);
+    expect(collapse).toHaveFocus();
+    expect(options()).toHaveLength(7 + fixture.problems.length);
+    await user.keyboard('{Enter}');
+    expect(within(dialog()).getByRole('button', { name: /^すべて表示/ })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledWith(false);
   });
 
   it('検索語を変えると、また切った表示に戻る（すべて表示は、その検索語の間だけ）', async () => {

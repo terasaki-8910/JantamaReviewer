@@ -150,8 +150,8 @@ export function SearchOverlay({ rows, summaries, now, onOpenGame, onOpenProblem,
     return () => document.body.classList.remove('sx-open');
   }, []);
 
-  // Esc で閉じる。Tab は、この中を回る（外へ出さない）。キーは、中の要素から上がってくるものを、ダイアログの要素で受ける
-  // （メニューが開いているときの Esc は、メニューが先に受けて止める）。
+  // Esc で閉じる。Tab は、この中を回る（外へ出さない）。キーは、ページ全体で受ける（押した物が消えて、キーボードの位置が
+  // どこにも無くなっても、Esc で閉じられるように）。メニューが開いているときの Esc は、メニューが先に受けて止める。
   const onDialogKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       if (event.isComposing || event.keyCode === 229) return;
@@ -178,11 +178,9 @@ export function SearchOverlay({ rows, summaries, now, onOpenGame, onOpenProblem,
     }
   });
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog === null) return undefined;
     const handler = (event: KeyboardEvent) => onDialogKey(event);
-    dialog.addEventListener('keydown', handler);
-    return () => dialog.removeEventListener('keydown', handler);
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
   }, []);
 
   useEffect(() => {
@@ -201,7 +199,11 @@ export function SearchOverlay({ rows, summaries, now, onOpenGame, onOpenProblem,
     setShowAll(false);
   };
 
-  const clearConditions = () => update({ games: false, problems: false, stage: 'all', period: 'all', doubt: false, todo: false });
+  // 「条件を解除」は、押すと消える。キーボードの位置が失われないよう、検索欄へ移す。
+  const clearConditions = () => {
+    update({ games: false, problems: false, stage: 'all', period: 'all', doubt: false, todo: false });
+    inputRef.current?.focus();
+  };
 
   const resetAll = () => {
     setState(FRESH_SEARCH);
@@ -382,14 +384,10 @@ export function SearchOverlay({ rows, summaries, now, onOpenGame, onOpenProblem,
         <div className="sx-sortbar">
           <span className="sx-count">
             半荘 <b>{result.games.length}</b> · 問題 <b>{problemsText}</b>
-            {shown.hidden > 0 && (
-              <button type="button" className="link-btn" onClick={() => setShowAll(true)}>
-                すべて表示（あと{shown.hidden}件）
-              </button>
-            )}
-            {shown.collapsible && (
-              <button type="button" className="link-btn" onClick={() => setShowAll(false)}>
-                上位だけ表示
+            {(shown.hidden > 0 || shown.collapsible) && (
+              // 1 つのボタンで、名前と向きだけが変わる（押したあとも、キーボードの位置が、このボタンに残る）
+              <button type="button" className="link-btn" onClick={() => setShowAll(shown.hidden > 0)}>
+                {shown.hidden > 0 ? `すべて表示（あと${shown.hidden}件）` : '上位だけ表示'}
               </button>
             )}
           </span>
