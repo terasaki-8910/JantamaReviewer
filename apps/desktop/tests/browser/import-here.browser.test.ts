@@ -108,7 +108,12 @@ async function open(importing: ImportScenario, width = 1280, scheme: Scheme = 'l
   await page.goto(new URL('index.html', server.url).toString());
   await waitForMainReady(page);
   await page.getByRole('button', { name: ACTION }).waitFor();
-  await page.waitForFunction(() => Array.from(document.images).every((img) => img.complete));
+  // 画面に出ている画像が読み終わるまで待つ（画面の外の遅延読み込みの画像は待たない）
+  await page.waitForFunction(() =>
+    Array.from(document.images)
+      .filter((img) => img.getBoundingClientRect().top < window.innerHeight)
+      .every((img) => img.complete),
+  );
   return { context, page, problems, external };
 }
 

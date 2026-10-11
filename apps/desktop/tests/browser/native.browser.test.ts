@@ -289,7 +289,9 @@ describe('検討画面（半荘のページ）', () => {
       for (const selector of ['.head .title', '.app-mark', '.s-time', '.thumb', 'main.main']) {
         await clearEvents(page);
         const box = (await page.locator(selector).first().boundingBox())!;
-        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' });
+        // 本文の余白は、左の端を押す（本文の真ん中は、メモの文字を打つ欄に当たることがある。文字を打つ欄では、コピーと貼り付けのために、メニューを残してある）
+        const x = selector === 'main.main' ? box.x + 4 : box.x + box.width / 2;
+        await page.mouse.click(x, box.y + box.height / 2, { button: 'right' });
         const menus = (await seenEvents(page)).filter((e) => e.type === 'contextmenu');
         expect(menus.length, selector).toBe(1);
         expect(menus[0]?.prevented, selector).toBe(true);

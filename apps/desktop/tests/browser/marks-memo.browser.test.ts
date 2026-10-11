@@ -126,7 +126,11 @@ async function open(options: { width?: number; height?: number; scheme?: Scheme;
   await waitForMainReady(page);
   await page.getByRole('table', { name: '局の評価' }).waitFor();
   // 画面に近い画像が読み終わるまで待つ（遅延読み込みの、まだ遠い画像は待たない）
-  await page.waitForFunction(() => Array.from(document.images).every((img) => img.complete || img.loading === 'lazy'));
+  await page.waitForFunction(() =>
+    Array.from(document.images)
+      .filter((img) => img.getBoundingClientRect().top < window.innerHeight)
+      .every((img) => img.complete),
+  );
   return { context, page, problems, external };
 }
 

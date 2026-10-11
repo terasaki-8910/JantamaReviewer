@@ -862,11 +862,12 @@ body.lb-open {
   white-space: normal;
 }
 
+/* 札が 1 行に収まる局は、札の無い局と同じ行の高さ（42px）にする: 札 28px + 上下 6px + 罫線 1px */
 .mk-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 7px 0;
+  padding: 6px 0;
 }
 
 .mk-chip {
@@ -1027,6 +1028,11 @@ body.lb-open {
 
 .mcard .mctl {
   margin-top: var(--s1);
+}
+
+/* メモの欄の下の「この局面を解く」は、欄から少し離す（下端に置くボタンなので、メモが無いときの余白は、これまでのまま） */
+.mcard .memo + .msolve {
+  padding-top: var(--s3);
 }
 
 /* 迷いマークの無いメモのカード: 画像の代わりに、同じ大きさの箱（カードの高さがそろう） */

@@ -50,7 +50,7 @@ export interface AnswerPanelProps {
   onNext: () => void;
   /**
    * 答える前に出す、終局直後のメモの欄（半荘を通して見る画面の迷いの場面だけ。F4、U-28）。AI の情報は含まない。
-   * 答え合わせのあとは、`memoShown` に替わる。
+   * 答えのフォーム（理由・答え合わせ）のあとに置く。答え合わせのあとは、`memoShown` に替わる。
    */
   memoEditor?: ReactNode;
   /** 答え合わせのあとに、自分の答えの下へ出す「終局直後のメモ」（無ければ出さない）。答える前は渡さない（DOM にも無い）。 */
@@ -486,13 +486,14 @@ export function AnswerPanel(props: AnswerPanelProps) {
   const revealed = quiz.stage === 'revealed' && quiz.model !== null && quiz.row !== null;
   return (
     <section className="answer" aria-label="答え" id="answer">
+      {quiz.stage !== 'revealed' && <AnsweringForm {...props} />}
+      {/* 答えのフォームのあとに置く（手牌から Tab で、理由・答え合わせへ続く順を変えない）。答えを出す前なら、いつでも書ける・直せる */}
       {quiz.stage !== 'revealed' && props.memoEditor !== undefined && (
         <div className="q-sec memo-editor" data-memo="editor">
           <h2 className="sec-title">終局直後のメモ</h2>
           {props.memoEditor}
         </div>
       )}
-      {quiz.stage !== 'revealed' && <AnsweringForm {...props} />}
       {revealed && quiz.model !== null && quiz.row !== null && (
         <Reveal {...props} model={quiz.model} row={quiz.row} focusOnMount={startedAnswering} />
       )}

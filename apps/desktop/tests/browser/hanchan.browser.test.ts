@@ -167,8 +167,12 @@ async function open(options: OpenOptions = {}): Promise<Opened> {
   } else {
     await page.getByRole('table', { name: '局の評価' }).waitFor();
   }
-  // 画面に出ている画像が読み終わるまで待つ。
-  await page.waitForFunction(() => Array.from(document.images).every((img) => img.complete));
+  // 画面に出ている画像が読み終わるまで待つ（画面の外の遅延読み込みの画像は待たない。迷いのカードの下に、メモの欄が増えて、画面の外へ出る画像がある）。
+  await page.waitForFunction(() =>
+    Array.from(document.images)
+      .filter((img) => img.getBoundingClientRect().top < window.innerHeight)
+      .every((img) => img.complete),
+  );
   return { context, page, problems, external };
 }
 
@@ -393,10 +397,27 @@ describe('F10 局の評価の表の形（実ブラウザ）', () => {
   it('1280px: 表の幅は 760px 以内。見出しの行が見え、各行は 1 行', async () => {
     const { context, page } = await open();
     try {
+      // 迷いの札の列（U-27）がある表は、列の分だけ広い（入れ物は 1000px まで）。札が無いと、760px 以内（下の「迷いが無い半荘」）
       const table = await page.locator('.tbl').boundingBox();
-      expect(table?.width ?? 0).toBeLessThanOrEqual(761);
+      expect(table?.width ?? 0).toBeLessThanOrEqual(1001);
+      expect(table?.width ?? 0).toBeGreaterThan(761);
       const header = await page.locator('.tbl thead').boundingBox();
       expect(header?.height ?? 0).toBeGreaterThan(20);
+      const heights = await page.locator('.tbl tbody tr').evaluateAll((rows) => rows.map((r) => Math.round(r.getBoundingClientRect().height)));
+      expect(new Set(heights).size).toBe(1);
+      expect(heights[0]).toBeLessThanOrEqual(44);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('迷いが無い半荘（札が 1 つも無い）: 「迷い」の列も説明も出ず、表の幅は 760px 以内のまま（1280px）', async () => {
+    const { context, page } = await open({ scenario: scenario({ sessions: [{ ...importedSession(), marks: [], mark_count: 0 }, recordedSession()] }) });
+    try {
+      const table = await page.locator('.tbl').boundingBox();
+      expect(table?.width ?? 0).toBeLessThanOrEqual(761);
+      expect(await page.getByRole('table', { name: '局の評価' }).getByRole('columnheader').count()).toBe(6);
+      expect(await page.getByText('迷いの札を押すと').count()).toBe(0);
       const heights = await page.locator('.tbl tbody tr').evaluateAll((rows) => rows.map((r) => Math.round(r.getBoundingClientRect().height)));
       expect(new Set(heights).size).toBe(1);
       expect(heights[0]).toBeLessThanOrEqual(44);
@@ -409,7 +430,7 @@ describe('F10 局の評価の表の形（実ブラウザ）', () => {
     const { context, page } = await open({ width: 390 });
     try {
       const table = page.getByRole('table', { name: '局の評価' });
-      expect(await table.getByRole('columnheader').count()).toBe(6);
+      expect(await table.getByRole('columnheader').count()).toBe(7);
       expect(await table.getByRole('rowheader').count()).toBe(6);
       expect(await table.getByRole('row').count()).toBe(7);
       const header = await page.locator('.tbl thead').boundingBox();
@@ -419,13 +440,15 @@ describe('F10 局の評価の表の形（実ブラウザ）', () => {
         Array.from(tr.children).map((cell) => Math.round(cell.getBoundingClientRect().top)),
       );
       expect(new Set(rows.slice(0, 3)).size).toBe(1);
-      expect(new Set(rows.slice(3)).size).toBe(1);
+      expect(new Set(rows.slice(3, 6)).size).toBe(1);
       expect(rows[3] ?? 0).toBeGreaterThan(rows[0] ?? 0);
-      // 2 行目の小さな見出し（自分・AI 基準・MAKA）。
+      // 3 行目: 迷いの行（札がある局だけ。U-27）。自分・AI 基準・MAKA の行より下
+      expect(rows[6] ?? 0).toBeGreaterThan(rows[3] ?? 0);
+      // 2 行目の小さな見出し（自分・AI 基準・MAKA）と、3 行目の「迷い」。
       const labels = await page.locator('.tbl tbody tr').first().evaluate((tr) =>
         Array.from(tr.querySelectorAll('td[data-label]')).map((td) => getComputedStyle(td, '::before').content),
       );
-      expect(labels).toEqual(['"自分"', '"AI 基準"', '"MAKA"']);
+      expect(labels).toEqual(['"自分"', '"AI 基準"', '"MAKA"', '"迷い"']);
       const m = await overflow(page);
       expect(m.table).toEqual([0]);
     } finally {
