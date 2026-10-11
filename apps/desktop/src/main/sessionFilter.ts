@@ -77,7 +77,7 @@ function localDay(ms: number): LocalDay {
 }
 
 /** 暦の日で数えた、`ms` から `now` までの日数（同じ日 = 0、前の日 = 1）。夏時間などに左右されない。 */
-function daysBefore(now: number, ms: number): number {
+export function daysBefore(now: number, ms: number): number {
   const a = localDay(now);
   const b = localDay(ms);
   return Math.round((Date.UTC(a.year, a.month - 1, a.day) - Date.UTC(b.year, b.month - 1, b.day)) / 86_400_000);
@@ -126,14 +126,15 @@ export function clockLabel(ms: number): string {
 
 // ---- 検索 ----
 
-interface SearchContext {
+export interface SearchContext {
   now: number;
 }
 
 /** 検索で当てる文字を、行から取り出す口。メモなど、新しい項目は、ここに足す。 */
-type SearchField = (row: FilterRow, context: SearchContext) => string[];
+export type SearchField = (row: FilterRow, context: SearchContext) => string[];
 
-const dateField: SearchField = (row, { now }) => {
+/** 日付の言い方（本日・今日・昨日と、10月9日・10/9 など）。検索の重ね表示は、日付の当たりを見せるために、この中身を見る。 */
+export const dateField: SearchField = (row, { now }) => {
   const { year, month, day } = localDay(row.startedMs);
   const diff = daysBefore(now, row.startedMs);
   const relative = diff === 0 ? ['本日', '今日'] : diff === 1 ? ['昨日'] : [];
@@ -147,18 +148,18 @@ const dateField: SearchField = (row, { now }) => {
   ];
 };
 
-const timeField: SearchField = (row) => {
+export const timeField: SearchField = (row) => {
   const d = new Date(row.startedMs);
   const padded = `${two(d.getHours())}:${two(d.getMinutes())}`;
   return d.getHours() < 10 ? [padded, `${d.getHours()}:${two(d.getMinutes())}`] : [padded];
 };
 
-const roomField: SearchField = (row) => (row.room ? [row.room] : []);
+export const roomField: SearchField = (row) => (row.room ? [row.room] : []);
 const gradeField: SearchField = (row) => (row.grade ? [row.grade] : []);
 const ratingField: SearchField = (row) => (row.ratingText ? [row.ratingText] : []);
 const doubtField: SearchField = (row) => (row.markCount > 0 ? [`迷い${row.markCount}`] : []);
 const importField: SearchField = (row) => (row.imported ? [] : ['取り込み前']);
-const memoField: SearchField = (row) => (row.memo ? [row.memo] : []);
+export const memoField: SearchField = (row) => (row.memo ? [row.memo] : []);
 
 export const SEARCH_FIELDS: readonly SearchField[] = [
   dateField,
@@ -171,21 +172,33 @@ export const SEARCH_FIELDS: readonly SearchField[] = [
   memoField,
 ];
 
-/** 数字で始まる語は、別の数字の途中には当てない（「1月9日」が「11月9日」に、「9:05」が「19:05」に当たらない）。 */
-function includesAtBoundary(haystack: string, term: string): boolean {
-  const startsWithDigit = /\d/.test(term.charAt(0));
+/** 検索の語（全角・半角をそろえ、空白で区切ったもの）。語が無ければ空の配列。 */
+export function queryTerms(query: string): string[] {
+  return normalize(query).trim().split(/\s+/).filter(Boolean);
+}
+
+/**
+ * `haystack`（正規化したもの）の `at` から始まる語の当たりを、当たりとして認めてよいか。
+ * 数字で始まる語は、別の数字の途中には当てない（「1月9日」が「11月9日」に、「9:05」が「19:05」に当たらない）。
+ */
+export function isTermHit(haystack: string, term: string, at: number): boolean {
+  return !/\d/.test(term.charAt(0)) || at === 0 || !/\d/.test(haystack.charAt(at - 1));
+}
+
+/** 語（正規化したもの）が、`haystack`（正規化したもの）に当たるか。 */
+export function containsTerm(haystack: string, term: string): boolean {
   for (let at = haystack.indexOf(term); at >= 0; at = haystack.indexOf(term, at + 1)) {
-    if (!startsWithDigit || at === 0 || !/\d/.test(haystack.charAt(at - 1))) return true;
+    if (isTermHit(haystack, term, at)) return true;
   }
   return false;
 }
 
 /** 検索の語（空白で区切った、すべて）に、この行が当たるか。語が空なら、当たる。 */
 export function matchesQuery(row: FilterRow, query: string, now: number): boolean {
-  const terms = normalize(query).trim().split(/\s+/).filter(Boolean);
+  const terms = queryTerms(query);
   if (terms.length === 0) return true;
   const haystack = normalize(SEARCH_FIELDS.flatMap((field) => field(row, { now })).join(' '));
-  return terms.every((term) => includesAtBoundary(haystack, term));
+  return terms.every((term) => containsTerm(haystack, term));
 }
 
 /** 段階の絞り込みに、この行が入るか。段階がまだ無い行は、「すべて」以外では入らない。 */
