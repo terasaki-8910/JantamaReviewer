@@ -1,0 +1,2146 @@
+/*
+  quiz.css: 出題・今日の出題・解き直しの画面（承認済みの 9回目・10回目のサンプルの quiz.css・round10.css を、実際の画面に移したもの）。
+  色は書かない。すべて tokens.css のトークンから。
+  方針（2回目に承認された「卓の配置」を、今のシェルに移したもの）:
+  - 盤面は卓の配置のまま。河は四方に置き、6枚で折り返す。リーチ宣言牌は横向き、ツモ切りは暗く、鳴かれた牌は薄く。
+  - 副露は、持ち主の右手側の角に置く（自分は右下）。河と同じ向きで回す。
+  - accent は「選択・主な操作・フォーカス」と AI の印。赤（--you）は「自分の手」だけ。実戦は中立（--ink）。
+  - 答えの欄は罫線で区切り、カードは重ねない。色のある内容は牌だけ。
+  既存の CSS と名前が重なるもの（chip・choice・tag・sec・link・maka）には、q- を付けてある。
+  ドラの強調は、設定が入のとき（.qz[data-dora="on"]）だけ、ドラ表示牌が指す牌の面に --dora-fill を重ねる（黄色の背景だけ。R10-7）。
+*/
+/* stylelint-disable no-descending-specificity -- 牌（.tile）の大きさ・位置の規則は、置き場ごとに別の性質（--tw・位置・影）を決めるだけで、同じ性質を取り合わない。承認済みのサンプルの並びのまま使う */
+
+/* ---------- ボタン・入力の追加 ---------- */
+.btn.lg {
+  min-height: 42px;
+  font-size: 15px;
+}
+
+.btn.block {
+  width: 100%;
+}
+
+.btn.primary:disabled {
+  background: var(--hover);
+  border-color: var(--line);
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.btn.primary .ic {
+  color: inherit;
+}
+
+.field-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.field-h > label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.req {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.q-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  color: var(--ink);
+  font-size: 13px;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.q-link:hover {
+  text-decoration-color: var(--ink);
+}
+
+.q-link .ic {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+/* ---------- 見出し ---------- */
+.qhead {
+  align-items: center;
+}
+
+.q-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.q-l {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s4);
+  min-width: 0;
+}
+
+.kicker {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.kicker b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.progress {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.progress b {
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.q-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.q-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 12.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.replay {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.replay .btn {
+  min-height: 34px;
+  padding: 0 var(--s3);
+  font-size: 13px;
+  gap: 6px;
+}
+
+.replay .btn svg {
+  width: 9px;
+  height: 9px;
+  fill: currentcolor;
+  flex: none;
+}
+
+.replay .btn:disabled {
+  background: transparent;
+  border-color: var(--line);
+}
+
+.turn {
+  min-width: 4.4em;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.turn b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+/* ---------- 作業の面 ---------- */
+.work {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s5);
+  max-width: 1240px;
+  margin-inline: auto;
+  padding-top: 18px;
+  align-items: start;
+}
+
+@container main (width >= 840px) {
+  .work {
+    grid-template-columns: minmax(0, 1fr) 336px;
+    gap: 28px;
+  }
+}
+
+.board-col {
+  container: board / inline-size;
+  min-width: 0;
+  display: grid;
+  gap: var(--s3);
+  align-content: start;
+}
+
+/* ---------- 牌 ---------- */
+.tile {
+  display: block;
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  width: var(--tw, 26px);
+  aspect-ratio: 3 / 4;
+  background: url("tiles/Front.svg") center / 100% 100% no-repeat;
+  border-radius: 10% / 7.5%;
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.tile img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ツモ切りは暗く。鳴かれた牌は薄く。鳴ける牌（いま鳴く対象の牌）は accent の輪 */
+.tile.tg {
+  filter: brightness(0.8);
+}
+
+.tile.called {
+  opacity: 0.38;
+}
+
+.tile.target {
+  box-shadow: 0 0 0 2px var(--accent);
+  z-index: 1;
+}
+
+.tile.back {
+  background: var(--accent-bar);
+}
+
+/* ---------- 卓 ---------- */
+
+/*
+  --rows: 河の段の数、--ri: リーチ宣言牌（横向き）の分の余白を取るか（0 か 1）。どちらも JS が入れる。
+  牌の幅 --rw は、列の幅と、窓の高さ（見出し・凡例・手牌の分を引いた残り）の小さいほうから決める。
+  河は持ち主の向きで作り、まるごと回す。左右の置き場は、幅と高さを入れ替えて取るので、回しても中央の箱に重ならない。
+*/
+.table-wrap {
+  display: grid;
+  justify-items: center;
+}
+
+.table {
+  --g: 8px;
+  --pad: 12px;
+  --rows: 3;
+  --ri: 0;
+  --kw: calc(2 * var(--pad) + 4 * var(--g) + 2 * var(--rows) * 1px + 3px);
+  --cw: calc(6 + var(--rows) * 8 / 3 + var(--ri) / 3);
+  --rw: max(14px, min(46px, calc((min(100cqw, 100vh - var(--chrome-h, 246px)) - var(--kw)) / var(--cw))));
+  --rh: calc(var(--rw) * 4 / 3);
+  --river-w: calc(var(--rw) * 6 + var(--ri) * (var(--rh) - var(--rw)) + 5px);
+  --side: calc(var(--rh) * var(--rows) + (var(--rows) - 1) * 1px);
+  --mw: min(calc(var(--rw) * 0.72), calc((var(--side) - 8px) / 4));
+  --mh: calc(var(--mw) * 4 / 3);
+
+  display: grid;
+  gap: var(--g);
+  padding: var(--pad);
+  grid-template:
+    "tl top tr" var(--side)
+    "left center right" var(--river-w)
+    "bl bottom br" var(--side) / var(--side) var(--river-w) var(--side);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+}
+
+.zone {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.zone.top { grid-area: top; }
+.zone.left { grid-area: left; }
+.zone.right { grid-area: right; }
+.zone.bottom { grid-area: bottom; }
+
+.river {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-end;
+  gap: 1px;
+  width: var(--river-w);
+  height: var(--side);
+}
+
+.rt {
+  position: relative;
+  flex: none;
+  width: var(--rw);
+  height: var(--rh);
+}
+
+.rt .tile {
+  --tw: var(--rw);
+}
+
+/* リーチ宣言牌は横向き。幅と高さを入れ替えた箱に、回した牌を入れる */
+.rt.sw {
+  width: var(--rh);
+  height: var(--rw);
+}
+
+.rt.sw .tile {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.zone.top .river {
+  transform: rotate(180deg);
+}
+
+.zone.left .river,
+.zone.right .river {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+
+.zone.left .river {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.zone.right .river {
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+/* 副露の置き場（四隅）。持ち主の右手側の角（自分は右下）。持ち主の向きで作って、河と同じ向きに回す */
+.corner {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.corner.tl { grid-area: tl; }
+.corner.tr { grid-area: tr; }
+.corner.bl { grid-area: bl; }
+.corner.br { grid-area: br; }
+
+.melds {
+  position: absolute;
+  inset: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-flow: row-reverse wrap-reverse;
+  place-content: flex-start;
+  gap: 4px 8px;
+}
+
+.corner.tl .melds { transform: rotate(180deg); }
+.corner.bl .melds { transform: rotate(90deg); }
+.corner.tr .melds { transform: rotate(-90deg); }
+
+.meld {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.mt {
+  position: relative;
+  flex: none;
+  width: var(--mw);
+  height: var(--mh);
+}
+
+.mt .tile {
+  --tw: var(--mw);
+}
+
+.mt.sw {
+  width: var(--mh);
+  height: var(--mw);
+}
+
+.mt.sw .tile {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+/* 加槓: 横向きの牌を 2 枚重ねる */
+.mt.stack {
+  display: grid;
+  gap: 1px;
+  width: var(--mh);
+  height: calc(var(--mw) * 2 + 1px);
+}
+
+.mt.stack .sw1 {
+  position: relative;
+  width: var(--mh);
+  height: var(--mw);
+}
+
+.mt.stack .sw1 .tile {
+  --tw: var(--mw);
+
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+/* 狭いときだけ使う部品（広いときは隠す） */
+.info-strip,
+.round-s {
+  display: none;
+}
+
+/* 中央の箱 */
+.center {
+  grid-area: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+}
+
+.score {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 1px;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.score .who {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.score .wind {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.score .wind.oya {
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.score .rel {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.score .pts {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.score .rch {
+  margin-top: 1px;
+  padding: 0 6px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.score.me .wind:not(.oya),
+.score.me .rel,
+.score.me .pts {
+  color: var(--you);
+}
+
+.score.top {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 4px 0 6px;
+}
+
+.score.left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.score.right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.score.bottom {
+  grid-column: 2;
+  grid-row: 3;
+  padding: 6px 0 4px;
+}
+
+.info {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+.round {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.honba,
+.rest {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.rest b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.dora {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.dora-l {
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dora-t {
+  display: flex;
+  gap: 2px;
+}
+
+.dora .tile {
+  --tw: 22px;
+}
+
+@container board (width <= 579px) {
+  .table {
+    --g: 4px;
+    --pad: 6px;
+  }
+
+  .center {
+    padding: 3px;
+  }
+
+  .center .info {
+    display: none;
+  }
+
+  .center .round-s {
+    display: block;
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+    text-align: center;
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .info-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 2px 10px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .is-round {
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .info-strip b {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .is-dora-strip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .is-dora-strip .tile {
+    --tw: 16px;
+  }
+
+  .score .rel {
+    display: none;
+  }
+
+  .score .wind {
+    font-size: 14px;
+  }
+
+  .score .pts {
+    font-size: 10px;
+    letter-spacing: -0.02em;
+  }
+
+  .score .rch {
+    font-size: 9px;
+    padding: 0 4px;
+  }
+
+  .score.top,
+  .score.bottom {
+    grid-column: 1 / -1;
+    grid-auto-flow: column;
+    justify-content: center;
+    align-items: baseline;
+    gap: 4px;
+    padding: 1px 0;
+  }
+
+  .melds {
+    gap: 2px 4px;
+  }
+}
+
+/* 凡例 */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px var(--s4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend .tile {
+  --tw: 14px;
+}
+
+.legend .sw-demo {
+  position: relative;
+  display: inline-block;
+  width: 19px;
+  height: 14px;
+}
+
+.legend .sw-demo .tile {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.legend .past-flag {
+  display: none;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.qz [data-view="past"] .legend .past-flag {
+  display: inline-flex;
+}
+
+/* ---------- 手牌 ---------- */
+.hand-wrap {
+  padding: var(--s2) 0 var(--s3);
+}
+
+.qz[data-state="revealed"] .hand-wrap[data-kind="discard"] {
+  padding-bottom: 58px;
+}
+
+.hand {
+  --tw: clamp(24px, calc((100cqw - 38px) / 14), 43px);
+
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+}
+
+.slot {
+  position: relative;
+  display: block;
+}
+
+.slot.draw {
+  margin-left: 12px;
+}
+
+.slot .cap-top {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  margin-bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tile-btn {
+  padding: 0;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.tile-btn:hover:not(:disabled) {
+  transform: translateY(-4px);
+}
+
+.tile-btn[aria-pressed="true"] {
+  transform: translateY(-12px);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.tile-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  z-index: 2;
+}
+
+.tile-btn:disabled {
+  cursor: default;
+}
+
+/* 鳴きの選択肢で選んだ組み合わせに使う手牌 */
+.slot[data-use] > .tile {
+  transform: translateY(-10px);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* 答え合わせのあとの印。牌の下に、自分・実戦・AI の順に重ねる */
+.mks {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  margin-top: 7px;
+  transform: translateX(-50%);
+}
+
+.mk {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.mk.you { color: var(--you); }
+.mk.act { color: var(--ink); }
+.mk.top { color: var(--accent); }
+
+.slot[data-mark] .mks {
+  display: flex;
+}
+
+.slot[data-mark] .tile-btn {
+  transform: none;
+}
+
+.slot[data-ring="you"] .tile-btn { box-shadow: 0 0 0 2px var(--you); }
+.slot[data-ring="top"] .tile-btn { box-shadow: 0 0 0 2px var(--accent); }
+.slot[data-ring="act"] .tile-btn { box-shadow: 0 0 0 2px var(--ink); }
+
+.qz [data-view="past"] .hand-wrap {
+  opacity: 0.4;
+}
+
+@container board (width <= 579px) {
+  .hand {
+    --tw: 36px;
+
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    row-gap: 16px;
+  }
+
+  .slot.draw {
+    margin-left: 6px;
+  }
+
+  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"] {
+    padding-bottom: 12px;
+  }
+
+  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"] .hand {
+    row-gap: 48px;
+  }
+}
+
+/* ---------- 答えの欄 ---------- */
+.answer {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  padding: 12px 16px;
+  min-width: 0;
+  word-break: auto-phrase;
+}
+
+.answer form {
+  display: grid;
+  gap: var(--s4);
+  margin: 0;
+}
+
+.answer .sec-title {
+  margin: 0;
+}
+
+.q-sec {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.q-review > .q-sec,
+.q-review > form.q-sec {
+  padding: 12px 0;
+}
+
+.q-review > :first-child {
+  padding-top: 0;
+}
+
+.q-review > :last-child {
+  padding-bottom: 0;
+}
+
+.q-review > * + * {
+  border-top: 1px solid var(--line);
+}
+
+.qz[data-state="answering"] .only-revealed {
+  display: none !important;
+}
+
+.qz[data-state="revealed"] .only-answering {
+  display: none !important;
+}
+
+.pick {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 56px;
+}
+
+.pick .tile {
+  --tw: 32px;
+}
+
+.pick-name {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.pick-name .mono {
+  font-weight: 500;
+}
+
+.pick .none {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* 鳴きの選択肢（丸い印つきのカード） */
+.q-choices {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.q-choices legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.q-choice {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.c-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.c-body::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+}
+
+.q-choice:hover .c-body {
+  border-color: var(--ink);
+}
+
+.q-choice[aria-checked="true"] .c-body {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.q-choice[aria-checked="true"] .c-body::before {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.q-choice:focus-visible {
+  outline: none;
+}
+
+.q-choice:focus-visible .c-body {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.c-name {
+  min-width: 3.4em;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.c-tiles {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.c-tiles .tile {
+  --tw: 26px;
+}
+
+.c-plus {
+  margin: 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.c-note {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* 答え合わせのあと */
+.summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--s3);
+  align-items: center;
+}
+
+.summary .tiles {
+  display: flex;
+  gap: 2px;
+  grid-row: span 3;
+}
+
+.summary .tile {
+  --tw: 28px;
+}
+
+.summary .what {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.summary .what .who {
+  color: var(--you);
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.summary .why {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.summary .meta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary.no-tile {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bars,
+.uk {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.bars {
+  --lbl: 20px;
+}
+
+.bars.call {
+  --lbl: 6.6em;
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: 5.6em var(--lbl) minmax(0, 1fr) 4.4em;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 27px;
+}
+
+.bar .tile {
+  --tw: 20px;
+}
+
+.bar .btag,
+.uk-tags {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.bar .lab {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.bar .lab .tile {
+  --tw: 17px;
+}
+
+.bar .lab b {
+  margin-right: 4px;
+  font-weight: 700;
+}
+
+.track {
+  display: block;
+  height: 10px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--accent-bar);
+  border-radius: 2px;
+}
+
+.bar .v {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bar.you .btag,
+.bar.you .v,
+.uk-row.you .uk-tags {
+  color: var(--you);
+}
+
+.bar.top .btag,
+.uk-row.top .uk-tags {
+  color: var(--accent);
+}
+
+.bar.you .fill,
+.uk-row.you .fill {
+  background: var(--you);
+}
+
+.bar.act .fill,
+.uk-row.act .fill {
+  background: var(--ink);
+}
+
+.bar.you .v {
+  font-weight: 500;
+}
+
+/* 受け入れ枚数（2 行: 上に印・牌・シャンテン数・枚数、下に棒） */
+.uk-row {
+  display: grid;
+  gap: 4px;
+}
+
+.uk-top {
+  display: grid;
+  grid-template-columns: minmax(5.6em, auto) auto minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.uk-dis {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.uk-dis .tile {
+  --tw: 20px;
+}
+
+.uk-sh {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.uk-n {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.uk-row.you .uk-n {
+  color: var(--you);
+  font-weight: 500;
+}
+
+/* 最大のシャンテン数より多い打牌は、枚数で比べられないので、棒を中立にして「シャンテン」を濃く */
+.uk-row.worse .fill {
+  background: var(--line-strong);
+}
+
+.uk-row.worse .uk-sh {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.takeaway {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.uk-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px var(--s3);
+}
+
+/* 差の原因・学んだ原則・MAKA */
+.learn {
+  display: grid;
+  gap: var(--s3);
+}
+
+.q-maka {
+  border-top: 1px solid var(--line);
+  padding-top: var(--s2);
+}
+
+.q-maka summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.q-maka summary::-webkit-details-marker {
+  display: none;
+}
+
+.q-maka summary:hover .chev {
+  color: var(--ink);
+}
+
+.q-maka summary .chev {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.q-maka[open] summary .chev {
+  transform: rotate(90deg);
+}
+
+.q-maka summary .opt {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.maka-body {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s2) 0 var(--s1);
+}
+
+.maka-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mk-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 10% / 7.5%;
+}
+
+.mk-btn .tile {
+  --tw: 27px;
+
+  transition: transform 120ms ease;
+}
+
+.mk-btn:hover .tile {
+  transform: translateY(-3px);
+}
+
+.mk-btn[aria-pressed="true"] .tile {
+  box-shadow: 0 0 0 2px var(--accent);
+  transform: translateY(-3px);
+}
+
+.mk-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.maka-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s2);
+  min-height: 24px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.maka-note .q-chip {
+  color: var(--ink);
+}
+
+/* 解き直しの結果 */
+.verdict {
+  display: grid;
+  gap: 6px;
+}
+
+.v-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--s3);
+  margin: 0;
+}
+
+.v-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--ink);
+  border-radius: var(--r2);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.v-badge .ic {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.6;
+}
+
+.verdict[data-result="ok"] .v-badge {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.v-text {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.v-rule {
+  display: block;
+  font-size: 12.5px;
+}
+
+.v-next {
+  display: grid;
+  gap: 2px;
+  padding: var(--s2) var(--s3);
+  background: var(--hover);
+  border-radius: var(--r2);
+  font-size: 13.5px;
+}
+
+.v-next p {
+  margin: 0;
+}
+
+.v-next b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.v-why {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- 今日の出題 ---------- */
+.q-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3) var(--s5);
+  margin-bottom: var(--s5);
+}
+
+.q-prog {
+  display: grid;
+  gap: 6px;
+  min-width: min(100%, 260px);
+}
+
+.q-prog .nums {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.q-prog .nums b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 22px;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.q-prog .track {
+  height: 6px;
+}
+
+.q-prog .fill {
+  width: calc(var(--p, 0) * 100%);
+  min-width: 0;
+}
+
+.q-rule {
+  max-width: 62ch;
+  word-break: auto-phrase;
+  text-wrap: pretty;
+  margin: 0 0 var(--s4);
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.qlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.qrow {
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 56px;
+  padding: 8px var(--s3);
+  border-top: 1px solid var(--line);
+}
+
+.qlist > li:last-child .qrow {
+  border-bottom: 1px solid var(--line);
+}
+
+.qrow .no {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.qrow .main-l {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.qrow .l1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s2);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.qrow .l2 {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.qrow .st {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.qrow .st .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.qrow.done .l1 {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.qrow.next {
+  background: var(--accent-fill);
+  border-radius: var(--r2);
+  border-top-color: transparent;
+}
+
+.qrow.next + .qrow,
+li:has(> .qrow.next) + li > .qrow {
+  border-top-color: transparent;
+}
+
+.qrow.next .st {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.q-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.q-tag.doubt {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.qrest {
+  margin-top: var(--s4);
+}
+
+.qrest summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  font-size: 14px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.qrest summary::-webkit-details-marker {
+  display: none;
+}
+
+.qrest summary:hover {
+  border-color: var(--ink);
+}
+
+.qrest summary .chev {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.qrest[open] summary .chev {
+  transform: rotate(90deg);
+}
+
+.qrest summary .hint {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.qrest .qlist {
+  margin-top: var(--s3);
+}
+
+.q-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  max-width: 62ch;
+  word-break: auto-phrase;
+  margin: var(--s5) 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.q-note .ic {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+}
+
+/* ---------- 狭いとき（640px 未満） ---------- */
+@media (width < 640px) {
+  .qhead {
+    align-items: flex-start;
+  }
+
+  .replay {
+    flex-wrap: wrap;
+  }
+
+  .qrow {
+    grid-template-columns: 1.8em minmax(0, 1fr);
+  }
+
+  .qrow .st {
+    grid-column: 2;
+  }
+
+  .bar {
+    grid-template-columns: 4.6em var(--lbl) minmax(0, 1fr) 4.2em;
+    gap: 6px;
+  }
+
+  .bars.call {
+    --lbl: 5.4em;
+  }
+
+  .uk-top {
+    grid-template-columns: minmax(4.6em, auto) auto minmax(0, 1fr) auto 16px;
+    gap: 6px;
+  }
+}
+
+.qrow p {
+  margin: 0;
+}
+
+.tile.latest {
+  box-shadow: 0 0 0 2px var(--ink);
+  z-index: 1;
+}
+
+/* 列が 481〜579px のとき（窓がおよそ 1150〜1250px）: 卓は狭い配置のまま、手牌は 1 段に収める（9回目の狭い配置は 36px 固定で折り返していた） */
+@container board (481px <= width <= 579px) {
+  .hand {
+    --tw: clamp(24px, calc((100cqw - 40px) / 14), 36px);
+
+    flex-wrap: nowrap;
+    justify-content: center;
+    row-gap: 0;
+  }
+
+  .slot.draw {
+    margin-left: 12px;
+  }
+
+  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"] {
+    padding-bottom: 58px;
+  }
+
+  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"] .hand {
+    row-gap: 0;
+  }
+}
+
+/* 窓の高さが低くても、卓の中央の文字が重ならない大きさ（牌 36px。中央の箱が約 220px）より小さくしない（どの画面でも）。
+   列が 580px より狭いときは、卓の中央を外に出す狭い配置（quiz.css）に切り替わる（9回目は 480px。その間は中央の文字が重なるので、580px に上げた） */
+@container board (width >= 580px) {
+  .table {
+    --rw: max(36px, min(46px, calc((min(100cqw, 100vh - var(--chrome-h, 246px)) - var(--kw)) / var(--cw))));
+  }
+}
+
+.qhead .q-chips .q-chip.is-doubt {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.qhead .q-chips .q-chip.is-mis {
+  border-color: var(--ink);
+}
+
+/* ================= 受け入れ枚数の行（押せる行）と、詳しい表示 ================= */
+.uk-open {
+  display: grid;
+  gap: 4px;
+  width: calc(100% + 12px);
+  margin: 0 -6px;
+  padding: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r2);
+  color: inherit;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+
+.uk-open:hover {
+  background: var(--hover);
+}
+
+.uk-open[aria-expanded="true"] {
+  background: var(--accent-fill);
+}
+
+.uk-tags {
+  white-space: normal;
+}
+
+.uk-more {
+  display: grid;
+  place-items: center;
+}
+
+.uk-more .chev {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.uk-open:hover .uk-more .chev,
+.uk-open[aria-expanded="true"] .uk-more .chev {
+  color: var(--ink);
+}
+
+.uk-hint {
+  margin-top: -2px;
+}
+
+.ukpop {
+  position: fixed;
+  z-index: 75;
+  display: flex;
+  flex-direction: column;
+  width: 404px;
+  max-width: calc(100vw - 16px);
+  max-height: min(660px, calc(100vh - 16px));
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  box-shadow: 0 12px 32px var(--menu-shadow);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+.up-fix {
+  flex: none;
+  padding: 12px 14px 0;
+}
+
+.up-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 14px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ukpop:focus {
+  outline: none;
+}
+
+.ukpop.sheet {
+  inset: auto 0 0;
+  width: auto;
+  max-width: none;
+  max-height: 80vh;
+  border-radius: var(--r3) var(--r3) 0 0;
+}
+
+.up-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.up-t {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s2);
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.up-dis {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.up-dis .tile {
+  --tw: 24px;
+}
+
+.up-x {
+  width: 32px;
+  height: 32px;
+  margin: -4px -6px -4px 0;
+}
+
+.up-sum {
+  margin: 8px 0 4px;
+  font-size: 13.5px;
+}
+
+.up-sum b,
+.up-sum2 b,
+.up-total b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.up-sum2 {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+}
+
+.up-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.up-note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.up-note.warn {
+  padding: 6px 10px;
+  background: var(--hover);
+  border-radius: var(--r2);
+  color: var(--ink);
+}
+
+.up-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 10px 0 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.up-tabs [role="tab"] {
+  min-height: 36px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--r1) var(--r1) 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.up-tabs [role="tab"]:hover {
+  color: var(--ink);
+}
+
+.up-tabs [role="tab"][aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.up-tabs [role="tab"]:focus-visible {
+  outline-offset: -2px;
+}
+
+.ut-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ut {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.ut.gap {
+  margin-left: 8px;
+}
+
+.ut .tile {
+  --tw: 28px;
+}
+
+.ut-n {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ut-n b {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.up-total {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  text-align: right;
+  font-size: 13px;
+}
+
+.up-diff {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--hover);
+  border-radius: var(--r2);
+}
+
+.up-diff-h {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.up-diff .quiet {
+  margin: 0;
+}
+
+.df-n {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.df-row {
+  display: grid;
+  grid-template-columns: 8.6em minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.df-l {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.df-ts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.df-t {
+  display: inline-grid;
+  justify-items: center;
+  gap: 1px;
+}
+
+.df-t .tile {
+  --tw: 22px;
+}
+
+.fl-wrap {
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+
+.fl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.fl th {
+  padding: 6px 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.fl td {
+  padding: 4px 8px;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.fl tbody tr:first-child td {
+  border-top: 0;
+}
+
+.fl .tile {
+  --tw: 20px;
+}
+
+.fl-n,
+.fl-uv {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.fl-n b,
+.fl-uv b {
+  font-weight: 500;
+}
+
+.fl-d {
+  white-space: nowrap;
+}
+
+.fl-d .tile {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+
+.fl-u {
+  min-width: 8.5em;
+}
+
+.fl-u .track {
+  height: 6px;
+  margin-top: 3px;
+}
+
+/* ================= 差の原因（いくつでも） ================= */
+.legend-note {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* 四角の印 + チェック（複数選べることが見た目で分かる）。入れ子の span は .pill span の規則を受けるので、i を使う */
+.pill.multi span::before {
+  content: none;
+}
+
+.pill.multi .bx {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-right: 7px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 3px;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.pill.multi .bx svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: var(--on-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.pill.multi input:checked + span .bx {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.pill.multi input:checked + span .bx svg {
+  opacity: 1;
+}
+
+/* ---------- ドラを目立たせる（設定「ドラを目立たせる」。入のとき、ページの根に data-dora="on"） ----------
+  牌の面に --dora-fill を multiply で重ねる（図柄は暗くならず、面だけが黄色くなる）。付けるのは、ドラ表示牌が指す牌の
+  手牌・河・副露だけ（赤五は、指される牌でもあるときだけ。鳴かれて薄くなった牌と、ドラ表示牌そのものには付けない）。
+  どの牌に is-dora を付けるかは、画面の部品が決める（ドラの決まりは dora.ts）。 */
+.qz[data-dora="on"] .tile.is-dora::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--dora-fill);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.qz:not([data-dora="on"]) .lg-dora {
+  display: none;
+}
