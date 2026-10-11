@@ -232,7 +232,7 @@ export function tauriMockScript(scenario: Scenario): string {
         return importing.fetchHangs ? new Promise(function () {}) : importing.reportText;
       case 'ocr_sessions':
         return args.sessionIds.map(function (id) {
-          return { session_id: id, ocr: importing.ocr || { geometry: 'center-v1-lanczos3x', entries: {} } };
+          return { session_id: id, ocr: importing.ocr || { geometry: 'center-v2-lanczos3x-variants', entries: {} } };
         });
       case 'save_report': return args.sessionId === null ? '20261010-120000' : args.sessionId;
       case 'get_state': case 'add_mark': case 'add_rating': case 'undo': case 'new_session': return scenario.state;

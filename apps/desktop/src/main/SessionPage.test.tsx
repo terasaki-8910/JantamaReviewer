@@ -27,9 +27,12 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 const ID = '20261009-190953';
 const STARTED = local(2026, 10, 9, 19, 9);
 
-/** 取り込みが保存するとおりの結びつけ（迷い 1〜3 は 1 つに決まって保存、評価 7〜11 は局の順）。 */
+/**
+ * 取り込みが保存するとおりの結びつけ（迷いは保存しない。推定は、読み取りの写しと結果から出す。評価 7〜11 は局の順）。
+ * 迷い 1〜5 は読めて、1 位が推定になる。迷い 6 は読めないので、手で選ぶ。
+ */
 const IMPORTED_LINKS: Links = {
-  marks: { '1': 'k0h0e4', '2': 'k1h0e13', '3': 'k1h1e7' },
+  marks: {},
   ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': 'k2h0', '11': 'k2h1' },
 };
 
@@ -207,65 +210,139 @@ describe('F9 迷いのカード（取り込む前）', () => {
   });
 });
 
-describe('F9 迷いのカード（取り込んだあと。FX-4）', () => {
-  it('決まっている迷い 1・2・3: 「局 巡目 · 種類」と「自分：実戦の行動」（自分がした行動だけ）と「選び直す」', async () => {
+describe('F9・U-13 迷いのカード（取り込んだあと。FX-4）', () => {
+  /** カードの欄の文字を、確かめやすい形で取り出す。 */
+  function textsOf(n: number) {
+    const c = card(n);
+    return {
+      what: c.querySelector('.mwhat')?.textContent ?? null,
+      read: c.querySelector('.mread')?.textContent ?? null,
+      tag: c.querySelector('.tag.est')?.textContent ?? null,
+      mine: c.querySelector('.mact > span:not(.tag)')?.textContent ?? null,
+      alt: c.querySelector('.malt-lbl')?.textContent ?? null,
+      chips: Array.from(c.querySelectorAll('.chip')).map((b) => b.textContent),
+    };
+  }
+
+  it('どの迷いも、同じ構成: 「迷いN」と時刻 → 2 行目の局面 → スクショから読んだ値 → 状態ごとの欄（推定の印・自分の行動・選び直す）', async () => {
     setup();
     await tableReady();
-    expect(within(card(1)).getByText('東1局 4巡目 · 打牌の迷い')).toBeInTheDocument();
-    expect(within(card(1)).getByText('自分：打5p')).toBeInTheDocument();
-    expect(within(card(2)).getByText('東2局 11巡目 · 鳴きの迷い')).toBeInTheDocument();
-    expect(within(card(2)).getByText('自分：鳴かない判断')).toBeInTheDocument();
-    expect(within(card(3)).getByText('東2局1本場 6巡目 · 打牌の迷い')).toBeInTheDocument();
-    expect(within(card(3)).getByText('自分：打南')).toBeInTheDocument();
-    for (const n of [1, 2, 3]) {
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      const c = card(n);
+      const order = Array.from(c.querySelectorAll('.mtop, .mwhat, .mread, .msub, .malt, .mctl')).map((el) => el.className.split(' ')[0]);
+      expect(order.slice(0, 3), `迷い${n}`).toEqual(['mtop', 'mwhat', 'mread']);
+    }
+    for (const n of [1, 2, 3, 4, 5]) {
+      expect(card(n).querySelector('.mtop + .mwhat + .mread + .msub'), `迷い${n}`).not.toBeNull();
+    }
+    expect(card(6).querySelector('.mtop + .mwhat + .mread + .mctl')).not.toBeNull();
+  });
+
+  it('推定の迷い 1・3（ほかの候補が無い）: 局面・読んだ値・「推定」の印・「自分：実戦の行動」・「選び直す」', async () => {
+    setup();
+    await tableReady();
+    expect(textsOf(1)).toEqual({
+      what: '東1局 4巡目 · 打牌の迷い',
+      read: 'スクショ: 東1局・残り59・25,000点',
+      tag: '推定',
+      mine: '自分：打5p',
+      alt: null,
+      chips: [],
+    });
+    expect(textsOf(3)).toEqual({
+      what: '東2局1本場 6巡目 · 打牌の迷い',
+      read: 'スクショ: 東2局・残り47・15,100点',
+      tag: '推定',
+      mine: '自分：打南',
+      alt: null,
+      chips: [],
+    });
+    for (const n of [1, 3]) {
       expect(within(card(n)).getByRole('button', { name: `迷い${n}を選び直す` })).toHaveTextContent('選び直す');
-      expect(card(n).querySelector('.chip, .sel-btn')).toBeNull();
+      expect(card(n).querySelector('.sel-btn')).toBeNull();
     }
   });
 
-  it('候補が複数の迷い 4・5: 1 行目に候補の数、候補の札（実戦の行動）と「選んでください」', async () => {
+  it('推定の迷い 2・4・5（近い判断がある）: 2 行目の巡目は「11〜12巡目」の形。「ほかの候補」の札（巡目つきの実戦の行動）が出る', async () => {
     setup();
     await tableReady();
-    expect(within(card(4)).getByText('東2局1本場 · 候補が3つ')).toBeInTheDocument();
-    const four = within(card(4)).getByRole('group', { name: '迷い4の候補' });
-    expect(within(four).getAllByRole('button').map((b) => b.textContent)).toEqual(['東をポン', '打7p', '和了']);
-    expect(within(card(4)).getByText('選んでください')).toBeInTheDocument();
-    expect(within(card(5)).getByText('東3局1本場 · 候補が2つ')).toBeInTheDocument();
-    expect(
-      within(within(card(5)).getByRole('group', { name: '迷い5の候補' }))
-        .getAllByRole('button')
-        .map((b) => b.textContent),
-    ).toEqual(['打9m', '打1p']);
-    // まだ何も選んでいない（どの札も押されていない）。
+    expect(textsOf(2)).toEqual({
+      what: '東2局 11〜12巡目 · 打牌の迷い',
+      read: 'スクショ: 東2局・残り23・19,000点',
+      tag: '推定',
+      mine: '自分：打8p',
+      alt: 'ほかの候補',
+      chips: ['12巡目 打9m', '11巡目 鳴かない判断'],
+    });
+    expect(textsOf(4)).toEqual({
+      what: '東2局1本場 8〜9巡目 · 鳴きの迷い',
+      read: 'スクショ: 東2局・残り35・15,100点',
+      tag: '推定',
+      mine: '自分：東をポン',
+      alt: 'ほかの候補',
+      chips: ['9巡目 打7p'],
+    });
+    expect(textsOf(5)).toEqual({
+      what: '東3局1本場 6〜7巡目 · 打牌の迷い',
+      read: 'スクショ: 東3局・残り46・4,400点',
+      tag: '推定',
+      mine: '自分：打9m',
+      alt: 'ほかの候補',
+      chips: ['7巡目 打1p'],
+    });
+    const four = within(card(4)).getByRole('group', { name: '迷い4のほかの候補' });
+    expect(within(four).getAllByRole('button').map((b) => b.textContent)).toEqual(['9巡目 打7p']);
+    // 札は、まだ何も選んでいない（どの札も押されていない）。1 位の推定は札ではなく「自分：」に出ている。
     for (const chip of card(4).querySelectorAll('.chip')) expect(chip).toHaveAttribute('aria-pressed', 'false');
-    expect(within(card(4)).queryByRole('button', { name: /選び直す/ })).toBeNull();
+    expect(within(card(4)).queryByText('選んでください')).toBeNull();
+    expect(within(card(4)).getByRole('button', { name: '迷い4を選び直す' })).toBeInTheDocument();
   });
 
-  it('読み取れなかった迷い 6: 「読み取れませんでした」と「局面を手で選ぶ」（局のメニュー・判断のメニュー。判断は局を選ぶまで押せない）', async () => {
+  it('読み取れなかった迷い 6: 局面は決まっていません・スクショを読めませんでした・「手で選ぶ」（局のメニュー・判断のメニュー。判断は局を選ぶまで押せない）', async () => {
     setup();
     await tableReady();
     const six = card(6);
-    expect(within(six).getByText('読み取れませんでした')).toBeInTheDocument();
-    expect(within(six).getByText('局面を手で選ぶ')).toBeInTheDocument();
+    expect(textsOf(6)).toMatchObject({ what: '局面は決まっていません', read: 'スクショを読めませんでした', tag: null, mine: null, chips: [] });
+    expect(within(six).getByText('手で選ぶ')).toBeInTheDocument();
     expect(within(six).getByRole('button', { name: '迷い6の局を選ぶ' })).toBeEnabled();
     expect(within(six).getByRole('button', { name: '迷い6の判断を選ぶ' })).toBeDisabled();
     expect(within(six).queryByRole('button', { name: /選び直す/ })).toBeNull();
+    expect(within(six).queryByText('推定')).toBeNull();
   });
 
-  it('保存した選びは、自動の結果に勝つ: 迷い 4 に保存してあれば、決まっている', async () => {
+  it('E-20 読み直しの写しがあれば、迷い 6 も推定になる（東3局・残り38枚・4,400点。打北 9巡目。ほかの候補は 8巡目の鳴かない判断）', async () => {
+    setup({ session: imported({ ocr: fx4Ocr({ retries: true }) }) });
+    await tableReady();
+    expect(textsOf(6)).toEqual({
+      what: '東3局1本場 8〜9巡目 · 打牌の迷い',
+      read: 'スクショ: 東3局・残り38・4,400点',
+      tag: '推定',
+      mine: '自分：打北',
+      alt: 'ほかの候補',
+      chips: ['8巡目 鳴かない判断'],
+    });
+  });
+
+  it('保存した選び（利用者が選んだもの）は推定に勝つ: 「推定」の印と「ほかの候補」は無い。局面は選んだ判断の巡目だけ。読んだ値の 1 行は同じに出る', async () => {
     setup({
       session: imported({ links: { ...IMPORTED_LINKS, marks: { ...IMPORTED_LINKS.marks, '4': 'k1h1e11' } } }),
     });
     await tableReady();
-    expect(within(card(4)).getByText('東2局1本場 9巡目 · 打牌の迷い')).toBeInTheDocument();
-    expect(within(card(4)).getByText('自分：打7p')).toBeInTheDocument();
-    expect(within(card(4)).queryByText('選んでください')).toBeNull();
+    expect(textsOf(4)).toEqual({
+      what: '東2局1本場 9巡目 · 打牌の迷い',
+      read: 'スクショ: 東2局・残り35・15,100点',
+      tag: null,
+      mine: '自分：打7p',
+      alt: null,
+      chips: [],
+    });
+    expect(within(card(4)).getByRole('button', { name: '迷い4を選び直す' })).toBeInTheDocument();
   });
 
   it('結果を読み出せないとき（取り込み済みなのに）は、カードは画像と時刻だけ。記録した評価の一覧を出す', async () => {
     setup({ report: null, summary: { status: 'unavailable', reason: '取り込んだ結果を読み出せませんでした' } });
     await screen.findByRole('list', { name: '局の評価の一覧' });
-    expect(card(1).querySelector('.mwhat, .msub, .mctl')).toBeNull();
+    expect(card(1).querySelector('.mwhat, .mread, .msub, .mctl')).toBeNull();
     expect(screen.queryByRole('table')).toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: '評価（5）' })).toBeInTheDocument();
   });
@@ -279,29 +356,31 @@ describe('F9 迷いのカード（取り込んだあと。FX-4）', () => {
 });
 
 describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => {
-  it('候補の札を押すと、その判断に結びつけて保存する。カードは「決まっている」の形になり、キーボードの位置は「選び直す」へ', async () => {
+  it('ほかの候補の札を押すと、その判断に結びつけて保存する。カードは「利用者が選んだ」形（「推定」の印・札が消える）になり、キーボードの位置は「選び直す」へ', async () => {
     const { user, mock } = setup();
     await tableReady();
-    await user.click(within(card(4)).getByRole('button', { name: '打7p' }));
+    await user.click(within(card(4)).getByRole('button', { name: '9巡目 打7p' }));
     await waitFor(() => expect(within(card(4)).getByText('自分：打7p')).toBeInTheDocument());
     expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 4, decision: 'k1h1e11' }]);
     expect(within(card(4)).getByText('東2局1本場 9巡目 · 打牌の迷い')).toBeInTheDocument();
-    expect(within(card(4)).queryByText('選んでください')).toBeNull();
+    expect(within(card(4)).queryByText('推定')).toBeNull();
+    expect(card(4).querySelector('.chip, .malt')).toBeNull();
     expect(within(card(4)).getByRole('button', { name: '迷い4を選び直す' })).toHaveFocus();
   });
 
-  it('Ctrl+Z で前の状態（まだ選んでいない）に戻り（保存を消す）、Ctrl+Y でもう一度選ぶ（U-11）', async () => {
+  it('Ctrl+Z で前の状態（推定）に戻り（保存を消す）、Ctrl+Y でもう一度選ぶ（U-11）', async () => {
     const { user, mock, store } = setup();
     await tableReady();
-    await user.click(within(card(5)).getByRole('button', { name: '打1p' }));
+    await user.click(within(card(5)).getByRole('button', { name: '7巡目 打1p' }));
     await waitFor(() => expect(within(card(5)).getByText('自分：打1p')).toBeInTheDocument());
     expect(store.session(ID).links.marks['5']).toBe('k2h1e7');
 
     await undoKey(user);
-    await waitFor(() => expect(within(card(5)).getByText('選んでください')).toBeInTheDocument());
+    await waitFor(() => expect(within(card(5)).getByText('推定')).toBeInTheDocument());
     expect(calls(mock, 'clear_mark_link')).toEqual([{ sessionId: ID, markId: 5 }]);
     expect(store.session(ID).links.marks['5']).toBeUndefined();
-    expect(within(card(5)).queryByText(/自分：/)).toBeNull();
+    expect(within(card(5)).getByText('自分：打9m')).toBeInTheDocument();
+    expect(within(card(5)).getByRole('button', { name: '7巡目 打1p' })).toBeInTheDocument();
 
     await redoKey(user);
     await waitFor(() => expect(within(card(5)).getByText('自分：打1p')).toBeInTheDocument());
@@ -314,31 +393,52 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
   it('「選び直す」: 自動の候補があれば札が出て（いまの判断が押された形）、別の札を押すと保存し直す。Ctrl+Z で前の判断に戻る', async () => {
     const { user, mock, store } = setup();
     await tableReady();
-    await user.click(within(card(4)).getByRole('button', { name: '東をポン' }));
-    await waitFor(() => expect(within(card(4)).getByText('自分：東をポン')).toBeInTheDocument());
-
     await user.click(within(card(4)).getByRole('button', { name: '迷い4を選び直す' }));
+    // 推定の 1 位（東をポン）が押された形で、ほかの候補と一緒に並ぶ（巡目つき）。
     const chips = within(card(4)).getAllByRole('button', { pressed: true });
-    expect(chips.map((b) => b.textContent)).toEqual(['東をポン']);
-    await user.click(within(card(4)).getByRole('button', { name: '和了' }));
-    await waitFor(() => expect(within(card(4)).getByText('自分：和了')).toBeInTheDocument());
-    expect(store.session(ID).links.marks['4']).toBe('k1h1e12');
+    expect(chips.map((b) => b.textContent)).toEqual(['8巡目 東をポン']);
+    expect(within(card(4)).getAllByRole('button').filter((b) => b.classList.contains('chip')).map((b) => b.textContent)).toEqual([
+      '8巡目 東をポン',
+      '9巡目 打7p',
+    ]);
+    await user.click(within(card(4)).getByRole('button', { name: '9巡目 打7p' }));
+    await waitFor(() => expect(within(card(4)).getByText('自分：打7p')).toBeInTheDocument());
+    expect(store.session(ID).links.marks['4']).toBe('k1h1e11');
+
+    // 利用者が選んだあとの「選び直す」でも、同じ札が並ぶ（押されているのは、選んだ判断）。
+    await user.click(within(card(4)).getByRole('button', { name: '迷い4を選び直す' }));
+    expect(within(card(4)).getAllByRole('button', { pressed: true }).map((b) => b.textContent)).toEqual(['9巡目 打7p']);
+    await user.click(within(card(4)).getByRole('button', { name: '8巡目 東をポン' }));
+    await waitFor(() => expect(within(card(4)).getByText('自分：東をポン')).toBeInTheDocument());
+    expect(store.session(ID).links.marks['4']).toBe('k1h1e10');
 
     await undoKey(user);
-    await waitFor(() => expect(within(card(4)).getByText('自分：東をポン')).toBeInTheDocument());
-    expect(calls(mock, 'set_mark_link').at(-1)).toEqual({ sessionId: ID, markId: 4, decision: 'k1h1e10' });
-    expect(store.session(ID).links.marks['4']).toBe('k1h1e10');
+    await waitFor(() => expect(within(card(4)).getByText('自分：打7p')).toBeInTheDocument());
+    expect(calls(mock, 'set_mark_link').at(-1)).toEqual({ sessionId: ID, markId: 4, decision: 'k1h1e11' });
+    expect(store.session(ID).links.marks['4']).toBe('k1h1e11');
   });
 
-  it('「選び直す」→「やめる」: 何も保存せず、元の表示に戻る', async () => {
+  it('推定の 1 位（自分：…）を、そのまま選んで確かめることもできる: 「選び直す」→ 同じ札を押すと、保存して「推定」の印が外れる', async () => {
+    const { user, mock, store } = setup();
+    await tableReady();
+    await user.click(within(card(4)).getByRole('button', { name: '迷い4を選び直す' }));
+    await user.click(within(card(4)).getByRole('button', { name: '8巡目 東をポン' }));
+    await waitFor(() => expect(within(card(4)).queryByText('推定')).toBeNull());
+    expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 4, decision: 'k1h1e10' }]);
+    expect(store.session(ID).links.marks['4']).toBe('k1h1e10');
+    expect(within(card(4)).getByText('東2局1本場 8巡目 · 鳴きの迷い')).toBeInTheDocument();
+  });
+
+  it('「選び直す」→「やめる」: 何も保存せず、元の表示（推定）に戻る', async () => {
     const { user, mock } = setup();
     await tableReady();
     await user.click(within(card(1)).getByRole('button', { name: '迷い1を選び直す' }));
-    expect(within(card(1)).getByText('局面を手で選ぶ')).toBeInTheDocument();
+    expect(within(card(1)).getByText('手で選ぶ')).toBeInTheDocument();
     // いまの局が選んである。判断のメニューにも、いまの判断が印の付いた形で出る。
     expect(within(card(1)).getByRole('button', { name: '迷い1の局 東1局' })).toBeInTheDocument();
     await user.click(within(card(1)).getByRole('button', { name: '迷い1の選び直しをやめる' }));
     expect(within(card(1)).getByText('自分：打5p')).toBeInTheDocument();
+    expect(within(card(1)).getByText('推定')).toBeInTheDocument();
     expect(within(card(1)).getByRole('button', { name: '迷い1を選び直す' })).toHaveFocus();
     expect(calls(mock, 'set_mark_link')).toEqual([]);
   });
@@ -371,28 +471,32 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     await waitFor(() => expect(within(six).getByText('自分：打北')).toBeInTheDocument());
     expect(calls(mock, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 6, decision: 'k2h1e10' }]);
     expect(within(six).getByText('東3局1本場 9巡目 · 打牌の迷い')).toBeInTheDocument();
+    expect(within(six).queryByText('推定')).toBeNull();
     expect(store.session(ID).links.marks['6']).toBe('k2h1e10');
 
     await undoKey(user);
-    await waitFor(() => expect(within(six).getByText('読み取れませんでした')).toBeInTheDocument());
+    await waitFor(() => expect(within(six).getByText('局面は決まっていません')).toBeInTheDocument());
     expect(calls(mock, 'clear_mark_link')).toEqual([{ sessionId: ID, markId: 6 }]);
   });
 
-  it('候補の札のとなりの「手で選ぶ」で、手で選ぶ欄に替わる。「候補から選ぶ」で札に戻る（保存はしない）', async () => {
+  it('「選び直す」の札のとなりの「手で選ぶ」で、手で選ぶ欄に替わる。「候補から選ぶ」で札に戻る（保存はしない）', async () => {
     const { user, mock } = setup();
     await tableReady();
+    await user.click(within(card(5)).getByRole('button', { name: '迷い5を選び直す' }));
     await user.click(within(card(5)).getByRole('button', { name: '迷い5の局面を手で選ぶ' }));
-    expect(within(card(5)).getByText('局面を手で選ぶ')).toBeInTheDocument();
+    expect(within(card(5)).getByText('手で選ぶ')).toBeInTheDocument();
     expect(within(card(5)).queryByText('選んでください')).toBeNull();
-    // 1 行目は、候補の言い方のまま（読み取れなかったのではない）。
-    expect(within(card(5)).getByText('東3局1本場 · 候補が2つ')).toBeInTheDocument();
+    // 2 行目は、推定のまま（選び直しの途中で、まだ何も決めていない）。
+    expect(within(card(5)).getByText('東3局1本場 6〜7巡目 · 打牌の迷い')).toBeInTheDocument();
     await user.click(within(card(5)).getByRole('button', { name: '迷い5の候補から選ぶ' }));
     expect(within(card(5)).getByText('選んでください')).toBeInTheDocument();
     expect(calls(mock, 'set_mark_link')).toEqual([]);
   });
 
-  it('決まっている判断を選び直して、同じ判断を選んだときは、保存し直さない', async () => {
-    const { user, mock } = setup();
+  it('決まっている判断を選び直して、同じ判断を選んだときは、保存し直さない（利用者が選んだものを、もう一度選んだとき）', async () => {
+    const { user, mock } = setup({
+      session: imported({ links: { ...IMPORTED_LINKS, marks: { '1': 'k0h0e4' } } }),
+    });
     await tableReady();
     await user.click(within(card(1)).getByRole('button', { name: '迷い1を選び直す' }));
     await user.click(within(card(1)).getByRole('button', { name: '迷い1の判断 4巡目 · 打5p' }));
@@ -401,7 +505,7 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
     expect(within(card(1)).getByText('自分：打5p')).toBeInTheDocument();
   });
 
-  it('保存できなかったときは、選ぶ前の欄のまま（取り消せるものも増えない）', async () => {
+  it('保存できなかったときは、選ぶ前の欄のまま（推定のまま。取り消せるものも増えない）', async () => {
     const { user } = setup({
       handlers: {
         set_mark_link: () => {
@@ -410,11 +514,11 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
       },
     });
     await tableReady();
-    await user.click(within(card(4)).getByRole('button', { name: '打7p' }));
-    await waitFor(() => expect(within(card(4)).getByText('選んでください')).toBeInTheDocument());
-    expect(within(card(4)).queryByText(/自分：/)).toBeNull();
+    await user.click(within(card(4)).getByRole('button', { name: '9巡目 打7p' }));
+    await waitFor(() => expect(within(card(4)).getByText('推定')).toBeInTheDocument());
+    expect(within(card(4)).getByText('自分：東をポン')).toBeInTheDocument();
     await undoKey(user);
-    expect(within(card(4)).getByText('選んでください')).toBeInTheDocument();
+    expect(within(card(4)).getByText('自分：東をポン')).toBeInTheDocument();
   });
 
   it('メニューは Esc で閉じ、何も保存しない。キーボードの位置は開いたボタンへ戻る', async () => {
@@ -431,7 +535,7 @@ describe('F9・U-11 迷いを選ぶ（保存して、取り消せる）', () => 
 });
 
 describe('F9 画像を大きく表示する求め', () => {
-  it('カードの画像を押すと、画像のある迷いの一覧と、押した迷いの位置を渡す。説明は「迷いN · 局 · 巡目 · 種類」と時刻', async () => {
+  it('カードの画像を押すと、画像のある迷いの一覧と、押した迷いの位置を渡す。説明は「迷いN · 局 · 巡目 · 種類（· 推定）」と時刻', async () => {
     const { user, onOpenImage } = setup();
     await tableReady();
     await user.click(within(card(3)).getByRole('button', { name: '迷い3の画像を大きく見る' }));
@@ -443,16 +547,16 @@ describe('F9 画像を大きく表示する求め', () => {
     expect(request.items[2]).toEqual({
       src: `asset://localhost/${encodeURIComponent('C:\\data\\games\\20261009-190953\\marks\\m3.png')}`,
       alt: '迷い3のスクリーンショット',
-      caption: '迷い3 · 東2局1本場 · 6巡目 · 打牌の迷い',
+      caption: '迷い3 · 東2局1本場 · 6巡目 · 打牌の迷い · 推定',
       time: '19:17:37',
     });
     expect(request.items.map((i) => i.caption)).toEqual([
-      '迷い1 · 東1局 · 4巡目 · 打牌の迷い',
-      '迷い2 · 東2局 · 11巡目 · 鳴きの迷い',
-      '迷い3 · 東2局1本場 · 6巡目 · 打牌の迷い',
-      '迷い4 · 東2局1本場 · 候補が3つ',
-      '迷い5 · 東3局1本場 · 候補が2つ',
-      '迷い6 · 読み取れませんでした',
+      '迷い1 · 東1局 · 4巡目 · 打牌の迷い · 推定',
+      '迷い2 · 東2局 · 11〜12巡目 · 打牌の迷い · 推定',
+      '迷い3 · 東2局1本場 · 6巡目 · 打牌の迷い · 推定',
+      '迷い4 · 東2局1本場 · 8〜9巡目 · 鳴きの迷い · 推定',
+      '迷い5 · 東3局1本場 · 6〜7巡目 · 打牌の迷い · 推定',
+      '迷い6 · 局面は決まっていません',
     ]);
   });
 

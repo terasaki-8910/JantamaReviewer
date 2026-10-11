@@ -9,17 +9,19 @@
  * - 合うものが無いか2つ以上あるが、結果の無い半荘がある: 一覧から選んでもらう（`choose`。新しい順）
  * - 結果の無い半荘が1つも無い（記録の無い半荘の結果）: 新しい半荘として取り込む（`new`）
  */
-import { parseCenterText } from './center-text';
+import { firstReadable } from './center-text';
 import { type CenterReading, kyokuFactsOf, locateKyokus } from './kyoku-locate';
 import type { MortalReport } from './report-types';
 
 /**
- * スクショ 1 枚の読み取り。読み取り済みなら `center`（読めなかったら null）、文字認識の行のままなら `lines`。
+ * スクショ 1 枚の読み取り。読み取り済みなら `center`（読めなかったら null）、文字認識の行のままなら `lines`
+ * （1 回目で読めないときは、`retries` の読み直しの行も試す。E-20）。
  * 照合には局・点数だけを使うので、`center` は残りの牌の数（`tilesLeft`）を省いてもよい。
  */
 export interface SessionMark {
   center?: CenterReading | null;
   lines?: readonly string[];
+  retries?: readonly (readonly string[])[];
 }
 
 /** 結果がまだ無い半荘（ウィジェットが記録した半荘）。 */
@@ -45,7 +47,7 @@ export type SessionMatch =
 
 function readingOfMark(mark: SessionMark): CenterReading | null {
   if (mark.center !== undefined) return mark.center;
-  return mark.lines === undefined ? null : parseCenterText(mark.lines);
+  return mark.lines === undefined ? null : firstReadable(mark.lines, mark.retries);
 }
 
 /** 新しい順。時刻が分からないものは、時刻の分かるものより後ろ。同じなら名前の降順。 */
@@ -54,6 +56,43 @@ function newestFirst(a: SessionCandidate, b: SessionCandidate): number {
   const tb = b.started_ms ?? Number.NEGATIVE_INFINITY;
   if (ta !== tb) return tb > ta ? 1 : -1;
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+}
+
+/** 結果と合わなかったスクショ 1 枚。`index` は、渡した並びの何番目か（0 から）。 */
+export interface ShotMismatch<T extends SessionMark = SessionMark> {
+  index: number;
+  mark: T;
+  /** 読み取った局・点数（残りの牌の数が読めていれば、それも）。 */
+  center: CenterReading;
+}
+
+/** 結びつけ先の半荘が決まっているときの、スクショと結果の照合（`checkShotsAgainstReport`）。 */
+export interface ShotCheck<T extends SessionMark = SessionMark> {
+  /** 読めたスクショの数。 */
+  readable: number;
+  /** そのうち、結果と合ったものの数。 */
+  fitting: number;
+  /** 結果と合わなかったスクショ（渡した順）。 */
+  mismatches: ShotMismatch<T>[];
+}
+
+/**
+ * 結びつけ先の半荘が決まっているとき（取り込み前の半荘のページから、その半荘に取り込むとき。U-14）の、スクショと結果の照合。
+ * 結びつけ先の照合（`matchSessionForReport`）はせず、読めたスクショのうち、結果と合わないものを返す。
+ * 合わない = 読んだ局が結果に無い、または点数が局の始めの点数に合わない（自分のリーチ棒の分は引いて比べる。`kyokuFits`）。
+ * 読めなかったスクショは数えない。合わないものが1枚でもあれば、画面から読んだ局・点数が、この結果と食い違っている。
+ */
+export function checkShotsAgainstReport<T extends SessionMark>(report: MortalReport, marks: readonly T[]): ShotCheck<T> {
+  const facts = kyokuFactsOf(report);
+  const result: ShotCheck<T> = { readable: 0, fitting: 0, mismatches: [] };
+  marks.forEach((mark, index) => {
+    const center = readingOfMark(mark);
+    if (center === null) return;
+    result.readable++;
+    if (locateKyokus(facts, center).length > 0) result.fitting++;
+    else result.mismatches.push({ index, mark, center });
+  });
+  return result;
 }
 
 /**

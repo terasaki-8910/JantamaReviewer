@@ -96,14 +96,34 @@ export function parseCenterText(lines: readonly string[]): CenterText | null {
  * スクショ 1 枚の読み取り。結びつけの関数（迷いマーク・評価・半荘）には、このどちらかを持つ記録をそのまま渡せる。
  * 読み取り済みなら `center`（読めなかったときは null）、文字認識の行のままなら `lines`（`parseCenterText` に通す）。
  * どちらも無い記録は「読めない」として扱う。
+ *
+ * `retries` は、1 回目の読み取り（`lines`）で読めなかったときに順に試す、読み直しの行（E-20）。画像のコントラストを上げたものや、
+ * 1.5 倍に広げたものを、文字認識にかけ直した結果。使うのは、`parseCenterText` が最初に読めたもの（1 回目で読めれば、使わない）。
  */
 export interface ScreenReading {
   center?: CenterText | null;
   lines?: readonly string[];
+  retries?: readonly (readonly string[])[];
 }
 
-/** スクショ 1 枚の読み取り結果。`center` があればそれ、無ければ `lines` を読む。どちらも無ければ null（読めない）。 */
+/**
+ * 文字認識の行のうち、最初に読めたものから、局・残りの牌の数・自分の点数を取り出す（E-20）。
+ * 先に 1 回目の行（`lines`）を試し、読めなければ読み直しの行（`retries`）を順に試す。どれも読めなければ null。
+ */
+export function firstReadable(
+  lines: readonly string[],
+  retries: readonly (readonly string[])[] = [],
+): CenterText | null {
+  for (const attempt of [lines, ...retries]) {
+    const parsed = parseCenterText(attempt);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+/** スクショ 1 枚の読み取り結果。`center` があればそれ、無ければ `lines`（と `retries`）を読む。どちらも無ければ null（読めない）。 */
 export function readingOf(input: ScreenReading): CenterText | null {
   if (input.center !== undefined) return input.center;
-  return input.lines === undefined ? null : parseCenterText(input.lines);
+  if (input.lines === undefined) return null;
+  return firstReadable(input.lines, input.retries);
 }

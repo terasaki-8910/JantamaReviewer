@@ -6,16 +6,29 @@ import type { DecisionRef } from '@jantama/engine';
 import type { MarkRecord } from '../api/types';
 import { formatClock } from './format';
 import { Icon } from './Icon';
-import { chipLabels, decisionOptions, kyokuOptions, markHeading, type ResolvedMark } from './markCards';
+import {
+  ESTIMATE_TAG,
+  alternativesOf,
+  chipLabels,
+  decisionOptions,
+  isEstimated,
+  kyokuOptions,
+  markHeading,
+  readingLine,
+  type ResolvedMark,
+} from './markCards';
 import { MenuSelect } from './MenuSelect';
 
 /**
- * 迷いマーク 1 つのカード（F9）。画像（押すと大きく表示。R7-4）・「迷いN」と時刻・結びつけの 1 行目と 2 行目。
+ * 迷いマーク 1 つのカード（F9、U-13）。画像（押すと大きく表示。R7-4）・「迷いN」と時刻・結びつけの欄。
  *
- * 結びつけの状態（取り込み前、または結果を読めていないときは、画像と時刻だけ）:
- * - 決まっている: 「東2局1本場 6巡目 · 打牌の迷い」と「自分：打南」（自分が実際にした行動だけ）と、小さな「選び直す」
- * - 候補が複数: 「東2局 11巡目 · 候補が2つ」と、候補の札（実戦の行動）と「選んでください」
- * - 手で選ぶ（読み取れなかった）: 「読み取れませんでした」と「局面を手で選ぶ」（局のメニュー → 判断のメニュー）
+ * どの状態も、同じ構成で書く（取り込み前、または結果を読めていないときは、画像と時刻だけ）:
+ * 1 行目「迷いN」と時刻 / 2 行目 局面（「東2局1本場 6巡目 · 打牌の迷い」） / 静かな 1 行 スクショから読んだ値
+ * （「スクショ: 東2局・残り47・15,100点」か「スクショを読めませんでした」） / 状態ごとの欄:
+ * - 推定（自動で、1 位の判断に結びつけた）: 「推定」の印・「自分：打南」（自分が実際にした行動だけ）・小さな「選び直す」。
+ *   近い判断があれば、その下に「ほかの候補」の札（押すと、その判断に替わる。取り消せる）
+ * - 利用者が選んだ: 「推定」の印は無い。「自分：打南」と「選び直す」
+ * - 手で選ぶ（読めない・合う局が無い）: 「手で選ぶ」（局のメニュー → 判断のメニュー）
  * AI の候補・確率・順位は出さない（SPEC F3。答えを書くまで隠す）。
  *
  * 選んだ瞬間に保存する（`onChoose`。取り消せる）。選んだあとは、「選び直す」にキーボードの位置を移す
@@ -89,14 +102,13 @@ interface LinkAreaProps {
 }
 
 /**
- * カードの下の欄の、いまの見せ方。決まっていて、選び直していないとき `view`。それ以外は、候補の札（`chips`）か、
- * 手で選ぶ欄（`pick`）。`mode` が `auto` のときは、結びつけの状態に任せる。
+ * カードの下の欄の、いまの見せ方。決まっていて、選び直していないとき `view`。それ以外は、選び直しの札（`chips`）か、
+ * 手で選ぶ欄（`pick`）。`mode` が `auto` のときは、結びつけの状態に任せる（決まっていれば `view`、決まっていなければ `pick`）。
  */
 function viewOf(mode: Mode, hasCandidates: boolean, resolution: ResolvedMark['resolution']): 'view' | 'chips' | 'pick' {
   if (mode === 'chips' && hasCandidates) return 'chips';
   if (mode === 'pick') return 'pick';
-  if (resolution.kind === 'linked') return 'view';
-  return resolution.kind === 'candidates' ? 'chips' : 'pick';
+  return resolution.kind === 'linked' ? 'view' : 'pick';
 }
 
 /** カードの下の、結びつけの欄。 */
@@ -111,15 +123,20 @@ function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
   const linked = resolution.kind === 'linked' ? resolution : null;
   const hasCandidates = autoCandidates.length >= 2;
   const labels = chipLabels(autoCandidates);
+  const estimated = isEstimated(resolved);
+  const alternatives = alternativesOf(resolved);
   const view = viewOf(mode, hasCandidates, resolution);
 
-  // 決まって「選び直す」が出たら、選ぶのに使ったボタンの代わりに、キーボードの位置をそこへ移す。
+  // 決まって「選び直す」が出たら、選ぶのに使ったボタンの代わりに、キーボードの位置をそこへ移す
+  // （候補の札を押して、推定から選んだ状態に替わったときは、見せ方は `view` のままなので、決まった判断が変わったときにも移す）。
+  const linkedKey = linked?.ref.key;
+  const linkedSaved = linked?.saved;
   useEffect(() => {
     if (view === 'view' && focusRechoose.current) {
       focusRechoose.current = false;
       rechooseRef.current?.focus();
     }
-  }, [view]);
+  }, [view, linkedKey, linkedSaved]);
 
   const choose = async (ref: DecisionRef) => {
     if (linked?.saved && linked.ref.key === ref.key) {
@@ -155,13 +172,34 @@ function LinkArea({ number, resolved, decisions, onChoose }: LinkAreaProps) {
   return (
     <>
       <p className="mwhat">{markHeading(resolved)}</p>
+      <p className="mread">{readingLine(resolved)}</p>
       {view === 'view' && linked !== null && (
-        <p className="msub">
-          <span>自分：{linked.ref.actionLabel}</span>
-          <button type="button" className="link-btn" ref={rechooseRef} aria-label={`迷い${number}を選び直す`} onClick={startRechoose}>
-            選び直す
-          </button>
-        </p>
+        <>
+          <p className="msub">
+            <span className="mact">
+              {estimated && <span className="tag est">{ESTIMATE_TAG}</span>}
+              <span>自分：{linked.ref.actionLabel}</span>
+            </span>
+            <button type="button" className="link-btn" ref={rechooseRef} aria-label={`迷い${number}を選び直す`} onClick={startRechoose}>
+              選び直す
+            </button>
+          </p>
+          {estimated && alternatives.length > 0 && (
+            <div className="malt">
+              <span className="malt-lbl" aria-hidden="true">
+                ほかの候補
+              </span>
+              <fieldset className="chips">
+                <legend className="sr-only">迷い{number}のほかの候補</legend>
+                {alternatives.map((candidate, i) => (
+                  <button key={candidate.key} type="button" className="chip" aria-pressed={false} onClick={() => void choose(candidate)}>
+                    {labels[i + 1]}
+                  </button>
+                ))}
+              </fieldset>
+            </div>
+          )}
+        </>
       )}
       {view === 'chips' && (
         <div className="mctl">
@@ -221,7 +259,7 @@ interface PickAreaProps {
   onCancel: (() => void) | null;
 }
 
-/** 「局面を手で選ぶ」: 局のメニュー → 判断のメニュー（選んだ瞬間に決まる）。 */
+/** 「手で選ぶ」: 局のメニュー → 判断のメニュー（選んだ瞬間に決まる）。 */
 function PickArea({ number, decisions, kyoku, current, onKyoku, onDecision, onBackToChips, onCancel }: PickAreaProps) {
   const kyokus = kyokuOptions(decisions);
   const kyokuLabel = kyokus.find((option) => option.position === kyoku)?.label ?? null;
@@ -229,7 +267,7 @@ function PickArea({ number, decisions, kyoku, current, onKyoku, onDecision, onBa
   const currentOption = options.find((option) => option.key === current?.key) ?? null;
   return (
     <div className="mctl">
-      <span className="mpick-lbl">局面を手で選ぶ</span>
+      <span className="mpick-lbl">手で選ぶ</span>
       <MenuSelect
         className="sel-btn"
         label={kyokuLabel === null ? `迷い${number}の局を選ぶ` : `迷い${number}の局 ${kyokuLabel}`}

@@ -33,14 +33,17 @@ function problemText(problem: ClipboardProblem | null): string {
   }
 }
 
-/** 取り込んだ迷いマークの結びつけの結果を、文にする（承認済みの見本の書き方）。 */
+/**
+ * 取り込んだ迷いマークの結びつけの結果を、文にする（承認済みの見本の書き方に、「推定」を足したもの）。
+ * 読めた迷いは、1 位の判断を推定として結びつける。読めなかったものだけが、手で選ぶ。
+ */
 function marksText(summary: ImportSummary): string | null {
   if (summary.markCount === 0) return null;
-  if (summary.choiceMarks === 0) return `（迷い ${summary.markCount} つを、すべて局面に結びつけました）`;
-  if (summary.linkedMarks === 0) {
-    return `（局面に結びつけられたものはありません。${summary.choiceMarks}つは選んでください）`;
+  if (summary.manualMarks === 0) return `（迷い ${summary.markCount} つを、すべて推定で局面に結びつけました）`;
+  if (summary.estimatedMarks === 0) {
+    return `（局面に結びつけられたものはありません。${summary.manualMarks}つは手で選んでください）`;
   }
-  return `（${summary.linkedMarks}つは局面に結びつけました。${summary.choiceMarks}つは選んでください）`;
+  return `（${summary.estimatedMarks}つは推定で局面に結びつけました。${summary.manualMarks}つは手で選んでください）`;
 }
 
 interface Props {

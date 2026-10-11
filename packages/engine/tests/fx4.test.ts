@@ -53,7 +53,15 @@ describe('FX-4 の文字認識の写し', () => {
     expect(times[5]).toBe('2026-10-09T19:22:36.593');
   });
 
-  it('lines は text を " | " で分けたものと同じ', () => {
-    for (const m of marks) expect(m.text.split(' | '), `迷い${m.mark}`).toEqual(m.lines);
+  it('lines は text を " | " で分けたものと同じ（読み直しの retries も）', () => {
+    for (const m of marks) {
+      expect(m.text.split(' | '), `迷い${m.mark}`).toEqual(m.lines);
+      for (const r of m.retries ?? []) expect(r.text.split(' | '), `迷い${m.mark} ${r.variant}`).toEqual(r.lines);
+    }
+  });
+
+  it('読み直し（E-20）の写しは、1回目で読めなかった迷い6だけにある（コントラスト ×1.8・1.5 倍の順）', () => {
+    expect(marks.filter((m) => m.retries !== undefined).map((m) => m.mark)).toEqual([6]);
+    expect(marks[5]?.retries?.map((r) => r.variant)).toEqual(['contrast1.8', 'upscale1.5']);
   });
 });

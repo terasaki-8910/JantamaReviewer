@@ -1,3 +1,5 @@
+import type { CenterReading } from '@jantama/engine';
+
 import type { Trigger } from '../api/types';
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'] as const;
@@ -64,4 +66,22 @@ export function describeTrigger(trigger: Trigger): string {
     trigger.win && 'Win',
   ].filter((name): name is string => typeof name === 'string');
   return modifiers.length > 0 ? [...modifiers, key].join('+') : `キー：${key}`;
+}
+
+const WIND_NAMES = { E: '東', S: '南', W: '西' } as const;
+
+/** 点数の書き方: 3 桁ごとにコンマ。例: 15,100。 */
+export function groupedNumber(value: number): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/**
+ * スクショから読んだ中央の文字の書き方: 「東2局・残り47・15,100点」。残りの牌の数が無いとき（局と点数だけ読めたとき）は省く。
+ * 本場は読めない（点数との照合で区別する）ので、書かない。
+ */
+export function centerText(center: CenterReading): string {
+  const parts = [`${WIND_NAMES[center.wind]}${center.number}局`];
+  if (center.tilesLeft !== undefined) parts.push(`残り${center.tilesLeft}`);
+  parts.push(`${groupedNumber(center.score)}点`);
+  return parts.join('・');
 }

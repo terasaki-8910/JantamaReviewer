@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type CenterText, parseCenterText } from '../src/center-text';
+import { type CenterText, firstReadable, parseCenterText, readingOf } from '../src/center-text';
 import { loadFx4Ocr } from './helpers/fixtures';
 
 /** 空白だけの違いを気にせず書けるよう、行を ' | ' で区切った文字列から行を作る。 */
@@ -163,5 +163,49 @@ describe('E-16 読めないものは null（作った入力）', () => {
     });
     expect(parseCenterText(['東'.repeat(10_000)])).toBeNull();
     expect(parseCenterText(['\0', '\r\n', '東 1 局 余 59'])).toBeNull();
+  });
+});
+
+describe('E-20 読み直し（コントラストを上げた画像・1.5倍に広げた画像で読み直した行）を、最初に読めたものから取る', () => {
+  const mark6 = loadFx4Ocr().find((m) => m.mark === 6);
+  if (!mark6?.retries) throw new Error('迷い6の読み直しの写しが無い');
+  const [contrast, enlarged] = mark6.retries.map((r) => r.lines);
+  const expected: CenterText = { wind: 'E', number: 3, tilesLeft: 38, score: 4400 };
+
+  it('E-20 迷い6: 1回目の行は読めない（null）が、読み直しの行はどちらも 東3局・残り38枚・4400点（余の前の 8 は取らない）', () => {
+    expect(parseCenterText(mark6.lines)).toBeNull();
+    expect(parseCenterText(contrast ?? [])).toEqual(expected);
+    expect(parseCenterText(enlarged ?? [])).toEqual(expected);
+  });
+
+  it('E-20 firstReadable: 1回目で読めれば、読み直しは見ない。読めなければ、読み直しを順に試して、最初に読めたものを使う', () => {
+    const first = ['東 1 局', '余 59', '25000'];
+    const later = ['東 2 局', '余 40', '19000'];
+    expect(firstReadable(first, [later])).toEqual({ wind: 'E', number: 1, tilesLeft: 59, score: 25000 });
+    expect(firstReadable(mark6.lines, [contrast ?? [], later])).toEqual(expected);
+    // 最初の読み直しが読めなければ、次の読み直し
+    expect(firstReadable(mark6.lines, [['崩れた', '行'], enlarged ?? []])).toEqual(expected);
+    // どれも読めなければ null。読み直しが無くてもよい
+    expect(firstReadable(mark6.lines, [['崩れた', '行']])).toBeNull();
+    expect(firstReadable(mark6.lines)).toBeNull();
+    expect(firstReadable(first)).toEqual({ wind: 'E', number: 1, tilesLeft: 59, score: 25000 });
+  });
+
+  it('E-20 readingOf: lines だけなら 1回目だけ。retries があれば、1回目で読めないときに使う。center があれば、それが先', () => {
+    expect(readingOf({ lines: mark6.lines })).toBeNull();
+    expect(readingOf({ lines: mark6.lines, retries: [contrast ?? []] })).toEqual(expected);
+    expect(readingOf({ lines: ['東 1 局', '余 59', '25000'], retries: [contrast ?? []] })?.number).toBe(1);
+    const given: CenterText = { wind: 'S', number: 2, tilesLeft: 10, score: 1000 };
+    expect(readingOf({ center: given, lines: mark6.lines, retries: [contrast ?? []] })).toBe(given);
+    expect(readingOf({ center: null, retries: [contrast ?? []] })).toBeNull();
+    expect(readingOf({ retries: [contrast ?? []] })).toBeNull();
+    expect(readingOf({})).toBeNull();
+  });
+
+  it('E-20 読み直しの行を渡しても、入力は書き換えない', () => {
+    const retries = [[...(contrast ?? [])], [...(enlarged ?? [])]];
+    const copy = structuredClone(retries);
+    firstReadable(mark6.lines, retries);
+    expect(retries).toEqual(copy);
   });
 });

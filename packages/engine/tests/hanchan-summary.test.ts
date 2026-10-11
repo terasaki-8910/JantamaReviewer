@@ -69,14 +69,15 @@ describe('半荘のまとめ（FX-4）', () => {
     expect(summary.roomDisp).toBe('玉の間南喰赤');
   });
 
-  it('E-17 迷いマークの結びつけが、渡した順に付く（linkMarks と同じ）', () => {
-    expect(summary.marks.map((m) => m.status)).toEqual(['linked', 'linked', 'linked', 'candidates', 'candidates', 'manual']);
-    expect(summary.marks.map((m) => m.candidates.map((c) => c.key))).toEqual([
-      ['k0h0e4'],
-      ['k1h0e13'],
-      ['k1h1e7'],
-      ['k1h1e10', 'k1h1e11', 'k1h1e12'],
-      ['k2h1e6', 'k2h1e7'],
+  it('E-17 迷いマークの結びつけが、渡した順に付く（linkMarks と同じ）。読めた5枚は、1位が推定（ユーザーが選び直した判断）、読めない1枚は手で選ぶ', () => {
+    expect(summary.marks.map((m) => m.status)).toEqual(['estimated', 'estimated', 'estimated', 'estimated', 'estimated', 'manual']);
+    expect(summary.marks.map((m) => m.estimate?.key ?? null)).toEqual(['k0h0e4', 'k1h0e12', 'k1h1e7', 'k1h1e10', 'k2h1e6', null]);
+    expect(summary.marks.map((m) => m.alternatives.map((c) => c.key))).toEqual([
+      [],
+      ['k1h0e14', 'k1h0e13'],
+      [],
+      ['k1h1e11'],
+      ['k2h1e7'],
       [],
     ]);
     expect(summary.marks).toEqual(linkMarks(report, marks));

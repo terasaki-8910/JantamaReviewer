@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { type SessionCandidate, type SessionMark, matchSessionForReport } from '../src/session-match';
+import {
+  type SessionCandidate,
+  type SessionMark,
+  checkShotsAgainstReport,
+  matchSessionForReport,
+} from '../src/session-match';
 import { parseReportText } from '../src/report';
 import type { MortalReport } from '../src/report-types';
 import { FX4_ID, loadFx4Ocr, loadReportText } from './helpers/fixtures';
@@ -88,6 +93,62 @@ describe('E-19 結びつける半荘（FX-4 の結果に対して）', () => {
     expect(matchSessionForReport(report, [byCenter])).toEqual({ kind: 'match', sessionId: 'c' });
     expect(matchSessionForReport(report, [byLines])).toEqual({ kind: 'match', sessionId: 'l' });
     expect(matchSessionForReport(report, [byCenter, byLines])).toMatchObject({ kind: 'choose', sessionIds: ['l', 'c'] });
+  });
+
+  it('E-20 1回目で読めないスクショも、読み直し（retries）で読めれば、局と点数の照合に使う（迷い6の 東3局・4400）', () => {
+    const six = loadFx4Ocr()[5];
+    const lines = six?.lines ?? [];
+    const retries = six?.retries?.map((r) => r.lines);
+    // 読み直しが無ければ、読めたスクショは無い（合うとは言えない）。読み直しがあれば、東3局・4400点（東3局1本場）に合う。
+    expect(matchSessionForReport(report, [session('a', 1, [{ lines }]), session('b', 2, [])])).toMatchObject({
+      kind: 'choose',
+      matchingIds: [],
+    });
+    expect(matchSessionForReport(report, [session('a', 1, [{ lines, retries }])])).toEqual({ kind: 'match', sessionId: 'a' });
+    // 読み直しで読めた値が、結果と合わなければ、合わない
+    const wrong = [['東 1 局', '余 59', '17000']];
+    expect(matchSessionForReport(report, [session('a', 1, [{ lines, retries: wrong }]), session('b', 2, [])])).toMatchObject({
+      kind: 'choose',
+      matchingIds: [],
+    });
+  });
+});
+
+describe('U-14 結びつけ先が決まっているときの、スクショと結果の照合', () => {
+  it('U-14 読めて合うものと、読めて合わないものを分ける。読めないものは数えない。合わないものは、渡した順の番号と読んだ内容を返す', () => {
+    const marks: SessionMark[] = [
+      ...fx4Marks, // 5枚が読めて、すべて合う。1枚は読めない
+      at('S', 2, 25000), // 結果に無い局
+      at('E', 2, 17000), // 局は合うが、点数が合わない
+      { center: null },
+    ];
+    const check = checkShotsAgainstReport(report, marks);
+    expect(check.readable).toBe(7);
+    expect(check.fitting).toBe(5);
+    expect(check.mismatches.map((m) => [m.index, m.center.wind, m.center.number, m.center.score])).toEqual([
+      [6, 'S', 2, 25000],
+      [7, 'E', 2, 17000],
+    ]);
+    expect(check.mismatches[0]?.mark).toBe(marks[6]);
+  });
+
+  it('U-14 すべて合えば、合わないものは無い。何も読めなければ、読めた数は 0（食い違いは言えない）', () => {
+    expect(checkShotsAgainstReport(report, fx4Marks)).toMatchObject({ readable: 5, fitting: 5, mismatches: [] });
+    expect(checkShotsAgainstReport(report, [{ center: null }, { lines: [] }, {}])).toMatchObject({
+      readable: 0,
+      fitting: 0,
+      mismatches: [],
+    });
+    expect(checkShotsAgainstReport(report, [])).toEqual({ readable: 0, fitting: 0, mismatches: [] });
+  });
+
+  it('U-14 読み直し（retries）で読めたスクショも数える。自分のリーチ棒の分を引いた点数は合う（E-17 と同じ照合）', () => {
+    const six = loadFx4Ocr()[5];
+    const check = checkShotsAgainstReport(report, [{ lines: six?.lines ?? [], retries: six?.retries?.map((r) => r.lines) }]);
+    expect(check).toMatchObject({ readable: 1, fitting: 1, mismatches: [] });
+    const big = load('f9da87cbcd7af5e9');
+    expect(checkShotsAgainstReport(big, [{ center: { wind: 'E', number: 2, tilesLeft: 20, score: 24000 } }]).mismatches).toEqual([]);
+    expect(checkShotsAgainstReport(big, [{ center: { wind: 'E', number: 2, tilesLeft: 40, score: 24000 } }]).mismatches).toHaveLength(1);
   });
 });
 
