@@ -22,6 +22,7 @@ import {
   hasAnyCondition,
   hasConditions,
   limitResult,
+  matchedKyokus,
   runSearch,
   type SearchModel,
   type SearchState,
@@ -75,7 +76,8 @@ describe('U-22: 検索の元になる値', () => {
   it('半荘の要約（メモが無いときの 2 行目）と、結果の読み込み前・取り込み前の言い方', () => {
     expect(MODEL.games.find((g) => g.id === 'g1')?.summary).toBe('5局 · 東3局1本場で終了');
     expect(MODEL.games.find((g) => g.id === 'g2')?.summary).toBe('12局 · 西1局で終了');
-    expect(MODEL.games.find((g) => g.id === 'g7')?.summary).toBe('取り込み前');
+    // 取り込み前の半荘は、行の段階の所に「取り込み前」と出るので、2 行目は無い
+    expect(MODEL.games.find((g) => g.id === 'g7')?.summary).toBe('');
     expect(MODEL.games.find((g) => g.id === 'g1')?.memo).toBe('放銃を見直す');
     expect(MODEL.games.find((g) => g.id === 'g3')?.memo).toBeNull();
   });
@@ -408,6 +410,20 @@ describe('U-22: 「すべて表示（あと N件）」', () => {
     expect(cut.games).toHaveLength(1);
     expect(cut.problems).toHaveLength(PROBLEM_LIMIT);
     expect(cut.hidden).toBe(result.problems.length - PROBLEM_LIMIT);
+  });
+});
+
+describe('U-22: 局の名前で当たった理由', () => {
+  const kyokusOf = (id: string) => MODEL.games.find((g) => g.id === id) as { kyokus: readonly string[] };
+
+  it('検索語に当たる局の名前だけを返す（東4局 → 東4局と東4局1本場）。語が無ければ空', () => {
+    expect(matchedKyokus(kyokusOf('g2'), queryTerms('東4局'))).toEqual(['東4局', '東4局1本場']);
+    expect(matchedKyokus(kyokusOf('g2'), queryTerms('東4局1本場'))).toEqual(['東4局1本場']);
+    expect(matchedKyokus(kyokusOf('g2'), queryTerms('南'))).toEqual(['南1局', '南2局1本場', '南3局', '南4局']);
+    expect(matchedKyokus(kyokusOf('g2'), queryTerms('10/9'))).toEqual([]);
+    expect(matchedKyokus(kyokusOf('g2'), [])).toEqual([]);
+    expect(matchedKyokus(kyokusOf('g1'), queryTerms('東4局'))).toEqual([]);
+    expect(matchedKyokus(kyokusOf('g7'), queryTerms('東4局'))).toEqual([]);
   });
 });
 

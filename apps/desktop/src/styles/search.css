@@ -271,6 +271,11 @@
   padding: 0 var(--s2) var(--s2);
 }
 
+/* 結果の欄に Tab で止まったときの輪は、内側に描く（外側は、ダイアログの角丸の外で切れて見えなくなる） */
+.sx-body:focus-visible {
+  outline-offset: -2px;
+}
+
 .sx-gh {
   position: sticky;
   top: 0;
@@ -345,6 +350,9 @@
   color: var(--muted);
   line-height: 1.5;
   overflow-wrap: anywhere;
+
+  /* 細い幅で折り返すとき、言葉の途中（「受け入れ」の真ん中）ではなく、句の切れ目で折る */
+  word-break: auto-phrase;
 }
 
 .sx-r {

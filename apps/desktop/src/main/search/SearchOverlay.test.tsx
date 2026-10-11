@@ -99,6 +99,8 @@ const optionText = (el: HTMLElement) =>
     .map((part) => (part.textContent ?? '').trim())
     .filter((text) => text !== '')
     .join(' ');
+/** 半荘の行の 2 行目の文字。 */
+const row2 = (row: HTMLElement) => (row.querySelector('.sx-sub')?.textContent ?? '').trim();
 /** 案内の文字（段落とボタンの間に空き）。 */
 const blockText = (el: HTMLElement) =>
   [...el.children]
@@ -191,7 +193,7 @@ describe('U-22: 開いた状態', () => {
     const user = userEvent.setup();
     return user.click(within(dialog()).getByRole('button', { name: /^すべて表示/ })).then(() => {
       const g7 = options().find((o) => /取り込み前/.test(optionText(o))) as HTMLElement;
-      expect(optionText(g7)).toBe('半荘 22:05 取り込み前 10月2日 取り込み前 迷い1');
+      expect(optionText(g7)).toBe('半荘 22:05 取り込み前 10月2日 迷い1');
       expect(g7.querySelector('.grade.ghost')).not.toBeNull();
     });
   });
@@ -228,6 +230,27 @@ describe('U-22: 検索語と、当たった文字の印', () => {
     expect(problem.querySelector('.t mark.hit')?.textContent).toBe('東4局');
     expect(screen.getByRole('button', { name: '検索語を消す' })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(`${5 + found.length}件の結果`);
+  });
+
+  it('局の名前で当たった半荘は、2 行目に当たった局を添える（印つき）。3 つまで、残りは「ほか N局」。2 行目に出ている局だけなら、添えない', async () => {
+    const { user } = setup();
+    await type(user, '東4局');
+    const rows = options().filter((o) => /^半荘 /.test(optionText(o)));
+    expect(rows.map((row) => row.querySelector('.s-time')?.textContent)).toEqual(['17:12', '21:40', '20:55', '22:10', '20:12']);
+    // f9da（17:12）: 2 行目はメモ。当たった局が、そのあとに続く
+    expect(row2(rows[0] as HTMLElement)).toBe('3mを切った場面が悪かった · 局: 東4局、東4局1本場');
+    // メモの無い半荘（21:40）は、要約のあとに続く
+    expect(row2(rows[1] as HTMLElement)).toBe('16局 · 南4局2本場で終了 · 局: 東4局、東4局1本場');
+    // 東4局が 4 つ続く半荘（20:55）: 3 つまで出して、残りの数
+    expect(row2(rows[2] as HTMLElement)).toBe('親番で押しすぎた · 局: 東4局、東4局1本場、東4局2本場 ほか1局');
+    expect([...(rows[0] as HTMLElement).querySelectorAll('.sx-sub mark.hit')].map((m) => m.textContent)).toEqual(['東4局', '東4局']);
+    // 2 行目の要約にすでに出ている局（南4局）で探したときは、その半荘には添えない（当たった局が、すべて 2 行目に出ているため）
+    await user.clear(input());
+    await user.keyboard('南4局');
+    const south = options().filter((o) => /^半荘 /.test(optionText(o)));
+    const plain = south.find((row) => row.querySelector('.s-time')?.textContent === '20:12') as HTMLElement;
+    expect(row2(plain)).toBe('15局 · 南4局で終了');
+    expect([...plain.querySelectorAll('.sx-sub mark.hit')].map((m) => m.textContent)).toEqual(['南4局']);
   });
 
   it('日付 10/9: 画面に出ている「10月9日」に印が付く（文字がそのまま入っていなくても）。昨日・今日は、（昨日）（本日）の文字に印', async () => {

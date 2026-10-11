@@ -29,6 +29,7 @@ import {
   hasAnyCondition,
   hasConditions,
   limitResult,
+  matchedKyokus,
   periodLabel,
   runSearch,
   sortLabel,
@@ -546,11 +547,21 @@ function GameScore({ row, terms }: { row: ListRow; terms: readonly string[] }) {
   );
 }
 
+/** 局の名前で当たった半荘の行に添える、当たった局（3 つまで。残りは「ほか N局」）。 */
+function kyokuNote(matched: readonly string[]): string {
+  const rest = matched.length - 3;
+  return `局: ${matched.slice(0, 3).join('、')}${rest > 0 ? ` ほか${rest}局` : ''}`;
+}
+
 function GameRow({ game, id, index, selected, terms, now }: RowFrame & { game: GameEntry }) {
   const { row } = game;
   const parts = dateParts(game.startedMs, now);
   const extra = dateTerms(game.startedMs, now, terms);
   const allTerms = [...terms, ...extra];
+  // 2 行目: メモ（無ければ要約）。局の名前で当たったのに、2 行目に出ていないときは、当たった局を添える
+  const sub = game.memo ?? game.summary;
+  const matched = matchedKyokus(game, terms);
+  const note = matched.length === 0 || matched.every((label) => sub.includes(label)) ? null : kyokuNote(matched);
   const problemInfo =
     row.status === 'none' || game.problemCount === null
       ? null
@@ -575,9 +586,17 @@ function GameRow({ game, id, index, selected, terms, now }: RowFrame & { game: G
           )}
         </span>
       </span>
-      <span className="sx-sub">
-        <Hit text={game.memo ?? game.summary} terms={terms} />
-      </span>
+      {(sub !== '' || note !== null) && (
+        <span className="sx-sub">
+          <Hit text={sub} terms={terms} />
+          {note !== null && (
+            <>
+              {sub === '' ? '' : ' · '}
+              <Hit text={note} terms={terms} />
+            </>
+          )}
+        </span>
+      )}
       <span className="sx-r">
         {row.markCount > 0 && (
           <span className="s-doubt">

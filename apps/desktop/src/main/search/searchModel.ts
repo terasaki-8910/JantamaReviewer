@@ -33,6 +33,7 @@ import type { ListRow } from '../sessionRows';
 import type { SummaryMap, SummaryState } from '../sessionSummaries';
 import { KIND_NAME } from '../study/labels';
 import { answeredIds } from '../study/studyModel';
+import { hitRanges } from './highlight';
 
 // ---- 並べ方・期間 ----
 
@@ -113,7 +114,7 @@ export interface GameEntry {
   readonly row: ListRow;
   /** 半荘のメモ（まだ書く場所が無いので、いまは無い）。 */
   readonly memo: string | null;
-  /** 行の 2 行目に出す、半荘の要約（メモが無いとき）。例: 5局 · 東3局1本場で終了。 */
+  /** 行の 2 行目に出す、半荘の要約（メモが無いとき）。例: 5局 · 東3局1本場で終了。結果を読めていない半荘は、空。 */
   readonly summary: string;
   /** 半荘の局の名前（東1局・東2局1本場 …）。 */
   readonly kyokus: readonly string[];
@@ -189,16 +190,15 @@ function latestPrinciples(answers: readonly AnswerRow[]): Map<string, string> {
   return principles;
 }
 
-/** 半荘の行の 2 行目（メモが無いとき）。 */
-function summaryLine(row: ListRow, state: SummaryState | undefined): string {
-  if (row.status === 'none') return '取り込み前';
-  if (state?.status === 'ready') {
-    const kyokus = state.summary.kyokus;
-    const last = kyokus.at(-1);
-    return last === undefined ? `${kyokus.length}局` : `${kyokus.length}局 · ${last.label}で終了`;
-  }
-  if (state?.status === 'unavailable') return '結果を読めません';
-  return '読み込んでいます';
+/**
+ * 半荘の行の 2 行目（メモが無いとき）。結果を読めた半荘だけ。取り込み前・読み込み中・読めない半荘は、行の段階の所に
+ * 同じことが書いてあるので、空（2 行目を出さない）。
+ */
+function summaryLine(state: SummaryState | undefined): string {
+  if (state?.status !== 'ready') return '';
+  const kyokus = state.summary.kyokus;
+  const last = kyokus.at(-1);
+  return last === undefined ? `${kyokus.length}局` : `${kyokus.length}局 · ${last.label}で終了`;
 }
 
 /** 半荘の局の名前。結果を読めていない半荘は、空。 */
@@ -233,7 +233,7 @@ export function buildSearchModel(input: SearchInput): SearchModel {
       startedMs: row.startedMs,
       row,
       memo: row.memo === undefined || row.memo === '' ? null : row.memo,
-      summary: summaryLine(row, state),
+      summary: summaryLine(state),
       kyokus,
       ratingValue: ratingValue === null || Number.isNaN(ratingValue) ? null : ratingValue,
       problemCount: problemsReady ? own.length : null,
@@ -404,7 +404,13 @@ export function limitResult(result: SearchResult, showAll: boolean): ShownResult
   };
 }
 
-// ---- 当たりの印（日付） ----
+// ---- 当たりの印（局・日付） ----
+
+/** 半荘の局の名前のうち、検索語に当たるもの（行の 2 行目に出す。局の名前で当たった理由を見せるため）。 */
+export function matchedKyokus(game: Pick<GameEntry, 'kyokus'>, terms: readonly string[]): string[] {
+  if (terms.length === 0) return [];
+  return game.kyokus.filter((label) => hitRanges(label, terms).length > 0);
+}
 
 /** 半荘の日付の文字: 10月9日（今年でなければ 2025年1月1日）と、本日・昨日（それ以外は null）。 */
 export function dateParts(ms: number, now: number): { monthDay: string; relative: '本日' | '昨日' | null } {
