@@ -95,9 +95,10 @@ export const api = {
   /**
    * mjai の窓を開いて、URL 欄に牌譜リンクを入れる。Submit はユーザーが押す。
    * `background` は、いま描いている背景の色（窓の背景色をそろえる）。
+   * `target` は、取り込み先の半荘の呼び名（例: 10月9日 19:09。その半荘のページから取り込むとき。窓の題名に出す。U-14）。
    */
-  openMjaiWindow: (link: string, background: string) =>
-    invoke<void>('open_mjai_window', { link, background }),
+  openMjaiWindow: (link: string, background: string, target?: string) =>
+    invoke<void>('open_mjai_window', { link, background, target }),
   /** mjai の窓を閉じる（開いていなければ何もしない）。 */
   closeMjaiWindow: () => invoke<void>('close_mjai_window'),
   /** 貼り付けた文字から、mjai の結果の ID を探す。見つからなければ null。 */

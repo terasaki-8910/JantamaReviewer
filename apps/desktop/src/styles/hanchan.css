@@ -200,12 +200,10 @@
   font-size: 11.5px;
 }
 
-/* ほかの候補: 小さな見出しと、候補の札（押すと、その判断に替わる） */
+/* ほかの候補: 小さな見出しと、その下に候補の札（押すと、その判断に替わる）。札の数で並びが変わらないよう、見出しはいつも札の上 */
 .malt {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
+  display: grid;
+  gap: 4px;
   margin-top: 4px;
 }
 
@@ -337,6 +335,48 @@
   width: 14px;
   height: 14px;
   color: var(--muted);
+}
+
+/*
+  ================= 半荘のページの中の取り込み（U-14） =================
+  取り込み前の半荘の見出しの、右の主な操作。狭いときは、見出しの下の行に回る
+*/
+.head-act {
+  display: grid;
+  gap: var(--s1);
+  justify-items: end;
+}
+
+.head-act .quiet {
+  text-align: right;
+}
+
+/* ページの中に出す、取り込みの進み具合・確認（取り込みのページと同じパネルを、少し詰めたもの） */
+.inline-import {
+  max-width: 640px;
+  gap: var(--s3);
+  padding: var(--s4);
+}
+
+/* 結果と合わなかった画面の一覧（確認のとき） */
+.mismatch {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.mismatch li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s3);
+}
+
+.mismatch b {
+  min-width: 5.5em;
+  font-weight: 700;
 }
 
 /* ================= 局の評価の表 ================= */

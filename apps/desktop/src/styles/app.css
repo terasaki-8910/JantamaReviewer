@@ -627,6 +627,13 @@ fieldset.setting:not(:first-child) {
   font-weight: 700;
 }
 
+/* 押せないときは、塗りをやめる（主な操作が、押せないのに目立ち続けないように） */
+.btn.primary:disabled {
+  background: var(--hover);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
 .btn.primary:hover:not(:disabled) {
   border-color: var(--accent);
 }

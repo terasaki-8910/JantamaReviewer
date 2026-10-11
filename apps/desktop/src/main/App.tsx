@@ -374,6 +374,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
               summary={summaries.get(selectedSession.id)}
               onChanged={reload}
               onOpenImage={setViewer}
+              importFlow={flow}
             />
           )}
           {sessions !== null && selectedSession === null && (view.kind === 'none' || view.kind === 'session') && (

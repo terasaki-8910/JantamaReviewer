@@ -7,6 +7,8 @@
 //! - 開けるのは mjai のサイトと Cloudflare の確認の画面だけ（`mjai_nav::decide_navigation`）。新しい窓の要求・ダウンロードは断る。
 //! - ブラウザの名残を出さない設定（SPEC 3a 節）は、ほかの窓と同じ `WebviewFlags::strict` と `webview_win::harden` をかける。
 //!   窓の題名は日本語の名前だけ（N-13）。隠したまま作り、最初のページを読み終えたら見せる（N-7）。
+//!   取り込み前の半荘のページから、その半荘に取り込むときは（U-14）、題名に取り込み先の半荘を出す
+//!   （「10月9日 19:09 の半荘を検討（mjai）」。`mjai_title`）。別の窓に移っても、どの半荘に取り込むかが分かるように。
 //! - この窓に、Tauri の権限（capabilities）は与えない。外のサイトのページは、アプリのコマンドを呼べない
 //!   （Tauri が、権限を与えていない外のオリジンからの呼び出しを断る。`tests/safety.rs` が、権限の設定にこの窓が無いことを確かめる）。
 
@@ -36,6 +38,30 @@ use crate::widget_window::{clamp_to_monitors, Area, MAIN_LABEL};
 pub const MJAI_LABEL: &str = "mjai";
 /// 窓の題名（N-13）。アプリの日本語の名前。URL や localhost は入れない。
 pub const MJAI_TITLE: &str = "JantamaReviewer mjai 検討";
+
+/// 取り込み先の半荘の呼び名（例: 10月9日 19:09）の最大の長さ（字数）。
+const TARGET_LABEL_MAX: usize = 24;
+
+/// 取り込み先の半荘の呼び名に入れてよい字。数字・空白・「:」・「年」「月」「日」だけ（半荘の日時の書き方）。
+/// 画面から来る文字なので、決めた字だけを通す（URL や英字の名前が、窓の題名に入らないように。N-13）。
+fn is_label_char(c: char) -> bool {
+    c.is_ascii_digit() || matches!(c, ' ' | ':' | '年' | '月' | '日')
+}
+
+/// mjai の窓の題名。取り込み先の半荘の呼び名（例: 10月9日 19:09）があれば、「10月9日 19:09 の半荘を検討（mjai）」にする（U-14）。
+/// 呼び名が無い・長すぎる・数字が無い・決めた字以外が入っているときは、既定の題名（`MJAI_TITLE`）にする（N-13）。
+pub fn mjai_title(target: Option<&str>) -> String {
+    match target.map(str::trim) {
+        Some(label)
+            if label.chars().count() <= TARGET_LABEL_MAX
+                && label.chars().any(|c| c.is_ascii_digit())
+                && label.chars().all(is_label_char) =>
+        {
+            format!("{label} の半荘を検討（mjai）")
+        }
+        _ => MJAI_TITLE.to_string(),
+    }
+}
 /// 検討画面へ知らせるイベントの名前。
 pub const EVENT_MJAI: &str = "mjai-window";
 
@@ -186,9 +212,17 @@ fn present<R: Runtime>(window: &WebviewWindow<R>) {
 
 /// mjai の窓を開いて、URL 欄に `link`（牌譜リンク）を入れる。すでに開いていれば、前面に出して入れ直す。
 /// `background` は、検討画面が描いている背景の色（CSS の色。窓の背景色をそろえる）。
-pub fn open<R: Runtime>(app: &AppHandle<R>, link: &str, background: &str) -> Result<(), String> {
+/// `target` は、取り込み先の半荘の呼び名（その半荘のページから取り込むとき。窓の題名に出す。`mjai_title`）。
+pub fn open<R: Runtime>(
+    app: &AppHandle<R>,
+    link: &str,
+    background: &str,
+    target: Option<&str>,
+) -> Result<(), String> {
     let script = prefill_script(link).map_err(|e| e.to_string())?;
+    let title = mjai_title(target);
     if let Some(window) = app.get_webview_window(MJAI_LABEL) {
+        let _ = window.set_title(&title);
         present(&window);
         if let Err(e) = window.eval(&script) {
             eprintln!("mjai の窓に牌譜リンクを入れ直せませんでした: {e}");
@@ -208,7 +242,7 @@ pub fn open<R: Runtime>(app: &AppHandle<R>, link: &str, background: &str) -> Res
     let load_shown = Arc::clone(&shown);
 
     let mut builder = WebviewWindowBuilder::new(app, MJAI_LABEL, WebviewUrl::External(start_url()))
-        .title(MJAI_TITLE)
+        .title(&title)
         .inner_size(WINDOW_SIZE.0, WINDOW_SIZE.1)
         .min_inner_size(WINDOW_MIN_SIZE.0, WINDOW_MIN_SIZE.1)
         .visible(false)
@@ -353,6 +387,71 @@ mod tests {
         }
         assert_ne!(MJAI_TITLE, crate::widget_window::MAIN_TITLE);
         assert_ne!(MJAI_TITLE, crate::widget_window::WIDGET_TITLE);
+    }
+
+    #[test]
+    fn u14_the_title_names_the_target_hanchan_in_japanese_and_never_a_url() {
+        assert_eq!(
+            mjai_title(Some("10月9日 19:09")),
+            "10月9日 19:09 の半荘を検討（mjai）"
+        );
+        assert_eq!(
+            mjai_title(Some("2025年1月2日 03:04")),
+            "2025年1月2日 03:04 の半荘を検討（mjai）"
+        );
+        // 前後の空白は取る。
+        assert_eq!(
+            mjai_title(Some("  10月9日 19:09  ")),
+            "10月9日 19:09 の半荘を検討（mjai）"
+        );
+        for title in [
+            mjai_title(Some("10月9日 19:09")),
+            mjai_title(Some("2026年12月31日 23:59")),
+        ] {
+            assert!(
+                title
+                    .chars()
+                    .any(|c| matches!(c, '\u{3040}'..='\u{30FF}' | '\u{4E00}'..='\u{9FFF}')),
+                "日本語の名前: {title}"
+            );
+            for forbidden in [
+                "localhost",
+                "://",
+                "http",
+                "tauri",
+                ".html",
+                "127.0.0.1",
+                "ekyu",
+                ".moe",
+            ] {
+                assert!(
+                    !title.to_lowercase().contains(forbidden),
+                    "題名に {forbidden} を入れない: {title}"
+                );
+            }
+            assert_ne!(title, crate::widget_window::MAIN_TITLE);
+            assert_ne!(title, crate::widget_window::WIDGET_TITLE);
+        }
+    }
+
+    #[test]
+    fn u14_a_missing_or_unusual_target_gives_the_default_title() {
+        assert_eq!(mjai_title(None), MJAI_TITLE);
+        for label in [
+            "",
+            "   ",
+            "月日",
+            "https://mjai.ekyu.moe/",
+            "http://localhost:1420/?x=1",
+            "10月9日 19:09 localhost",
+            "10月9日\n19:09",
+            "10月9日 19:09 <b>",
+            "１０月９日",
+            // 長すぎる
+            "2026年10月9日 19:09 2026年10月9日 19:09",
+        ] {
+            assert_eq!(mjai_title(Some(label)), MJAI_TITLE, "{label:?}");
+        }
     }
 
     #[test]

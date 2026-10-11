@@ -435,7 +435,8 @@ async function emitEvent(page: Page, event: string, payload: unknown) {
 /** サイドバーの「検討結果を取り込む」を押して、取り込みのページを開く。 */
 async function openImportPage(page: Page) {
   await waitForMainReady(page);
-  await page.getByRole('button', { name: '検討結果を取り込む' }).click();
+  // 完全に一致するものだけ（取り込み前の半荘のページには、「この半荘に検討結果を取り込む」もある。U-14）。
+  await page.getByRole('button', { name: '検討結果を取り込む', exact: true }).click();
   await page.getByRole('heading', { level: 1, name: '検討結果を取り込む' }).waitFor();
 }
 
@@ -567,7 +568,7 @@ describe('取り込みのページ', () => {
       const { context, page } = await open('index.html', { width, height: 800 }, 'light', scenario('main'));
       try {
         await waitForMainReady(page);
-        const button = page.getByRole('button', { name: '検討結果を取り込む' });
+        const button = page.getByRole('button', { name: '検討結果を取り込む', exact: true });
         const box = await button.boundingBox();
         const next = await page.getByRole('button', { name: '解き直し' }).first().boundingBox();
         // ブランドの下、行き先（解き直し・ログ・週の集計）より上。

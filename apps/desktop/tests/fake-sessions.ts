@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { SelfRatingValue, SessionRecord } from '../src/api/types';
+import type { Links, OcrCache, SelfRatingValue, SessionRecord } from '../src/api/types';
 
 const REPORTS_DIR = resolve(import.meta.dirname, '../../../packages/engine/tests/fixtures/reports');
 
@@ -185,6 +185,40 @@ export class FakeSessionStore {
       return undefined;
     },
   };
+
+  /**
+   * 取り込みの保存の偽物（`handlers` には入れない。取り込みの試験が、必要なときに足す）。Rust 側と同じく、結果の保存は、
+   * 半荘に結果の場所を入れて、一覧に反映する。文字認識は、与えた写しを返して、半荘に入れる。
+   * 呼ばれた順の記録は `log`（'ocr:a,b'・'save:id'・'links:id'）。
+   */
+  importHandlers(ocr: OcrCache | ((id: string) => OcrCache)): Record<string, (args: unknown) => unknown> {
+    return {
+      ocr_sessions: (args) => {
+        const ids = (args as { sessionIds: string[] }).sessionIds;
+        this.log.push(`ocr:${ids.join(',')}`);
+        return ids.map((id) => {
+          const cache = typeof ocr === 'function' ? ocr(id) : ocr;
+          this.update(id, (s) => ({ ...s, ocr: cache }));
+          return { session_id: id, ocr: cache };
+        });
+      },
+      save_report: (args) => {
+        const { sessionId, text } = args as { sessionId: string | null; text: string };
+        this.log.push(`save:${sessionId}`);
+        if (sessionId === null) throw '記録の無い半荘としての取り込みは、この偽物では扱わない';
+        if (this.reports.has(sessionId)) throw `この半荘には、すでに結果が取り込まれています: ${sessionId}`;
+        this.reports.set(sessionId, text);
+        this.update(sessionId, (s) => ({ ...s, report_path: `C:\\data\\games\\${sessionId}\\report.json` }));
+        return sessionId;
+      },
+      replace_links: (args) => {
+        const { sessionId, links } = args as { sessionId: string; links: Links };
+        this.log.push(`links:${sessionId}`);
+        this.update(sessionId, (s) => ({ ...s, links }));
+        return undefined;
+      },
+    };
+  }
 
   readonly handlers: Record<string, (args: unknown) => unknown> = {
     ...this.saving,

@@ -122,6 +122,8 @@ export interface ImportScenario {
   reportText?: string;
   /** true なら、結果の取得が終わらない（「取り込んでいます」の画面を見るため）。 */
   fetchHangs?: boolean;
+  /** true なら、画像の文字認識が終わらない（読み取りの進み具合の画面を見るため）。 */
+  ocrHangs?: boolean;
   /** `ocr_sessions` が、すべての半荘について返す文字認識の写し。無ければ、空の写し。 */
   ocr?: unknown;
 }
@@ -231,6 +233,7 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'fetch_report': case 'read_report_file_text':
         return importing.fetchHangs ? new Promise(function () {}) : importing.reportText;
       case 'ocr_sessions':
+        if (importing.ocrHangs) return new Promise(function () {});
         return args.sessionIds.map(function (id) {
           return { session_id: id, ocr: importing.ocr || { geometry: 'center-v2-lanczos3x-variants', entries: {} } };
         });
