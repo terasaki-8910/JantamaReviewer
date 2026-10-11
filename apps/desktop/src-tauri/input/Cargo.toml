@@ -2,6 +2,7 @@
 name = "jantama-input"
 version = "0.1.0"
 description = "ボタンを拾う部品（本体と補助プログラムが共有する）: 判定・本体との連絡の決まり・Windows のフックと名前付きパイプ"
+license = "MIT"
 edition = "2021"
 rust-version = "1.90"
 publish = false

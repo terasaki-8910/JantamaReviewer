@@ -2,6 +2,7 @@
 name = "jantama-helper"
 version = "0.1.0"
 description = "管理者で動くボタンの補助プログラム: 入力を拾って本体に知らせるだけ（画面・ネット・ファイルは扱わない）"
+license = "MIT"
 edition = "2021"
 rust-version = "1.90"
 publish = false
