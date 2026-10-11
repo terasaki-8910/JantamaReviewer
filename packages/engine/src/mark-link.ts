@@ -19,8 +19,12 @@
  * スクショの値から「離れている」（`isFarFromReading`。E-27）。
  *
  * 結びつけた判断は鍵（`DecisionRef.key`）で持つので、ユーザーが選んだものを保存して、あとで同じ結果に当て直せる。
+ *
+ * この関数（`linkMarks`）は、迷いマーク 1 つずつを、そのスクショの読み取りだけで結びつける（局はすべて読めたときだけ）。
+ * アプリは、迷いと評価を押した時刻の順に 1 本に並べて局に当てはめる `linkTimeline`（timeline-link.ts。E-29・E-30）を使う。
+ * そちらは、崩れた読み取りの部分（E-28）も使い、局だけ分かった迷い（`status` が `kyoku`）も返す。判断の順位づけ（`rankDecisions`）は共通。
  */
-import { type CenterText, type ScreenReading, readingOf } from './center-text';
+import { type CenterText, type PartialCenterText, type ScreenReading, readingOf } from './center-text';
 import { classifyDecisionKind } from './decision';
 import { type DecisionRef, decisionRefAt, findDecisionRef } from './decision-ref';
 import { kyokuFactsOf, locateKyokus } from './kyoku-locate';
@@ -48,8 +52,10 @@ export interface MarkCandidate extends DecisionRef {
 /**
  * - estimated: 読めた。1位の判断を推定として結びつけた（`estimate`）。近い判断は `alternatives`。あとから手で選び直せる
  * - manual: 候補が無い（手で選ぶ）。理由は `reason`
+ * - kyoku: 局だけ分かった（巡目は決まらない。E-30）。推定は無く、局の幅の中の判断をすべて選ぶ候補にする。
+ *   時間の並びでの当てはめ（`linkTimeline`）だけが返す。`linkMarks` は返さない
  */
-export type MarkLinkStatus = 'estimated' | 'manual';
+export type MarkLinkStatus = 'estimated' | 'manual' | 'kyoku';
 
 /**
  * 手で選ぶ理由。
@@ -102,15 +108,17 @@ export function markScore(entry: Pick<ReportEntry, 'tiles_left' | 'actual' | 'de
  */
 export function isFarFromReading(
   report: MortalReport,
-  link: Pick<MarkLink, 'center' | 'kyokuPositions' | 'estimate' | 'alternatives'>,
+  link: Pick<MarkLink, 'center' | 'kyokuPositions' | 'estimate' | 'alternatives'> & { reading?: PartialCenterText | null },
   chosenKey: string,
 ): boolean {
-  if (link.estimate === null || link.center === null) return false;
+  // 残りの牌の数は、すべて読めた読み取り（center）か、崩れた読み取りの部分（reading。時間の並びでの当てはめが返す）から取る
+  const readTilesLeft = link.reading === undefined ? (link.center?.tilesLeft ?? null) : (link.reading?.tilesLeft ?? null);
+  if (link.estimate === null || readTilesLeft === null) return false;
   if (link.estimate.key === chosenKey || link.alternatives.some((candidate) => candidate.key === chosenKey)) return false;
   const chosen = findDecisionRef(report, chosenKey);
   if (chosen === null) return false;
   if (!link.kyokuPositions.includes(chosen.kyokuPosition)) return true;
-  return Math.abs(chosen.tilesLeft - link.center.tilesLeft) > link.estimate.tilesDiff;
+  return Math.abs(chosen.tilesLeft - readTilesLeft) > link.estimate.tilesDiff;
 }
 
 /** 順位づけの対象 1 つ（局の位置と、局の中の判断の番号）。 */
@@ -119,6 +127,43 @@ interface Ranked {
   entryIndex: number;
   diff: number;
   score: number;
+}
+
+/** 順位づけの結果。判断が無ければ、推定も無い。 */
+export interface RankedDecisions {
+  /** 1位の判断（推定）。無ければ null。 */
+  estimate: MarkCandidate | null;
+  /** ほかの候補（点の順。1位は含まない。最大 4 つ）。 */
+  alternatives: MarkCandidate[];
+}
+
+/**
+ * 局（`positions`。review.kyokus の添字）の判断すべてに点（`markScore`）を付けて、点の順（同じなら、結果の中で先のもの）に並べ、
+ * 1位を推定、1位との点の差が 0.75 以下のものを、最大 4 つまでほかの候補にする。`tilesLeft` は、読んだ残りの牌の数。
+ */
+export function rankDecisions(report: MortalReport, positions: readonly number[], tilesLeft: number): RankedDecisions {
+  const ranked: Ranked[] = [];
+  for (const position of positions) {
+    (report.review.kyokus[position]?.entries ?? []).forEach((entry, entryIndex) => {
+      ranked.push({
+        position,
+        entryIndex,
+        diff: Math.abs(entry.tiles_left - tilesLeft),
+        score: markScore(entry, tilesLeft),
+      });
+    });
+  }
+  ranked.sort((a, b) => a.score - b.score || a.position - b.position || a.entryIndex - b.entryIndex);
+
+  const candidates: MarkCandidate[] = [];
+  const best = ranked[0]?.score ?? Number.POSITIVE_INFINITY;
+  for (const r of ranked.slice(0, 1 + MAX_ALTERNATIVES)) {
+    if (candidates.length > 0 && r.score > best + ALTERNATIVE_MARGIN) break;
+    const ref = decisionRefAt(report, r.position, r.entryIndex);
+    if (ref) candidates.push({ ...ref, tilesDiff: r.diff, score: r.score });
+  }
+  const [estimate, ...alternatives] = candidates;
+  return { estimate: estimate ?? null, alternatives };
 }
 
 /**
@@ -147,28 +192,8 @@ export function linkMarks<T extends ScreenReading>(report: MortalReport, marks: 
     if (matched.length === 0) return manual(center, kyokuPositions, 'no-kyoku');
 
     // 合った局（本場違いで点数が同じときは複数）の判断すべてに点を付けて、点の順（同じなら、結果の中で先のもの）に並べる。
-    const ranked: Ranked[] = [];
-    for (const f of matched) {
-      (report.review.kyokus[f.position]?.entries ?? []).forEach((entry, entryIndex) => {
-        ranked.push({
-          position: f.position,
-          entryIndex,
-          diff: Math.abs(entry.tiles_left - center.tilesLeft),
-          score: markScore(entry, center.tilesLeft),
-        });
-      });
-    }
-    ranked.sort((a, b) => a.score - b.score || a.position - b.position || a.entryIndex - b.entryIndex);
-
-    const candidates: MarkCandidate[] = [];
-    const best = ranked[0]?.score ?? Number.POSITIVE_INFINITY;
-    for (const r of ranked.slice(0, 1 + MAX_ALTERNATIVES)) {
-      if (candidates.length > 0 && r.score > best + ALTERNATIVE_MARGIN) break;
-      const ref = decisionRefAt(report, r.position, r.entryIndex);
-      if (ref) candidates.push({ ...ref, tilesDiff: r.diff, score: r.score });
-    }
-    const [estimate, ...alternatives] = candidates;
-    if (estimate === undefined) return manual(center, kyokuPositions, 'no-decision');
+    const { estimate, alternatives } = rankDecisions(report, kyokuPositions, center.tilesLeft);
+    if (estimate === null) return manual(center, kyokuPositions, 'no-decision');
     return { index, mark, status: 'estimated', center, kyokuPositions, estimate, alternatives, reason: null };
   });
 }
