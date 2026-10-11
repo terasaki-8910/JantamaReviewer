@@ -3,6 +3,7 @@
  * リポジトリ全体の決まりを機械で確かめる。
  * - L-2: ソースと画面の文言に絵文字を入れない（eslint が見ない Rust・CSS・HTML・JSON も含む）
  * - L-1: HTML に色の値を直接書かない（CSS は stylelint、TSX は eslint が見る）
+ * - U-26: 問題の状態の言葉は「解答済み」「未解答」にそろえる（「回答済み」「未回答」を、画面の文言にも、ソースの書き込みにも残さない）
  * - docs/recipes/tauri-desktop-app.md の注意点（アプリのフォルダのロックファイルと packageManager、
  *   bundle.icon の明示）
  * - 画面の CSP が外部の通信を許していないこと（S-2 の補強）
@@ -81,6 +82,44 @@ describe('L-1: HTML に色を直接書かない', () => {
     for (const name of htmls) {
       expect(readFileSync(join(dir, name), 'utf8').match(COLOR_LITERAL), name).toBeNull();
     }
+  });
+});
+
+/** 製品のソース（試験・試験の部品は含めない）。画面の文言を持つ TS・TSX・Rust・HTML と、CSS（`content` の文字）。 */
+function productSourceFiles(): string[] {
+  return sourceFiles().filter((file) => {
+    const rel = relative(ROOT, file).split(sep).join('/');
+    if (/(^|\/)tests?\//.test(rel) || /\.test\.[a-z]+$/.test(rel)) return false;
+    return /^(apps\/desktop\/(src\/|[a-z]+\.html$)|apps\/desktop\/src-tauri\/(src|helper|input|ocr)\/|packages\/)/.test(rel);
+  });
+}
+
+describe('U-26: 問題の状態の言葉は「解答済み」「未解答」', () => {
+  it('走査の対象に、画面のソースが入っている', () => {
+    const files = productSourceFiles().map((file) => relative(ROOT, file).split(sep).join('/'));
+    expect(files.length).toBeGreaterThan(40);
+    expect(files).toContain('apps/desktop/src/main/study/TodayPage.tsx');
+    expect(files).toContain('apps/desktop/src/main/replay/NowPanel.tsx');
+    expect(files).toContain('apps/desktop/index.html');
+    expect(files.some((file) => file.startsWith('apps/desktop/src-tauri/src/'))).toBe(true);
+    expect(files.some((file) => /\.test\.[a-z]+$/.test(file))).toBe(false);
+  });
+
+  it('どの画面のソースにも「回答済み」「未回答」が無い（「解答済み」「未解答」にそろう）', () => {
+    const found: string[] = [];
+    for (const file of productSourceFiles()) {
+      const text = readFileSync(file, 'utf8');
+      for (const match of text.matchAll(/回答済み|未回答/g)) {
+        const line = text.slice(0, match.index).split('\n').length;
+        found.push(`${relative(ROOT, file)}:${line} ${match[0]}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it('今日の出題の一覧は、答えた問題に「解答済み」と出す（問題の状態の言葉の元の場所）', () => {
+    const source = readFileSync(join(ROOT, 'apps', 'desktop', 'src', 'main', 'study', 'TodayPage.tsx'), 'utf8');
+    expect(source).toMatch(/^\s*解答済み$/m);
   });
 });
 
