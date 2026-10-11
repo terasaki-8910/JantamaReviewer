@@ -15,12 +15,13 @@
  * 本場違いで点数が同じ局が続くときは、局が1つに決まらない（`kyokuPositions` が複数になる）ので、それらの局の判断をまとめて並べる。
  * 読めない・合う局が無い・判断が無いときは、「手で選ぶ」（`manual`）。
  * 保存したユーザーの選び（links.json）は、ここでは扱わない。呼び出す側が、推定より先に使う（選んだものに「推定」の印は付けない）。
+ * ユーザーが選んだ判断が、推定にもほかの候補にも入らないときは、スクショの値から「離れている」（`isFarFromReading`。E-27）。
  *
  * 結びつけた判断は鍵（`DecisionRef.key`）で持つので、ユーザーが選んだものを保存して、あとで同じ結果に当て直せる。
  */
 import { type CenterText, type ScreenReading, readingOf } from './center-text';
 import { classifyDecisionKind } from './decision';
-import { type DecisionRef, decisionRefAt } from './decision-ref';
+import { type DecisionRef, decisionRefAt, parseDecisionKey } from './decision-ref';
 import { kyokuFactsOf, locateKyokus } from './kyoku-locate';
 import type { MortalReport, ReportEntry } from './report-types';
 
@@ -85,6 +86,19 @@ export function markScore(entry: Pick<ReportEntry, 'tiles_left' | 'actual' | 'de
   else if (entry.actual.type === 'none') score += PASS_PENALTY;
   if (entry.tiles_left < tilesLeft) score += AFTER_PENALTY;
   return score;
+}
+
+/**
+ * ユーザーが選んだ判断（`links.json` の値。判断の鍵）が、スクショの値から離れているか（E-27、F9）。
+ * 結びつけの結果（`linkMarks` の 1 つ）の推定にも、ほかの候補にも入らない判断を選んでいるときだけ true。
+ * 次のときは false（離れているとは言えない）:
+ * - 推定が無い（読めない・合う局が無い・その局に判断が無い）: 比べる相手が無い
+ * - 選んだ値が判断の鍵ではない（`"manual"`＝局面を手で選ぶ、など）: 判断を選んでいない
+ */
+export function isFarFromReading(link: Pick<MarkLink, 'estimate' | 'alternatives'>, chosenKey: string): boolean {
+  if (link.estimate === null) return false;
+  if (parseDecisionKey(chosenKey) === null) return false;
+  return link.estimate.key !== chosenKey && !link.alternatives.some((candidate) => candidate.key === chosenKey);
 }
 
 /** 順位づけの対象 1 つ（局の位置と、局の中の判断の番号）。 */
