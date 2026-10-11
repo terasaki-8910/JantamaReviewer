@@ -147,6 +147,10 @@ export interface Scenario {
   thumbBy?: Record<string, string>;
   /** 取り込みの流れへの答え。無ければ、クリップボードは空。 */
   importing?: ImportScenario;
+  /** 保存してある答え（`list_answers` が返す。`record_answer` で増える。答えの記録 study.sqlite の偽物）。 */
+  answers?: unknown[];
+  /** 日付（YYYY-MM-DD）→ 保存してある今日の組（`get_daily_set`。`save_daily_set` は、その日の組が無いときだけ保存する）。 */
+  dailySets?: Record<string, unknown[]>;
   /**
    * 前の作り方で読んだ半荘の読み直し（F11、E-27）への答え。無ければ、読み直しは要らない（`needs_ocr_reread` は false）。
    * 写しの決まりの名前が `currentGeometry` と違う半荘だけ、要る。読み直しは、写しを `fresh` に置き換えて true を返す
@@ -175,6 +179,10 @@ export function tauriMockScript(scenario: Scenario): string {
   var reports = scenario.reports || {};
   var failDelete = scenario.failDelete || null;
   var failRestore = scenario.failRestore || null;
+  // 答えの記録（study.sqlite）の偽物。Rust 側と同じ決まり: 答えには番号が付き、今日の組は、その日に 1 回だけ保存される
+  var answers = JSON.parse(JSON.stringify(scenario.answers || []));
+  var nextAnswerId = answers.reduce(function (max, a) { return Math.max(max, a.id); }, 0) + 1;
+  var dailySets = JSON.parse(JSON.stringify(scenario.dailySets || {}));
   window.__jrCalls = [];
   function sortedSessions() {
     return sessions.slice().sort(function (a, b) {
@@ -229,6 +237,30 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'set_maka_hanchan': mutate(args.sessionId, function (s) { s.maka.hanchan = args.grade; }); return null;
       case 'clear_maka_hanchan': mutate(args.sessionId, function (s) { delete s.maka.hanchan; }); return null;
       case 'read_report': return reports[args.sessionId] === undefined ? null : reports[args.sessionId];
+      case 'list_answers': return JSON.parse(JSON.stringify(answers));
+      case 'record_answer': {
+        var made = Object.assign({ causes: [], principle: '', maka_move: null }, args.answer, { id: nextAnswerId++ });
+        answers.push(made);
+        return JSON.parse(JSON.stringify(made));
+      }
+      case 'update_answer_notes': {
+        var target = answers.filter(function (a) { return a.id === args.id; })[0];
+        if (!target) throw '答えが見つかりません: ' + args.id;
+        target.causes = args.notes.causes;
+        target.principle = args.notes.principle;
+        target.maka_move = args.notes.maka_move;
+        return JSON.parse(JSON.stringify(target));
+      }
+      case 'get_daily_set': return dailySets[args.date] === undefined ? null : JSON.parse(JSON.stringify(dailySets[args.date]));
+      case 'save_daily_set':
+        if (dailySets[args.date] === undefined) dailySets[args.date] = args.items;
+        return JSON.parse(JSON.stringify(dailySets[args.date]));
+      case 'count_solved':
+        return args.sessionIds.map(function (id) {
+          var keys = {};
+          answers.forEach(function (a) { if (a.session_id === id) keys[a.decision_key] = true; });
+          return { session_id: id, solved: Object.keys(keys).length };
+        });
       case 'needs_ocr_reread': {
         if (!scenario.reread) return false;
         var stale = sessions.filter(function (s) { return s.id === args.sessionId; })[0];
@@ -354,23 +386,43 @@ const FOCUSABLE =
 /**
  * Tab キーだけで、すべての操作に届くか。届かなかった要素の説明を返す。
  * ラジオボタンは、1 つの組につき 1 か所に止まれば良い（組の中は矢印キーで動く）。
+ * `roving` は、矢印キーで動く組（手牌・答えのボタン・タブ）の要素の選び方。その中の `tabindex="-1"` の要素は、止まり場所でないので、
+ * 数えない（止まり場所になる 1 つ — `tabindex="0"` の要素 — は、数える）。
  */
-export async function unreachableByTab(page: Page): Promise<{ total: number; missed: string[] }> {
-  const targets = await page.evaluate((selector) => {
-    const visible = (el: HTMLElement) => {
-      const rect = el.getBoundingClientRect();
-      const style = getComputedStyle(el);
-      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-    };
-    const elements = Array.from(document.querySelectorAll<HTMLElement>(selector)).filter(visible);
-    elements.forEach((el, index) => el.setAttribute('data-reach-id', String(index)));
-    (document.activeElement as HTMLElement | null)?.blur();
-    return elements.map((el, index) => ({
-      id: String(index),
-      group: el instanceof HTMLInputElement && el.type === 'radio' ? el.name : null,
-      label: (el.getAttribute('aria-label') ?? el.textContent ?? el.tagName).trim().slice(0, 30),
-    }));
-  }, FOCUSABLE);
+export async function unreachableByTab(
+  page: Page,
+  options: { roving?: string } = {},
+): Promise<{ total: number; missed: string[] }> {
+  const targets = await page.evaluate(
+    ({ selector, roving }) => {
+      const visible = (el: HTMLElement) => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        // 閉じた <details> の中など（content-visibility で描かれない所）は、見えていないものとして数える
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.visibility !== 'hidden' &&
+          style.display !== 'none' &&
+          el.checkVisibility()
+        );
+      };
+      const skipped = (el: HTMLElement) =>
+        (el as HTMLButtonElement).disabled === true ||
+        (roving !== undefined && el.matches(roving) && el.getAttribute('tabindex') === '-1');
+      const elements = Array.from(document.querySelectorAll<HTMLElement>(selector)).filter(
+        (el) => visible(el) && !skipped(el),
+      );
+      elements.forEach((el, index) => el.setAttribute('data-reach-id', String(index)));
+      (document.activeElement as HTMLElement | null)?.blur();
+      return elements.map((el, index) => ({
+        id: String(index),
+        group: el instanceof HTMLInputElement && el.type === 'radio' ? el.name : null,
+        label: (el.getAttribute('aria-label') ?? el.textContent ?? el.tagName).trim().slice(0, 30),
+      }));
+    },
+    { selector: FOCUSABLE, roving: options.roving },
+  );
 
   const seen = new Set<string>();
   for (let i = 0; i < targets.length + 4; i += 1) {

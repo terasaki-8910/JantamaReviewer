@@ -6,7 +6,7 @@
  * - 学んだ原則は文字を打つ欄。欄の外へ出たとき（と、次の問題へ進むとき）に保存する
  */
 import { CAUSE_CHOICES } from '@jantama/engine';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { errorMessage } from '../../api/tauri';
 import type { AnswerRow } from '../../api/types';
@@ -69,18 +69,26 @@ export function useAnswerNotes(row: AnswerRow): NotesState {
     [current.maka_move, makaDraft, row.id, undo, updateNotes],
   );
 
-  const commitPrinciple = useCallback(async (): Promise<boolean> => {
-    const next = principle.trim();
-    if (next === current.principle) return true;
-    try {
-      await updateNotes(row.id, { principle: next });
-      setError(null);
-      return true;
-    } catch (failure) {
-      setError(`学んだ原則を保存できませんでした: ${errorMessage(failure)}`);
-      return false;
-    }
-  }, [current.principle, principle, row.id, updateNotes]);
+  // 学んだ原則の保存は、1 つずつ順に行う（欄の外へ出たときと、次へ進むときが続いても、同じ文を 2 度保存しない）
+  const savedPrinciple = useRef(row.principle);
+  const queue = useRef<Promise<boolean>>(Promise.resolve(true));
+  const commitPrinciple = useCallback((): Promise<boolean> => {
+    const run = async (): Promise<boolean> => {
+      const next = principle.trim();
+      if (next === savedPrinciple.current) return true;
+      try {
+        await updateNotes(row.id, { principle: next });
+        savedPrinciple.current = next;
+        setError(null);
+        return true;
+      } catch (failure) {
+        setError(`学んだ原則を保存できませんでした: ${errorMessage(failure)}`);
+        return false;
+      }
+    };
+    queue.current = queue.current.then(run, run);
+    return queue.current;
+  }, [principle, row.id, updateNotes]);
 
   return { causes, makaMove, principle, setPrinciple, toggleCause, setMakaMove, commitPrinciple, error };
 }

@@ -655,7 +655,7 @@ describe('U-9: 削除（行の「…」・選択）', () => {
     await waitFor(() => expect(visibleTimes()).toHaveLength(8));
   });
 
-  it('解いた問題があれば、確認にその数が出る（クイズの記録ができたあとの足場。いまは 0 で出さない）', async () => {
+  it('解いた問題があれば、確認にその数が出る（数は答えの記録に数えてもらう。ここでは、数を返す関数を渡す）', async () => {
     const { user } = setup({ solvedProblems: (ids) => ids.length * 4 });
     await ready();
     await user.click(menuOf(rowOf('c')));

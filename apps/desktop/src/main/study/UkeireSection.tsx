@@ -13,7 +13,7 @@ import { Icon } from '../Icon';
 import { isDoraTile } from './dora';
 import { followOf, type UkeireBox, type UkeireRow } from './reveal';
 import { Tile } from './Tile';
-import { kindOrder, tileName } from './tiles';
+import { kindOrder } from './tiles';
 
 type PopTab = 'tiles' | '2sh';
 
@@ -280,12 +280,21 @@ function Popover({ box, row, mine, dora, trigger, initialTab, onClose }: Popover
     };
   }, [onClose, place, trigger]);
 
+  // 矢印キーでタブを替えたときは、替えた先のタブへキーボードの位置を移す（クリックのときは、押した所のまま）
+  const focusTab = useRef(false);
+  useEffect(() => {
+    if (!focusTab.current) return;
+    focusTab.current = false;
+    document.getElementById(`uptab-${tab}`)?.focus();
+  }, [tab]);
+
   const onTabKeys = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
     event.preventDefault();
     const next: PopTab = event.key === 'ArrowLeft' || event.key === 'Home' ? 'tiles' : '2sh';
+    if (next === tab) return;
+    focusTab.current = true;
     setTab(next);
-    requestAnimationFrame(() => document.getElementById(`uptab-${next}`)?.focus());
   };
 
   const tags = row.tags.join('・');
@@ -401,7 +410,6 @@ export function UkeireSection({ box, dora }: SectionProps) {
       <ul className="uk">
         {box.rows.map((row, index) => {
           const detail = row.detail;
-          const name = `${row.tags.join('・')} 打${tileName(row.tile)} ${shantenTag(detail.shanten)} ${detail.ukeire}枚、残り${detail.remaining}`;
           const width = ((detail.ukeire / box.maxCount) * 100).toFixed(1);
           return (
             <li className={`uk-row ${row.color}${row.worse ? ' worse' : ''}`} data-ai="ukeire" key={row.tile}>
@@ -411,7 +419,7 @@ export function UkeireSection({ box, dora }: SectionProps) {
                 aria-haspopup="dialog"
                 aria-expanded={open?.index === index}
                 aria-controls="ukpop"
-                aria-label={`${name}。受け入れ牌の一覧を開く`}
+                aria-describedby="uk-hint"
                 onClick={(event) => {
                   const trigger = event.currentTarget;
                   setOpen(open?.index === index ? null : { index, trigger });
@@ -424,7 +432,8 @@ export function UkeireSection({ box, dora }: SectionProps) {
                   </span>
                   <span className="uk-sh">{shantenTag(detail.shanten)}</span>
                   <span className="uk-n">
-                    {detail.ukeire}枚<span className="uk-rem">残り{detail.remaining}</span>
+                    {detail.ukeire}枚{' '}
+                    <span className="uk-rem">残り{detail.remaining}</span>
                   </span>
                   <span className="uk-more" aria-hidden="true">
                     <Icon name="chevronRight" className="chev" />
@@ -439,7 +448,9 @@ export function UkeireSection({ box, dora }: SectionProps) {
         })}
       </ul>
       {box.takeaway !== '' && <p className="takeaway">{box.takeaway}</p>}
-      <p className="quiet uk-hint">行を押すと、受け入れ牌と枚数・残りの一覧を開きます。</p>
+      <p className="quiet uk-hint" id="uk-hint">
+        行を押すと、受け入れ牌と枚数・残りの一覧を開きます。
+      </p>
       {box.anyWorse && <p className="quiet">シャンテン数が違う打牌は、受け入れ枚数では比べられません。</p>}
       <div className="uk-links">
         <a className="q-link" href={box.pairiUrl || tenhouPairiUrl(box.tiles)} target="_blank" rel="noopener noreferrer">

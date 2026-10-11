@@ -185,6 +185,91 @@ describe('設定ページ', () => {
   });
 });
 
+describe('設定ページ: 出題の設定（D-3・U-19）', () => {
+  it('既定: 1日に出す数 5・大きな不一致の基準 5%・ドラを目立たせる は切', async () => {
+    await renderPage();
+    expect(screen.getByRole('spinbutton', { name: '1日に出す数' })).toHaveValue(5);
+    expect(screen.getByRole('spinbutton', { name: '大きな不一致の基準' })).toHaveValue(5);
+    expect(screen.getByRole('checkbox', { name: 'ドラを目立たせる' })).not.toBeChecked();
+    expect(screen.getByText('今日の出題に入れる問題の数です（既定は5）。')).toBeInTheDocument();
+  });
+
+  it('1日に出す数は、入力を終えたとき（フォーカスが外れたとき・Enter）に保存する。変えていなければ保存しない', async () => {
+    const user = userEvent.setup();
+    const mock = await renderPage();
+    const box = screen.getByRole('spinbutton', { name: '1日に出す数' });
+    await user.click(box);
+    await user.tab();
+    expect(savedSettings(mock)).toHaveLength(0);
+    await user.clear(box);
+    await user.type(box, '8');
+    expect(savedSettings(mock)).toHaveLength(0);
+    await user.type(box, '{Enter}');
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
+    expect(savedSettings(mock)[0]).toMatchObject({ daily_count: 8, disagreement_percent: 5, highlight_dora: false });
+    expect(await screen.findByText('保存しました')).toBeInTheDocument();
+    expect(box).toHaveValue(8);
+  });
+
+  it('範囲の外・整数でない値は、理由を出して、元の値に戻す（保存しない）', async () => {
+    const user = userEvent.setup();
+    const mock = await renderPage();
+    const box = screen.getByRole('spinbutton', { name: '1日に出す数' });
+    for (const bad of ['0', '51', '3.5', '']) {
+      await user.clear(box);
+      if (bad !== '') await user.type(box, bad);
+      await user.tab();
+      expect(await screen.findByRole('alert')).toHaveTextContent('1日に出す数は 1 から 50 の間の整数で指定してください');
+      expect(box).toHaveValue(5);
+    }
+    expect(savedSettings(mock)).toHaveLength(0);
+    // 範囲の端は通る
+    await user.clear(box);
+    await user.type(box, '50');
+    await user.tab();
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
+    expect(savedSettings(mock)[0]?.daily_count).toBe(50);
+  });
+
+  it('大きな不一致の基準（%）も同じ。1〜50 の整数で保存し、外れた値は理由を出して戻す', async () => {
+    const user = userEvent.setup();
+    const mock = await renderPage();
+    const box = screen.getByRole('spinbutton', { name: '大きな不一致の基準' });
+    await user.clear(box);
+    await user.type(box, '10');
+    await user.tab();
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
+    expect(savedSettings(mock)[0]).toMatchObject({ disagreement_percent: 10, daily_count: 5 });
+    await user.clear(box);
+    await user.type(box, '0');
+    await user.tab();
+    expect(await screen.findByRole('alert')).toHaveTextContent('大きな不一致の基準は 1% から 50% の間の整数で指定してください');
+    expect(box).toHaveValue(10);
+    expect(savedSettings(mock)).toHaveLength(1);
+  });
+
+  it('ドラを目立たせる: チェックで、その場で保存する（入れたあと、切ることもできる）', async () => {
+    const user = userEvent.setup();
+    const mock = await renderPage();
+    await user.click(screen.getByRole('checkbox', { name: 'ドラを目立たせる' }));
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
+    expect(savedSettings(mock)[0]?.highlight_dora).toBe(true);
+    expect(screen.getByRole('checkbox', { name: 'ドラを目立たせる' })).toBeChecked();
+    await user.click(screen.getByRole('checkbox', { name: 'ドラを目立たせる' }));
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(2));
+    expect(savedSettings(mock)[1]?.highlight_dora).toBe(false);
+  });
+
+  it('別の窓の変更（settings-changed）も、ここに反映する', async () => {
+    const mock = await renderPage();
+    act(() => {
+      mock.emit('settings-changed', { ...baseSettings, daily_count: 12, highlight_dora: true } satisfies Settings);
+    });
+    await waitFor(() => expect(screen.getByRole('spinbutton', { name: '1日に出す数' })).toHaveValue(12));
+    expect(screen.getByRole('checkbox', { name: 'ドラを目立たせる' })).toBeChecked();
+  });
+});
+
 describe('設定ページ: 迷いマークのボタンの登録（W-10）', () => {
   it('W-10 4 つの選択肢のラジオは無く、いまの割り当てと「ボタンを登録」が並ぶ', async () => {
     await renderPage();

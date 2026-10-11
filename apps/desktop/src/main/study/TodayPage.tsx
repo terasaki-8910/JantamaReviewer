@@ -45,7 +45,7 @@ function ProblemRow({ n, problem, answered, next, onOpen }: RowProps) {
             {problem.markNumber !== null && <span className="q-tag doubt">迷い{problem.markNumber}</span>}
           </span>
           <span className="l2">
-            {KIND_NAME[decision.kind]} · {shantenTag(decision.shanten)} · {formatSessionShort(problem.startedMs)} の半荘
+            {KIND_NAME[decision.kind]} · {shantenTag(decision.shanten)} · <span className="nw">{formatSessionShort(problem.startedMs)} の半荘</span>
           </span>
         </span>
         <span className="st">

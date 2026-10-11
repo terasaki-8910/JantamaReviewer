@@ -141,11 +141,28 @@ export function QuizScreen({
     if (button !== null && button.disabled) (which === 'prev' ? nextRef : prevRef).current?.focus();
   }, [step]);
 
+  // 前の問題の「次の問題へ」や、一覧の行を押して開いたとき（押したボタンが消えて、キーボードの位置が無いとき）は、
+  // 最初の操作（手牌の Tab の止まり場所か、答えのボタン）へ移す。サイドバーなどから開いたときは、位置を奪わない
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (existing !== null) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+    rootRef.current
+      ?.querySelector<HTMLElement>('.hand .tile-btn[tabindex="0"], .q-choices [role="radio"][tabindex="0"]')
+      ?.focus({ preventScroll: true });
+  }, [existing]);
+
   const pickedTile = quiz.choice !== null && quiz.choice.type === 'dahai' ? quiz.choice.tile : null;
   const calledFrom = calledSeat === null ? null : relationName(decision.board.playerId, calledSeat);
 
   return (
-    <div className="qz" data-state={revealed ? 'revealed' : 'answering'} data-dora={study.highlightDora ? 'on' : 'off'}>
+    <div
+      className="qz"
+      ref={rootRef}
+      data-state={revealed ? 'revealed' : 'answering'}
+      data-dora={study.highlightDora ? 'on' : 'off'}
+    >
       <header className="head qhead">
         <div className="q-main">
           {kicker}

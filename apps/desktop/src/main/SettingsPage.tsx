@@ -329,6 +329,41 @@ export function SettingsPage() {
             </label>
           </div>
 
+          <div className="setting">
+            <span className="lbl field-label" id="data-dir-label">
+              データの保存先
+            </span>
+            <div className="setting-row">
+              <p className="path selectable" aria-labelledby="data-dir-label">
+                {settings.data_dir}
+              </p>
+              <button type="button" className="btn" onClick={() => void pickFolder()}>
+                フォルダを選ぶ
+              </button>
+            </div>
+            {storeError && (
+              <p className="error selectable" role="alert">
+                {storeError}
+              </p>
+            )}
+          </div>
+
+          <div className="setting field">
+            <label htmlFor="capture-keywords">雀魂の窓を探す語（1行に1つ）</label>
+            <textarea
+              id="capture-keywords"
+              className="input"
+              value={keywordsText}
+              spellCheck={false}
+              aria-describedby="capture-keywords-help"
+              onChange={(e) => setKeywordsDraft(e.target.value)}
+              onBlur={commitKeywords}
+            />
+            <p className="quiet" id="capture-keywords-help">
+              窓の題名にこの語があれば、その窓を撮ります。見つからないときは画面全体を撮ります。
+            </p>
+          </div>
+
           <div className="setting field">
             <label htmlFor="daily-count">1日に出す数</label>
             <input
@@ -404,41 +439,6 @@ export function SettingsPage() {
             </label>
             <p className="quiet" id="highlight-dora-help">
               出題の画面で、ドラ表示牌が指す牌の面を黄色にします。赤五は、指される牌でもあるときだけ黄色になります（既定は切）。
-            </p>
-          </div>
-
-          <div className="setting">
-            <span className="lbl field-label" id="data-dir-label">
-              データの保存先
-            </span>
-            <div className="setting-row">
-              <p className="path selectable" aria-labelledby="data-dir-label">
-                {settings.data_dir}
-              </p>
-              <button type="button" className="btn" onClick={() => void pickFolder()}>
-                フォルダを選ぶ
-              </button>
-            </div>
-            {storeError && (
-              <p className="error selectable" role="alert">
-                {storeError}
-              </p>
-            )}
-          </div>
-
-          <div className="setting field">
-            <label htmlFor="capture-keywords">雀魂の窓を探す語（1行に1つ）</label>
-            <textarea
-              id="capture-keywords"
-              className="input"
-              value={keywordsText}
-              spellCheck={false}
-              aria-describedby="capture-keywords-help"
-              onChange={(e) => setKeywordsDraft(e.target.value)}
-              onBlur={commitKeywords}
-            />
-            <p className="quiet" id="capture-keywords-help">
-              窓の題名にこの語があれば、その窓を撮ります。見つからないときは画面全体を撮ります。
             </p>
           </div>
         </div>
