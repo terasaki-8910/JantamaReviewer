@@ -1,11 +1,12 @@
 /**
  * 判断（Decision）と、その種類・タグ（E-8）。
  *
- * 種類（kind）は候補の行動から決める。タグは、シャンテン数（記録のまま）・鳴き・押し引き・序盤。
+ * 種類（kind）は候補の行動から決める。タグは、シャンテン数（場面の手で数える。E-21）・鳴き・押し引き・序盤。
  * 画面では自動で付けたものをユーザーが直せる（F3）。
  */
 import type { BoardState } from './replay';
 import type { ReportDetail, ReportEntry } from './report-types';
+import { sceneShanten } from './scene-shanten';
 
 /**
  * 判断の種類。
@@ -52,14 +53,16 @@ export function opponentHasRiichi(board: Pick<BoardState, 'playerId' | 'riichi'>
 }
 
 /**
- * 判断のタグ。順に、シャンテン数（記録のまま）、鳴き（鳴きの判断）、押し引き（他家のリーチ）、序盤（junme が 6 以下）。
+ * 判断のタグ。順に、シャンテン数、鳴き（鳴きの判断）、押し引き（他家のリーチ）、序盤（junme が 6 以下）。
+ * シャンテン数は、その場面の手で数える（E-21。打牌の判断はツモったあとの14枚から切る牌ごとの最小、鳴きの判断は鳴く前の13枚。
+ * 結果 JSON の `shanten` は、ツモる前の手のものなので使わない）ので、盤面の手牌とツモ牌を渡す。
  */
 export function classifyTags(
-  entry: Pick<ReportEntry, 'shanten' | 'junme'>,
+  entry: Pick<ReportEntry, 'junme'>,
   kind: DecisionKind,
-  board: Pick<BoardState, 'playerId' | 'riichi'>,
+  board: Pick<BoardState, 'playerId' | 'riichi' | 'hand' | 'drawn'>,
 ): string[] {
-  const tags = [shantenTag(entry.shanten)];
+  const tags = [shantenTag(sceneShanten(board))];
   if (kind === 'call') tags.push(TAG_CALL);
   if (opponentHasRiichi(board)) tags.push(TAG_PUSH_PULL);
   if (entry.junme <= EARLY_JUNME_LIMIT) tags.push(TAG_EARLY);
@@ -88,5 +91,7 @@ export interface Decision {
   /** この判断の時点の盤面。 */
   board: BoardState;
   kind: DecisionKind;
+  /** 場面のシャンテン数（E-21。0 はテンパイ）。`tags` の先頭は、この数の言い方。記録の `entry.shanten` とは違うことがある。 */
+  shanten: number;
   tags: string[];
 }

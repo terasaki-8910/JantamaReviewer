@@ -7,9 +7,13 @@ import {
   isCorrectAnswer,
   isDue,
   nextIntervalDays,
+  scheduleFirstReview,
   scheduleReview,
+  STUDY_DAY_START_HOUR,
+  studyDate,
   toLocalDateString,
 } from '../src/srs';
+import { dueAnswers, latestAnswers, type AnswerLike } from '../src/problems';
 
 describe('E-5 解き直しの予定（間隔 1 → 3 → 7 → 14 → 30 → 60日）', () => {
   it('E-5 間隔は 1, 3, 7, 14, 30, 60日', () => {
@@ -109,5 +113,85 @@ describe('E-5 日付は手元の暦の日付（YYYY-MM-DD）', () => {
     expect(() => addDays('2026-1-9', 1)).toThrow(RangeError);
     expect(() => addDays('2026-10-09', 1.5)).toThrow(RangeError);
     expect(() => isDue('abc', '2026-10-09')).toThrow(RangeError);
+  });
+});
+
+describe('E-5 正解でも、答えを選び直した問題は、間隔を進めず同じ間隔で出す（R8-6）', () => {
+  it('E-5 選び直した回数が 1 以上の正解は、前の間隔のまま。まだ間隔が無ければ 1日', () => {
+    expect(scheduleReview(3, true, '2026-10-13', 1)).toEqual({ intervalDays: 3, dueDate: '2026-10-16' });
+    expect(scheduleReview(7, true, '2026-10-20', 4)).toEqual({ intervalDays: 7, dueDate: '2026-10-27' });
+    expect(scheduleReview(60, true, '2026-10-20', 2)).toEqual({ intervalDays: 60, dueDate: '2026-12-19' });
+    expect(scheduleReview(null, true, '2026-10-09', 1)).toEqual({ intervalDays: 1, dueDate: '2026-10-10' });
+  });
+
+  it('E-5 選び直しが 0 回の正解は、これまでどおり次の間隔へ進む。選び直しの回数を渡さなくても同じ', () => {
+    expect(scheduleReview(3, true, '2026-10-13', 0)).toEqual({ intervalDays: 7, dueDate: '2026-10-20' });
+    expect(scheduleReview(3, true, '2026-10-13')).toEqual({ intervalDays: 7, dueDate: '2026-10-20' });
+  });
+
+  it('E-5 間違えたときは、選び直したかどうかにかかわらず 1日に戻る', () => {
+    expect(scheduleReview(14, false, '2026-11-03', 0)).toEqual({ intervalDays: 1, dueDate: '2026-11-04' });
+    expect(scheduleReview(14, false, '2026-11-03', 3)).toEqual({ intervalDays: 1, dueDate: '2026-11-04' });
+  });
+});
+
+describe('E-25 出題で答えた問題は、正解かどうかにかかわらず 1日後に解き直しに出る', () => {
+  it('E-25 最初の予定は、答えた日の 1日後（間隔 1日）', () => {
+    expect(scheduleFirstReview('2026-10-09')).toEqual({ intervalDays: 1, dueDate: '2026-10-10' });
+    expect(scheduleFirstReview('2026-12-31')).toEqual({ intervalDays: 1, dueDate: '2027-01-01' });
+    // 正解でも、間違いでも、選び直しても、最初の予定は同じ
+    for (const correct of [true, false]) {
+      for (const reselect of [0, 2]) {
+        expect(scheduleReview(null, correct, '2026-10-09', reselect)).toEqual(scheduleFirstReview('2026-10-09'));
+      }
+    }
+  });
+
+  const answer = (key: string, answeredAt: number, dueDate: string): AnswerLike => ({
+    sessionId: 's1',
+    key,
+    answeredAt,
+    intervalDays: 1,
+    dueDate,
+  });
+
+  it('E-25 期限が今日までの問題が、期限の古い順に並ぶ（同じ期限なら、答えた順）。今日より先の期限は入らない', () => {
+    const due = dueAnswers(
+      [
+        answer('a', 3, '2026-10-12'),
+        answer('b', 1, '2026-10-10'),
+        answer('c', 2, '2026-10-10'),
+        answer('d', 4, '2026-10-13'),
+        answer('e', 5, '2026-10-11'),
+      ],
+      '2026-10-12',
+    );
+    expect(due.map((a) => a.key)).toEqual(['b', 'c', 'e', 'a']);
+    expect(dueAnswers([answer('x', 1, '2026-10-13')], '2026-10-12')).toEqual([]);
+  });
+
+  it('E-25 問題ごとの最後の答えだけを見る（解き直して期限が先に延びた問題は、期限の列に出ない）', () => {
+    const rows = [answer('a', 1, '2026-10-10'), { ...answer('a', 5, '2026-10-20'), intervalDays: 3 }, answer('b', 2, '2026-10-10')];
+    const latest = latestAnswers(rows);
+    expect(latest).toHaveLength(2);
+    expect(dueAnswers(latest, '2026-10-12').map((a) => a.key)).toEqual(['b']);
+    // 半荘が違えば、同じ鍵でも別の問題
+    expect(latestAnswers([answer('a', 1, '2026-10-10'), { ...answer('a', 2, '2026-10-11'), sessionId: 's2' }])).toHaveLength(2);
+  });
+});
+
+describe('「今日」は、午前 4 時までを前の日として数える（出題・解き直しの日付を決める 1 か所）', () => {
+  it('午前 4 時より前は前の日、4 時ちょうどから、その日', () => {
+    expect(STUDY_DAY_START_HOUR).toBe(4);
+    expect(studyDate(new Date(2026, 9, 10, 3, 59, 59))).toBe('2026-10-09');
+    expect(studyDate(new Date(2026, 9, 10, 4, 0, 0))).toBe('2026-10-10');
+    expect(studyDate(new Date(2026, 9, 10, 0, 0, 0))).toBe('2026-10-09');
+    expect(studyDate(new Date(2026, 9, 10, 23, 59, 59))).toBe('2026-10-10');
+  });
+
+  it('月初・年始をまたぐときも、前の日の暦のとおり', () => {
+    expect(studyDate(new Date(2026, 10, 1, 2, 0, 0))).toBe('2026-10-31');
+    expect(studyDate(new Date(2027, 0, 1, 3, 30, 0))).toBe('2026-12-31');
+    expect(studyDate(new Date(2028, 2, 1, 1, 0, 0))).toBe('2028-02-29');
   });
 });

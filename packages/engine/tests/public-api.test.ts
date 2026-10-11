@@ -105,6 +105,45 @@ describe('公開 API（src/index.ts）', () => {
     expect(engine.FLAG_BAND_GAP).toBe(2);
   });
 
+  it('E-21 場面のシャンテン数・E-22 受け入れの残り・E-23 2シャンテンからの先の入口が使える', () => {
+    for (const name of [
+      'sceneShanten',
+      'sceneShantenOfTiles',
+      'discardDetails',
+      'visibleTileCounts',
+      'findDiscardDetail',
+      'followAfterTwoShanten',
+    ] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+  });
+
+  it('E-24 今日の出題・E-25 解き直しの期限・出題の答えの入口が使える', () => {
+    for (const name of [
+      'listProblems',
+      'buildDailySet',
+      'restOfProblems',
+      'latestAnswers',
+      'dueAnswers',
+      'problemId',
+      'findDecisionByKey',
+      'keyOfDecision',
+      'studyDate',
+      'scheduleFirstReview',
+      'answerOptions',
+      'discardCandidates',
+      'choiceProbability',
+      'actualChoice',
+      'topChoice',
+      'choiceText',
+      'actualText',
+    ] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+    expect(engine.STUDY_DAY_START_HOUR).toBe(4);
+    expect(engine.DEFAULT_DAILY_COUNT).toBe(5);
+  });
+
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
   });

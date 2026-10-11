@@ -11,7 +11,13 @@
  * - 2〜3巡前からの再生: `framesBeforeDecision`（F3）
  * - Rating: `gameRating` / `handRatings`（E-12）、段階の当てはめ: `fitGradeModel` / `evaluateLeaveOneGameOut`（E-13）
  * - 局の結果と暫定の〇△✕: `summarizeKyokus`（E-6）、評価の突き合わせ: `alignRatings`（E-7）
- * - 解き直しの予定: `scheduleReview`（E-5）、牌譜リンク: `parsePaipuLink`（E-9）、MAKA の打牌: `recordMakaMove`（E-14）
+ * - 解き直しの予定: `scheduleReview`（E-5。答えを選び直した問題は間隔を進めない）・`scheduleFirstReview`（出題で答えたら 1 日後。E-25）・
+ *   `studyDate`（出題・解き直しの「今日」。午前 4 時まで前の日）、牌譜リンク: `parsePaipuLink`（E-9）、MAKA の打牌: `recordMakaMove`（E-14）
+ * - 場面のシャンテン数: `sceneShanten`（E-21。打牌の判断はツモったあとの手から切る牌ごとの最小、鳴きの判断は鳴く前の手）
+ * - 受け入れの残り: `discardDetails`（E-22。受け入れ牌ごとに、手牌だけの枚数と、場に見えている牌も除いた残り）、
+ *   2シャンテンからの先: `followAfterTwoShanten`（E-23）
+ * - 出題: 問題の一覧 `listProblems`・今日の出題の組 `buildDailySet`・「残り」`restOfProblems`・解き直しの期限 `dueAnswers`（E-24・E-25）、
+ *   答えのボタンと AI の候補への当てはめ `answerOptions` / `choiceProbability`（打牌以外の答えは、雀魂と同じ並びのボタン）
  * - クリップボードの牌譜リンク（E-15）: `detectPaipuLink(text)` は `PaipuLink | null`。同じ牌譜 ID を一度だけ知らせるのは
  *   `detectNewPaipuLink(text, announced)`（純粋な関数）か `new PaipuLinkAnnouncer(ids).announce(text)`
  *
@@ -59,6 +65,8 @@ export * from './maka';
 export * from './mark-link';
 export * from './outcome';
 export * from './paipu-link';
+export * from './problems';
+export * from './quiz-choice';
 export * from './rating';
 export * from './rating-alignment';
 export * from './rating-link';
@@ -66,8 +74,11 @@ export * from './replay';
 export * from './report';
 export * from './report-types';
 export * from './result';
+export * from './scene-shanten';
 export * from './session-match';
 export * from './shanten';
 export * from './srs';
 export * from './tenhou-url';
 export * from './tiles';
+export * from './two-shanten-follow';
+export * from './ukeire-remaining';
