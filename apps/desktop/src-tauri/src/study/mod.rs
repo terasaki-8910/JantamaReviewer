@@ -7,6 +7,8 @@
 //! - `answers`: 答え 1 件ごとの行。出題（quiz）と解き直し（review）の両方。答えた問題ごとに、最後の答えの `interval_days`・
 //!   `due_date` が、次の解き直しの予定になる
 //! - `daily_sets`: 日ごとの今日の出題の組（日付・順番・半荘の名前・判断の鍵）。その日の組は、作ったら入れ替えない
+//! - `weeks`: 週ごとの、手で入れる数（成績 6 つ）と来週の重点（版 2。U-30、R11-12）。鍵は、週の月曜の日付（YYYY-MM-DD）。
+//!   書き出し（D-2「週の数」）が使う入口は、`StudyDb::list_weeks`（読む）・`set_week`（1 週を置き換える）・`replace_weeks`（全部を置き換える）
 //!
 //! 表の作りは `PRAGMA user_version` で版を持つ。新しい版のアプリが作ったファイルは、読まずにエラーにする（壊さないため）。
 //! 消した半荘は、アプリを閉じるとき（落ちたときは次の起動のとき）に、答えと予定も消す（`forget_sessions`。`trash.rs` が呼ぶ）。
@@ -28,7 +30,7 @@ use crate::store::{ensure_outside_git, StoreError};
 pub const STUDY_FILE: &str = "study.sqlite";
 
 /// 表の作りの版。
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 /// 差の原因（U-20）。画面の 5 つのチェックボックスの値。
 pub const CAUSES: [&str; 5] = ["ukeire", "shape", "value", "defense", "other"];
@@ -175,6 +177,119 @@ pub struct AnswerNotes {
 pub struct ProblemRef {
     pub session_id: String,
     pub decision_key: String,
+}
+
+/// 週の成績（手で入れる数。雀魂の成績の画面から）。入れていない項目は `None`。
+/// 率は %（0 から 100）、平均順位は 1 から 4。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct WeekStats {
+    /// 4位率（%）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rank4: Option<f64>,
+    /// 放銃率（%）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deal: Option<f64>,
+    /// 平均順位（1 から 4）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avg: Option<f64>,
+    /// 和了率（%）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub win: Option<f64>,
+    /// 副露率（%）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<f64>,
+    /// 立直率（%）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub riichi: Option<f64>,
+}
+
+impl WeekStats {
+    fn is_empty(&self) -> bool {
+        self.rank4.is_none()
+            && self.deal.is_none()
+            && self.avg.is_none()
+            && self.win.is_none()
+            && self.call.is_none()
+            && self.riichi.is_none()
+    }
+}
+
+/// 1 週ぶんの、手で入れた数と来週の重点。書き出しの JSON の「週の数」の 1 件も、この形。
+/// 例: `{"week":"2026-10-05","stats":{"rank4":20.4,"avg":2.41},"focus":"受け入れを数えてから切る。"}`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WeekRecord {
+    /// 週の月曜の日付（YYYY-MM-DD）。週は月曜から日曜（検討ログと同じ。日の区切りは午前 4 時）。
+    pub week: String,
+    #[serde(default)]
+    pub stats: WeekStats,
+    /// 来週の重点（1 から 3 行。空なら書いていない）。保存するときに、行の前後の空白と空の行を除く。
+    #[serde(default)]
+    pub focus: String,
+}
+
+/// 重点の行数の上限と、1 行の文字数の上限。
+const FOCUS_LINES: usize = 3;
+const FOCUS_LINE_CHARS: usize = 100;
+
+/// 週の月曜の日付か（暦に実在する日で、月曜日）。
+fn valid_week_start(week: &str) -> bool {
+    if !valid_date(week) {
+        return false;
+    }
+    chrono::NaiveDate::parse_from_str(week, "%Y-%m-%d")
+        .map(|date| chrono::Datelike::weekday(&date) == chrono::Weekday::Mon)
+        .unwrap_or(false)
+}
+
+fn check_rate(name: &str, value: Option<f64>, min: f64, max: f64) -> Result<(), StudyError> {
+    match value {
+        None => Ok(()),
+        Some(v) if v.is_finite() && (min..=max).contains(&v) => Ok(()),
+        Some(v) => Err(invalid(format!("{name}は {min} から {max} の数です: {v}"))),
+    }
+}
+
+/// 重点を、行の前後の空白と空の行を除いた形にする。3 行を超える・1 行が長すぎるときは断る。
+fn normalize_focus(focus: &str) -> Result<String, StudyError> {
+    let lines: Vec<&str> = focus
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    if lines.len() > FOCUS_LINES {
+        return Err(invalid(format!("重点は {FOCUS_LINES} 行までです")));
+    }
+    if lines
+        .iter()
+        .any(|line| line.chars().count() > FOCUS_LINE_CHARS)
+    {
+        return Err(invalid(format!(
+            "重点の 1 行は {FOCUS_LINE_CHARS} 文字までです"
+        )));
+    }
+    Ok(lines.join("\n"))
+}
+
+/// 週の記録の値を確かめて、保存する形（重点を整えたもの）にする。
+fn check_week(record: &WeekRecord) -> Result<WeekRecord, StudyError> {
+    if !valid_week_start(&record.week) {
+        return Err(invalid(format!(
+            "週は、月曜の日付（YYYY-MM-DD）で指定します: {}",
+            record.week
+        )));
+    }
+    let stats = &record.stats;
+    check_rate("4位率", stats.rank4, 0.0, 100.0)?;
+    check_rate("放銃率", stats.deal, 0.0, 100.0)?;
+    check_rate("平均順位", stats.avg, 1.0, 4.0)?;
+    check_rate("和了率", stats.win, 0.0, 100.0)?;
+    check_rate("副露率", stats.call, 0.0, 100.0)?;
+    check_rate("立直率", stats.riichi, 0.0, 100.0)?;
+    Ok(WeekRecord {
+        week: record.week.clone(),
+        stats: stats.clone(),
+        focus: normalize_focus(&record.focus)?,
+    })
 }
 
 /// 半荘の名前の形（英数字と `-` だけ）。
@@ -358,6 +473,24 @@ impl StudyDb {
                  COMMIT;",
             )?;
         }
+        if version < 2 {
+            // 版 2: 週ごとの成績（手入力）と来週の重点。版 1 のファイルには、答えを残したまま足す。
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE IF NOT EXISTS weeks (
+                   week TEXT PRIMARY KEY,
+                   rank4_pct REAL,
+                   deal_pct REAL,
+                   avg_rank REAL,
+                   win_pct REAL,
+                   call_pct REAL,
+                   riichi_pct REAL,
+                   focus TEXT NOT NULL DEFAULT ''
+                 );
+                 PRAGMA user_version = 2;
+                 COMMIT;",
+            )?;
+        }
         Ok(StudyDb { conn })
     }
 
@@ -504,6 +637,62 @@ impl StudyDb {
         Ok(counts)
     }
 
+    /// すべての週の記録（週の古い順）。書き出し（D-2「週の数」）が使う。
+    pub fn list_weeks(&self) -> Result<Vec<WeekRecord>, StudyError> {
+        let mut statement = self.conn.prepare(
+            "SELECT week, rank4_pct, deal_pct, avg_rank, win_pct, call_pct, riichi_pct, focus
+             FROM weeks ORDER BY week",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(WeekRecord {
+                week: row.get(0)?,
+                stats: WeekStats {
+                    rank4: row.get(1)?,
+                    deal: row.get(2)?,
+                    avg: row.get(3)?,
+                    win: row.get(4)?,
+                    call: row.get(5)?,
+                    riichi: row.get(6)?,
+                },
+                focus: row.get(7)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// 1 週ぶんを置き換える（値を確かめてから、1 つの取引で書く）。成績が 1 つも無く、重点も空なら、その週の行を消す。
+    /// 保存した記録（重点を整えたもの）を返す。消したときは `None`。
+    pub fn set_week(&mut self, record: WeekRecord) -> Result<Option<WeekRecord>, StudyError> {
+        let record = check_week(&record)?;
+        let tx = self.conn.transaction()?;
+        let kept = write_week(&tx, &record)?;
+        tx.commit()?;
+        Ok(kept.then_some(record))
+    }
+
+    /// すべての週の記録を、渡したものに置き換える（書き出したものを読み込むとき。D-2）。すべてを確かめてから、1 つの取引で書く
+    /// （1 つでも正しくなければ、何も変えない）。同じ週が 2 つあれば断る。書いた週の数（空の記録は数えない）を返す。
+    pub fn replace_weeks(&mut self, records: Vec<WeekRecord>) -> Result<usize, StudyError> {
+        let mut checked: Vec<WeekRecord> = Vec::with_capacity(records.len());
+        for record in &records {
+            let one = check_week(record)?;
+            if checked.iter().any(|other| other.week == one.week) {
+                return Err(invalid(format!("同じ週が重なっています: {}", one.week)));
+            }
+            checked.push(one);
+        }
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM weeks", [])?;
+        let mut written = 0;
+        for record in &checked {
+            if write_week(&tx, record)? {
+                written += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(written)
+    }
+
     /// 半荘の答えと、今日の出題の組の行を消す。消した行の数（答え、組）を返す。
     pub fn forget_sessions(
         &mut self,
@@ -525,6 +714,34 @@ impl StudyDb {
         tx.commit()?;
         Ok((answers, sets))
     }
+}
+
+/// 週の記録を、取引の中で書く。中身が空なら、行を消す。行を残した（書いた）なら true。
+fn write_week(tx: &rusqlite::Transaction<'_>, record: &WeekRecord) -> Result<bool, StudyError> {
+    if record.stats.is_empty() && record.focus.is_empty() {
+        tx.execute("DELETE FROM weeks WHERE week = ?1", params![record.week])?;
+        return Ok(false);
+    }
+    let stats = &record.stats;
+    tx.execute(
+        "INSERT INTO weeks (week, rank4_pct, deal_pct, avg_rank, win_pct, call_pct, riichi_pct, focus)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT(week) DO UPDATE SET
+           rank4_pct = excluded.rank4_pct, deal_pct = excluded.deal_pct, avg_rank = excluded.avg_rank,
+           win_pct = excluded.win_pct, call_pct = excluded.call_pct, riichi_pct = excluded.riichi_pct,
+           focus = excluded.focus",
+        params![
+            record.week,
+            stats.rank4,
+            stats.deal,
+            stats.avg,
+            stats.win,
+            stats.call,
+            stats.riichi,
+            record.focus,
+        ],
+    )?;
+    Ok(true)
 }
 
 const SELECT_ANSWER: &str = "SELECT id, session_id, decision_key, mode, shown_at, answered_at, choice, reason,
@@ -980,6 +1197,311 @@ mod tests {
         let result = StudyDb::open(&tmp.path().join("repo").join("data"));
         assert!(matches!(result, Err(StudyError::Store(_))));
         assert!(!tmp.path().join("repo").join("data").exists());
+    }
+
+    // ---- 週ごとの成績と重点（U-30、R11-12。D-2「週の数」） ----
+
+    fn week(week: &str, stats: WeekStats, focus: &str) -> WeekRecord {
+        WeekRecord {
+            week: week.to_string(),
+            stats,
+            focus: focus.to_string(),
+        }
+    }
+
+    fn stats(rank4: f64, avg: f64) -> WeekStats {
+        WeekStats {
+            rank4: Some(rank4),
+            avg: Some(avg),
+            ..WeekStats::default()
+        }
+    }
+
+    #[test]
+    fn u30_the_weeks_table_is_empty_at_first_and_what_is_set_survives_reopening() {
+        let (_tmp, data, mut db) = open();
+        assert_eq!(db.list_weeks().unwrap(), Vec::new());
+        let full = WeekStats {
+            rank4: Some(20.4),
+            deal: Some(11.6),
+            avg: Some(2.41),
+            win: Some(22.1),
+            call: Some(31.5),
+            riichi: Some(19.8),
+        };
+        let saved = db
+            .set_week(week(
+                "2026-10-05",
+                full.clone(),
+                "受け入れを数えてから切る。",
+            ))
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.stats, full);
+        db.set_week(week("2026-09-28", stats(25.0, 2.6), ""))
+            .unwrap();
+        drop(db);
+
+        let db = StudyDb::open(&data).unwrap();
+        let weeks = db.list_weeks().unwrap();
+        // 週の古い順
+        assert_eq!(
+            weeks.iter().map(|w| w.week.as_str()).collect::<Vec<_>>(),
+            vec!["2026-09-28", "2026-10-05"]
+        );
+        assert_eq!(weeks[1].stats, full);
+        assert_eq!(weeks[1].focus, "受け入れを数えてから切る。");
+        assert_eq!(weeks[0].stats, stats(25.0, 2.6));
+        assert_eq!(weeks[0].focus, "");
+    }
+
+    #[test]
+    fn u30_setting_a_week_replaces_it_and_an_empty_week_is_removed() {
+        let (_tmp, _data, mut db) = open();
+        db.set_week(week("2026-10-05", stats(20.0, 2.5), "一行目\n二行目"))
+            .unwrap();
+        // 置き換える（足し合わせない。入れていない項目は、消える）
+        db.set_week(week(
+            "2026-10-05",
+            WeekStats {
+                win: Some(21.0),
+                ..WeekStats::default()
+            },
+            "",
+        ))
+        .unwrap();
+        let weeks = db.list_weeks().unwrap();
+        assert_eq!(weeks.len(), 1);
+        assert_eq!(weeks[0].stats.rank4, None);
+        assert_eq!(weeks[0].stats.win, Some(21.0));
+        assert_eq!(weeks[0].focus, "");
+        // 成績も重点も空にすると、行ごと消える（空の行を残さない）
+        let kept = db
+            .set_week(week("2026-10-05", WeekStats::default(), "  \n "))
+            .unwrap();
+        assert_eq!(kept, None);
+        assert_eq!(db.list_weeks().unwrap(), Vec::new());
+        // 無い週を空で置き換えても、何も起きない
+        assert_eq!(
+            db.set_week(week("2026-10-12", WeekStats::default(), ""))
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn u30_the_focus_is_trimmed_by_line_and_blank_lines_are_dropped() {
+        let (_tmp, _data, mut db) = open();
+        let saved = db
+            .set_week(week(
+                "2026-10-05",
+                WeekStats::default(),
+                "  受け入れを数える。 \r\n\r\n 押し引きは現物から。\n",
+            ))
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.focus, "受け入れを数える。\n押し引きは現物から。");
+        assert_eq!(db.list_weeks().unwrap()[0].focus, saved.focus);
+    }
+
+    #[test]
+    fn u30_values_that_are_not_valid_are_refused_and_nothing_is_saved() {
+        let (_tmp, _data, mut db) = open();
+        let ok = week("2026-10-05", stats(20.0, 2.5), "重点");
+        db.set_week(ok.clone()).unwrap();
+        let long = "あ".repeat(101);
+        let cases: Vec<(&str, WeekRecord)> = vec![
+            ("火曜", week("2026-10-06", stats(20.0, 2.5), "")),
+            ("日曜", week("2026-10-11", stats(20.0, 2.5), "")),
+            ("形", week("2026/10/05", stats(20.0, 2.5), "")),
+            ("無い日", week("2026-02-30", stats(20.0, 2.5), "")),
+            ("週が空", week("", stats(20.0, 2.5), "")),
+            (
+                "4位率が 100 を超える",
+                week("2026-10-05", stats(100.5, 2.5), ""),
+            ),
+            ("4位率が負", week("2026-10-05", stats(-0.1, 2.5), "")),
+            (
+                "平均順位が 1 未満",
+                week("2026-10-05", stats(20.0, 0.9), ""),
+            ),
+            (
+                "平均順位が 4 を超える",
+                week("2026-10-05", stats(20.0, 4.01), ""),
+            ),
+            ("数でない", week("2026-10-05", stats(f64::NAN, 2.5), "")),
+            ("無限大", week("2026-10-05", stats(f64::INFINITY, 2.5), "")),
+            (
+                "重点が 4 行",
+                week("2026-10-05", WeekStats::default(), "1\n2\n3\n4"),
+            ),
+            (
+                "重点の 1 行が長い",
+                week("2026-10-05", WeekStats::default(), &long),
+            ),
+        ];
+        for (label, record) in cases {
+            assert!(
+                matches!(db.set_week(record), Err(StudyError::Invalid(_))),
+                "{label} を断る"
+            );
+        }
+        // 境界の値は通る（率 0 と 100、平均順位 1 と 4、重点は 3 行・100 文字）
+        let edge = WeekStats {
+            rank4: Some(0.0),
+            deal: Some(100.0),
+            avg: Some(1.0),
+            win: Some(0.0),
+            call: Some(100.0),
+            riichi: Some(0.0),
+        };
+        db.set_week(week(
+            "2026-10-12",
+            edge,
+            &format!("{}\nb\nc", "あ".repeat(100)),
+        ))
+        .unwrap();
+        db.set_week(week("2026-10-19", stats(20.0, 4.0), ""))
+            .unwrap();
+        // 断ったものは、何も書いていない
+        assert_eq!(db.list_weeks().unwrap().len(), 3);
+        assert_eq!(db.list_weeks().unwrap()[0], ok);
+    }
+
+    #[test]
+    fn u30_weeks_run_monday_to_sunday_including_across_the_new_year() {
+        assert!(valid_week_start("2026-10-05"));
+        assert!(valid_week_start("2025-12-29"));
+        assert!(valid_week_start("2024-01-01"));
+        assert!(valid_week_start("2026-01-05"));
+        for not_monday in ["2025-12-30", "2025-12-28", "2026-01-01", "2026-10-04"] {
+            assert!(!valid_week_start(not_monday), "{not_monday}");
+        }
+    }
+
+    #[test]
+    fn u30_replacing_all_weeks_is_all_or_nothing_and_refuses_the_same_week_twice() {
+        let (_tmp, _data, mut db) = open();
+        db.set_week(week("2026-09-28", stats(25.0, 2.6), "古い重点"))
+            .unwrap();
+        // 1 つでも正しくなければ、何も変えない
+        let bad = vec![
+            week("2026-10-05", stats(20.0, 2.5), ""),
+            week("2026-10-06", stats(20.0, 2.5), ""),
+        ];
+        assert!(matches!(db.replace_weeks(bad), Err(StudyError::Invalid(_))));
+        let twice = vec![
+            week("2026-10-05", stats(20.0, 2.5), ""),
+            week("2026-10-05", stats(21.0, 2.4), ""),
+        ];
+        assert!(matches!(
+            db.replace_weeks(twice),
+            Err(StudyError::Invalid(_))
+        ));
+        assert_eq!(db.list_weeks().unwrap().len(), 1);
+        assert_eq!(db.list_weeks().unwrap()[0].week, "2026-09-28");
+        // 正しければ、すべてを置き換える（空の記録は書かない）
+        let written = db
+            .replace_weeks(vec![
+                week("2026-10-12", stats(18.0, 2.4), "新しい重点"),
+                week("2026-10-05", stats(20.0, 2.5), ""),
+                week("2026-10-19", WeekStats::default(), ""),
+            ])
+            .unwrap();
+        assert_eq!(written, 2);
+        let weeks = db.list_weeks().unwrap();
+        assert_eq!(
+            weeks.iter().map(|w| w.week.as_str()).collect::<Vec<_>>(),
+            vec!["2026-10-05", "2026-10-12"]
+        );
+        assert_eq!(db.replace_weeks(Vec::new()).unwrap(), 0);
+        assert_eq!(db.list_weeks().unwrap(), Vec::new());
+    }
+
+    #[test]
+    fn u30_the_weeks_json_shape_is_stable_for_the_export() {
+        let record = week("2026-10-05", stats(20.4, 2.41), "受け入れを数える。");
+        let json = serde_json::to_value(&record).unwrap();
+        // 入れていない項目は出さない
+        assert_eq!(
+            json,
+            json!({
+                "week": "2026-10-05",
+                "stats": {"rank4": 20.4, "avg": 2.41},
+                "focus": "受け入れを数える。"
+            })
+        );
+        let back: WeekRecord = serde_json::from_value(json).unwrap();
+        assert_eq!(back, record);
+        // 項目が足りない JSON（昔の書き出し・手で書いたもの）も読める
+        let minimal: WeekRecord = serde_json::from_value(json!({"week": "2026-10-05"})).unwrap();
+        assert_eq!(minimal.stats, WeekStats::default());
+        assert_eq!(minimal.focus, "");
+    }
+
+    #[test]
+    fn u30_a_version_1_file_gains_the_weeks_table_and_keeps_its_answers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data");
+        std::fs::create_dir_all(&data).unwrap();
+        {
+            // 版 1 のファイル（週の表が無い）を、そのまま作る
+            let conn = Connection::open(study_path(&data)).unwrap();
+            conn.execute_batch(
+                r#"CREATE TABLE answers (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   session_id TEXT NOT NULL,
+                   decision_key TEXT NOT NULL,
+                   mode TEXT NOT NULL CHECK (mode IN ('quiz', 'review')),
+                   shown_at INTEGER NOT NULL,
+                   answered_at INTEGER NOT NULL,
+                   choice TEXT NOT NULL,
+                   reason TEXT NOT NULL,
+                   duration_ms INTEGER NOT NULL,
+                   reselect_count INTEGER NOT NULL,
+                   correct INTEGER NOT NULL CHECK (correct IN (0, 1)),
+                   causes TEXT NOT NULL DEFAULT '[]',
+                   principle TEXT NOT NULL DEFAULT '',
+                   maka_move TEXT,
+                   interval_days INTEGER NOT NULL,
+                   due_date TEXT NOT NULL
+                 );
+                 CREATE TABLE daily_sets (
+                   date TEXT NOT NULL,
+                   position INTEGER NOT NULL,
+                   session_id TEXT NOT NULL,
+                   decision_key TEXT NOT NULL,
+                   PRIMARY KEY (date, position)
+                 );
+                 INSERT INTO answers (session_id, decision_key, mode, shown_at, answered_at, choice, reason,
+                   duration_ms, reselect_count, correct, interval_days, due_date)
+                 VALUES ('20261009-190953', 'k2h1e14', 'quiz', 1, 2, '{"type":"dahai","tile":"1s"}', '理由', 1, 0, 1, 1, '2026-10-10');
+                 PRAGMA user_version = 1;"#,
+            )
+            .unwrap();
+        }
+        let mut db = StudyDb::open(&data).unwrap();
+        assert_eq!(db.schema_version().unwrap(), 2);
+        assert_eq!(db.list_answers().unwrap().len(), 1);
+        assert_eq!(db.list_weeks().unwrap(), Vec::new());
+        db.set_week(week("2026-10-05", stats(20.0, 2.5), "重点"))
+            .unwrap();
+        drop(db);
+        let db = StudyDb::open(&data).unwrap();
+        assert_eq!(db.list_weeks().unwrap().len(), 1);
+        assert_eq!(db.list_answers().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn u30_forgetting_a_session_leaves_the_weeks_alone() {
+        let (_tmp, _data, mut db) = open();
+        db.record_answer(sample("20261009-190953", "k0h0e4", 1_000))
+            .unwrap();
+        db.set_week(week("2026-10-05", stats(20.0, 2.5), "重点"))
+            .unwrap();
+        db.forget_sessions(&["20261009-190953".to_string()])
+            .unwrap();
+        assert_eq!(db.list_weeks().unwrap().len(), 1);
     }
 
     #[test]

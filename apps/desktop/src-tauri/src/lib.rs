@@ -131,6 +131,8 @@ pub fn run() {
             study::commands::get_daily_set,
             study::commands::save_daily_set,
             study::commands::count_solved,
+            study::commands::list_weeks,
+            study::commands::set_week,
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)
