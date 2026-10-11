@@ -69,6 +69,16 @@ function importedSession(
   return { ...base, ratings: base.ratings.map((r, i) => ({ ...r, rating: ratings[i] ?? r.rating })) };
 }
 
+/**
+ * 手で選ぶ迷いがある半荘: 迷い 1 の読み取りが、この半荘のどの局にも合わない（別の半荘のスクショ。理由は no-kyoku）。
+ * 迷い 6 は、前後の評価と迷いから局が分かる（局だけ分かった迷い）ので、手で選ぶ迷いにならない。
+ */
+function manualScenario(): Scenario {
+  const cache = fx4Ocr();
+  cache.entries['marks/m1.png'] = { lines: ['南 2 局', '余 40', '25000'] };
+  return scenario({ sessions: [importedSession({ ocr: cache }), recordedSession()] });
+}
+
 /** 取り込む前の半荘（昨日）。迷い 3・評価 3。 */
 function recordedSession() {
   const base = fx4Session(OLDER_ID, local(2026, 10, 8, 21, 0));
@@ -207,9 +217,15 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     await (await reveal(page, page.getByRole('button', { name: '東3局の MAKA を入力' }))).click();
     await page.getByRole('menu', { name: '東3局の MAKA' }).waitFor();
   },
+  // 局だけ分かった迷い 6: 局は選んである（局の幅の中の局だけが並ぶ）
   pick: async (page) => {
-    await (await reveal(page, page.getByRole('button', { name: '迷い6の局を選ぶ' }))).click();
+    await (await reveal(page, page.getByRole('button', { name: '迷い6の局 東3局1本場' }))).click();
     await page.getByRole('menu', { name: '迷い6の局' }).waitFor();
+  },
+  // 手で選ぶ迷い 1（`manualScenario`）: 局のメニューに、半荘のすべての局が並ぶ
+  pickManual: async (page) => {
+    await (await reveal(page, page.getByRole('button', { name: '迷い1の局を選ぶ' }))).click();
+    await page.getByRole('menu', { name: '迷い1の局' }).waitFor();
   },
   lightbox: async (page) => {
     await thumb(page, 3).click();
@@ -224,7 +240,11 @@ describe('U-4・U-5・U-6: 半荘のページの各状態（実ブラウザ）',
         // メニューと画像の表示は、幅 390 と 1280 だけ（768 は、通常の状態と同じ作り）。
         if (width === 768 && name !== 'default') continue;
         it(`${name} 幅${width}px ${scheme}: 横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届き、外へ通信しない`, async () => {
-          const { context, page, problems, external } = await open({ width, scheme });
+          const { context, page, problems, external } = await open({
+            width,
+            scheme,
+            ...(name === 'pickManual' ? { scenario: manualScenario() } : {}),
+          });
           try {
             await drive(page);
             await page.waitForTimeout(100);
@@ -492,7 +512,7 @@ describe('R7-4 画像の大きな表示（実ブラウザ）', () => {
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
-      expect(await dialog.locator('figcaption').textContent()).toBe('迷い6 · 局面は決まっていません · 19:22:36');
+      expect(await dialog.locator('figcaption').textContent()).toBe('迷い6 · 東3局1本場 · 巡目は決まっていません · 19:22:36');
       expect(await dialog.getByRole('button', { name: '次の画像' }).isDisabled()).toBe(true);
       await page.keyboard.press('ArrowRight');
       expect(await dialog.locator('figcaption').textContent()).toContain('迷い6');
@@ -582,21 +602,21 @@ describe('F9・F10・U-11 編集（実ブラウザ。実際のキーとマウス
   });
 
   it('局面を手で選ぶ: キーボードだけで、局のメニュー → 判断のメニューを開いて選べる（矢印だけでは決まらない）', async () => {
-    const { context, page } = await open();
+    const { context, page } = await open({ scenario: manualScenario() });
     try {
-      await (await reveal(page, card(page, 6).getByRole('button', { name: '迷い6の局を選ぶ' }))).focus();
+      await (await reveal(page, card(page, 1).getByRole('button', { name: '迷い1の局を選ぶ' }))).focus();
       await page.keyboard.press('Enter');
-      const kyoku = page.getByRole('menu', { name: '迷い6の局' });
+      const kyoku = page.getByRole('menu', { name: '迷い1の局' });
       await kyoku.waitFor();
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('ArrowDown');
       expect(await calls(page, 'set_mark_link')).toEqual([]);
       await page.keyboard.press('Enter');
       await kyoku.waitFor({ state: 'detached' });
-      await poll(() => isFocused(card(page, 6).getByRole('button', { name: /^迷い6の局 東2局1本場/ }))).toBe(true);
+      await poll(() => isFocused(card(page, 1).getByRole('button', { name: /^迷い1の局 東2局1本場/ }))).toBe(true);
       await page.keyboard.press('Tab');
       await page.keyboard.press('Enter');
-      const decision = page.getByRole('menu', { name: '迷い6の判断' });
+      const decision = page.getByRole('menu', { name: '迷い1の判断' });
       await decision.waitFor();
       await page.keyboard.press('ArrowDown');
       await page.keyboard.press('ArrowDown');
@@ -604,8 +624,33 @@ describe('F9・F10・U-11 編集（実ブラウザ。実際のキーとマウス
       expect(await calls(page, 'set_mark_link')).toEqual([]);
       await page.keyboard.press('Enter');
       await poll(async () => (await calls(page, 'set_mark_link')).length).toBe(1);
-      expect(await calls(page, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 6, decision: 'k1h1e3' }]);
-      await card(page, 6).getByText('東2局1本場 3巡目 · 鳴きの迷い').waitFor();
+      expect(await calls(page, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 1, decision: 'k1h1e3' }]);
+      await card(page, 1).getByText('東2局1本場 3巡目 · 鳴きの迷い').waitFor();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('U-24 局だけ分かった迷い 6: 局は選んである。キーボードだけで、判断のメニュー（局の幅の 17）を開いて選べる。局をどう決めたかの 1 文が出る', async () => {
+    const { context, page } = await open();
+    try {
+      const six = card(page, 6);
+      expect(await six.locator('.mwhat').textContent()).toBe('東3局1本場 · 巡目は決まっていません');
+      expect(await six.locator('.mhow').textContent()).toBe(
+        '東3局1本場の迷い5（19:21:58）と東3局1本場の評価（19:23:54）の間に押したので、東3局1本場です。',
+      );
+      await (await reveal(page, six.getByRole('button', { name: '迷い6の判断を選ぶ' }))).focus();
+      await page.keyboard.press('Enter');
+      const decision = page.getByRole('menu', { name: '迷い6の判断' });
+      await decision.waitFor();
+      expect(await decision.getByRole('menuitemradio').count()).toBe(17);
+      for (let i = 0; i < 9; i += 1) await page.keyboard.press('ArrowDown');
+      expect(await calls(page, 'set_mark_link')).toEqual([]);
+      await page.keyboard.press('Enter');
+      await poll(async () => (await calls(page, 'set_mark_link')).length).toBe(1);
+      expect(await calls(page, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 6, decision: 'k2h1e9' }]);
+      await six.getByText('東3局1本場 8巡目 · 鳴きの迷い').waitFor();
+      expect(await six.locator('.mhow').count()).toBe(0);
     } finally {
       await context.close();
     }

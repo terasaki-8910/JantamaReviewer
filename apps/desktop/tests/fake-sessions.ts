@@ -10,9 +10,10 @@ import type { Links, OcrCache, SelfRatingValue, SessionRecord } from '../src/api
 
 const REPORTS_DIR = resolve(import.meta.dirname, '../../../packages/engine/tests/fixtures/reports');
 
-/** エンジンの試験の固定データ（FX-1 の 5 半荘と FX-4）の、結果の JSON の文字。 */
+/** エンジンの試験の固定データ（FX-1 の 5 半荘と FX-4・FX-5）の、結果の JSON の文字。 */
 export const REPORT_TEXTS = {
   fx4: readFileSync(resolve(REPORTS_DIR, '5b821c8a048ff791.json'), 'utf8'),
+  fx5: readFileSync(resolve(REPORTS_DIR, '20261011-153540.json'), 'utf8'),
   fx1a: readFileSync(resolve(REPORTS_DIR, 'f9da87cbcd7af5e9.json'), 'utf8'),
   fx1b: readFileSync(resolve(REPORTS_DIR, 'f738896995c33fed.json'), 'utf8'),
   fx1c: readFileSync(resolve(REPORTS_DIR, 'be0a2a523fdd7758.json'), 'utf8'),
@@ -149,6 +150,13 @@ export class FakeSessionStore {
         delete marks[String(markId)];
         return { ...s, links: { ...s.links, marks } };
       });
+      return undefined;
+    },
+    // 評価の結びつけと版だけを置き換える（E-31）。迷いの結びつけ・自己評価・MAKA には触らない
+    replace_rating_links: (args) => {
+      const { sessionId, ratings, version } = args as { sessionId: string; ratings: Record<string, string>; version: number };
+      this.log.push(`ratings:${sessionId}`);
+      this.update(sessionId, (s) => ({ ...s, links: { ...s.links, ratings, ratings_version: version } }));
       return undefined;
     },
     set_self_rating: (args) => {

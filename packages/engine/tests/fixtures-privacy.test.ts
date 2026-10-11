@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { FX1_IDS, FX4_ID, loadFixtureJson, loadReportJson, loadReportText } from './helpers/fixtures';
+import { FX1_IDS, FX4_ID, FX5_ID, loadFixtureJson, loadReportJson, loadReportText } from './helpers/fixtures';
 
-// 結果 JSON の固定データ（FX-1 の5半荘と FX-4）をリポジトリに入れてよいかの検査。
+// 結果 JSON の固定データ（FX-1 の5半荘と FX-4・FX-5）をリポジトリに入れてよいかの検査。
 // 雀魂の牌譜 ID・アカウントの番号・本名が入っていないことを、コミットの前にテストで確かめる。
-describe('固定データ（FX-1・FX-4）に個人を特定できる値が入っていない', () => {
-  for (const id of [...FX1_IDS, FX4_ID]) {
+describe('固定データ（FX-1・FX-4・FX-5）に個人を特定できる値が入っていない', () => {
+  for (const id of [...FX1_IDS, FX4_ID, FX5_ID]) {
     describe(id, () => {
       const text = loadReportText(id);
 
@@ -60,5 +60,38 @@ describe('FX-4 の文字認識の写し（fx4-ocr.json）に個人を特定で�
 
   it('絵文字として扱われる文字が無い', () => {
     expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+});
+
+describe('FX-4・FX-5 のウィジェットの記録と FX-5 の文字認識の写しに、個人を特定できる値が入っていない', () => {
+  for (const name of ['fx4-widget.json', 'fx5-widget.json', 'fx5-ocr.json']) {
+    describe(name, () => {
+      const text = JSON.stringify(loadFixtureJson(name));
+
+      it('牌譜リンク・雀魂のドメイン・アカウントの番号・プレイヤー名・URL・画像のパスが無い（画像のファイル名だけ）', () => {
+        expect(text).not.toMatch(/paipu|mahjong-?soul|maj-?soul|yo-star/i);
+        expect(text).not.toMatch(/_a\d+|account|nickname|user_?id/i);
+        expect(text).not.toMatch(/[A-D]さん/);
+        expect(text).not.toMatch(/\d{6}-[0-9a-f]{8}-/i);
+        // JSON の文字列にしたあとなので、Windows のパスの区切り（\）は、2 つ続く（\\）
+        expect(text).not.toMatch(/https?:|[A-Za-z]:\\\\|JantamaReviewerData|\/Users\//);
+      });
+
+      it('絵文字として扱われる文字が無い', () => {
+        expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
+      });
+    });
+  }
+
+  it('文字認識の写しの行は、画面中央の切り出しを読んだ短い文字だけ（長い文字列・英単語は無い）', () => {
+    const ocr = loadFixtureJson<{ entries: Record<string, { lines: string[]; retries?: Array<{ lines: string[] }> }> }>('fx5-ocr.json');
+    for (const [name, entry] of Object.entries(ocr.entries)) {
+      expect(name, name).toMatch(/^(marks|ratings)\/\d{8}-\d{6}-\d{3}\.png$/);
+      for (const line of [...entry.lines, ...(entry.retries ?? []).flatMap((r) => r.lines)]) {
+        expect(line.length, `${name} ${line}`).toBeLessThanOrEqual(24);
+        expect(line, `${name} ${line}`).not.toMatch(/[A-Za-z]{3,}/);
+        expect(line, `${name} ${line}`).not.toMatch(/\d{7,}/);
+      }
+    }
   });
 });

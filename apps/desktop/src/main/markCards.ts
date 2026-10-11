@@ -1,15 +1,18 @@
 /**
  * 迷いマークのカード（F9）に出す、結びつけの状態と文言を決める。画面にも Tauri にも依存しない（試験しやすいように分けてある）。
  *
- * 迷いマークごとに、次の順で決める（保存した選びは、自動の結果より先）:
+ * 迷いと評価は、押した時刻の順に 1 本に並べて、まとめて局に当てはめる（`linkTimeline`。E-29）。崩れて読めなかった部分は、前後の評価・迷いの
+ * 局から決める。迷いマークごとに、次の順で決める（保存した選びは、自動の結果より先）:
  * 1. 保存した結びつけ（`links.marks`）が判断の鍵で、この結果に有る判断を指すなら、その判断（`findDecisionRef`）。利用者が選んだもの
- *    （`saved: true`）なので、「推定」の印は付けない
+ *    （`saved: true`）なので、「推定」の印は付けない。この選びは、ほかの迷いと評価の局を決める手がかりにもなる
  * 2. 保存した値が `"manual"`（局面を手で選ぶ）なら、手で選ぶ
- * 3. 保存した値が無い（または、この結果に無い判断の鍵）なら、自動の結果（`linkMarks`）: 読めたものは、1 位の判断を推定として
- *    結びつける（`saved: false`。近い判断は、ほかの候補）。読めないものは、手で選ぶ
+ * 3. 保存した値が無い（または、この結果に無い判断の鍵）なら、自動の結果: 残り枚数が読めたものは、局の幅の中で 1 位の判断を推定として
+ *    結びつける（`saved: false`。近い判断は、ほかの候補）。残り枚数が読めず、局だけ分かったものは、局の幅の中の判断から選んでもらう
+ *    （`kind: 'kyoku'`。E-30、U-24）。前後の評価・迷いからも何も分からないものは、手で選ぶ
  *
  * どの状態のカードも、同じ構成の文言にする（U-13）: 1 行目「迷いN」と時刻（カードの部品が出す）、2 行目の局面（`markHeading`）、
- * スクショから読んだ値の静かな 1 行（`readingLine`）、その下に状態ごとの欄（推定の印・自分がした行動・ほかの候補・選び直す・手で選ぶ）。
+ * スクショから読んだ値の静かな 1 行（`readingLine`。読めなかった部分は「読めず」）、局をどう決めたかの 1 文（`howText`。
+ * 読み取りが崩れていたもの・前後の時刻から決めたものだけ）、その下に状態ごとの欄（推定の印・自分がした行動・ほかの候補・選び直す・手で選ぶ）。
  *
  * 利用者が選んだ判断が、推定にもほかの候補にも入らないとき（`far`。E-27）は、「自分：…」の下に、その旨の 1 行（`farLine`）と、
  * 推定・ほかの候補の札（推定には「（推定）」を足す。`farChipLabels`）を出す。
@@ -21,17 +24,19 @@ import {
   isFarFromReading,
   kyokuLabel,
   kyokuNumber,
-  linkMarks,
-  type CenterText,
+  linkTimeline,
   type DecisionRef,
   type MarkCandidate,
   type MarkManualReason,
   type MortalReport,
+  type PartialCenterText,
+  type TimelineMarkLink,
+  type TimelineNeighbour,
 } from '@jantama/engine';
 
 import type { SessionRecord } from '../api/types';
-import { centerText } from './format';
-import { markReadings } from './importFlow';
+import { formatClock, partialCenterText, partialKyokuText } from './format';
+import { markReadings, ratingReadings, type MarkReading } from './importFlow';
 
 /** 迷いマークの結びつけの値のうち、「局面を手で選ぶ」という印（Rust 側の `LINK_MANUAL` と同じ）。 */
 export const LINK_MANUAL = 'manual';
@@ -42,6 +47,8 @@ export const ESTIMATE_TAG = '推定';
 export const ESTIMATE_SUFFIX = '（推定）';
 /** 局面が決まっていない（手で選ぶ）カードの 2 行目。 */
 export const UNDECIDED_TEXT = '局面は決まっていません';
+/** 局だけ分かった（巡目が決まっていない）カードの 2 行目の、局の名前のあとの言葉。 */
+export const UNDECIDED_JUNME_TEXT = '巡目は決まっていません';
 /** スクショから中央の文字を読めなかったときの 1 行。 */
 export const UNREADABLE_TEXT = 'スクショを読めませんでした';
 
@@ -52,6 +59,11 @@ export type MarkResolution =
    * （「推定」の印と、ほかの候補を出す）。
    */
   | { kind: 'linked'; ref: DecisionRef; saved: boolean }
+  /**
+   * 局だけ分かった（残り枚数が読めない・読めない。E-30）。巡目は決まらないので、局の幅の中の判断から選んでもらう
+   * （選び肢は `timeline.choices`）。判断を選ぶまでは、判断が決まっていない迷いとして数える（問題にも入らない）。
+   */
+  | { kind: 'kyoku' }
   /** 手で選んでもらう。`reason` は、自動で決まらなかった理由（`chosen` は、利用者が手で選ぶと決めたもの）。 */
   | { kind: 'manual'; reason: MarkManualReason | 'chosen' };
 
@@ -66,8 +78,8 @@ export interface ResolvedMark {
    * 利用者が選んだあとも持つ（選び直すとき、札に出す）。
    */
   autoCandidates: MarkCandidate[];
-  /** スクショから読んだ局・残りの牌の数・点数。読めなければ null。 */
-  reading: CenterText | null;
+  /** スクショから読めた部分（崩れて、読めなかった部分は null）。点数も読めなければ null。 */
+  reading: PartialCenterText | null;
   /** 自動で決まらなかった理由（読めたものは null）。 */
   autoReason: MarkManualReason | null;
   /** 保存した結びつけの値（無ければ undefined）。取り消すときに、この値へ戻す。 */
@@ -77,39 +89,100 @@ export interface ResolvedMark {
    * 推定のまま（選んでいない）・読めない・手で選ぶと決めた迷いは、false。
    */
   far: boolean;
+  /** 時間の並びでの当てはめの結果（局・局の幅・どう決めたか・選び肢）。当てはめていなければ null。 */
+  timeline: TimelineMarkLink<MarkReading> | null;
+  /**
+   * 局をどう決めたかの 1 文（U-24）。読み取りが崩れていて、読めた部分と点数から決めたもの・前後の評価や迷いの時刻から決めたものだけ。
+   * 利用者が選んだもの・すべて読めた読み取りで決まったもの・手で選ぶものは null。
+   */
+  howText: string | null;
+}
+
+/** 局の名前の並び（重ならない。局の順）。 */
+function uniqueLabels(refs: readonly DecisionRef[]): string[] {
+  return [...new Set(refs.map((ref) => ref.kyokuLabel))];
+}
+
+/** 局の名前が 1 つなら「東4局です」、複数なら「東4局から東4局1本場までのどれかです」。 */
+function whereText(labels: readonly string[]): string {
+  const first = labels[0] ?? '';
+  const last = labels[labels.length - 1] ?? '';
+  return labels.length <= 1 ? `${first}です` : `${first}から${last}までのどれかです`;
+}
+
+/** 局の幅を決めた前後の出来事の言い方: 「東3局1本場の評価（15:41:44）」「東4局の迷い9（15:42:52）」。 */
+function neighbourText(report: MortalReport, neighbour: TimelineNeighbour): string {
+  const kyoku = report.review.kyokus[neighbour.kyokuPosition];
+  const label = kyoku === undefined ? '' : kyokuLabel(kyoku.kyoku, kyoku.honba);
+  const time = formatClock(neighbour.t_ms);
+  return neighbour.kind === 'rating' ? `${label}の評価（${time}）` : `${label}の迷い${neighbour.index + 1}（${time}）`;
+}
+
+/**
+ * 局をどう決めたかの 1 文（U-24）。`labels` は、決まった局の名前（局の幅が複数の局なら、その並び）。
+ * - 局の名前の一部が読めなかったので、読めた部分と点数で決めたもの: 「局の名前の一部が読めなかったので、読めた部分と点数から、東2局です。」
+ * - 前後の評価・迷いの時刻の並びで決めたもの: 「東3局1本場の評価（15:41:44）と東4局の迷い9（15:42:52）の間に押したので、東4局です。」
+ * - それ以外（すべて読めた読み取りで決まったもの・利用者が選んだもの）は null
+ */
+function howSentence(report: MortalReport, link: TimelineMarkLink<MarkReading>, labels: readonly string[]): string | null {
+  const where = whereText(labels);
+  if (link.how === 'partial') {
+    const reading = link.reading;
+    // 局の名前（風と番号）は読めていて、残り枚数だけ読めないときは、局は読み取りのとおり。書くことが無い
+    if (reading === null || (reading.wind !== null && reading.number !== null)) return null;
+    return `局の名前の一部が読めなかったので、読めた部分と点数から、${where}。`;
+  }
+  if (link.how !== 'timeline') return null;
+  const before = link.before === null ? null : neighbourText(report, link.before);
+  const after = link.after === null ? null : neighbourText(report, link.after);
+  if (before !== null && after !== null) return `${before}と${after}の間に押したので、${where}。`;
+  if (before !== null) return `${before}のあとに押したので、${where}。`;
+  if (after !== null) return `${after}より前に押したので、${where}。`;
+  return null;
 }
 
 /** 迷いマークごとの、いまの結びつけ（記録の順）。 */
 export function resolveMarks(
   report: MortalReport,
-  session: Pick<SessionRecord, 'marks' | 'ocr' | 'links'>,
+  session: Pick<SessionRecord, 'marks' | 'ratings' | 'ocr' | 'links'>,
 ): ResolvedMark[] {
-  const auto = linkMarks(report, markReadings(session, session.ocr));
+  // 迷いと評価を押した時刻の順に並べて、局に当てはめる（E-29）。利用者が選んだ結びつけは、いちばん強い手がかり
+  const timeline = linkTimeline(report, {
+    marks: markReadings(session, session.ocr),
+    ratings: ratingReadings(session, session.ocr),
+  });
   return session.marks.map((mark, index): ResolvedMark => {
-    const link = auto[index];
+    const link = timeline.marks[index] ?? null;
     const estimate = link?.estimate ?? null;
-    const autoCandidates = estimate === null || link === undefined ? [] : [estimate, ...link.alternatives];
+    const autoCandidates = estimate === null || link === null ? [] : [estimate, ...link.alternatives];
     const stored = session.links.marks[String(mark.id)];
     const base = {
       markId: mark.id,
       number: index + 1,
       autoCandidates,
-      reading: link?.center ?? null,
-      autoReason: link === undefined ? ('unreadable' as const) : link.reason,
+      reading: link?.reading ?? null,
+      autoReason: link === null ? ('unreadable' as const) : link.reason,
       stored,
       far: false,
+      timeline: link,
+      howText: null as string | null,
     };
 
     if (stored !== undefined && stored !== LINK_MANUAL) {
       const ref = findDecisionRef(report, stored);
       if (ref !== null) {
-        const far = link !== undefined && isFarFromReading(report, link, stored);
+        const far = link !== null && isFarFromReading(report, link, stored);
         return { ...base, far, resolution: { kind: 'linked', ref, saved: true } };
       }
     }
     if (stored === LINK_MANUAL) return { ...base, resolution: { kind: 'manual', reason: 'chosen' } };
 
-    if (estimate !== null) return { ...base, resolution: { kind: 'linked', ref: estimate, saved: false } };
+    if (estimate !== null && link !== null) {
+      return { ...base, howText: howSentence(report, link, [estimate.kyokuLabel]), resolution: { kind: 'linked', ref: estimate, saved: false } };
+    }
+    if (link !== null && link.status === 'kyoku') {
+      return { ...base, howText: howSentence(report, link, uniqueLabels(link.choices)), resolution: { kind: 'kyoku' } };
+    }
     return { ...base, resolution: { kind: 'manual', reason: link?.reason ?? 'unreadable' } };
   });
 }
@@ -119,6 +192,11 @@ export function isEstimated(item: ResolvedMark): boolean {
   return item.resolution.kind === 'linked' && !item.resolution.saved;
 }
 
+/** 局だけ分かった迷い（局の幅の中の判断から、選んでもらう。E-30）か。 */
+export function isKyokuOnly(item: ResolvedMark): boolean {
+  return item.resolution.kind === 'kyoku';
+}
+
 /** 推定のとき、ほかの候補（1 位の推定は含まない）。 */
 export function alternativesOf(item: ResolvedMark): MarkCandidate[] {
   const { resolution } = item;
@@ -126,7 +204,20 @@ export function alternativesOf(item: ResolvedMark): MarkCandidate[] {
   return item.autoCandidates.filter((candidate) => candidate.key !== resolution.ref.key);
 }
 
-/** 巡目の書き方: 1 つなら「8巡目」、違う巡目にまたがるなら「8〜9巡目」。 */
+/** 局だけ分かった迷いが選べる、局の幅の中の判断（半荘の順）。それ以外は空。 */
+export function kyokuChoices(item: ResolvedMark): readonly DecisionRef[] {
+  return item.resolution.kind === 'kyoku' ? (item.timeline?.choices ?? []) : [];
+}
+
+/** 局だけ分かった迷いの、局の名前: 1 局なら「東4局」、複数の局にまたがるなら「東4局〜東4局1本場」。 */
+export function kyokuSpanText(item: ResolvedMark): string {
+  const labels = uniqueLabels(kyokuChoices(item));
+  const first = labels[0] ?? '';
+  const last = labels[labels.length - 1] ?? '';
+  return labels.length <= 1 ? first : `${first}〜${last}`;
+}
+
+/** 巡目の書き方: 1つなら「8巡目」、違う巡目にまたがるなら「8〜9巡目」。 */
 export function junmeSpanText(junmes: readonly number[]): string {
   if (junmes.length === 0) return '';
   const low = Math.min(...junmes);
@@ -148,23 +239,27 @@ export function estimateHeading(estimate: DecisionRef, alternatives: readonly De
  * カードの 2 行目:
  * - 利用者が選んだもの: 「東2局1本場 6巡目 · 打牌の迷い」
  * - 推定: 同じ形で、巡目は 1 位とほかの候補をまとめる（「東2局1本場 8〜9巡目 · 鳴きの迷い」）
+ * - 局だけ分かったもの: 「東4局 · 巡目は決まっていません」（局の幅が複数の局なら「東4局〜東4局1本場 · …」）
  * - 手で選ぶ: 「局面は決まっていません」
  */
 export function markHeading(item: ResolvedMark): string {
   const { resolution } = item;
   if (resolution.kind === 'manual') return UNDECIDED_TEXT;
+  if (resolution.kind === 'kyoku') return `${kyokuSpanText(item)} · ${UNDECIDED_JUNME_TEXT}`;
   if (resolution.saved) return resolution.ref.label;
   return estimateHeading(resolution.ref, alternativesOf(item));
 }
 
 /**
  * 画像の大きな表示の下に出す文の、カードの 2 行目に当たる部分（区切りごと）。
- * 例: [東2局1本場, 6巡目, 打牌の迷い]・[東2局1本場, 8〜9巡目, 鳴きの迷い, 推定]・[局面は決まっていません]。取り込み前は空。
+ * 例: [東2局1本場, 6巡目, 打牌の迷い]・[東2局1本場, 8〜9巡目, 鳴きの迷い, 推定]・[東4局, 巡目は決まっていません]・[局面は決まっていません]。
+ * 取り込み前は空。
  */
 export function markCaptionParts(item: ResolvedMark | null): string[] {
   if (item === null) return [];
   const { resolution } = item;
   if (resolution.kind === 'manual') return [UNDECIDED_TEXT];
+  if (resolution.kind === 'kyoku') return [kyokuSpanText(item), UNDECIDED_JUNME_TEXT];
   const { ref, saved } = resolution;
   if (saved) return [ref.kyokuLabel, `${ref.junme}巡目`, ref.kindLabel];
   const sameKyoku = item.autoCandidates.filter((c) => c.kyokuPosition === ref.kyokuPosition);
@@ -174,13 +269,14 @@ export function markCaptionParts(item: ResolvedMark | null): string[] {
 /**
  * スクショから読んだ値の 1 行（どの状態のカードにも出す）:
  * - 読めた: 「スクショ: 東2局・残り47・15,100点」
+ * - 崩れて、一部だけ読めた: 「スクショ: 風は読めず・2局・残り50・25,000点」（読めなかった部分は「読めず」）
  * - 読めなかった: 「スクショを読めませんでした」
  * 読めても、この半荘に合う局が無い・その局に判断が無いときは、理由を足す。
  */
 export function readingLine(item: ResolvedMark): string {
   if (item.reading === null) return UNREADABLE_TEXT;
-  const text = `スクショ: ${centerText(item.reading)}`;
-  if (item.resolution.kind === 'linked') return text;
+  const text = `スクショ: ${partialCenterText(item.reading)}`;
+  if (item.resolution.kind !== 'manual') return text;
   if (item.autoReason === 'no-kyoku') return `${text} · この半荘に合う局がありません`;
   if (item.autoReason === 'no-decision') return `${text} · その局に自分の判断がありません`;
   return text;
@@ -190,16 +286,23 @@ export function readingLine(item: ResolvedMark): string {
  * 「離れている」ときの 1 行（E-27。カードの「自分：…」の下に、警告のアイコンと並べて出す）。離れていなければ null。
  * - 選んだ判断が、スクショから読んだ局と同じ局（本場は問わない）: 「スクショの値（残り38）と離れています。選んだ局面は残り29です。」
  * - 違う局: 「スクショの値（東3局・残り38）と離れています。選んだ局面は東2局1本場です。」
+ *   局の名前が崩れていたときは、読めた部分を書く（「スクショの値（風は読めず・2局・残り50）と離れています。…」）
  */
 export function farLine(item: ResolvedMark): string | null {
   const { reading, resolution } = item;
-  if (!item.far || reading === null || resolution.kind !== 'linked') return null;
+  if (!item.far || reading === null || reading.tilesLeft === null || resolution.kind !== 'linked') return null;
   const { ref } = resolution;
-  const readKyoku = kyokuNumber(reading.wind, reading.number);
-  if (readKyoku === ref.kyoku) {
+  const { wind, number } = reading;
+  const readKyokuNumber = wind !== null && number !== null ? kyokuNumber(wind, number) : null;
+  const sameKyoku =
+    readKyokuNumber !== null
+      ? readKyokuNumber === ref.kyoku
+      : (item.timeline?.kyokuPositions.includes(ref.kyokuPosition) ?? false);
+  if (sameKyoku) {
     return `スクショの値（残り${reading.tilesLeft}）と離れています。選んだ局面は残り${ref.tilesLeft}です。`;
   }
-  return `スクショの値（${kyokuLabel(readKyoku, 0)}・残り${reading.tilesLeft}）と離れています。選んだ局面は${ref.kyokuLabel}です。`;
+  const readKyoku = readKyokuNumber !== null ? kyokuLabel(readKyokuNumber, 0) : partialKyokuText(wind, number);
+  return `スクショの値（${readKyoku}・残り${reading.tilesLeft}）と離れています。選んだ局面は${ref.kyokuLabel}です。`;
 }
 
 /**

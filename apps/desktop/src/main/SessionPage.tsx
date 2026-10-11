@@ -74,10 +74,12 @@ export function SessionPage({
   const reportState = useSessionReport(session.id, session.report_path);
   // 前の作り方で読んだ写しは、開いたとき 1 回だけ読み直す（読み直す間は、前の読み取りの値で描く。済んだら、一覧が読み直されて、描き直す）。
   const rereading = useSyncExternalStore(rereads.subscribe, rereads.getSnapshot).has(session.id);
-  const hasReadings = session.report_path !== null && session.ocr !== null;
+  // 読み取りの写しがあれば、読み直しが要るかを確かめる。写しが無くても、結果を取り込んである半荘は、評価の当てはめ直しを確かめる（E-31）
+  const imported = session.report_path !== null;
+  const hasReadings = imported && session.ocr !== null;
   useEffect(() => {
-    if (hasReadings) rereads.open(session.id);
-  }, [rereads, session.id, hasReadings]);
+    if (imported) rereads.open(session.id, { reread: hasReadings });
+  }, [rereads, session.id, imported, hasReadings]);
   const ready = summary?.status === 'ready' ? summary.summary : null;
   const report = reportState.status === 'ready' ? reportState.report : null;
   // 結果を取り込んで、読めている半荘は、通して見られる
