@@ -18,6 +18,10 @@
  *   2シャンテンからの先: `followAfterTwoShanten`（E-23）
  * - 出題: 問題の一覧 `listProblems`・今日の出題の組 `buildDailySet`・「残り」`restOfProblems`・解き直しの期限 `dueAnswers`（E-24・E-25）、
  *   答えのボタンと AI の候補への当てはめ `answerOptions` / `choiceProbability`（打牌以外の答えは、雀魂と同じ並びのボタン）
+ * - 半荘を通して見る画面（F12）: 時間軸 `buildReplayTimeline`（局ごとの手の列。手のあとの盤面は `replayFrames` の盤面そのもの。
+ *   自分の判断は、ちょうど 1 つの手に属する。局の結果 `kyokuEndOf`。行き先は `nextTurnStep` / `prevTurnStep` / `nextKyokuStep` /
+ *   `prevKyokuStep` / `decisionSteps` と `nextStepIn` / `prevStepIn`）、場面 `listReplayScenes`（迷いと不一致。E-26 の
+ *   `replayMismatches` は、既定は確率が基準未満、設定を入れると AI の1位と違う判断すべて）
  * - クリップボードの牌譜リンク（E-15）: `detectPaipuLink(text)` は `PaipuLink | null`。同じ牌譜 ID を一度だけ知らせるのは
  *   `detectNewPaipuLink(text, announced)`（純粋な関数）か `new PaipuLinkAnnouncer(ids).announce(text)`
  *
@@ -74,6 +78,8 @@ export * from './rating';
 export * from './rating-alignment';
 export * from './rating-link';
 export * from './replay';
+export * from './replay-scenes';
+export * from './replay-timeline';
 export * from './report';
 export * from './report-types';
 export * from './result';
