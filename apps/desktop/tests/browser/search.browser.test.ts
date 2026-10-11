@@ -739,3 +739,66 @@ describe('U-22: メニュー・当たりの印・行', () => {
     }
   });
 });
+
+describe('N-8・N-9・N-10: 重ね表示の中の文字・カーソル・検索欄', () => {
+  it('文字は選択できず（三連クリックしても、選択範囲が空のまま）、検索欄だけが選択できる。画像は無い', { timeout: 60_000 }, async () => {
+    const { context, page } = await open();
+    try {
+      await openOverlay(page);
+      for (const selector of ['.sx-fl', '.sx-count b', '.sx-gh', '.sx-foot li']) {
+        await page.locator(selector).first().click({ clickCount: 3 });
+        expect(await page.evaluate(() => window.getSelection()?.toString() ?? ''), selector).toBe('');
+        // 文字の上を押しても、重ね表示は閉じない
+        expect(await dialog(page).isVisible(), selector).toBe(true);
+      }
+      expect(await page.evaluate(() => getComputedStyle(document.querySelector('.sx-main') as Element).userSelect)).toBe('none');
+      expect(await page.evaluate(() => getComputedStyle(document.querySelector('.sx-in') as Element).userSelect)).toBe('text');
+      expect(await page.evaluate(() => document.querySelectorAll('.sx img').length)).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('カーソル: 操作できるもの（ボタン・行）だけが指の形。検索欄は文字の形。そのほかの文字・余白は矢印', { timeout: 60_000 }, async () => {
+    const { context, page } = await open();
+    try {
+      await openOverlay(page);
+      await page.getByRole('combobox', { name: '半荘と問題を検索' }).fill('東4局');
+      await page.getByRole('button', { name: /^期間：/ }).click();
+      const bad = await page.evaluate(() => {
+        const out: string[] = [];
+        let pointers = 0;
+        for (const el of document.querySelectorAll<HTMLElement>('.sx-wrap, .sx-wrap *, .pop, .pop *')) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue;
+          const tag = el.tagName.toLowerCase();
+          let expected = 'default';
+          if (tag === 'input') expected = 'text';
+          else if (el.closest('button:not(:disabled), [role="option"]') !== null) expected = 'pointer';
+          const actual = getComputedStyle(el).cursor;
+          if (expected === 'pointer' && actual === 'pointer') pointers += 1;
+          if (actual !== expected) out.push(`${tag}.${el.className}: ${actual}（期待は ${expected}）`);
+        }
+        return { out, pointers };
+      });
+      expect(bad.out).toEqual([]);
+      expect(bad.pointers).toBeGreaterThan(10);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('検索欄は、入力の候補・赤い波線・自動補正を出さない（spellcheck・autocomplete・autocorrect・autocapitalize）', { timeout: 60_000 }, async () => {
+    const { context, page } = await open();
+    try {
+      await openOverlay(page);
+      const attributes = await page.evaluate(() => {
+        const input = document.querySelector('.sx-in') as HTMLInputElement;
+        return ['spellcheck', 'autocomplete', 'autocorrect', 'autocapitalize'].map((name) => input.getAttribute(name));
+      });
+      expect(attributes).toEqual(['false', 'off', 'off', 'off']);
+    } finally {
+      await context.close();
+    }
+  });
+});
