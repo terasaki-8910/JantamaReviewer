@@ -10,6 +10,7 @@ import {
   splitKyokus,
   topChoice,
   type Decision,
+  type Fuuro,
   type ImportedGame,
   type Tile,
 } from '@jantama/engine';
@@ -320,6 +321,12 @@ describe('U-29 要約（絞り込んだ行の数と合う）', () => {
   });
 });
 
+/** 副露を、順不同の牌を並べ替えた比べやすい文字列にする（取り込みの E-2 の突き合わせと同じ考え方）。 */
+function meldKey(meld: Fuuro): string {
+  const rest = meld.type === 'kakan' ? [meld.previous_pon_pai, meld.pai, ...meld.consumed] : [...meld.consumed, ...('pai' in meld ? [meld.pai] : [])];
+  return `${meld.type}:${sortTiles(rest).join(' ')}`;
+}
+
 describe('U-29・E-2 行の手牌（再生と一致する）', () => {
   /** 判断ごとに、牌譜を別に再生した盤面（手牌・ツモ牌）。`Decision.board` を使わない。 */
   function replayedBoard(game: ImportedGame, decision: Decision) {
@@ -351,6 +358,10 @@ describe('U-29・E-2 行の手牌（再生と一致する）', () => {
       if (drawAt >= 0) expect(drawAt, label).toBe(closed.length - 1);
       // 記録（各判断の state）と、牌の集まりが一致する（E-2）
       expect(sortTiles(closed.map((item) => item.tile)), label).toEqual(sortTiles(decision.entry.state.tehai));
+      // 副露も、再生した盤面・記録と同じ（鳴いた順）
+      expect(row.hand.seat, label).toBe(game.playerId);
+      expect(row.hand.melds, label).toEqual(board.melds[game.playerId]);
+      expect(row.hand.melds.map(meldKey), label).toEqual(decision.entry.state.fuuros.map(meldKey));
       // 鳴きの判断: 鳴く牌（他家の打牌）が右端に 1 つ。打牌の判断・自分の手番の判断には無い
       const called = items.filter((item) => item.called);
       if (decision.kind !== 'discard' && calledTileOf(decision) !== null) {
@@ -362,6 +373,8 @@ describe('U-29・E-2 行の手牌（再生と一致する）', () => {
         expect(row.hand.calledFrom, label).toBeNull();
       }
     }
+    // 副露のある判断が、実際にある（副露の突き合わせが空振りしない）
+    expect(rows.some((row) => row.hand.melds.length > 0)).toBe(true);
     // 打牌の判断には、ツモ牌がある。鳴き（他家の打牌）の判断には無い
     const draws = rows.filter((row) => row.kind === 'discard' && row.hand.items.some((item) => item.draw));
     expect(draws.length).toBeGreaterThan(0);

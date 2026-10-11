@@ -98,8 +98,9 @@ describe('U-15 サイドバーの今日の出題・解き直し', () => {
     expect(sideCount(/^今日の出題/)).toBeNull();
     await loaded('5');
     expect(sideCount(/^解き直し/)).toBe('0');
-    // ログ・週の集計は、まだ押せない（数も無い）
-    expect(sideButton(/^ログ/)).toHaveAttribute('aria-disabled', 'true');
+    // ログは押せる（数は無い）。週の集計は、まだ押せない
+    expect(sideButton(/^ログ/)).not.toHaveAttribute('aria-disabled');
+    expect(sideButton(/^ログ/).querySelector('.count')).toBeNull();
     expect(sideButton(/^週の集計/)).toHaveAttribute('aria-disabled', 'true');
   });
 

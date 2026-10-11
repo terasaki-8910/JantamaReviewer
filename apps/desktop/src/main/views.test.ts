@@ -14,7 +14,7 @@ import {
 
 describe('N-5: 画面の解決（メモリの中の状態だけで持つ）', () => {
   it('いま在る画面は、そのまま画面になる', () => {
-    expect(VIEW_KINDS).toEqual(['none', 'session', 'import', 'settings', 'today', 'quiz', 'review', 'replay']);
+    expect(VIEW_KINDS).toEqual(['none', 'session', 'import', 'settings', 'today', 'quiz', 'review', 'log', 'replay']);
     const views: View[] = [
       { kind: 'none' },
       sessionView('20261009-161200'),
@@ -22,6 +22,7 @@ describe('N-5: 画面の解決（メモリの中の状態だけで持つ）', ()
       { kind: 'settings' },
       { kind: 'today' },
       { kind: 'review' },
+      { kind: 'log' },
       quizView('20261009-161200', 'k2h1e14'),
       quizView('20261009-161200', 'k2h1e14', 'review'),
       replayView('20261009-161200'),
@@ -89,6 +90,8 @@ describe('N-5: 画面の解決（メモリの中の状態だけで持つ）', ()
     expect(sameView({ kind: 'none' }, { kind: 'none' })).toBe(true);
     expect(sameView({ kind: 'today' }, { kind: 'today' })).toBe(true);
     expect(sameView({ kind: 'today' }, { kind: 'review' })).toBe(false);
+    expect(sameView({ kind: 'log' }, { kind: 'log' })).toBe(true);
+    expect(sameView({ kind: 'log' }, { kind: 'today' })).toBe(false);
     // 出題は、半荘の名前・判断の鍵・種類まで同じとき
     expect(sameView(quizView('a', 'k1h0e1'), quizView('a', 'k1h0e1'))).toBe(true);
     expect(sameView(quizView('a', 'k1h0e1'), quizView('b', 'k1h0e1'))).toBe(false);
@@ -109,7 +112,7 @@ describe('N-5: 画面の解決（メモリの中の状態だけで持つ）', ()
     expect(viewSessionId(quizView('b', 'k1h0e1'))).toBe('b');
     expect(viewSessionId(replayView('c'))).toBe('c');
     expect(viewSessionId(replayView('c', 'k1h0e1'))).toBe('c');
-    for (const view of [{ kind: 'none' }, { kind: 'import' }, { kind: 'settings' }, { kind: 'today' }, { kind: 'review' }] as const) {
+    for (const view of [{ kind: 'none' }, { kind: 'import' }, { kind: 'settings' }, { kind: 'today' }, { kind: 'review' }, { kind: 'log' }] as const) {
       expect(viewSessionId(view)).toBeNull();
     }
   });

@@ -24,7 +24,9 @@ import {
   topChoice,
   type CauseId,
   type DecisionKind,
+  type Fuuro,
   type Problem,
+  type Seat,
   type Tile,
 } from '@jantama/engine';
 
@@ -123,6 +125,10 @@ export interface HandPreview {
   items: readonly HandItem[];
   /** 他家の打牌への判断のとき、鳴く牌を打った人の呼び名（下家・対面・上家）。 */
   calledFrom: string | null;
+  /** 本人の副露（鳴いた順）。手牌の右に、並べて出す。 */
+  melds: readonly Fuuro[];
+  /** 本人の席（副露の並べ方が、鳴いた相手の方向で決まる）。 */
+  seat: Seat;
 }
 
 export interface LogRow {
@@ -204,12 +210,15 @@ export function latestAnswerPerProblem(answers: readonly AnswerRow[]): AnswerRow
   return [...latest.values()];
 }
 
-/** 行の手牌。判断の盤面（牌譜の再生から作った盤面）の、手牌・ツモ牌・鳴く牌。 */
+/** 行の手牌。判断の盤面（牌譜の再生から作った盤面）の、手牌・ツモ牌・鳴く牌と、副露。 */
 export function handPreviewOf(decision: Located['decision']): HandPreview {
   const called: Tile | null = decision.kind === 'discard' ? null : calledTileOf(decision);
+  const seat = decision.board.playerId;
   return {
     items: buildHandItems(decision.board, called),
-    calledFrom: called === null ? null : relationName(decision.board.playerId, decision.entry.last_actor),
+    calledFrom: called === null ? null : relationName(seat, decision.entry.last_actor),
+    melds: decision.board.melds[seat] ?? [],
+    seat,
   };
 }
 
