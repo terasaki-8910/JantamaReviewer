@@ -20,6 +20,7 @@ import {
   startPageServer,
   tauriMockScript,
   unreachableByTab,
+  ensureSidebar,
   waitForMainReady,
   type PageServer,
   type Scenario,
@@ -218,11 +219,12 @@ describe('検討画面（メインの窓）', () => {
           try {
             await waitForMainReady(page);
             if (pageName === '設定') {
+              await ensureSidebar(page);
               await page.getByRole('button', { name: '設定' }).click();
               await page.getByRole('heading', { level: 1, name: '設定' }).waitFor();
               await page.getByRole('button', { name: 'ボタンを登録' }).waitFor();
             } else {
-              await page.getByRole('navigation', { name: '半荘の一覧' }).waitFor();
+              await page.locator('nav[aria-label="半荘の一覧"]').waitFor({ state: 'attached' });
               await waitForImages(page);
             }
 
@@ -310,6 +312,7 @@ describe('検討画面（メインの窓）', () => {
           );
           try {
             await waitForMainReady(page);
+            await ensureSidebar(page);
             await page.getByRole('button', { name: '設定' }).click();
             await page.getByRole('heading', { level: 1, name: '設定' }).waitFor();
             await page.getByText(variant.ready).first().waitFor();
@@ -363,17 +366,22 @@ describe('検討画面（メインの窓）', () => {
     }
   });
 
-  it('幅 390px では、サイドバーがアイコンだけの細い列になり、行き先の名前は読み上げに残る', async () => {
+  it('幅 390px では、サイドバーは隠れている（細い列ではない）。左上のボタンで引き出しを開くと、行き先の名前が文字で見える', async () => {
     const { context, page } = await open('index.html', { width: 390, height: 800 }, 'light', scenario('main'));
     try {
       await waitForMainReady(page);
+      // 閉じている間: 列は無く、サイドバーの物は見えない・届かない
+      expect(await page.locator('.side').evaluate((el) => getComputedStyle(el).visibility)).toBe('hidden');
+      expect(await page.getByRole('button', { name: '設定' }).count()).toBe(0);
+      // 本文は左端から始まる
+      expect(await page.locator('main .head').evaluate((el) => el.getBoundingClientRect().left)).toBeLessThanOrEqual(16);
+      await ensureSidebar(page);
       const side = await page.locator('.side').boundingBox();
-      expect(side?.width).toBeLessThanOrEqual(61);
-      // 文字は見えないが、アクセシブルな名前は残っている。
+      expect(Math.round(side?.width ?? 0)).toBe(300);
       await expect(page.getByRole('button', { name: '設定' }).count()).resolves.toBe(1);
       const label = page.locator('.nav-item .label').first();
       const box = await label.boundingBox();
-      expect(box?.width ?? 0).toBeLessThanOrEqual(1);
+      expect(box?.width ?? 0).toBeGreaterThan(20);
     } finally {
       await context.close();
     }
@@ -435,6 +443,8 @@ async function emitEvent(page: Page, event: string, payload: unknown) {
 /** サイドバーの「検討結果を取り込む」を押して、取り込みのページを開く。 */
 async function openImportPage(page: Page) {
   await waitForMainReady(page);
+  // 細い窓では、サイドバーは引き出しに隠れている。開いてから押す（押すと閉じる）
+  await ensureSidebar(page);
   // 完全に一致するものだけ（取り込み前の半荘のページには、「この半荘に検討結果を取り込む」もある。U-14）。
   await page.getByRole('button', { name: '検討結果を取り込む', exact: true }).click();
   await page.getByRole('heading', { level: 1, name: '検討結果を取り込む' }).waitFor();
@@ -544,10 +554,11 @@ describe('取り込みのページ', () => {
 
             const axe = await runAxe(page);
             expect(seriousViolations(axe)).toEqual([]);
-            expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(3);
+            // 細い窓では、サイドバーは隠れている（検査の対象ではない）ので、文字の数が少ない。規則が働いていれば足りる
+            expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThanOrEqual(3);
 
             const reach = await unreachableByTab(page);
-            expect(reach.total).toBeGreaterThan(3);
+            expect(reach.total).toBeGreaterThanOrEqual(3);
             expect(reach.missed).toEqual([]);
 
             expect(problems).toEqual([]);
@@ -560,26 +571,20 @@ describe('取り込みのページ', () => {
     }
   }
 
-  it('幅 1280px では、取り込みのボタンがサイドバーの上にあり、accent で塗られている。幅 390px ではアイコンだけ（44px）', async () => {
-    for (const [width, withLabel] of [
-      [1280, true],
-      [390, false],
-    ] as const) {
+  it('幅 1280px では、取り込みのボタンがサイドバーの上にあり、accent で塗られている。幅 390px でも（引き出しを開くと）同じ形で、文字が見える', async () => {
+    for (const width of [1280, 390] as const) {
       const { context, page } = await open('index.html', { width, height: 800 }, 'light', scenario('main'));
       try {
         await waitForMainReady(page);
+        await ensureSidebar(page);
         const button = page.getByRole('button', { name: '検討結果を取り込む', exact: true });
         const box = await button.boundingBox();
         const next = await page.getByRole('button', { name: '解き直し' }).first().boundingBox();
         // ブランドの下、行き先（解き直し・ログ・週の集計）より上。
         expect(box !== null && next !== null && box.y < next.y).toBe(true);
         const label = await page.locator('.import .label').boundingBox();
-        if (withLabel) {
-          expect(label?.width ?? 0).toBeGreaterThan(40);
-        } else {
-          expect(Math.round(box?.width ?? 0)).toBe(44);
-          expect(label?.width ?? 0).toBeLessThanOrEqual(1);
-        }
+        expect(label?.width ?? 0).toBeGreaterThan(40);
+        expect(box?.width ?? 0).toBeGreaterThan(150);
         // 塗りは accent（背景色が、ページの背景と違う）。
         const fill = await button.evaluate((el) => getComputedStyle(el).backgroundColor);
         const base = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);

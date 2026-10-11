@@ -2,8 +2,8 @@
 /**
  * 実ブラウザで、サイドバーの新しい見出しと検索の重ね表示を検査する（U-22・U-4・U-5・U-6・U-1）。
  *
- * - 見出し: 左にアプリのアイコン、右に枠の無い検索のアイコン、そのすぐ右に ← →（幅 1280・768）。細い列（390）では、
- *   アイコン・検索・← → の順に縦に並ぶ。検索のアイコンに、見える枠は無い
+ * - 見出し: 左にサイドバーのボタンとアプリのアイコン、右に枠の無い検索のアイコン、そのすぐ右に ← →（幅 1280・768）。細い窓（390）では、
+ *   同じ並びが本文の上の帯に出る。検索のアイコンに、見える枠は無い
  * - U-4: 幅 390・768・1280px で、重ね表示の各状態に横スクロールが出ない。重ね表示は窓の中に収まる
  * - U-5・U-6: axe の重大な違反が 0 件（色のコントラストを含む）。ライトとダーク。Tab で重ね表示のすべての操作に届き、外へ出ない
  * - 開く・閉じる・選ぶ・開く: 本物のキー（Ctrl+K・Esc・↑ ↓・Enter・Alt+←）と、本物の inert・フォーカスで確かめる
@@ -25,6 +25,7 @@ import {
   startPageServer,
   tauriMockScript,
   waitForMainReady,
+  waitForSidebarCounts,
   type PageServer,
   type Scenario,
 } from './harness';
@@ -141,7 +142,7 @@ async function open(options: { width?: number; height?: number; scheme?: Scheme 
   await page.goto(new URL('index.html', server.url).toString());
   await waitForMainReady(page);
   // 出題のデータ（半荘の再生・答えの記録・今日の組）が読み終わると、サイドバーに数が出る
-  await page.locator('nav[aria-label="メイン"] .count').first().waitFor({ timeout: 30_000 });
+  await waitForSidebarCounts(page, 30_000);
   return { context, page, problems, external };
 }
 
@@ -224,6 +225,7 @@ async function headerGeometry(page: Page) {
     const sides = ['Top', 'Right', 'Bottom', 'Left'] as const;
     return {
       head: rect(head),
+      toggle: rect(head.querySelector('.sb-toggle') as Element),
       mark: rect(head.querySelector('.app-mark') as Element),
       search: rect(search),
       back: rect(head.querySelector('[aria-label="戻る"]') as Element),
@@ -248,7 +250,7 @@ async function headerGeometry(page: Page) {
 
 describe('U-22: サイドバーの見出し（アイコン・検索・← →）', () => {
   for (const width of [1280, 768]) {
-    it(`幅 ${width}px: 左にアプリのアイコン、右に枠の無い検索のアイコンと、そのすぐ右に ← →（右端にそろえる）`, { timeout: 60_000 }, async () => {
+    it(`幅 ${width}px: 左にサイドバーのボタンとアプリのアイコン、右に枠の無い検索のアイコンと、そのすぐ右に ← →（右端にそろえる）`, { timeout: 60_000 }, async () => {
       for (const scheme of SCHEMES) {
         const { context, page, problems } = await open({ width, scheme });
         try {
@@ -258,7 +260,10 @@ describe('U-22: サイドバーの見出し（アイコン・検索・← →）
           expect(g.markAlt).toBe('JantamaReviewer');
           expect(g.markDraggable).toBe(false);
           expect(g.brandText).toBe('');
-          expect(Math.abs(g.mark.left - (g.head.left))).toBeLessThanOrEqual(1);
+          // 左端はサイドバーを閉じるボタン（40px）で、そのすぐ右にアイコン
+          expect(Math.abs(g.toggle.left - g.head.left)).toBeLessThanOrEqual(1);
+          expect(g.toggle.width).toBe(40);
+          expect(g.mark.left - g.toggle.right).toBeLessThanOrEqual(8);
           expect(g.mark.width).toBe(30);
           expect(g.mark.height).toBe(30);
           // 検索のアイコン: 枠が見えない（線の太さが 0・線なし・透明のどれか）。影も輪郭も無い
@@ -289,29 +294,48 @@ describe('U-22: サイドバーの見出し（アイコン・検索・← →）
     });
   }
 
-  it('幅 390px（細い列）: アイコン・検索・← → の順に縦に並び、中央にそろう。どれも押せる大きさで、列からはみ出さない', { timeout: 60_000 }, async () => {
+  it('幅 390px（細い窓）: サイドバーは隠れ、同じ並び（ボタン・アイコン・検索・← →）が本文の上の帯に出る。どれも押せる大きさで、窓からはみ出さず、検索のアイコンは重ね表示を開く', { timeout: 60_000 }, async () => {
     for (const scheme of SCHEMES) {
       const { context, page, problems } = await open({ width: 390, scheme });
       try {
-        const g = await headerGeometry(page);
-        expect(g.mark.bottom).toBeLessThanOrEqual(g.search.top);
-        expect(g.search.bottom).toBeLessThanOrEqual(g.back.top);
-        expect(g.back.bottom).toBeLessThanOrEqual(g.forward.top);
-        const centers = [g.mark, g.search, g.back, g.forward].map((r) => (r.left + r.right) / 2);
-        for (const c of centers) expect(Math.abs(c - (centers[0] as number))).toBeLessThanOrEqual(1);
-        expect(g.search.width).toBeGreaterThanOrEqual(44);
-        expect(g.search.height).toBeGreaterThanOrEqual(36);
-        const sideWidth = await page.evaluate(() => (document.querySelector('.side') as Element).getBoundingClientRect().width);
-        for (const r of [g.mark, g.search, g.back, g.forward]) {
-          expect(r.left).toBeGreaterThanOrEqual(0);
-          expect(r.right).toBeLessThanOrEqual(sideWidth);
+        const g = await page.evaluate(() => {
+          const rect = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+          };
+          const bar = document.querySelector('header.topbar') as HTMLElement;
+          const search = bar.querySelector('.search-btn') as HTMLElement;
+          const style = getComputedStyle(search);
+          return {
+            bar: rect(bar),
+            toggle: rect(bar.querySelector('.sb-toggle') as Element),
+            mark: rect(bar.querySelector('.app-mark') as Element),
+            search: rect(search),
+            back: rect(bar.querySelector('[aria-label="戻る"]') as Element),
+            forward: rect(bar.querySelector('[aria-label="進む"]') as Element),
+            iw: window.innerWidth,
+            background: style.backgroundColor,
+            sidebarVisible: getComputedStyle(document.getElementById('sidebar') as Element).visibility !== 'hidden',
+          };
+        });
+        expect(g.sidebarVisible).toBe(false);
+        expect(g.toggle.right).toBeLessThanOrEqual(g.mark.left + 1);
+        expect(g.mark.right).toBeLessThanOrEqual(g.search.left);
+        expect(g.search.right).toBeLessThanOrEqual(g.back.left);
+        expect(g.back.right).toBeLessThanOrEqual(g.forward.left + 1);
+        expect(g.toggle.left).toBeLessThanOrEqual(16);
+        expect(g.forward.right).toBeLessThanOrEqual(g.iw);
+        for (const part of [g.toggle, g.search, g.back, g.forward]) {
+          expect(part.width).toBeGreaterThanOrEqual(30);
+          expect(part.height).toBeGreaterThanOrEqual(30);
         }
-        for (const border of g.borders) {
-          expect(border.style === 'none' || parseFloat(border.width) === 0 || parseCssColor(border.color).a === 0).toBe(true);
-        }
-        // 細い列でも、検索のアイコンは重ね表示を開く（どれにも届く）
+        expect(parseCssColor(g.background).a).toBe(0);
+        // 帯の検索のアイコンは、重ね表示を開く。閉じると、帯のアイコンへ位置が戻る
         await page.getByRole('button', { name: '検索' }).click();
         await dialog(page).waitFor();
+        await page.keyboard.press('Escape');
+        await dialog(page).waitFor({ state: 'detached' });
+        expect(await page.evaluate(() => document.activeElement === document.querySelector('header.topbar .search-btn'))).toBe(true);
         expect(problems).toEqual([]);
       } finally {
         await context.close();

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-/** サイドバーがアイコンだけの細い列になる幅（styles/app.css の `@media (width < 640px)` と同じ）。 */
+/** サイドバーが隠れて、引き出しになる幅（styles/app.css の `@media (width < 640px)` と同じ）。 */
 const NARROW_QUERY = '(width < 640px)';
 
 function subscribe(onChange: () => void): () => void {

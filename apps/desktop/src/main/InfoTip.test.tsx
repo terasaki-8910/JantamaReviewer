@@ -5,7 +5,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { InfoTip } from './InfoTip';
 
@@ -148,20 +148,52 @@ describe('U-25 説明のアイコン: キーボードで選ぶと出る', () => 
     }
   });
 
-  it('スクロールと窓の大きさの変化では、置き場所がずれるので閉じる', async () => {
+  it('スクロールと窓の大きさの変化では、置き直す（開いたまま）。アイコンが窓の外へ出たら閉じる', async () => {
     const { user, icon } = setup();
     await user.hover(icon);
     expect(tip()).not.toBeNull();
+    // キーボードで選んだとき、開いたあとにブラウザが起こすスクロールで、閉じてはいけない
     act(() => {
       document.dispatchEvent(new Event('scroll'));
     });
-    expect(tip()).toBeNull();
-    await user.click(icon);
     expect(tip()).not.toBeNull();
     act(() => {
       window.dispatchEvent(new Event('resize'));
     });
+    expect(tip()).not.toBeNull();
+    // アイコンが窓の外（下）へ出た
+    const spy = vi.spyOn(icon, 'getBoundingClientRect').mockReturnValue({ top: 5000, bottom: 5030, left: 10, right: 40, width: 30, height: 30, x: 10, y: 5000, toJSON: () => ({}) });
+    act(() => {
+      document.dispatchEvent(new Event('scroll'));
+    });
     expect(tip()).toBeNull();
+    spy.mockRestore();
+    // 窓の大きさが変わって、アイコンが窓の外へ出た
+    await user.click(icon);
+    expect(tip()).not.toBeNull();
+    vi.spyOn(icon, 'getBoundingClientRect').mockReturnValue({ top: 5000, bottom: 5030, left: 10, right: 40, width: 30, height: 30, x: 10, y: 5000, toJSON: () => ({}) });
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(tip()).toBeNull();
+  });
+
+  it('置き直すとき、位置（left・top）を書き直す。上に入らないときは下（data-side）', async () => {
+    const { user, icon } = setup();
+    // アイコンが窓の上の端にある（上に出す場所が無い）
+    vi.spyOn(icon, 'getBoundingClientRect').mockReturnValue({ top: 2, bottom: 32, left: 100, right: 130, width: 30, height: 30, x: 100, y: 2, toJSON: () => ({}) });
+    await user.hover(icon);
+    const pop = tip() as HTMLElement;
+    expect(pop.dataset.side).toBe('below');
+    expect(pop.style.top).not.toBe('');
+    // アイコンが窓の中ほどにある: 上
+    vi.spyOn(icon, 'getBoundingClientRect').mockReturnValue({ top: 400, bottom: 430, left: 100, right: 130, width: 30, height: 30, x: 100, y: 400, toJSON: () => ({}) });
+    act(() => {
+      document.dispatchEvent(new Event('scroll'));
+    });
+    expect(pop.dataset.side).toBe('above');
+    expect(Number.parseFloat(pop.style.top)).toBeLessThan(400);
+    expect(Number.parseFloat(pop.style.left)).toBeGreaterThanOrEqual(8);
   });
 });
 

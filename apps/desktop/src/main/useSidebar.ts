@@ -5,7 +5,7 @@
  *   どちらにしたかは、覚える（`shared/sidebarPref.ts`。起動し直しても残る）。キーボードの位置は、押したボタンの替わり（しまったら
  *   帯のボタン、出したらサイドバーの中のボタン）へ移す
  * - 640px 未満: サイドバーは隠れ、本文は左端（16px）から始まる。左上のボタンで、サイドバーを引き出しとして、幕つきで重ねる。
- *   開いている間は、本文は操作できず（inert）、Tab は引き出しの中だけを回る。項目を選ぶ・Esc・幕を押す・サイドバーの中のボタンで閉じて、
+ *   開いている間は、本文は操作できず（inert）、Tab は引き出しの中（と、その上に出る取り消しの通知）だけを回る。項目を選ぶ・Esc・幕を押す・サイドバーの中のボタンで閉じて、
  *   左上のボタンにキーボードの位置を戻す。窓の幅が変わって 640px の境を越えたら、引き出しは閉じる
  * - 検索の重ね表示・削除の確認・画像の大きな表示が開いている間（`suspended`）や、メニューが開いている間は、Esc と Tab はそちらに任せる
  */
@@ -118,14 +118,17 @@ export function useSidebar({ suspended }: { suspended: boolean }): SidebarContro
     closeDrawer(true);
   });
 
-  // Tab は、引き出しの中だけを回る。引き出しの外（検索の重ね表示など）にキーボードの位置があるときは、そちらに任せる
+  // Tab は、引き出しの中だけを回る（引き出しの上に出る取り消しの通知は、いっしょに回る。消したあとの「元に戻す」に届くように）。
+  // 引き出しの外（検索の重ね表示など）にキーボードの位置があるときは、そちらに任せる
   const onTab = useEffectEvent((event: KeyboardEvent) => {
     const side = sideRef.current;
     if (!drawerOpen || suspended || blocked() || event.key !== 'Tab' || side === null) return;
+    const toast = document.querySelector<HTMLElement>('.toast');
     const active = document.activeElement;
-    const outside = active !== null && active !== document.body && !side.contains(active);
+    const inScope = (element: Element) => side.contains(element) || (toast !== null && toast.contains(element));
+    const outside = active !== null && active !== document.body && !inScope(active);
     if (outside) return;
-    const items = focusablesIn(side);
+    const items = [...focusablesIn(side), ...(toast === null ? [] : focusablesIn(toast))];
     const first = items[0];
     const last = items[items.length - 1];
     if (first === undefined || last === undefined) {
