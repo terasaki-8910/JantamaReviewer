@@ -31,6 +31,7 @@ pub mod recorder;
 pub mod settings;
 pub mod sound;
 pub mod store;
+pub mod study;
 pub mod trash;
 pub mod webview_data;
 pub mod webview_policy;
@@ -115,6 +116,12 @@ pub fn run() {
             evaluation::clear_maka_grade,
             evaluation::set_maka_hanchan,
             evaluation::clear_maka_hanchan,
+            study::commands::record_answer,
+            study::commands::update_answer_notes,
+            study::commands::list_answers,
+            study::commands::get_daily_set,
+            study::commands::save_daily_set,
+            study::commands::count_solved,
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)
@@ -202,6 +209,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     trash::recycle_pending(&settings.data_dir);
     app.manage(SharedCore(Arc::new(Mutex::new(core))));
     app.manage(import::mjai_window::MjaiWindowState::default());
+    // 答え・解き直しの予定・今日の出題を置く SQLite の接続（検討画面だけが使う。最初に呼ばれたとき開く）。
+    app.manage(study::commands::SharedStudy::new());
     commands::allow_asset_dir(&handle, &settings.data_dir);
 
     // 入力の流れ: 本体の中のフック・補助プログラム・ボタンの登録とテスト（W-9、W-10、W-11）。

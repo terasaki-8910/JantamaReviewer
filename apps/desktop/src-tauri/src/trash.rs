@@ -8,6 +8,8 @@
 //! 送る相手は、`<保存先>/trash` の直下の項目だけ。リンク（シンボリックリンク・ジャンクション）は、中身を見ずに触らない。
 //! 実体の場所が trash の外を指す項目も触らない。ごみ箱へ送る部分（`Recycler`）は差し替えられる。試験は偽物を使い、
 //! 本物のごみ箱には触れない。
+//! ごみ箱へ送った半荘は、答えのファイル（`study.sqlite`）の、その半荘の答えと解き直しの予定も消す（`finalize_trash`。D-3）。
+//! 置き場にある間は、答えを残す（元に戻せば、答えも戻る）。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -114,10 +116,21 @@ pub fn recycle_trash(data_dir: &Path, recycler: &dyn Recycler) -> RecycleReport 
     report
 }
 
-/// 置き場に残っている「消した半荘」を、本物のごみ箱へ送る。アプリを閉じるとき・起動したとき（落ちたあと）・保存先を
-/// 変えたときに呼ぶ。問題があれば標準エラーに書く（閉じる・起動を止めない）。本物の `WindowsRecycler` を作るのは、ここだけ。
+/// 置き場を片づける: `recycler` で、置き場の中身をごみ箱へ送り、送った半荘の答えと解き直しの予定も、答えのファイル
+/// （`study.sqlite`）から消す（D-3）。ごみ箱へ送れなかった半荘は、置き場に残るので、答えも残す（元に戻せる間・次の起動で
+/// もう一度送るまで、答えを消さない）。答えを消せなかったときは、標準エラーに書く（片づけを止めない）。
+pub fn finalize_trash(data_dir: &Path, recycler: &dyn Recycler) -> RecycleReport {
+    let report = recycle_trash(data_dir, recycler);
+    if let Err(e) = crate::study::forget_sessions(data_dir, &report.recycled) {
+        eprintln!("消した半荘の答えを、答えのファイルから消せませんでした: {e}");
+    }
+    report
+}
+
+/// 置き場に残っている「消した半荘」を、本物のごみ箱へ送る（答えと予定も消す）。アプリを閉じるとき・起動したとき（落ちたあと）・
+/// 保存先を変えたときに呼ぶ。問題があれば標準エラーに書く（閉じる・起動を止めない）。本物の `WindowsRecycler` を作るのは、ここだけ。
 pub fn recycle_pending(data_dir: &Path) {
-    for line in recycle_trash(data_dir, &WindowsRecycler).problems() {
+    for line in finalize_trash(data_dir, &WindowsRecycler).problems() {
         eprintln!("{line}");
     }
 }
@@ -324,6 +337,109 @@ mod tests {
             trash_dir(&data).exists(),
             "中身が残っているので、置き場は片づけない"
         );
+    }
+
+    /// 答えの行を 1 件書く（試験用）。
+    fn record(db: &mut crate::study::StudyDb, session: &str, key: &str) {
+        let answer: crate::study::NewAnswer = serde_json::from_value(serde_json::json!({
+            "session_id": session,
+            "decision_key": key,
+            "mode": "quiz",
+            "shown_at": 1,
+            "answered_at": 2,
+            "choice": {"type": "dahai", "tile": "5p"},
+            "reason": "理由",
+            "duration_ms": 1,
+            "reselect_count": 0,
+            "correct": true,
+            "interval_days": 1,
+            "due_date": "2026-10-10",
+        }))
+        .unwrap();
+        db.record_answer(answer).unwrap();
+    }
+
+    #[test]
+    fn d3_finalizing_the_trash_forgets_the_answers_of_the_sessions_sent_to_the_recycle_bin_only() {
+        use crate::study::{ProblemRef, StudyDb};
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data");
+        make_session(&data, "20261009-190953");
+        make_session(&data, "20261010-100000");
+        let kept = data.join("games").join("20261001-000000");
+        fs::create_dir_all(&kept).unwrap();
+        let mut db = StudyDb::open(&data).unwrap();
+        for session in ["20261009-190953", "20261010-100000", "20261001-000000"] {
+            record(&mut db, session, "k0h0e4");
+        }
+        db.save_daily_set(
+            "2026-10-09",
+            &[
+                ProblemRef {
+                    session_id: "20261009-190953".to_string(),
+                    decision_key: "k0h0e4".to_string(),
+                },
+                ProblemRef {
+                    session_id: "20261001-000000".to_string(),
+                    decision_key: "k0h0e4".to_string(),
+                },
+            ],
+        )
+        .unwrap();
+        drop(db);
+
+        // 2 つ目は、ごみ箱へ送れない（置き場に残る）。
+        let recycler = FakeRecycler::failing_on("20261010-100000");
+        let report = finalize_trash(&data, &recycler);
+        assert_eq!(report.recycled, vec!["20261009-190953"]);
+
+        let db = StudyDb::open(&data).unwrap();
+        let mut left: Vec<String> = db
+            .list_answers()
+            .unwrap()
+            .into_iter()
+            .map(|a| a.answer.session_id)
+            .collect();
+        left.sort();
+        // 送った半荘の答えは消え、置き場に残った半荘と、消していない半荘の答えは残る
+        assert_eq!(left, vec!["20261001-000000", "20261010-100000"]);
+        let set = db.daily_set("2026-10-09").unwrap().unwrap();
+        assert_eq!(set.len(), 1);
+        assert_eq!(set[0].session_id, "20261001-000000");
+    }
+
+    #[test]
+    fn d3_while_a_session_is_in_the_trash_its_answers_stay_so_that_restoring_brings_them_back() {
+        use crate::store::Store;
+        use crate::study::StudyDb;
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data");
+        let mut store = Store::open(&data).unwrap();
+        let id = {
+            use crate::capture::{CaptureTarget, Screenshot};
+            store
+                .add_mark(
+                    crate::clock::now_ms(),
+                    Ok(Screenshot {
+                        png: vec![0x89, b'P', b'N', b'G'],
+                        target: CaptureTarget::Window,
+                    }),
+                )
+                .unwrap();
+            store.current_session_id().unwrap().to_string()
+        };
+        let mut db = StudyDb::open(&data).unwrap();
+        record(&mut db, &id, "k0h0e4");
+        store.delete_sessions(std::slice::from_ref(&id)).unwrap();
+        // 置き場にある間は、答えは消えていない
+        assert_eq!(db.list_answers().unwrap().len(), 1);
+        store.restore_sessions(std::slice::from_ref(&id)).unwrap();
+        assert_eq!(db.list_answers().unwrap().len(), 1);
+        // 消して、置き場を片づけると、答えも消える
+        store.delete_sessions(std::slice::from_ref(&id)).unwrap();
+        let report = finalize_trash(&data, &FakeRecycler::new());
+        assert_eq!(report.recycled, vec![id]);
+        assert_eq!(db.list_answers().unwrap().len(), 0);
     }
 
     #[test]

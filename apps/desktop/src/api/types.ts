@@ -2,6 +2,7 @@
  * Rust 側（src-tauri）とやり取りするデータの型。
  * フィールド名は Rust 側の JSON（snake_case）に合わせている。手で同期する（自動生成はしない）。
  */
+import type { QuizChoice } from '@jantama/engine';
 
 /** 局の評価。〇 = good、△ = fair、✕ = bad。 */
 export type Rating = 'good' | 'fair' | 'bad';
@@ -31,6 +32,12 @@ export interface Settings {
   sound: boolean;
   capture_keywords: string[];
   data_dir: string;
+  /** 1 日に出す問題の数（今日の出題。1〜50。既定 5）。 */
+  daily_count: number;
+  /** 大きな不一致の基準（AI が実戦の行動に付けた確率が、この %（未満）。1〜50。既定 5）。 */
+  disagreement_percent: number;
+  /** ドラ表示牌が指す牌の面を黄色にする（既定は切。U-19）。 */
+  highlight_dora: boolean;
 }
 
 /** idle = 半荘がまだ始まっていない、recording = 記録中、error = 保存先を開けない。 */
@@ -223,4 +230,72 @@ export interface InputStatus {
   helper: HelperStatus;
   /** 登録の開始・保存の失敗など、伝えたいこと。 */
   message: string | null;
+}
+
+// ---- 答え・解き直しの予定・今日の出題（D-3。保存先の study.sqlite。検討画面だけが使う） ----
+
+/** 答えの種類。出題（今日の出題）か、解き直しか。 */
+export type AnswerMode = 'quiz' | 'review';
+
+/**
+ * 答え合わせをするときに記録する答え（Rust の `NewAnswer`）。
+ * `choice` は、選んだ答え（エンジンの `QuizChoice`。打牌なら `{ type: 'dahai', tile }`、ボタンなら `{ type: 'option', id }`）。
+ * 日付（`due_date`）は、エンジンの `studyDate`（午前 4 時までを前の日として数える）と `scheduleReview` が決めた値をそのまま渡す。
+ */
+export interface NewAnswer {
+  /** 半荘の名前（フォルダの名前）。 */
+  session_id: string;
+  /** 判断の鍵（エンジンの `decisionKey`。例: k2h1e14）。 */
+  decision_key: string;
+  mode: AnswerMode;
+  /** 問題を見せた時刻（ミリ秒）。 */
+  shown_at: number;
+  /** 答え合わせを押した時刻（ミリ秒）。 */
+  answered_at: number;
+  choice: QuizChoice;
+  /** 理由（1 行。必須）。 */
+  reason: string;
+  /** 答えるまでの時間（ミリ秒）。 */
+  duration_ms: number;
+  /** 選び直した回数（R8-6）。 */
+  reselect_count: number;
+  /** 正解か（AI がその行動に付けた確率が基準以上）。 */
+  correct: boolean;
+  /** 差の原因（エンジンの `CAUSE_CHOICES` の `id` のいくつか）。答え合わせのあとに付ける。 */
+  causes?: string[];
+  /** 学んだ原則（1 行）。 */
+  principle?: string;
+  /** MAKA が推した打牌（任意）。 */
+  maka_move?: string | null;
+  /** この答えのあとの、次の解き直しまでの間隔（日）。 */
+  interval_days: number;
+  /** 次に解き直す日（YYYY-MM-DD）。 */
+  due_date: string;
+}
+
+/** 記録した答え（番号が付いたもの）。 */
+export interface AnswerRow extends NewAnswer {
+  id: number;
+  causes: string[];
+  principle: string;
+  maka_move: string | null;
+}
+
+/** 答え合わせのあとに直す欄。3 つとも、いまの値をそのまま渡す（取り消しも、前の値で置き換える）。 */
+export interface AnswerNotes {
+  causes: string[];
+  principle: string;
+  maka_move: string | null;
+}
+
+/** 問題 1 つ（半荘の名前と判断の鍵）。今日の出題の組の要素。 */
+export interface StoredProblemRef {
+  session_id: string;
+  decision_key: string;
+}
+
+/** 半荘ごとの、答えた問題の数。 */
+export interface SolvedCount {
+  session_id: string;
+  solved: number;
 }

@@ -2239,3 +2239,122 @@ fn u9_the_trash_is_emptied_when_the_app_exits_when_it_starts_and_when_the_data_d
         "{callers:?}"
     );
 }
+
+// ---- D-3: 答え・解き直しの予定・今日の出題の SQLite は、検討画面だけが使う ----
+
+/// SQLite の部品（rusqlite）の名前。
+const STUDY_DB_RUST: &str = "rusqlite";
+
+/// 答えの記録の Tauri コマンド（Rust の名前と、画面側の窓口の名前）。ウィジェットのコードは、どれにも触れない。
+const STUDY_COMMANDS: &[&str] = &[
+    "record_answer",
+    "update_answer_notes",
+    "list_answers",
+    "get_daily_set",
+    "save_daily_set",
+    "count_solved",
+];
+const STUDY_API_NAMES: &[&str] = &[
+    "recordAnswer",
+    "updateAnswerNotes",
+    "listAnswers",
+    "getDailySet",
+    "saveDailySet",
+    "countSolved",
+];
+
+#[test]
+fn d3_the_study_database_is_used_only_by_the_study_module_in_the_main_crate() {
+    // SQLite の部品を名前に持つソースは、`src/study/` の中だけ（ウィジェット・ボタンを拾う部分・補助プログラム・撮影・記録には入れない）。
+    let users = product_files_containing(STUDY_DB_RUST);
+    assert!(!users.is_empty(), "答えのファイルの部品が使われていない");
+    for user in &users {
+        assert!(
+            user.contains("src/study/"),
+            "{user} が SQLite の部品を使っている"
+        );
+    }
+    // Cargo.toml で宣言しているのは、本体のクレートだけ。SQLite 本体は同梱する（OS の部品を読み込まない）。
+    for dir in [
+        crate_dir().join("input"),
+        crate_dir().join("helper"),
+        ocr_dir(),
+    ] {
+        let toml = read(&dir.join("Cargo.toml"));
+        assert!(
+            forbidden_crates_in_manifest(&toml, &[STUDY_DB_RUST]).is_empty(),
+            "{} が SQLite の部品を宣言している",
+            dir.display()
+        );
+    }
+    let main_toml = read(&crate_dir().join("Cargo.toml"));
+    let declared: Vec<&str> = main_toml
+        .lines()
+        .filter(|l| l.trim_start().starts_with(&format!("{STUDY_DB_RUST} = ")))
+        .collect();
+    assert_eq!(declared.len(), 1, "{declared:?}");
+    assert!(
+        declared[0].contains("\"bundled\""),
+        "SQLite は同梱にする: {}",
+        declared[0]
+    );
+
+    // 答えのファイルを扱う `study` の名前を使うのは、登録（lib.rs）・置き場の片づけ（trash.rs）・study 自身だけ。
+    let mut referers: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        let name = file.to_string_lossy().replace('\\', "/");
+        if name.contains("src/study/") {
+            continue;
+        }
+        let text = read(&file);
+        if product_part(&text).contains("study::") || product_part(&text).contains("StudyDb") {
+            referers.push(name.rsplit("src/").next().unwrap_or(&name).to_string());
+        }
+    }
+    referers.sort();
+    assert_eq!(referers, vec!["lib.rs", "trash.rs"], "{referers:?}");
+}
+
+#[test]
+fn d3_every_study_command_refuses_calls_from_other_windows_and_the_widget_never_names_them() {
+    let commands = read(&crate_dir().join("src").join("study").join("commands.rs"));
+    let product = product_part(&commands);
+    let declared = product.matches("#[tauri::command]").count();
+    assert_eq!(
+        declared,
+        STUDY_COMMANDS.len(),
+        "コマンドの数が、一覧と合わない"
+    );
+    // どのコマンドも、検討画面（main）の窓から呼ばれたかを、最初に確かめる。
+    assert_eq!(product.matches("ensure_main(&window)?;").count(), declared);
+    assert!(product.contains("window.label() == MAIN_LABEL"));
+    for name in STUDY_COMMANDS {
+        assert!(
+            product.contains(&format!("pub async fn {name}(")),
+            "{name} がある"
+        );
+    }
+    // ウィジェットの画面のソースは、答えの記録の窓口の名前に触れない。
+    let widget_dir = repo_root()
+        .join("apps")
+        .join("desktop")
+        .join("src")
+        .join("widget");
+    for file in files_under(&widget_dir, &|p| {
+        has_ext(p, &["ts", "tsx"]) && !is_test_file(p)
+    }) {
+        let text = read(&file);
+        for name in STUDY_COMMANDS.iter().chain(STUDY_API_NAMES) {
+            assert!(
+                !text.contains(name),
+                "{}: ウィジェットが答えの記録の窓口 {name} に触れている",
+                file.display()
+            );
+        }
+    }
+    // 権限の一覧（capabilities）に、答えの記録の窓口を、ウィジェットに足していない。
+    let widget_cap = read(&crate_dir().join("capabilities").join("widget.json"));
+    for name in STUDY_COMMANDS {
+        assert!(!widget_cap.contains(name), "{name} が widget.json にある");
+    }
+}

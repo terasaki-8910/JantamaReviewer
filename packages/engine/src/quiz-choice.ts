@@ -16,6 +16,20 @@ import { actionLabel, tileLabel } from './decision-ref';
 import type { ActionEvent, ReportDetail, ReportEntry } from './report-types';
 import { type Tile, plainTile, sortTiles, tileKind } from './tiles';
 
+/**
+ * 差の原因（U-20）。答え合わせのあとに、当てはまるものをいくつでも選ぶ（チェックボックス）。
+ * `id` が保存する値（Rust の `CAUSES` と同じ）、`label` が画面の文字。
+ */
+export const CAUSE_CHOICES = [
+  { id: 'ukeire', label: '受け入れ枚数' },
+  { id: 'shape', label: '形の質' },
+  { id: 'value', label: '打点' },
+  { id: 'defense', label: '守備' },
+  { id: 'other', label: 'その他' },
+] as const;
+
+export type CauseId = (typeof CAUSE_CHOICES)[number]['id'];
+
 /** 保存する答え。 */
 export type QuizChoice = { type: 'dahai'; tile: Tile } | { type: 'option'; id: string };
 

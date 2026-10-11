@@ -28,6 +28,9 @@ export const baseSettings: Settings = {
   sound: true,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\test\\JantamaReviewerData',
+  daily_count: 5,
+  disagreement_percent: 5,
+  highlight_dora: false,
 };
 
 /** ボタンの登録・テスト・補助プログラムの、既定の状態（補助プログラムは未設定で、本体のフックだけで動いている）。 */
