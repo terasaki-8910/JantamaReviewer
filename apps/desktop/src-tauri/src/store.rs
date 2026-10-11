@@ -2863,8 +2863,9 @@ mod tests {
         store.set_mark_link(&id, 1, "k0h0e3").unwrap();
         store.set_mark_link(&id, 2, LINK_MANUAL).unwrap();
         store.set_rating_link(&id, 3, "k0h0").unwrap();
-        let ratings: BTreeMap<String, String> =
-            [("3".to_string(), "k1h0".to_string())].into_iter().collect();
+        let ratings: BTreeMap<String, String> = [("3".to_string(), "k1h0".to_string())]
+            .into_iter()
+            .collect();
         store.replace_rating_links(&id, ratings.clone(), 2).unwrap();
         let links = store.load_links(&id).unwrap();
         assert_eq!(links.ratings, ratings);
@@ -2906,8 +2907,9 @@ mod tests {
             Err(StoreError::InvalidLink(_))
         ));
         // 迷いマークの番号は、評価の番号としては受け付けない
-        let mark_id: BTreeMap<String, String> =
-            [("1".to_string(), "k0h0".to_string())].into_iter().collect();
+        let mark_id: BTreeMap<String, String> = [("1".to_string(), "k0h0".to_string())]
+            .into_iter()
+            .collect();
         assert!(matches!(
             store.replace_rating_links(&id, mark_id, 2),
             Err(StoreError::UnknownRecord { .. })
