@@ -1,0 +1,413 @@
+/*
+  log.css: 検討ログ（F5、U-29）。承認済みの見本（round11-samples/round11.css の log 節）の写しに、行の手牌（R11-11）を足したもの。
+  新しい色・部品は足さない。既存の部品（.btn.sm、.link-btn、.q-tag、.check、.quiet、牌 .tile、メニュー .pop）を言い換えて作る。
+*/
+
+.lfilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0 0 var(--s3);
+}
+
+/* 絞り込みの欄: 「期間 今週 ▾」。かかっているものは、淡い緑（段階の絞り込みと同じ） */
+.lf {
+  gap: 6px;
+  padding: 0 8px 0 10px;
+}
+
+.lf .lf-k {
+  color: var(--muted);
+}
+
+.lf .lf-v {
+  font-weight: 700;
+}
+
+.lf .ic {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.lf.on {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.lf[aria-expanded="true"] {
+  border-color: var(--ink);
+}
+
+.lbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s2) var(--s5);
+  margin: 0 0 var(--s3);
+}
+
+.lsum {
+  flex: 1 1 22em;
+  margin: 0;
+  padding-top: 6px;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.lsum b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.lans {
+  display: grid;
+  justify-items: end;
+  gap: 0;
+  max-width: 26em;
+  text-align: right;
+}
+
+.lans .quiet {
+  text-wrap: pretty;
+  word-break: auto-phrase;
+}
+
+.lempty {
+  display: grid;
+  justify-items: start;
+  gap: var(--s3);
+  padding: var(--s5) 0;
+}
+
+.lempty p {
+  margin: 0;
+}
+
+.llist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+/* 1 行 = 1 問。押すと、保存した答えつきで開く */
+button.lrow {
+  display: grid;
+  grid-template-columns: 6.2em minmax(0, 1fr) 16em;
+  grid-template-areas: "when main meta";
+  gap: 6px var(--s4);
+  align-items: start;
+  width: 100%;
+  padding: 12px var(--s3);
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.llist > li:last-child .lrow {
+  border-bottom: 1px solid var(--line);
+}
+
+button.lrow:hover {
+  background: var(--hover);
+}
+
+button.lrow:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.llist[data-ans="on"] button.lrow {
+  grid-template-columns: 6.2em minmax(0, 1fr) 11.5em 16em;
+  grid-template-areas: "when main ans meta";
+}
+
+.l-when {
+  grid-area: when;
+  display: grid;
+  gap: 1px;
+}
+
+.l-date {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.l-mode {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 手牌の幅を、この列の幅から決めるために、列を寸法の入れ物にする（`cqw`） */
+.l-main {
+  grid-area: main;
+  container: lmain / inline-size;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.l-l1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s2);
+}
+
+.l-t {
+  margin-right: var(--s1);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.q-tag.maka {
+  border-style: dashed;
+}
+
+.l-l2 {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/*
+  その場面の手牌（R11-11）。手牌・ツモ牌（または鳴く牌）・副露が、列の幅に収まる大きさにする（幅 22px まで。列が狭ければ縮める）。
+  `--tu` は全体の幅（牌の幅の何枚分か）、`--tn` は牌の数（牌の間の 1px の数）、`--tg` は離れている所の数（ツモ牌・鳴く牌・副露の前の 8px）で、
+  画面の部品が入れる。ツモ牌・鳴く牌・副露は、手牌から少し離す。鳴く牌には、輪と「下家の打牌」の小さな文字。副露は盤面と同じ並べ方（.meld）。
+*/
+.l-hand {
+  --lw: clamp(13px, calc((100cqw - var(--tg, 1) * 8px - var(--tn, 14) * 1px) / var(--tu, 14)), 22px);
+  --mw: var(--lw);
+  --mh: calc(var(--lw) * 4 / 3);
+
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: 0;
+  margin: 2px 0;
+}
+
+.l-hand[data-called] {
+  padding-top: 14px;
+}
+
+.l-hand .tile {
+  --tw: var(--lw);
+}
+
+.l-hs {
+  position: relative;
+  flex: none;
+}
+
+.l-hs.gap {
+  margin-left: 8px;
+}
+
+.l-cap {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  margin-bottom: 3px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.l-l3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--s2);
+}
+
+.lchip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.l-pr {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.l-prl {
+  margin-right: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.l-ans {
+  grid-area: ans;
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.l-ak {
+  display: inline-block;
+  min-width: 4.6em;
+  margin-right: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.l-a.you .l-ak {
+  color: var(--you);
+}
+
+.l-a.top .l-ak {
+  color: var(--accent);
+}
+
+.l-meta {
+  grid-area: meta;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  text-align: right;
+}
+
+.l-res {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--ink);
+  border-radius: var(--r1);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.l-res .ic {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.6;
+}
+
+.l-res.ok {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.l-sub {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.l-time {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.l-next b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* 答えの欄があって幅が足りないときは、答えを列から下の段に移す（手牌が列に収まる幅を保つ） */
+@container main (width < 940px) {
+  .llist[data-ans="on"] button.lrow {
+    grid-template-columns: 6.2em minmax(0, 1fr) 16em;
+    grid-template-areas:
+      "when main meta"
+      "when ans meta";
+  }
+
+  .llist[data-ans="on"] .l-ans {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px var(--s3);
+  }
+
+  .llist[data-ans="on"] .l-ak {
+    min-width: 0;
+  }
+}
+
+/* 幅が狭いときは、1 問ずつのカードのように積む（上の段: 日付と結果。下の段: 時間と次の解き直し） */
+@container main (width < 780px) {
+  button.lrow,
+  .llist[data-ans="on"] button.lrow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "when res"
+      "main main"
+      "ans ans"
+      "sub sub";
+    gap: 8px var(--s3);
+    padding: 12px var(--s2);
+  }
+
+  .llist[data-ans="off"] button.lrow {
+    grid-template-areas:
+      "when res"
+      "main main"
+      "sub sub";
+  }
+
+  .l-when {
+    display: flex;
+    align-items: baseline;
+    gap: var(--s2);
+  }
+
+  .l-meta {
+    display: contents;
+  }
+
+  .l-res {
+    grid-area: res;
+    align-self: center;
+  }
+
+  .l-sub {
+    grid-area: sub;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2px var(--s3);
+    justify-items: start;
+  }
+
+  .l-ans,
+  .llist[data-ans="on"] .l-ans {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px var(--s3);
+  }
+
+  .l-ak {
+    min-width: 0;
+  }
+
+  .lans {
+    justify-items: start;
+    text-align: left;
+  }
+}

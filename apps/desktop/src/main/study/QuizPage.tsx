@@ -34,6 +34,17 @@ export function latestAnswerFor(
   return latest;
 }
 
+/** `row` の答えの、すぐ前の答え（同じ問題）。無ければ null。 */
+function answerBefore(answers: readonly AnswerRow[], row: AnswerRow): AnswerRow | null {
+  let found: AnswerRow | null = null;
+  for (const other of answers) {
+    if (other.session_id !== row.session_id || other.decision_key !== row.decision_key || other.id === row.id) continue;
+    if (other.answered_at > row.answered_at || (other.answered_at === row.answered_at && other.id > row.id)) continue;
+    if (found === null || other.answered_at >= found.answered_at) found = other;
+  }
+  return found;
+}
+
 export function QuizPage({ sessionId, decisionKey, mode, onOpen, onToday, onReview }: QuizPageProps) {
   const study = useStudy();
   if (!study.ready) {
@@ -54,7 +65,9 @@ export function QuizPage({ sessionId, decisionKey, mode, onOpen, onToday, onRevi
   const key = `${sessionId}/${decisionKey}/${mode}`;
 
   if (mode === 'review') {
-    const latest = latestAnswerFor(study.answers, sessionId, decisionKey);
+    // 解き直しで答えた問題（検討ログの行から開いたとき）は、保存した答えで開く。その前の間隔は、その答えのすぐ前の答えのもの
+    const saved = latestAnswerFor(study.answers, sessionId, decisionKey, 'review');
+    const previous = saved === null ? latestAnswerFor(study.answers, sessionId, decisionKey) : answerBefore(study.answers, saved);
     return (
       <QuizScreen
         key={key}
@@ -62,8 +75,8 @@ export function QuizPage({ sessionId, decisionKey, mode, onOpen, onToday, onRevi
         mode="review"
         kicker={<p className="kicker">解き直し</p>}
         markNumber={null}
-        existing={null}
-        previousIntervalDays={latest === null ? null : latest.interval_days}
+        existing={saved}
+        previousIntervalDays={previous === null ? null : previous.interval_days}
         nextLabel="解き直しに戻る"
         onNext={onReview}
       />

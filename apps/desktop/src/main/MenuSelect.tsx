@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 
-import { Popup, type PopupItem } from './Popup';
+import { Popup, type PopupItem, type PopupPlacement } from './Popup';
 
 /**
  * 「ボタンを押すと、選択肢のメニューが開き、1 つ選ぶ」部品（WAI-ARIA の menu button）。選択肢の見た目は `Popup`（段階の絞り込みと同じ）。
@@ -30,28 +30,40 @@ interface MenuSelectProps {
   items: readonly MenuSelectItem[];
   className?: string;
   disabled?: boolean;
+  /**
+   * いくつでも選べるメニューにする（チェックの項目。押しても閉じず、キーボードの位置もメニューの中に残る）。
+   * 閉じるのは、Esc・外を押す・Tab のとき。既定は、1 つ選ぶと閉じる。
+   */
+  multiple?: boolean;
+  /** メニューを出す場所。既定は、ボタンの下に右端をそろえる。 */
+  placement?: PopupPlacement;
   /** ボタンの中身（いまの値の見た目）。 */
   children: ReactNode;
 }
 
-export function MenuSelect({ label, menuLabel, items, className, disabled, children }: MenuSelectProps) {
+export function MenuSelect({ label, menuLabel, items, className, disabled, multiple = false, placement, children }: MenuSelectProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
   const popupItems = (trigger: HTMLElement): PopupItem[] =>
-    items.map((item) => ({
-      kind: 'radio',
-      key: item.key,
-      label: item.label,
-      icon: item.icon,
-      hideLabel: item.hideLabel,
-      hint: item.hint,
-      checked: item.checked,
-      onSelect: () => {
-        // 選んだあと、キーボードの位置はこのボタンに戻す（メニューの項目は、閉じると消えるため）。
-        trigger.focus();
-        item.onSelect();
-      },
-    }));
+    items.map((item): PopupItem => {
+      if (multiple) {
+        return { kind: 'check', key: item.key, label: item.label, hint: item.hint, checked: item.checked, onSelect: item.onSelect };
+      }
+      return {
+        kind: 'radio',
+        key: item.key,
+        label: item.label,
+        icon: item.icon,
+        hideLabel: item.hideLabel,
+        hint: item.hint,
+        checked: item.checked,
+        onSelect: () => {
+          // 選んだあと、キーボードの位置はこのボタンに戻す（メニューの項目は、閉じると消えるため）。
+          trigger.focus();
+          item.onSelect();
+        },
+      };
+    });
 
   return (
     <>
@@ -67,7 +79,13 @@ export function MenuSelect({ label, menuLabel, items, className, disabled, child
         {children}
       </button>
       {anchor !== null && (
-        <Popup label={menuLabel} anchor={anchor} items={popupItems(anchor)} onClose={() => setAnchor(null)} />
+        <Popup
+          label={menuLabel}
+          anchor={anchor}
+          items={popupItems(anchor)}
+          placement={placement}
+          onClose={() => setAnchor(null)}
+        />
       )}
     </>
   );

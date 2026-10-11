@@ -93,11 +93,25 @@ function RiverItem({
   );
 }
 
-function Meld({ meld, seat, dora }: { meld: BoardState['melds'][number][number]; seat: Seat; dora: ReadonlySet<number> | null }) {
+/**
+ * 副露 1 つ（雀魂と同じ並べ方）。盤面では `li`（副露の一覧の項目）、検討ログの行の手牌では、ボタンの中に置くので `span`。
+ * 牌の大きさは、`--mw`（幅）と `--mh`（高さ）で決まる。
+ */
+export function Meld({
+  meld,
+  seat,
+  dora,
+  as: Wrapper = 'li',
+}: {
+  meld: BoardState['melds'][number][number];
+  seat: Seat;
+  dora: ReadonlySet<number> | null;
+  as?: 'li' | 'span';
+}) {
   const layout = layoutMeld(meld, seat);
   const face = (tile: TileCode) => <Tile tile={tile} dora={isDoraTile(tile, dora)} />;
   return (
-    <li className="meld" data-kind={MELD_NAME[layout.kind]}>
+    <Wrapper className="meld" data-kind={MELD_NAME[layout.kind]}>
       {layout.tiles.map((tile, index) => {
         const key = `${index}${tile}`;
         if (layout.kind === 'ankan') {
@@ -129,7 +143,7 @@ function Meld({ meld, seat, dora }: { meld: BoardState['melds'][number][number];
           </span>
         );
       })}
-    </li>
+    </Wrapper>
   );
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from 'react';
 
 import { api, errorMessage } from '../api/tauri';
+import type { AnswerMode } from '../api/types';
 import { applyTheme, effectiveTheme, storeTheme, type ThemeChoice } from '../shared/theme';
 import { reportBackground, signalWindowReady } from '../shared/windowReady';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -8,6 +9,8 @@ import { solvedProblemCount, solvedProblemsLine } from './deleteImpact';
 import { ImportOffer } from './ImportOffer';
 import { ImportPage } from './ImportPage';
 import { Lightbox, type ViewerRequest } from './Lightbox';
+import { LogPage } from './log/LogPage';
+import { useLogState } from './log/useLogState';
 import { ReplayPage } from './replay/ReplayPage';
 import { relinkRatings } from './ratingRelink';
 import { RereadStore } from './rereadStore';
@@ -87,6 +90,8 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const shortcutsBlocked = useShortcutsBlocked();
   // 検索の重ね表示（検索のアイコンと Ctrl+K で開く。U-22）
   const search = useSearchOverlay();
+  // 検討ログの絞り込みと「答えを出す」。問題を開いて戻っても残るよう、画面の外で持つ
+  const log = useLogState();
 
   // 半荘の一覧。読めるたびに、いま見ている半荘が残っているかを確かめる（何も選んでいなければ、いちばん新しい半荘にする）。
   const { sessions, error: loadError, reload } = useSessions((list) =>
@@ -252,6 +257,9 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const openFromList = useCallback((sessionId: string) => push(sessionView(sessionId)), [push]);
   const openToday = useCallback(() => push({ kind: 'today' }), [push]);
   const openReview = useCallback(() => push({ kind: 'review' }), [push]);
+  const openLog = useCallback(() => push({ kind: 'log' }), [push]);
+  // ログの行: 保存した答えで開く（答えの種類は、最後の答えのもの）
+  const openLogged = useCallback((sessionId: string, key: string, mode: AnswerMode) => push(quizView(sessionId, key, mode)), [push]);
   const openProblem = useCallback((sessionId: string, key: string) => push(quizView(sessionId, key)), [push]);
   // 半荘を通して見る画面。`key` は、開く判断の鍵（迷いのカードの「この局面を解く」）。無ければ半荘の頭から
   const openReplay = useCallback((sessionId: string, key?: string) => push(replayView(sessionId, key)), [push]);
@@ -401,6 +409,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           dueCount={study.dueCount}
           onToday={openToday}
           onReview={openReview}
+          onLog={openLog}
         >
           <SessionList
             ref={listRef}
@@ -423,6 +432,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           {view.kind === 'import' && <ImportPage flow={flow} onOpenSession={openSession} />}
           {view.kind === 'today' && <TodayPage onOpen={openProblem} />}
           {view.kind === 'review' && <ReviewPage />}
+          {view.kind === 'log' && <LogPage state={log} onOpen={openLogged} />}
           {view.kind === 'replay' && <ReplayPage sessionId={view.sessionId} startKey={view.key} />}
           {view.kind === 'quiz' && (
             <QuizPage
