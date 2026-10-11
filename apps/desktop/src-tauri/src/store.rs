@@ -426,7 +426,19 @@ pub struct ExtraMemo {
 
 /// 終局直後のメモ（`memos.json`）。
 /// - `marks`: 迷いマークの id（10 進の文字列）→ メモ。空のメモは持たない
-/// - `extras`: 迷いマークの無い迷いのメモ（足した順）
+/// - `extras`: 迷いマークの無い迷いのメモ（足した順）。局面は `position`（取り込む前に手で選んだ局・本場・巡目）と
+///   `decision`（判断の鍵）のどちらか、または両方。無い項目は書き出さない
+///
+/// ```json
+/// {
+///   "marks": { "3": { "candidates": "南・6m", "reason": "東を残したい" } },
+///   "extras": [
+///     { "id": "x1", "position": { "kyoku": 2, "honba": 0, "junme": 9 }, "candidates": "5s・發", "reason": "" },
+///     { "id": "x2", "decision": "k1h1e7", "position": { "kyoku": 1, "honba": 1, "junme": 6 }, "candidates": "", "reason": "速さ" },
+///     { "id": "x3", "decision": "k4h2e5", "candidates": "", "reason": "判断の鍵だけの、古い形" }
+///   ]
+/// }
+/// ```
 ///
 /// 知らない項目があっても読める。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
