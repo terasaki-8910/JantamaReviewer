@@ -512,6 +512,27 @@ describe('U-29: 本物のキー（行・メニュー・戻る）', () => {
     }
   });
 
+  it('見ていた位置: 下の方の行を開いて Alt+← で戻ると、ログは見ていた位置のまま（先頭に戻らない）', { timeout: 60_000 }, async () => {
+    const { context, page } = await open({ width: 1280, height: 700 });
+    try {
+      await openLog(page);
+      await page.evaluate(() => window.scrollTo(0, 900));
+      await page.waitForFunction(() => window.scrollY > 800);
+      const before = await page.evaluate(() => window.scrollY);
+      // 見えている行を押す
+      const target = page.locator('button.lrow').nth(6);
+      const title = await target.locator('.l-t').textContent();
+      await target.click();
+      await page.getByRole('heading', { level: 1, name: title ?? '' }).waitFor();
+      await page.keyboard.press('Alt+ArrowLeft');
+      await page.getByRole('heading', { level: 1, name: 'ログ' }).waitFor();
+      await page.waitForFunction((y) => Math.abs(window.scrollY - y) < 4, before);
+      expect(Math.abs((await page.evaluate(() => window.scrollY)) - before)).toBeLessThan(4);
+    } finally {
+      await context.close();
+    }
+  });
+
   it('絞り込みのメニュー: 本物のキーで開く（Enter）・↓ で動く・Space で選ぶ（閉じない）・Esc で閉じて、ボタンに戻る', { timeout: 60_000 }, async () => {
     const { context, page } = await open();
     try {
