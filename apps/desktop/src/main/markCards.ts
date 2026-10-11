@@ -11,10 +11,16 @@
  * どの状態のカードも、同じ構成の文言にする（U-13）: 1 行目「迷いN」と時刻（カードの部品が出す）、2 行目の局面（`markHeading`）、
  * スクショから読んだ値の静かな 1 行（`readingLine`）、その下に状態ごとの欄（推定の印・自分がした行動・ほかの候補・選び直す・手で選ぶ）。
  *
+ * 利用者が選んだ判断が、推定にもほかの候補にも入らないとき（`far`。E-27）は、「自分：…」の下に、その旨の 1 行（`farLine`）と、
+ * 推定・ほかの候補の札（推定には「（推定）」を足す。`farChipLabels`）を出す。
+ *
  * AI の候補・確率・順位は、ここにも出てこない（SPEC F3、U-1）。出すのは、判断の呼び名と、自分が実際にした行動だけ。
  */
 import {
   findDecisionRef,
+  isFarFromReading,
+  kyokuLabel,
+  kyokuNumber,
   linkMarks,
   type CenterText,
   type DecisionRef,
@@ -32,6 +38,8 @@ export const LINK_MANUAL = 'manual';
 
 /** 推定で結びつけたことを示す印の文字。 */
 export const ESTIMATE_TAG = '推定';
+/** 「離れている」ときの札で、推定の札の文字のあとに足す印（E-27）。 */
+export const ESTIMATE_SUFFIX = '（推定）';
 /** 局面が決まっていない（手で選ぶ）カードの 2 行目。 */
 export const UNDECIDED_TEXT = '局面は決まっていません';
 /** スクショから中央の文字を読めなかったときの 1 行。 */
@@ -64,6 +72,11 @@ export interface ResolvedMark {
   autoReason: MarkManualReason | null;
   /** 保存した結びつけの値（無ければ undefined）。取り消すときに、この値へ戻す。 */
   stored: string | undefined;
+  /**
+   * 利用者が選んだ判断が、スクショから読んだ値から離れているか（E-27）。推定にも、ほかの候補にも入らない判断を選んでいるときだけ true。
+   * 推定のまま（選んでいない）・読めない・手で選ぶと決めた迷いは、false。
+   */
+  far: boolean;
 }
 
 /** 迷いマークごとの、いまの結びつけ（記録の順）。 */
@@ -84,11 +97,15 @@ export function resolveMarks(
       reading: link?.center ?? null,
       autoReason: link === undefined ? ('unreadable' as const) : link.reason,
       stored,
+      far: false,
     };
 
     if (stored !== undefined && stored !== LINK_MANUAL) {
       const ref = findDecisionRef(report, stored);
-      if (ref !== null) return { ...base, resolution: { kind: 'linked', ref, saved: true } };
+      if (ref !== null) {
+        const far = link !== undefined && isFarFromReading(link, stored);
+        return { ...base, far, resolution: { kind: 'linked', ref, saved: true } };
+      }
     }
     if (stored === LINK_MANUAL) return { ...base, resolution: { kind: 'manual', reason: 'chosen' } };
 
@@ -167,6 +184,30 @@ export function readingLine(item: ResolvedMark): string {
   if (item.autoReason === 'no-kyoku') return `${text} · この半荘に合う局がありません`;
   if (item.autoReason === 'no-decision') return `${text} · その局に自分の判断がありません`;
   return text;
+}
+
+/**
+ * 「離れている」ときの 1 行（E-27。カードの「自分：…」の下に、警告のアイコンと並べて出す）。離れていなければ null。
+ * - 選んだ判断が、スクショから読んだ局と同じ局（本場は問わない）: 「スクショの値（残り38）と離れています。選んだ局面は残り29です。」
+ * - 違う局: 「スクショの値（東3局・残り38）と離れています。選んだ局面は東2局1本場です。」
+ */
+export function farLine(item: ResolvedMark): string | null {
+  const { reading, resolution } = item;
+  if (!item.far || reading === null || resolution.kind !== 'linked') return null;
+  const { ref } = resolution;
+  const readKyoku = kyokuNumber(reading.wind, reading.number);
+  if (readKyoku === ref.kyoku) {
+    return `スクショの値（残り${reading.tilesLeft}）と離れています。選んだ局面は残り${ref.tilesLeft}です。`;
+  }
+  return `スクショの値（${kyokuLabel(readKyoku, 0)}・残り${reading.tilesLeft}）と離れています。選んだ局面は${ref.kyokuLabel}です。`;
+}
+
+/**
+ * 「離れている」ときの札の文字（E-27）: 自動の候補（先頭が推定）それぞれの札の文字（`chipLabels`）のうち、推定には「（推定）」を足す。
+ * 例: ['9巡目 打北（推定）', '8巡目 鳴かない判断']。
+ */
+export function farChipLabels(candidates: readonly DecisionRef[]): string[] {
+  return chipLabels(candidates).map((label, i) => (i === 0 ? `${label}${ESTIMATE_SUFFIX}` : label));
 }
 
 /** 同じ値が 2 つ以上あるか。 */

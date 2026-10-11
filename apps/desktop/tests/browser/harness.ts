@@ -147,6 +147,12 @@ export interface Scenario {
   thumbBy?: Record<string, string>;
   /** 取り込みの流れへの答え。無ければ、クリップボードは空。 */
   importing?: ImportScenario;
+  /**
+   * 前の作り方で読んだ半荘の読み直し（F11、E-27）への答え。無ければ、読み直しは要らない（`needs_ocr_reread` は false）。
+   * 写しの決まりの名前が `currentGeometry` と違う半荘だけ、要る。読み直しは、写しを `fresh` に置き換えて true を返す
+   * （`hang` なら、終わらない。状態の 1 行を見るため）。
+   */
+  reread?: { currentGeometry: string; fresh: unknown; hang?: boolean };
 }
 
 /** 1x1 の緑の PNG。サムネイルの代わり（枠の中に引き伸ばして使う）。 */
@@ -223,6 +229,16 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'set_maka_hanchan': mutate(args.sessionId, function (s) { s.maka.hanchan = args.grade; }); return null;
       case 'clear_maka_hanchan': mutate(args.sessionId, function (s) { delete s.maka.hanchan; }); return null;
       case 'read_report': return reports[args.sessionId] === undefined ? null : reports[args.sessionId];
+      case 'needs_ocr_reread': {
+        if (!scenario.reread) return false;
+        var stale = sessions.filter(function (s) { return s.id === args.sessionId; })[0];
+        return !!(stale && stale.ocr && stale.ocr.geometry !== scenario.reread.currentGeometry);
+      }
+      case 'reread_ocr':
+        if (!scenario.reread) return false;
+        if (scenario.reread.hang) return new Promise(function () {});
+        mutate(args.sessionId, function (s) { s.ocr = scenario.reread.fresh; });
+        return true;
       case 'plugin:event|listen':
         (listeners[args.event] = listeners[args.event] || []).push(args.handler);
         return nextEvent++;

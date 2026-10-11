@@ -8,6 +8,7 @@ import { solvedProblemCount, solvedProblemsLine } from './deleteImpact';
 import { ImportOffer } from './ImportOffer';
 import { ImportPage } from './ImportPage';
 import { Lightbox, type ViewerRequest } from './Lightbox';
+import { RereadStore } from './rereadStore';
 import { SessionList, type SessionListHandle } from './SessionList';
 import { buildListRows, neighborAfterDelete } from './sessionRows';
 import { SessionPage } from './SessionPage';
@@ -82,6 +83,10 @@ function Shell({ solvedProblems }: Required<AppProps>) {
     dispatch({ type: 'listChanged', sessionIds: list.map((session) => session.id) }),
   );
   const summaries = useSessionSummaries(sessions);
+  // 前の作り方で読んだ半荘の読み直し（F11）。半荘の画面を開いたときに 1 回だけ。済んだら、一覧を読み直して、新しい読み取りを反映する。
+  const [rereads] = useState(
+    () => new RereadStore({ needed: api.needsOcrReread, reread: api.rereadOcr, changed: reload }),
+  );
   const rows = useMemo(() => buildListRows(sessions ?? [], summaries), [sessions, summaries]);
   const sessionIds = useMemo(() => new Set(rows.map((row) => row.id)), [rows]);
   const available = useCallback((candidate: View) => isViewAvailable(candidate, sessionIds), [sessionIds]);
@@ -375,6 +380,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
               onChanged={reload}
               onOpenImage={setViewer}
               importFlow={flow}
+              rereads={rereads}
             />
           )}
           {sessions !== null && selectedSession === null && (view.kind === 'none' || view.kind === 'session') && (

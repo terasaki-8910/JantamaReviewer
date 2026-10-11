@@ -12,8 +12,9 @@
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import type { OcrCache } from '../../src/api/types';
 import { REPORT_TEXTS, local } from '../fake-sessions';
-import { fx4Ocr, fx4Session } from '../import-fixtures';
+import { OCR_GEOMETRY, fx4Ocr, fx4Session } from '../import-fixtures';
 import {
   TINY_PNG,
   launchBrowser,
@@ -46,14 +47,19 @@ const settings = {
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
 };
 
-/** 取り込んだ半荘: FX-4。ウィジェットの評価は、局の順に △・✕・△・✕・✕（東2局・東3局・東3局1本場に旗）。 */
-function importedSession(extra: { maka?: { kyokus: Record<string, string>; hanchan?: string } } = {}) {
+/**
+ * 取り込んだ半荘: FX-4。ウィジェットの評価は、局の順に △・✕・△・✕・✕（東2局・東3局・東3局1本場に旗）。
+ * `ocr` と `marks` で、読み取りの写しと、ユーザーが選んだ結びつけ（迷いの番号 → 判断の鍵）を替えられる。
+ */
+function importedSession(
+  extra: { maka?: { kyokus: Record<string, string>; hanchan?: string }; ocr?: OcrCache; marks?: Record<string, string> } = {},
+) {
   const base = fx4Session(ID, local(2026, 10, 9, 19, 9), {
     report_path: `C:\\data\\games\\${ID}\\report.json`,
-    ocr: fx4Ocr(),
+    ocr: extra.ocr ?? fx4Ocr(),
     // 取り込みが保存するとおり: 迷いマークは保存しない（読めた迷い 1〜5 は推定、読めない迷い 6 は手で選ぶ）。評価は局の順。
     links: {
-      marks: {},
+      marks: extra.marks ?? {},
       ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': 'k2h0', '11': 'k2h1' },
     },
     self_ratings: { kyokus: {} },
@@ -667,6 +673,197 @@ describe('U-1 この画面に AI の答えは出さない（実ブラウザ）',
       await page.keyboard.press('Escape');
       await STATES.makaMenu?.(page);
       expect(await scan()).toEqual({ dataAi: false, probability: false });
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('E-27 離れている（実ブラウザ。読み直したあとの FX-4 の迷い 6）', () => {
+  const FAR_LINE = 'スクショの値（残り38）と離れています。選んだ局面は残り29です。';
+  const farScenario = () =>
+    scenario({
+      sessions: [importedSession({ ocr: fx4Ocr({ retries: true }), marks: { '6': 'k2h1e14' } }), recordedSession()],
+    });
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 1280] as const) {
+      it(`幅${width}px ${scheme}: 1 行と札がカードに収まり、横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届く。アイコンは文字と同じ色の線で、1 行目の高さ`, async () => {
+        const { context, page, problems, external } = await open({ width, scheme, scenario: farScenario() });
+        try {
+          const line = card(page, 6).locator('.mfar');
+          await line.waitFor();
+          expect(await line.textContent()).toBe(FAR_LINE);
+          expect(await card(page, 6).locator('.chip').allTextContents()).toEqual(['9巡目 打北（推定）', '8巡目 鳴かない判断']);
+
+          // 形: カードの中に収まる。アイコンは、文字の 1 行目の高さにあり、折り返しても動かない。色は文字と同じ（新しい色を足さない）。
+          const shape = await page.evaluate(() => {
+            const cardEl = Array.from(document.querySelectorAll<HTMLElement>('article.mcard'))[5] as HTMLElement;
+            const mfar = cardEl.querySelector('.mfar') as HTMLElement;
+            const icon = mfar.querySelector('svg') as SVGElement;
+            const text = mfar.querySelector('span') as HTMLElement;
+            const c = cardEl.getBoundingClientRect();
+            const m = mfar.getBoundingClientRect();
+            const i = icon.getBoundingClientRect();
+            const t = text.getBoundingClientRect();
+            const lineHeight = parseFloat(getComputedStyle(text).lineHeight);
+            return {
+              inside: m.left >= c.left - 0.5 && m.right <= c.right + 0.5,
+              chipsInside: Array.from(cardEl.querySelectorAll<HTMLElement>('.malt .chip')).every(
+                (chip) => chip.getBoundingClientRect().right <= c.right + 0.5 && chip.getBoundingClientRect().left >= c.left - 0.5,
+              ),
+              iconCenterFromTop: i.top + i.height / 2 - t.top,
+              firstLineCenter: lineHeight / 2,
+              iconBeforeText: i.right <= t.left + 0.5,
+              iconStroke: getComputedStyle(icon).stroke,
+              textColor: getComputedStyle(text).color,
+              iconFill: getComputedStyle(icon).fill,
+              lines: Math.round(t.height / lineHeight),
+              order: Array.from(cardEl.querySelectorAll('.msub, .mfar, .malt')).map((el) => el.className.split(' ')[0]),
+            };
+          });
+          expect(shape.inside).toBe(true);
+          expect(shape.chipsInside).toBe(true);
+          expect(shape.iconBeforeText).toBe(true);
+          expect(Math.abs(shape.iconCenterFromTop - shape.firstLineCenter)).toBeLessThan(2.5);
+          expect(shape.iconStroke).toBe(shape.textColor);
+          expect(shape.iconFill).toBe('none');
+          expect(shape.order).toEqual(['msub', 'mfar', 'malt']);
+          // 文は長いので、カードの幅（390px の 1 列でも、1280px の 3 列でも）では 2 行に折り返す。
+          expect(shape.lines).toBeGreaterThanOrEqual(2);
+
+          const m = await overflow(page);
+          expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+          expect(m.body).toBeLessThanOrEqual(m.client);
+
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(5);
+          const reach = await unreachableByTab(page);
+          expect(reach.missed).toEqual([]);
+
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('離れていないカード（1〜5）には 1 行が無い。札を押すと保存して通知が出て、1 行と札が消える。Ctrl+Z で、1 行と札が戻る', async () => {
+    const { context, page, problems } = await open({ scenario: farScenario() });
+    try {
+      expect(await page.locator('.mfar').count()).toBe(1);
+      await card(page, 6).getByRole('button', { name: '9巡目 打北（推定）' }).click();
+      await poll(() => toastText(page)).toBe('迷い6を東3局1本場 9巡目の局面に結びつけました');
+      await card(page, 6).getByText('自分：打北').waitFor();
+      expect(await page.locator('.mfar').count()).toBe(0);
+      expect(await calls(page, 'set_mark_link')).toEqual([{ sessionId: ID, markId: 6, decision: 'k2h1e10' }]);
+      await poll(() => isFocused(card(page, 6).getByRole('button', { name: '迷い6を選び直す' }))).toBe(true);
+
+      await page.keyboard.press('Control+z');
+      await poll(() => toastText(page)).toBe('迷い6の結びつけを元に戻しました');
+      await card(page, 6).locator('.mfar').waitFor();
+      expect(await card(page, 6).locator('.mfar').textContent()).toBe(FAR_LINE);
+      expect(await calls(page, 'set_mark_link')).toEqual([
+        { sessionId: ID, markId: 6, decision: 'k2h1e10' },
+        { sessionId: ID, markId: 6, decision: 'k2h1e14' },
+      ]);
+      expect(problems).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('F11・U-23 前の作り方で読んだ半荘の読み直し（実ブラウザ）', () => {
+  const STATUS = 'スクショを新しい読み取りで読み直しています';
+  const FAR_LINE = 'スクショの値（残り38）と離れています。選んだ局面は残り29です。';
+  const staleScenario = (hang: boolean) =>
+    scenario({
+      sessions: [
+        importedSession({ ocr: { ...fx4Ocr(), geometry: 'center-v1-lanczos3x' }, marks: { '6': 'k2h1e14' } }),
+        recordedSession(),
+      ],
+      reread: { currentGeometry: OCR_GEOMETRY, fresh: fx4Ocr({ retries: true }), hang },
+    });
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 1280] as const) {
+      it(`読み直している間 幅${width}px ${scheme}: 状態の 1 行が 1 つだけ出て、前の値で描いてあり、横スクロールが無く、重大な a11y 違反が無く、読み直しは 1 回だけ`, async () => {
+        const { context, page, problems, external } = await open({ width, scheme, scenario: staleScenario(true) });
+        try {
+          const status = page.getByRole('status');
+          await status.waitFor();
+          expect(await status.count()).toBe(1);
+          expect(await status.textContent()).toBe(STATUS);
+          // 前の読み取りの値のまま: 迷い 6 は読めず、離れているとも出ない。
+          expect(await card(page, 6).locator('.mread').textContent()).toBe('スクショを読めませんでした');
+          expect(await page.locator('.mfar').count()).toBe(0);
+
+          // 見出しと同じ行（広い幅）。狭い幅では、見出しの下の行に回ってよいが、横にははみ出さない。
+          const places = await page.evaluate(() => {
+            const heading = document.querySelector('.sec-head .sec-title') as HTMLElement;
+            const line = document.querySelector('.sec-head [role="status"]') as HTMLElement;
+            const marks = document.querySelector('.marks') as HTMLElement;
+            const h = heading.getBoundingClientRect();
+            const l = line.getBoundingClientRect();
+            return {
+              sameRow: Math.abs(h.top - l.top) < 8,
+              toTheRight: l.left >= h.right - 0.5,
+              belowHeading: l.top >= h.bottom - 0.5,
+              inside: l.right <= document.documentElement.clientWidth + 0.5,
+              marksBelow: marks.getBoundingClientRect().top >= Math.max(h.bottom, l.bottom) - 0.5,
+            };
+          });
+          expect(places.inside).toBe(true);
+          expect(places.marksBelow).toBe(true);
+          if (width >= 768) {
+            expect(places.sameRow).toBe(true);
+            expect(places.toTheRight).toBe(true);
+          } else {
+            expect(places.sameRow || places.belowHeading).toBe(true);
+          }
+
+          const m = await overflow(page);
+          expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          const reach = await unreachableByTab(page);
+          expect(reach.missed).toEqual([]);
+
+          expect(await calls(page, 'needs_ocr_reread')).toEqual([{ sessionId: ID }]);
+          expect(await calls(page, 'reread_ocr')).toEqual([{ sessionId: ID }]);
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('読み直しが済むと、状態の 1 行が消え、新しい読み取りの値で描き直す（迷い 6 が離れていると分かる）。結びつけは保存し直さず、開き直しても読み直さない', async () => {
+    const { context, page, problems } = await open({ scenario: staleScenario(false) });
+    try {
+      await card(page, 6).locator('.mfar').waitFor();
+      expect(await card(page, 6).locator('.mfar').textContent()).toBe(FAR_LINE);
+      expect(await card(page, 6).locator('.mread').textContent()).toBe('スクショ: 東3局・残り38・4,400点');
+      await page.getByRole('status').waitFor({ state: 'detached' });
+      expect(await calls(page, 'reread_ocr')).toHaveLength(1);
+      for (const cmd of ['set_mark_link', 'clear_mark_link', 'replace_links', 'set_rating_link', 'clear_rating_link']) {
+        expect(await calls(page, cmd), cmd).toEqual([]);
+      }
+      // 別の半荘へ移って戻っても、もう読み直さない。
+      await page.locator('.session-scroll [data-open]').nth(1).click();
+      await page.getByRole('heading', { level: 1, name: /10月8日/ }).waitFor();
+      await page.locator('.session-scroll [data-open]').nth(0).click();
+      await page.getByRole('table', { name: '局の評価' }).waitFor();
+      expect(await calls(page, 'reread_ocr')).toHaveLength(1);
+      expect(await calls(page, 'needs_ocr_reread')).toHaveLength(1);
+      expect(await page.getByRole('status').count()).toBe(0);
+      expect(problems).toEqual([]);
     } finally {
       await context.close();
     }
