@@ -364,10 +364,30 @@ export function tauriMockScript(scenario: Scenario): string {
 })(${JSON.stringify(scenario)});`;
 }
 
-/** 検討画面が最初の絵を描き終えるまで待つ（サイドバーの半荘の一覧と、本文の見出し）。 */
+/**
+ * 検討画面が最初の絵を描き終えるまで待つ（サイドバーの半荘の一覧と、本文の見出し）。
+ * 窓が細い（640px 未満）と、サイドバーは隠れている（引き出し）ので、一覧は「見える」ではなく「ある」まで待つ。
+ */
 export async function waitForMainReady(page: Page): Promise<void> {
-  await page.getByRole('navigation', { name: '半荘の一覧' }).waitFor();
+  // getByRole は、見えていない物（引き出しの中）に当たらないので、属性で探す
+  await page.locator('nav[aria-label="半荘の一覧"]').waitFor({ state: 'attached' });
   await page.getByRole('heading', { level: 1 }).first().waitFor();
+}
+
+/** サイドバーの「数」（今日の出題・解き直し）が出るまで待つ（出題のデータを読み終えた印）。引き出しが閉じていても待てる。 */
+export async function waitForSidebarCounts(page: Page, timeout = 20_000): Promise<void> {
+  await page.locator('nav[aria-label="メイン"] .count').first().waitFor({ state: 'attached', timeout });
+}
+
+/**
+ * サイドバーの物を操作できるようにする。窓が細い（640px 未満）と、サイドバーは隠れているので、左上のボタンで引き出しを開く
+ * （開いたあと、項目を選ぶと自動で閉じる）。広い窓で出ているときは、何もしない。
+ */
+export async function ensureSidebar(page: Page): Promise<void> {
+  const hidden = await page.evaluate(() => document.getElementById('sidebar')?.hasAttribute('inert') ?? true);
+  if (!hidden) return;
+  await page.getByRole('button', { name: 'サイドバーを開く' }).click();
+  await page.waitForFunction(() => document.getElementById('sidebar')?.hasAttribute('inert') === false);
 }
 
 export interface AxeViolation {
@@ -440,12 +460,15 @@ export async function unreachableByTab(
         const rect = el.getBoundingClientRect();
         const style = getComputedStyle(el);
         // 閉じた <details> の中など（content-visibility で描かれない所）は、見えていないものとして数える
+        // inert（確認のダイアログの裏・開いた引き出しの裏・閉じた引き出しの中）は、Tab で届かないのが正しいので、数えない
         return (
           rect.width > 0 &&
           rect.height > 0 &&
           style.visibility !== 'hidden' &&
           style.display !== 'none' &&
-          el.checkVisibility()
+          el.checkVisibility() &&
+          el.closest('[inert]') === null &&
+          el.closest('[aria-hidden="true"]') === null
         );
       };
       const skipped = (el: HTMLElement) =>
@@ -482,4 +505,51 @@ export async function unreachableByTab(
     }
   }
   return { total: targets.length, missed: [...new Set(missed)] };
+}
+
+export interface BoxRect {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+export interface InfoTipMeasure {
+  tip: BoxRect;
+  icon: BoxRect;
+  /** 説明している物（行の一覧など）。 */
+  explained: BoxRect | null;
+  innerWidth: number;
+  innerHeight: number;
+  /** 重なりを出した側（above = アイコンの上、below = 下）。 */
+  side: string | undefined;
+  text: string;
+}
+
+/** 開いている説明の重なり（InfoTip。U-25）の置き場所を測る。開いていなければ null。 */
+export async function measureInfoTip(page: Page, explained: string): Promise<InfoTipMeasure | null> {
+  return page.evaluate((selector) => {
+    const tip = document.querySelector<HTMLElement>('.infotip-pop:not([hidden])');
+    const icon = document.querySelector<HTMLElement>('.infotip-btn[data-open="1"]');
+    if (tip === null || icon === null) return null;
+    const box = (el: Element): BoxRect => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    };
+    const target = document.querySelector(selector);
+    return {
+      tip: box(tip),
+      icon: box(icon),
+      explained: target === null ? null : box(target),
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      side: tip.dataset.side,
+      text: tip.textContent ?? '',
+    };
+  }, explained);
+}
+
+/** 2 つの箱が重なっているか（辺が接するだけなら、重なっていない）。 */
+export function boxesOverlap(a: BoxRect, b: BoxRect): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 }

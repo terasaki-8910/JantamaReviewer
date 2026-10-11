@@ -142,7 +142,7 @@ describe('U-15 今日の出題の一覧', () => {
       expect.stringMatching(/^4東2局1本場 8巡目迷い4鳴き · 1シャンテン · 10月9日 19:09 の半荘$/),
       expect.stringMatching(/^5東3局1本場 6巡目迷い5打牌 · 2シャンテン · 10月9日 19:09 の半荘$/),
     ]);
-    // 回答済みの印も、次の印も、まだ無い
+    // 解答済みの印も、次の印も、まだ無い
     expect(rows.some((row) => row.className.includes('done') || row.className.includes('next'))).toBe(false);
     // 組の説明の 1 行
     expect(document.querySelector('.q-rule')?.textContent).toBe(
@@ -222,7 +222,7 @@ describe('U-16 出題と答え合わせ（今日の出題を順に解く）', ()
     await waitFor(() => expect(document.activeElement?.closest('.hand, .q-choices')).not.toBeNull());
   });
 
-  it('一覧に戻ると、解いた数・回答済みの印・「続きから（2問目）」・次の行の印が出る。答えた問題を押すと、保存した答えが開く', async () => {
+  it('一覧に戻ると、解いた数・解答済みの印・「続きから（2問目）」・次の行の印が出る。答えた問題を押すと、保存した答えが開く', async () => {
     const { user } = setup();
     await loaded();
     await openToday(user);
@@ -234,7 +234,7 @@ describe('U-16 出題と答え合わせ（今日の出題を順に解く）', ()
     expect(screen.getByRole('button', { name: '続きから（2問目）' })).toBeInTheDocument();
     const rows = todayRows();
     expect(rows[0]).toHaveClass('done');
-    expect(rows[0]).toHaveTextContent('回答済み');
+    expect(rows[0]).toHaveTextContent('解答済み');
     expect(rows[1]).toHaveClass('next');
     expect(rows[1]).toHaveTextContent('次はここから');
     // 答えた問題: 保存した答えが、答え合わせのあとの形で開く

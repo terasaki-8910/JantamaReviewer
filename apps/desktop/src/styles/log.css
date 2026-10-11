@@ -63,16 +63,9 @@
 }
 
 .lans {
-  display: grid;
-  justify-items: end;
-  gap: 0;
-  max-width: 26em;
-  text-align: right;
-}
-
-.lans .quiet {
-  text-wrap: pretty;
-  word-break: auto-phrase;
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
 }
 
 .lempty {
@@ -404,10 +397,5 @@ button.lrow:focus-visible {
 
   .l-ak {
     min-width: 0;
-  }
-
-  .lans {
-    justify-items: start;
-    text-align: left;
   }
 }

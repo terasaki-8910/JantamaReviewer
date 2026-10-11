@@ -296,6 +296,38 @@ describe('U-29・R11-11 行の手牌（プレビュー。答えを出さなく�
   });
 });
 
+describe('U-25・U-29 「答えを出す」の説明は、説明のアイコン（i）', () => {
+  const HINT = 'あとで解き直すときに答えが見えてしまわないよう、ふだんは隠します。';
+
+  it('説明の文は、本文に出さない。「答えを出す」のすぐ右の (i) に、マウスを乗せるかキーボードで選ぶと、重ねて出る。Esc で閉じる', async () => {
+    const { user } = setup();
+    await openLog(user);
+    const bar = document.querySelector('.lbar') as HTMLElement;
+    expect(bar.textContent).not.toContain('ふだんは隠します');
+    expect(document.querySelector('p.quiet#log-answers-help')).toBeNull();
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    const toggle = screen.getByRole('checkbox', { name: '答えを出す' });
+    const icon = within(bar).getByRole('button', { name: '「答えを出す」の説明' });
+    // (i) は、チェックのすぐ右（同じ行の中）
+    expect(toggle.closest('.lans')).toBe(icon.closest('.lans'));
+    expect(toggle.closest('label')?.nextElementSibling).toBe(icon.closest('.infotip'));
+    // チェックは、同じ文を読み上げの説明として持つ
+    expect(toggle).toHaveAccessibleDescription(HINT);
+    await user.hover(icon);
+    expect(screen.getByRole('tooltip')).toHaveTextContent(HINT);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await user.unhover(icon);
+    // キーボードで選ぶ: Tab で、チェックの次に (i)
+    toggle.focus();
+    await user.tab();
+    expect(icon).toHaveFocus();
+    expect(screen.getByRole('tooltip')).toHaveTextContent(HINT);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+});
+
 describe('U-29・U-1 「答えを出す」（既定は切）', () => {
   it('切のとき、自分・実戦・AI の1位は DOM に無い。入れると全部の行に出て、切るとまた無くなる', async () => {
     const { user } = setup();

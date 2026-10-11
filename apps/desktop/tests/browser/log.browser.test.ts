@@ -21,13 +21,18 @@ import { answerRow, gameOf } from '../fake-study';
 import { fx4Ocr, fx4Session } from '../import-fixtures';
 import {
   TINY_PNG,
+  boxesOverlap,
+  ensureSidebar,
   launchBrowser,
+  measureInfoTip,
   runAxe,
   seriousViolations,
   startPageServer,
   tauriMockScript,
   unreachableByTab,
   waitForMainReady,
+  waitForSidebarCounts,
+  type BoxRect,
   type PageServer,
   type Scenario,
 } from './harness';
@@ -173,12 +178,14 @@ async function open(options: { width?: number; height?: number; scheme?: Scheme;
   await page.goto(new URL('index.html', server.url).toString());
   await waitForMainReady(page);
   // 出題のデータ（半荘の再生・答えの記録）が読み終わると、サイドバーに数が出る
-  await page.locator('nav[aria-label="メイン"] .count').first().waitFor({ timeout: 30_000 });
+  await waitForSidebarCounts(page, 30_000);
   return { context, page, problems, external };
 }
 
 /** ログを開く（サイドバーの「ログ」）。行が出るまで待つ。 */
 async function openLog(page: Page, options: { rows?: boolean } = {}): Promise<void> {
+  // 細い窓（640px 未満）では、サイドバーは引き出しに隠れている。開いてから押す（押すと閉じる）
+  await ensureSidebar(page);
   await page.getByRole('navigation', { name: 'メイン' }).getByRole('button', { name: 'ログ' }).click();
   await page.getByRole('heading', { level: 1, name: 'ログ' }).waitFor();
   if (options.rows !== false) await page.locator('button.lrow').first().waitFor({ timeout: 30_000 });
@@ -423,7 +430,7 @@ describe('U-29: 配置', () => {
   }
 });
 
-describe('U-5: Tab で、すべての操作に届く（順: 絞り込み → 答えを出す → 行）', () => {
+describe('U-5: Tab で、すべての操作に届く（順: 絞り込み → 答えを出す → 答えを出すの説明 → 行）', () => {
   it('幅 1280・390px: 絞り込み・解除・答えを出す・行のすべてに、Tab だけで届く', { timeout: 90_000 }, async () => {
     for (const width of [1280, 390]) {
       const { context, page } = await open({ width });
@@ -453,7 +460,7 @@ describe('U-5: Tab で、すべての操作に届く（順: 絞り込み → 答
       await filterButton(page, /^期間/).focus();
       const seen: string[] = [];
       const rings: number[] = [];
-      for (let i = 0; i < 9; i += 1) {
+      for (let i = 0; i < 10; i += 1) {
         const info = await page.evaluate(() => {
           const el = document.activeElement as HTMLElement;
           const style = getComputedStyle(el);
@@ -468,10 +475,11 @@ describe('U-5: Tab で、すべての操作に届く（順: 絞り込み → 答
         rings.push(info.ring);
         await page.keyboard.press('Tab');
       }
-      expect(seen.slice(0, 7)).toEqual(['期間 今週', '種類 すべて', '局面 すべて', '原因 すべて', '結果 不正解', '解除', '答えを出す']);
-      expect(seen[7]).toMatch(/^行 /);
+      // 「答えを出す」のすぐ次は、その説明の (i)（U-25）。そのあとが行
+      expect(seen.slice(0, 8)).toEqual(['期間 今週', '種類 すべて', '局面 すべて', '原因 すべて', '結果 不正解', '解除', '答えを出す', '「答えを出す」の説明']);
       expect(seen[8]).toMatch(/^行 /);
-      expect(seen[7]).not.toBe(seen[8]);
+      expect(seen[9]).toMatch(/^行 /);
+      expect(seen[8]).not.toBe(seen[9]);
       for (const ring of rings) expect(ring).toBeGreaterThanOrEqual(2);
     } finally {
       await context.close();
@@ -571,4 +579,50 @@ describe('U-29: 本物のキー（行・メニュー・戻る）', () => {
       }
     }
   });
+});
+
+describe('U-25: 説明のアイコン（ログの「答えを出す」）', () => {
+  const HINT = 'あとで解き直すときに答えが見えてしまわないよう、ふだんは隠します。';
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 説明の文は本文に出ず、(i) にマウスを乗せるかキーボードで選ぶと、窓の中に、「答えを出す」にかからずに重なって出る。Esc で閉じる。axe の重大な違反が 0 件（ライト・ダーク）`, { timeout: 120_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const { context, page, problems } = await open({ width, scheme });
+        try {
+          await openLog(page);
+          const bar = page.locator('.lbar');
+          const icon = bar.getByRole('button', { name: '「答えを出す」の説明' });
+          expect(await bar.innerText()).not.toContain('ふだんは隠します');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          await icon.hover();
+          await page.getByRole('tooltip').waitFor();
+          let m = await measureInfoTip(page, '.lans label.check');
+          expect(m, `${width} ${scheme}`).not.toBeNull();
+          expect(m!.text).toBe(HINT);
+          expect(m!.tip.left).toBeGreaterThanOrEqual(7);
+          expect(m!.tip.right).toBeLessThanOrEqual(m!.innerWidth - 7);
+          expect(m!.tip.top).toBeGreaterThanOrEqual(0);
+          expect(m!.tip.bottom).toBeLessThanOrEqual(m!.innerHeight);
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          expect(boxesOverlap(m!.tip, m!.icon)).toBe(false);
+          expect(seriousViolations(await runAxe(page)), `${width} ${scheme}`).toEqual([]);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          await page.mouse.move(2, 2);
+          // キーボード: 「答えを出す」から Tab で (i) に来ると出る
+          await page.getByRole('checkbox', { name: '答えを出す' }).focus();
+          await page.keyboard.press('Tab');
+          expect(await icon.evaluate((el) => el === document.activeElement)).toBe(true);
+          await page.getByRole('tooltip').waitFor();
+          m = await measureInfoTip(page, '.lans label.check');
+          expect(m!.text).toBe(HINT);
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          expect(problems).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      }
+    });
+  }
 });

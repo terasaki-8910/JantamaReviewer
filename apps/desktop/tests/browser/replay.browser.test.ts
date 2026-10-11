@@ -20,13 +20,18 @@ import { REPORT_TEXTS, local, seedSession } from '../fake-sessions';
 import { fx4Ocr, fx4Session } from '../import-fixtures';
 import {
   TINY_PNG,
+  boxesOverlap,
+  ensureSidebar,
   launchBrowser,
+  measureInfoTip,
   runAxe,
   seriousViolations,
   startPageServer,
   tauriMockScript,
   unreachableByTab,
   waitForMainReady,
+  waitForSidebarCounts,
+  type BoxRect,
   type PageServer,
   type Scenario,
 } from './harness';
@@ -152,13 +157,14 @@ async function open(options: OpenOptions = {}): Promise<Opened> {
   await page.goto(new URL('index.html', server.url).toString());
   await waitForMainReady(page);
   // 出題のデータ（半荘の再生・答えの記録・今日の組）が読み終わると、サイドバーに数が出る
-  await page.locator('nav[aria-label="メイン"] .count').first().waitFor({ timeout: 20_000 });
+  await waitForSidebarCounts(page, 20_000);
   return { context, page, problems, external };
 }
 
 /** 半荘のページから、通して見る画面を開く（既定は FX-4、`f9da` は 17:12 の半荘）。 */
 async function openReplay(page: Page, which: 'fx4' | 'f9da' = 'fx4'): Promise<void> {
   if (which === 'f9da') {
+    await ensureSidebar(page);
     await page.getByRole('navigation', { name: '半荘の一覧' }).getByText('17:12').click();
     await page.getByRole('heading', { level: 1, name: /17:12/ }).waitFor();
   }
@@ -883,6 +889,60 @@ describe('U-19: ドラを目立たせる（通して見る画面）', () => {
         expect(odd).toEqual({ called: 0, indicator: 0 });
       } finally {
         await context.close();
+      }
+    });
+  }
+});
+
+describe('U-25: 説明のアイコン（通して見る画面の「場面を押すと…」）', () => {
+  const HINT = '場面を押すと、その場面へ飛びます。場面に着くまで、AIの答えは出ません。';
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 本文には出ず、アイコンにマウスを乗せるかキーボードで選ぶと、窓の中に、説明している物にかからずに重なって出る。Esc で閉じる。axe の重大な違反が 0 件（ライト・ダーク）`, { timeout: 120_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const { context, page, problems } = await openState(STATES[0] as StateDef, { width, scheme });
+        try {
+          const head = page.locator('.scenes-h');
+          const icon = head.getByRole('button', { name: '場面の一覧の操作の説明' });
+          expect(await page.locator('.answer').innerText()).not.toContain('場面を押すと');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          await icon.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+          // マウスを乗せる
+          await icon.hover();
+          await page.getByRole('tooltip').waitFor();
+          let m = await measureInfoTip(page, '.scenes');
+          expect(m, `${width} ${scheme}`).not.toBeNull();
+          expect(m!.text).toBe(HINT);
+          // 窓の中（左右に 8px の余白）に収まる
+          expect(m!.tip.left).toBeGreaterThanOrEqual(7);
+          expect(m!.tip.right).toBeLessThanOrEqual(m!.innerWidth - 7);
+          expect(m!.tip.top).toBeGreaterThanOrEqual(0);
+          expect(m!.tip.bottom).toBeLessThanOrEqual(m!.innerHeight);
+          // 説明している物にも、アイコンにも、かからない。アイコンの上に出る
+          expect(m!.side).toBe('above');
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          expect(boxesOverlap(m!.tip, m!.icon)).toBe(false);
+          // 開いている間も、重大な違反が無い（色のコントラストを含む）
+          expect(seriousViolations(await runAxe(page)), `${width} ${scheme}`).toEqual([]);
+          // Esc で閉じる
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          await page.mouse.move(2, 2);
+          // キーボードで選ぶと出る。Esc で閉じて、位置はアイコンに残る
+          await icon.focus();
+          await page.keyboard.press('Shift+Tab');
+          await page.keyboard.press('Tab');
+          expect(await icon.evaluate((el) => el === document.activeElement)).toBe(true);
+          await page.getByRole('tooltip').waitFor();
+          m = await measureInfoTip(page, '.scenes');
+          expect(m!.text).toBe(HINT);
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          expect(await icon.evaluate((el) => el === document.activeElement)).toBe(true);
+          expect(problems).toEqual([]);
+        } finally {
+          await context.close();
+        }
       }
     });
   }

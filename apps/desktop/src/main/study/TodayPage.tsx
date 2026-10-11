@@ -52,7 +52,7 @@ function ProblemRow({ n, problem, answered, next, onOpen }: RowProps) {
           {answered ? (
             <>
               <Icon name="check" />
-              回答済み
+              解答済み
             </>
           ) : next ? (
             '次はここから'

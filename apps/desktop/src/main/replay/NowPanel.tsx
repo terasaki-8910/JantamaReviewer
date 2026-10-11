@@ -6,6 +6,7 @@
 import type { ReplayScene, ReplayTimeline, TimelineStep } from '@jantama/engine';
 
 import { Icon } from '../Icon';
+import { InfoTip } from '../InfoTip';
 import { KIND_NAME } from '../study/labels';
 import { deltaItems, resultText, sceneSubText, sceneTags, stepText, turnLabel } from './replayModel';
 
@@ -47,7 +48,12 @@ export function NowPanel({ timeline, step, scenes, answered, go }: NowPanelProps
         )}
       </div>
       <div className="scenes-h">
-        <h2 className="sec-title">この半荘の場面</h2>
+        <div className="sec-head">
+          <h2 className="sec-title">この半荘の場面</h2>
+          <InfoTip label="場面の一覧の操作の説明" id="sc-hint">
+            場面を押すと、その場面へ飛びます。場面に着くまで、AIの答えは出ません。
+          </InfoTip>
+        </div>
         <span className="scenes-n">
           {doneCount} / {scenes.length} 解答済み
         </span>
@@ -55,7 +61,7 @@ export function NowPanel({ timeline, step, scenes, answered, go }: NowPanelProps
       {scenes.length === 0 ? (
         <p className="quiet">迷いの場面と不一致の場面は、この半荘にはありません。</p>
       ) : (
-        <ol className="scenes" aria-label="場面の一覧">
+        <ol className="scenes" aria-label="場面の一覧" aria-describedby="sc-hint">
           {scenes.map((scene) => {
             const done = answered.has(scene.key);
             return (
@@ -90,7 +96,6 @@ export function NowPanel({ timeline, step, scenes, answered, go }: NowPanelProps
           })}
         </ol>
       )}
-      <p className="quiet sc-hint">場面を押すと、その場面へ飛びます。場面に着くまで、AIの答えは出ません。</p>
     </section>
   );
 }

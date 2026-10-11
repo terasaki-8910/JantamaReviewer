@@ -52,8 +52,6 @@ interface SessionListProps {
   now: number;
   /** いま本文に出している半荘（印を付ける）。 */
   currentId: string | null;
-  /** 640px 未満（アイコンだけの細い列）か。細い列では、選択と削除は出さない。 */
-  narrow: boolean;
   /** 一覧を読み終えたか。読む前に「半荘がありません」と出さないため。 */
   loaded: boolean;
   /** 一覧を読めなかった理由。 */
@@ -72,7 +70,7 @@ type PopupState =
 
 type PendingFocus = 'master' | 'select' | 'search';
 
-/** 行の「…」のラベルや、細い列の説明に使う、半荘の呼び名（「本日 19:09」）。 */
+/** 行の「…」のラベルに使う、半荘の呼び名（「本日 19:09」）。 */
 function rowName(row: ListRow, now: number): string {
   return `${dayLabel(row.startedMs, now)} ${clockLabel(row.startedMs)}`;
 }
@@ -81,7 +79,6 @@ export function SessionList({
   rows,
   now,
   currentId,
-  narrow,
   loaded,
   loadError,
   onOpen,
@@ -104,8 +101,7 @@ export function SessionList({
   const listId = useId();
   const pendingFocus = useRef<PendingFocus | null>(null);
 
-  // 細い列では、選択の欄は出さない（広げたら、選んでいたものが残っている）。
-  const selectMode = selecting && !narrow;
+  const selectMode = selecting;
   const visible = useMemo(() => filterRows(rows, filter, now), [rows, filter, now]);
   const groups = useMemo(() => groupByDay(visible, now), [visible, now]);
   // 見えていない半荘は、選んだことにしない（見えない半荘を消さないため）。
@@ -269,11 +265,9 @@ export function SessionList({
   };
 
   // 右クリック・Menu キー・Shift+F10 でも、行のメニューを開く。
-  // 細い列では「…」が隠れている（箱が無いので、メニューを出す場所も、閉じたときにキーボードの位置を戻す先も取れない）。
-  // そのときは、行のボタンを開いた物にして、その右隣に出す。
   const onListContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const item = (event.target as HTMLElement).closest<HTMLElement>('.s-item');
-    const anchor = item?.querySelector<HTMLElement>(narrow ? '[data-open]' : '[data-more]');
+    const anchor = item?.querySelector<HTMLElement>('[data-more]');
     const id = item?.getAttribute('data-id');
     if (!item || !anchor || !id || selectMode) return;
     event.preventDefault();
@@ -491,7 +485,6 @@ export function SessionList({
                         className="session-row srow"
                         data-open={row.id}
                         aria-current={row.id === currentId ? 'true' : undefined}
-                        title={narrow ? narrowTitle(row, now) : undefined}
                       >
                         <RowContent row={row} />
                       </button>
@@ -518,7 +511,6 @@ export function SessionList({
         <Popup
           label="半荘のメニュー"
           anchor={popup.anchor}
-          placement={narrow ? 'beside' : 'below'}
           items={rowMenuItems(popup.id, popup.anchor)}
           onClose={closePopup}
         />
@@ -528,13 +520,6 @@ export function SessionList({
       )}
     </nav>
   );
-}
-
-/** 細い列で、行にマウスを乗せたときの説明（時刻などは、画面には出ていない）。 */
-function narrowTitle(row: ListRow, now: number): string {
-  const score = row.grade !== null ? `${row.grade} ${row.ratingText ?? ''}`.trim() : row.status === 'none' ? '取り込み前' : '';
-  const doubt = row.markCount > 0 ? ` 迷い${row.markCount}` : '';
-  return `${rowName(row, now)} ${score}${doubt}`.trim();
 }
 
 /** 行の中身: 開始時刻・段階と Rating（取り込む前は「取り込み前」）・迷いの数。 */
@@ -558,13 +543,7 @@ function RowScore({ row }: { row: ListRow }) {
     );
   }
   if (row.status === 'none') {
-    // 細い列では、文字は見えない所へ寄せて、点線の印だけを見せる（CSS）。
-    return (
-      <>
-        <span className="s-pending">取り込み前</span>
-        <span className="grade ghost narrow-only" aria-hidden="true" />
-      </>
-    );
+    return <span className="s-pending">取り込み前</span>;
   }
   return (
     <>

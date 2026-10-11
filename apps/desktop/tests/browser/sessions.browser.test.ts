@@ -4,7 +4,7 @@
  *
  * - U-4: 幅 390・768・1280px で、一覧の各状態（通常・絞り込み・選択・確認・通知・メニュー）に横スクロールが出ない
  * - U-5・U-6: axe の重大な違反が 0 件（色のコントラストを含む）。Tab ですべての操作に届く。ライトとダーク
- * - U-8: 行の「…」は、行の中身（迷い 128・秒つきの時刻）が変わっても、行の右上の同じ場所に出る。細い列でも、はみ出さない
+ * - U-8: 行の「…」は、行の中身（迷い 128・秒つきの時刻）が変わっても、行の右上の同じ場所に出る。細い窓では、引き出しの中で同じ形
  * - U-9: 確認（裏は操作できない）・通知の 8 秒（偽の時計）と、マウスを乗せている間は消えないこと・Ctrl+Z
  * - U-10: ← → と Alt+← / Alt+→。マウスの戻る・進むでは動かない
  * - U-11: Ctrl+Z・Ctrl+Y が、文字を打つ欄の中では効かないこと
@@ -22,6 +22,7 @@ import {
   startPageServer,
   tauriMockScript,
   unreachableByTab,
+  ensureSidebar,
   waitForMainReady,
   type PageServer,
   type Scenario,
@@ -223,21 +224,12 @@ describe('U-4・U-5・U-6: 一覧の各状態（実ブラウザ）', () => {
   for (const scheme of SCHEMES) {
     for (const width of [390, 768, 1280] as const) {
       for (const [name, drive] of Object.entries(STATES)) {
-        // 細い列には、検索・選択・メニューの入口が無い（キーでは開ける）。そのため、その状態は幅 640 以上だけ。
-        if (width < 640 && !['default', 'toast'].includes(name)) continue;
         it(`${name} 幅${width}px ${scheme}: 横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届き、外へ通信しない`, async () => {
           const { context, page, problems, external } = await open({ width, scheme });
           try {
-            if (name === 'toast' && width < 640) {
-              // 細い列には、選択の入口が無い。行のメニューを、キー（Menu キー）で開いて消す。
-              await page.locator('.session-scroll .srow').nth(2).focus();
-              await page.keyboard.press('ContextMenu');
-              await page.getByRole('menuitem', { name: '削除' }).click();
-              await page.getByRole('alertdialog').getByRole('button', { name: '削除' }).click();
-              await toast(page).waitFor();
-            } else {
-              await drive(page);
-            }
+            // 細い窓（640px 未満）では、サイドバーは隠れている。一覧の状態は、引き出しを開いて作る（既定の状態は、閉じたまま）
+            if (width < 640 && name !== 'default') await ensureSidebar(page);
+            await drive(page);
             await page.waitForTimeout(100);
 
             const m = await noHorizontalScroll(page);
@@ -350,33 +342,44 @@ describe('U-8: 行の「…」と、細い列', () => {
     }
   });
 
-  it('幅 390px: 細い列（60px）に、段階の印だけ。検索・選択・日付の見出しは出ない。読み上げの名前には、時刻と Rating が残る', async () => {
+  it('幅 390px: サイドバーは隠れている。引き出しを開くと、全部の形の一覧（日付の見出し・検索・段階・選択・時刻・Rating・迷いの数）が出る（細い列ではない）', async () => {
     const { context, page } = await open({ width: 390 });
     try {
-      const side = await page.locator('.side').boundingBox();
-      expect(side?.width).toBeLessThanOrEqual(61);
-      for (const hidden of ['.filter', '.list-head', '.date-head', '.fstat', '.row-more']) {
-        const visible = await page.locator(hidden).first().isVisible().catch(() => false);
-        expect(visible, hidden).toBe(false);
+      // 閉じている間: 隠れていて、操作できない
+      const side = page.locator('#sidebar');
+      expect(await side.evaluate((el) => el.hasAttribute('inert'))).toBe(true);
+      expect(await page.locator('.session-scroll .srow').first().isVisible()).toBe(false);
+      await ensureSidebar(page);
+      const box = await side.boundingBox();
+      expect(box?.width).toBe(300);
+      for (const shown of ['.filter', '.list-head', '.date-head', '.sessions .sec-title']) {
+        expect(await page.locator(shown).first().isVisible(), shown).toBe(true);
       }
       const rows = page.locator('.session-scroll .srow');
       const first = await rows.first().boundingBox();
-      expect(first?.width).toBeLessThanOrEqual(44);
-      // 段階の印は見える。取り込み前の行には、点線の印。
-      expect(await page.locator('.session-scroll .grade:not(.ghost)').first().isVisible()).toBe(true);
-      expect(await page.locator('.session-scroll .grade.ghost.narrow-only').first().isVisible()).toBe(true);
-      expect(await rows.first().getAttribute('title')).toMatch(/^本日 19:09 /);
-      // 時刻・Rating は、見えない所に寄せてあるだけで、読み上げには残る。
+      expect(first?.width).toBeGreaterThan(200);
+      // 時刻・段階の印・Rating・迷いの数が、見える（寄せて隠していない）
+      for (const shown of ['.s-time', '.grade:not(.ghost)', '.s-rate', '.s-doubt']) {
+        expect(await rows.first().locator(shown).first().isVisible(), shown).toBe(true);
+      }
       expect(await rows.first().textContent()).toContain('19:09');
       expect(await rows.first().textContent()).toContain('93.0');
+      // 取り込み前の行は、文字で「取り込み前」。細い列のための点線の印は無い
+      expect(await page.locator('.session-scroll .s-pending').first().isVisible()).toBe(true);
+      expect(await page.locator('.narrow-only').count()).toBe(0);
+      // 「…」は、行に乗せる・位置を置くと出る
+      await rows.nth(1).hover();
+      await page.waitForTimeout(200);
+      expect(await page.locator('.session-scroll .s-item').nth(1).locator('.row-more').evaluate((e) => getComputedStyle(e).opacity)).toBe('1');
     } finally {
       await context.close();
     }
   });
 
-  it('幅 390px: 行のメニュー（Menu キー）は、その行の右隣に出て窓の中に収まり、Esc でその行のボタンにキーボードの位置が戻る', async () => {
+  it('幅 390px: 引き出しの中の行のメニュー（Menu キー）は、窓の中に収まり、Esc でその行の「…」にキーボードの位置が戻る（引き出しは開いたまま）', async () => {
     const { context, page } = await open({ width: 390 });
     try {
+      await ensureSidebar(page);
       const menu = page.getByRole('menu');
       const rows = page.locator('.session-scroll .srow');
       // 真ん中あたりの行と、一覧のいちばん下の行。
@@ -388,23 +391,28 @@ describe('U-8: 行の「…」と、細い列', () => {
         await page.keyboard.press('ContextMenu');
         await menu.waitFor();
         await poll(() => isFocused(menu.getByRole('menuitem', { name: '開く' }))).toBe(true);
-        const rowBox = await row.boundingBox();
         const menuBox = await menu.boundingBox();
-        expect(rowBox, `行 ${index}`).not.toBeNull();
         expect(menuBox, `メニュー ${index}`).not.toBeNull();
-        if (rowBox === null || menuBox === null) continue;
-        // 行の右隣（細い列の外）。窓の外へ出ない。左上の隅に出ない。
-        expect(menuBox.x, `行 ${index}: 行の右隣`).toBeGreaterThanOrEqual(rowBox.x + rowBox.width);
+        if (menuBox === null) continue;
+        // 窓の外へ出ない。左上の隅に出ない
+        expect(menuBox.x, `行 ${index}`).toBeGreaterThanOrEqual(8);
         expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(390);
         expect(menuBox.y).toBeGreaterThanOrEqual(8);
-        expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(800 - 8 + 1);
-        // 縦は、その行の高さのあたり（左上の隅など、行から離れた所には出ない）。
-        expect(menuBox.y, `行 ${index}: 行より下へ離れない`).toBeLessThanOrEqual(rowBox.y + rowBox.height);
-        expect(menuBox.y + menuBox.height, `行 ${index}: 行より上へ離れない`).toBeGreaterThanOrEqual(rowBox.y);
-
+        expect(menuBox.y + menuBox.height).toBeLessThanOrEqual(844 - 8 + 1);
+        // その行の「…」のそば（縦は、その行の高さのあたり）
+        const moreBox = await page.locator('.session-scroll .s-item').nth(index).locator('.row-more').boundingBox();
+        expect(moreBox).not.toBeNull();
+        if (moreBox !== null) {
+          expect(menuBox.y, `行 ${index}: 「…」より下へ離れない`).toBeLessThanOrEqual(moreBox.y + moreBox.height + 8);
+          expect(menuBox.y + menuBox.height, `行 ${index}: 「…」より上へ離れない`).toBeGreaterThanOrEqual(moreBox.y - 8);
+        }
         await page.keyboard.press('Escape');
         await menu.waitFor({ state: 'detached' });
-        expect(await isFocused(row), `行 ${index}: 閉じたあと、キーボードの位置が行に戻る`).toBe(true);
+        expect(
+          await page.locator('.session-scroll .s-item').nth(index).locator('.row-more').evaluate((el) => el === document.activeElement),
+          `行 ${index}: 閉じたあと、キーボードの位置が「…」に戻る`,
+        ).toBe(true);
+        expect(await page.locator('.app').getAttribute('data-drawer')).toBe('open');
       }
     } finally {
       await context.close();
@@ -538,19 +546,20 @@ describe('U-9: 削除（実ブラウザ）', () => {
     }
   });
 
-  it('幅 390px でも、通知は窓の中に収まり、サイドバーにかからない', async () => {
+  it('幅 390px でも、通知は窓の中に収まる（サイドバーは隠れているので、左端から出る）。引き出しの中で消しても同じ', async () => {
     const { context, page } = await open({ width: 390 });
     try {
+      await ensureSidebar(page);
       await page.locator('.session-scroll .srow').nth(2).focus();
       await page.keyboard.press('ContextMenu');
       await page.getByRole('menuitem', { name: '削除' }).click();
       await page.getByRole('alertdialog').getByRole('button', { name: '削除' }).click();
       await toast(page).waitFor();
       const box = await toast(page).boundingBox();
-      const side = await page.locator('.side').boundingBox();
       expect(box).not.toBeNull();
       expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
-      expect(box?.x ?? 0).toBeGreaterThanOrEqual((side?.x ?? 0) + (side?.width ?? 0));
+      expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
+      expect(box?.x ?? 99).toBeLessThanOrEqual(16);
     } finally {
       await context.close();
     }
@@ -559,6 +568,7 @@ describe('U-9: 削除（実ブラウザ）', () => {
   it('幅 380px（実機は縦のスクロール バーのぶん、390px の窓がこれだけ狭い）: 通知の文が 2 行になっても、1 文字だけ次の行へ落ちない', async () => {
     const { context, page } = await open({ width: 380 });
     try {
+      await ensureSidebar(page);
       await page.locator('.session-scroll .srow').nth(2).focus();
       await page.keyboard.press('ContextMenu');
       await page.getByRole('menuitem', { name: '削除' }).click();

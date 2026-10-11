@@ -40,9 +40,8 @@ export type PopupItem =
  * メニューを出す場所。
  * `below`: 開いたボタンの下に、右端をそろえて出す（下に入らなければ上）。ふつうの「…」や、段階のボタン。
  * `start`: 開いたボタンの下に、左端をそろえて出す（下に入らなければ上）。左から並べたボタンの下に出すとき（検討ログの絞り込み）。
- * `beside`: 開いた物の右隣に、上端をそろえて出す。幅の狭い物（細い列の行）の下に出すと、列からはみ出して離れて見えるため。
  */
-export type PopupPlacement = 'below' | 'start' | 'beside';
+export type PopupPlacement = 'below' | 'start';
 
 interface PopupProps {
   /** メニューの名前（読み上げ用）。 */
@@ -69,16 +68,10 @@ export function Popup({ label, items, anchor, placement = 'below', onClose }: Po
     const height = pop.offsetHeight;
     const viewWidth = document.documentElement.clientWidth;
     const viewHeight = document.documentElement.clientHeight;
-    let left: number;
-    let top: number;
-    if (placement === 'beside') {
-      left = Math.max(8, Math.min(rect.right + 8, viewWidth - width - 8));
-      top = Math.max(8, Math.min(rect.top, viewHeight - height - 8));
-    } else {
-      left = Math.max(8, Math.min(placement === 'start' ? rect.left : rect.right - width, viewWidth - width - 8));
-      top = rect.bottom + 4;
-      if (top + height > viewHeight - 8) top = Math.max(8, rect.top - height - 4);
-    }
+    // 開いたボタンの下に、右端（`start` なら左端）をそろえて出す（下に入らなければ上）
+    const left = Math.max(8, Math.min(placement === 'start' ? rect.left : rect.right - width, viewWidth - width - 8));
+    let top = rect.bottom + 4;
+    if (top + height > viewHeight - 8) top = Math.max(8, rect.top - height - 4);
     pop.style.left = `${left}px`;
     pop.style.top = `${top}px`;
   }, [anchor, placement]);

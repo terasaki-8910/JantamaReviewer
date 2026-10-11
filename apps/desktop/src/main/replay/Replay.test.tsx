@@ -462,11 +462,99 @@ describe('U-21 既定のキー（R10-3）', () => {
     expect(pos()).toBe('手 1 / 61');
   });
 
+  it('U-21 Home は局の頭、End は局の終わり（R11-4）。端では動かず、押したキーは窓のスクロールを止める', async () => {
+    const { user } = setup();
+    await loaded();
+    await openReplay(user);
+    const HOME = { code: 'Home', key: 'Home' };
+    const END = { code: 'End', key: 'End' };
+    // 局の頭では、Home は何も動かさない
+    expect(press(HOME)).toBe(false);
+    expect(pos()).toBe('手 1 / 80');
+    // 数手進んでから Home: この局の頭へ
+    press(PERIOD);
+    press(PERIOD);
+    press(PERIOD);
+    expect(pos()).toBe('手 4 / 80');
+    press(HOME);
+    expect(title()).toBe('東1局 配牌');
+    expect(pos()).toBe('手 1 / 80');
+    // End: この局の最後の手へ（結果が出る）。もう一度押しても動かない
+    expect(press(END)).toBe(false);
+    expect(pos()).toBe('手 80 / 80');
+    expect(nowText()).toBe('この局が終わりました');
+    press(END);
+    expect(pos()).toBe('手 80 / 80');
+    // 次の局でも、その局の頭・終わり
+    press(PERIOD);
+    expect(title()).toBe('東2局 配牌');
+    press(PERIOD);
+    press(PERIOD);
+    press(END);
+    expect(title()).toMatch(/^東2局 /);
+    expect(pos()).toBe(`手 ${timeline.kyokus[1]!.steps.length} / ${timeline.kyokus[1]!.steps.length}`);
+    press(HOME);
+    expect(title()).toBe('東2局 配牌');
+    expect(pos()).toBe('手 1 / ' + timeline.kyokus[1]!.steps.length);
+    // ボタンと同じ動き（局の頭へ・局の終わりへ）。ボタンの title にキーが出る
+    expect(screen.getByRole('button', { name: '局の頭へ' })).toHaveAttribute('title', '局の頭へ（Home）');
+    expect(screen.getByRole('button', { name: '局の終わりへ' })).toHaveAttribute('title', '局の終わりへ（End）');
+  });
+
+  it('U-21 Home・End を利用者が外していれば（保存してある設定の null）、外れたまま。キーを押しても何も動かない', async () => {
+    const { user } = setup({ settings: { replay_keys: { ...defaultReplayKeys(), kyoku_start: null, kyoku_end: null } } });
+    await loaded();
+    await openReplay(user);
+    press(PERIOD);
+    press(PERIOD);
+    expect(press({ code: 'Home', key: 'Home' })).toBe(true);
+    expect(press({ code: 'End', key: 'End' })).toBe(true);
+    expect(pos()).toBe('手 3 / 80');
+    await user.click(screen.getByRole('button', { name: 'キーの一覧と割り当て' }));
+    const dialog = screen.getByRole('dialog', { name: 'キーの一覧と割り当て' });
+    const key = (label: string) =>
+      (within(dialog).getByText(label, { selector: '.kp-name' }).closest('li') as HTMLElement).querySelector('.kp-key')?.textContent;
+    expect(key('局の頭')).toBe('なし');
+    expect(key('局の終わり')).toBe('なし');
+  });
+
+  it('U-21 保存してある設定に局の頭・終わりの値が無ければ、Home・End が既定で入る。ほかの操作が Home を使っていれば、局の頭は割り当て無し', async () => {
+    const withoutThem = { ...defaultReplayKeys(), step_back: 'KeyJ' } as Record<string, string | null>;
+    delete withoutThem.kyoku_start;
+    delete withoutThem.kyoku_end;
+    const first = setup({ settings: { replay_keys: withoutThem } });
+    await loaded();
+    await openReplay(first.user);
+    press(PERIOD);
+    press(PERIOD);
+    press({ code: 'KeyJ', key: 'j' });
+    expect(pos()).toBe('手 2 / 80');
+    press({ code: 'Home', key: 'Home' });
+    expect(pos()).toBe('手 1 / 80');
+    press({ code: 'End', key: 'End' });
+    expect(pos()).toBe('手 80 / 80');
+    first.view.unmount();
+
+    const taken = { ...defaultReplayKeys(), next_turn: 'Home' } as Record<string, string | null>;
+    delete taken.kyoku_start;
+    delete taken.kyoku_end;
+    const second = setup({ settings: { replay_keys: taken } });
+    await loaded();
+    await openReplay(second.user);
+    press(PERIOD);
+    press(PERIOD);
+    expect(title()).toBe('東1局 1巡目');
+    press({ code: 'Home', key: 'Home' }); // 次の巡目（局の頭ではない）
+    expect(title()).toBe('東1局 2巡目');
+    press({ code: 'End', key: 'End' });
+    expect(pos()).toBe('手 80 / 80');
+  });
+
   it('巡目の移動は、既定ではボタンだけ（キーを押しても動かない）。Alt+← → は取らない', async () => {
     const { user } = setup();
     await loaded();
     await openReplay(user);
-    for (const code of ['BracketRight', 'BracketLeft', 'KeyN', 'KeyP', 'PageDown', 'Home', 'End']) {
+    for (const code of ['BracketRight', 'BracketLeft', 'KeyN', 'KeyP', 'PageDown', 'PageUp']) {
       press({ code });
       expect(pos(), code).toBe('手 1 / 80');
     }
@@ -526,6 +614,35 @@ describe('U-21 既定のキー（R10-3）', () => {
     press(COMMA);
     expect(pos()).toBe(posAt(stepOf('k1h1e7') - 1));
   });
+
+  it('U-21 手牌の牌にキーボードの位置があるとき、Home・End は牌の移動のまま（局の頭・局の終わりへは行かない）。位置の帯でも、帯の Home・End が先', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
+    await screen.findByLabelText('理由（1行）');
+    const stop = document.querySelector<HTMLElement>('.hand .tile-btn[tabindex="0"]')!;
+    stop.focus();
+    const here = pos();
+    const tiles = [...document.querySelectorAll<HTMLElement>('.hand .tile-btn')].filter((tile) => !(tile as HTMLButtonElement).disabled);
+    expect(tiles.length).toBeGreaterThan(2);
+    expect(press({ code: 'End', key: 'End' })).toBe(false);
+    expect(pos()).toBe(here);
+    expect(document.activeElement).toBe(tiles[tiles.length - 1]);
+    press({ code: 'Home', key: 'Home' });
+    expect(pos()).toBe(here);
+    expect(document.activeElement).toBe(tiles[0]);
+    // 手牌から外れると（見出しなど）、Home は局の頭へ
+    (document.activeElement as HTMLElement).blur();
+    press({ code: 'Home', key: 'Home' });
+    expect(pos()).toBe('手 1 / 48');
+    // 位置の帯（スライダー）では、帯の Home・End（半荘の頭・終わり）
+    const track = screen.getByRole('slider', { name: '半荘の中の位置（左右の矢印で1手ずつ）' });
+    track.focus();
+    press({ code: 'End', key: 'End' });
+    expect(track).toHaveAttribute('aria-valuenow', '289');
+    press({ code: 'Home', key: 'Home' });
+    expect(track).toHaveAttribute('aria-valuenow', '1');
+  });
 });
 
 describe('U-21 キーの説明と割り当ての変更（アイコンを押すか、マウスを乗せる）', () => {
@@ -556,8 +673,8 @@ describe('U-21 キーの説明と割り当ての変更（アイコンを押す�
     expect(text('次の局')).toBe('Shift→');
     expect(text('前の巡目')).toBe('なし');
     expect(text('次の巡目')).toBe('なし');
-    expect(text('局の頭')).toBe('なし');
-    expect(text('局の終わり')).toBe('なし');
+    expect(text('局の頭')).toBe('Home');
+    expect(text('局の終わり')).toBe('End');
     // もう一度押すと閉じる
     await user.click(icon);
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -776,7 +893,20 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
       ['迷い6'],
       ['大きな不一致'],
     ]);
-    expect(screen.getByText('場面を押すと、その場面へ飛びます。場面に着くまで、AIの答えは出ません。')).toBeInTheDocument();
+    // 操作の説明は、本文に出さず、見出しのそばの (i) に乗せるか選ぶと、重ねて出る（U-25）
+    const panel = document.querySelector('.scenes-h') as HTMLElement;
+    expect(panel.textContent).not.toContain('場面を押すと');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    const icon = within(panel).getByRole('button', { name: '場面の一覧の操作の説明' });
+    expect(icon.closest('.sec-head')?.querySelector('h2')?.textContent).toBe('この半荘の場面');
+    expect(screen.getByRole('list', { name: '場面の一覧' })).toHaveAccessibleDescription(
+      '場面を押すと、その場面へ飛びます。場面に着くまで、AIの答えは出ません。',
+    );
+    await user.hover(icon);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('場面を押すと、その場面へ飛びます。場面に着くまで、AIの答えは出ません。');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await user.unhover(icon);
     // 場面を押すと、その場面へ飛ぶ。答えの欄が出る
     await user.click(rows[3] as HTMLElement);
     expect(title()).toBe('東2局1本場 6巡目');

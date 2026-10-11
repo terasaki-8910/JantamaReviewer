@@ -10,6 +10,7 @@ import { useEffect, useMemo, type ReactNode } from 'react';
 
 import type { AnswerMode } from '../../api/types';
 import { Icon } from '../Icon';
+import { InfoTip } from '../InfoTip';
 import { MenuSelect, type MenuSelectItem } from '../MenuSelect';
 import { formatElapsed, formatMonthDay } from '../study/labels';
 import { StudyNotice } from '../study/StudyNotice';
@@ -303,9 +304,9 @@ export function LogPage({ state, onOpen }: LogPageProps) {
               />
               答えを出す
             </label>
-            <p className="quiet" id="log-answers-help">
+            <InfoTip label="「答えを出す」の説明" id="log-answers-help">
               あとで解き直すときに答えが見えてしまわないよう、ふだんは隠します。
-            </p>
+            </InfoTip>
           </div>
         </div>
         {shown.length > 0 ? (

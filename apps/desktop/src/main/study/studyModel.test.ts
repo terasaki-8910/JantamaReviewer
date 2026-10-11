@@ -84,7 +84,7 @@ describe('U-15 今日の出題の画面のデータ', () => {
     expect(model.today.rest).toHaveLength(collected.problems.length);
   });
 
-  it('出題で答えた問題は「回答済み」になり、数が減る。残りから答えた問題（追加で解いた分）は、残りから消える', () => {
+  it('出題で答えた問題は「解答済み」になり、数が減る。残りから答えた問題（追加で解いた分）は、残りから消える', () => {
     const [first] = daily;
     const extra = collected.problems.find((problem) => problem.kind === 'disagreement');
     if (first === undefined || extra === undefined) throw new Error('問題が無い');

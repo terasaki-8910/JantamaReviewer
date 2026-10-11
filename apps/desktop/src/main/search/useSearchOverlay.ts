@@ -11,8 +11,10 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 
 import { useShortcutsBlocked } from '../undo/shortcutGuard';
 
-/** 検索のアイコン（サイドバーの見出し）。戻し先が無いときに探す。 */
-const SEARCH_BUTTON = '.side-head .search-btn';
+/** 検索のアイコン（サイドバーの見出しか、本文の上の帯）。戻し先が無いときに、いま見えている（操作できる）ほうを探す。 */
+function visibleSearchButton(): HTMLElement | null {
+  return [...document.querySelectorAll<HTMLElement>('.search-btn')].find((button) => button.closest('[inert]') === null) ?? null;
+}
 
 export interface SearchOverlayControl {
   open: boolean;
@@ -46,7 +48,7 @@ export function useSearchOverlay(): SearchOverlayControl {
     const back =
       opener.current !== null && opener.current.isConnected
         ? opener.current
-        : document.querySelector<HTMLElement>(SEARCH_BUTTON);
+        : visibleSearchButton();
     if (mode === 'opener') {
       back?.focus();
       return;

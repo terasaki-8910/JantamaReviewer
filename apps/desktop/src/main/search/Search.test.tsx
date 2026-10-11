@@ -85,10 +85,11 @@ describe('U-22: サイドバーの見出し', () => {
     // 見出しに、アプリの名前の文字は無い（アイコンだけ。U-22）
     expect(head.textContent?.trim()).toBe('');
     const buttons = [...head.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
-    expect(buttons).toEqual(['検索', '戻る', '進む']);
-    // 並び: アイコン → 検索 → ← → のすぐ左に検索
+    expect(buttons).toEqual(['サイドバーを閉じる', '検索', '戻る', '進む']);
+    // 並び: サイドバーを閉じるボタン → アイコン → 検索 → ← → のすぐ左に検索
     const order = [...head.querySelectorAll('img.app-mark, button')].map((el) => el.className.split(' ')[0] ?? '');
-    expect(order[0]).toBe('app-mark');
+    expect(order[0]).toBe('icon-btn');
+    expect(order[1]).toBe('app-mark');
     const tools = head.querySelector('.side-tools') as HTMLElement;
     expect([...tools.children].map((c) => c.className.split(' ').at(-1) ?? '')).toEqual(['search-btn', 'side-hist']);
     // ← → は、これまでどおり（見た画面が無いので、押せない）
