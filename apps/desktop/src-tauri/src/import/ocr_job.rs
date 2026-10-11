@@ -5,6 +5,10 @@
 //! 同じ画像は読み直さない。ウィジェット・ボタンを拾う部分・撮影・記録・補助プログラムのコードは、文字認識を使わない
 //! （文字認識のクレート `jantama-ocr` を使ってよいソースは、このファイルだけ。`tests/safety.rs` の S-3 が確かめる）。
 //!
+//! 1 枚の画像は、1 回目の画像（切り出して 3 倍にしたもの）に加えて、読み直し用の画像（コントラストを上げたもの・1.5 倍に広げたもの。
+//! E-20）でも読み、すべて写しに残す。1 回目で局・残り枚数・点数が取れなければ、読み直しの最初に取れたものを使うが、
+//! その選びは、行から取り出す側（エンジンの `parseCenterText`）が決める（ここには、同じ取り出しの規則を持たない）。
+//!
 //! 画像から行を読む部分は `LineReader` という口にして、準備（どの画像を読むか）と実行（読んで写しに入れる）は、
 //! 偽の読み取りで単体試験できるようにしてある。製品の読み取り `WindowsReader` は、専用のスレッドで動く
 //! Windows の日本語の文字認識で、`spawn_blocking` などの、画面とは別のスレッドから使う。
@@ -13,14 +17,22 @@ use std::path::{Path, PathBuf};
 
 use jantama_ocr::{OcrError, OcrWorker, GEOMETRY_ID};
 
-use crate::store::{OcrCache, OcrEntry};
+use crate::store::{OcrCache, OcrEntry, OcrRetry};
+
+/// 画像 1 枚の読み取り: 1 回目の画像の行と、読み直しの画像ごとの行（読んだ順）。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ShotReading {
+    pub lines: Vec<String>,
+    pub retries: Vec<OcrRetry>,
+}
 
 /// 画像 1 枚から、行ごとの文字を読む口。
 pub trait LineReader {
-    fn read_lines(&self, png: &Path) -> Result<Vec<String>, OcrError>;
+    fn read(&self, png: &Path) -> Result<ShotReading, OcrError>;
 }
 
-/// 製品の読み取り: 専用のスレッドで動く、Windows の日本語の文字認識（画面中央の板を切り出して、3 倍にして読む）。
+/// 製品の読み取り: 専用のスレッドで動く、Windows の日本語の文字認識（画面中央の板を切り出して、3 倍にして読む。
+/// 読み直し用に、コントラストを上げた画像と 1.5 倍に広げた画像も読む）。
 pub struct WindowsReader {
     worker: OcrWorker,
 }
@@ -35,8 +47,19 @@ impl WindowsReader {
 }
 
 impl LineReader for WindowsReader {
-    fn read_lines(&self, png: &Path) -> Result<Vec<String>, OcrError> {
-        self.worker.read_center_lines(png)
+    fn read(&self, png: &Path) -> Result<ShotReading, OcrError> {
+        let mut readings = self.worker.read_center_variants(png)?.into_iter();
+        // 先頭は、必ず 1 回目の画像（読めなければ、ここまで来ずに失敗している）。
+        let first = readings.next().map(|r| r.lines).unwrap_or_default();
+        Ok(ShotReading {
+            lines: first,
+            retries: readings
+                .map(|r| OcrRetry {
+                    variant: r.variant.name().to_string(),
+                    lines: r.lines,
+                })
+                .collect(),
+        })
     }
 }
 
@@ -118,12 +141,17 @@ pub fn run_job(
 ) -> Result<(), OcrError> {
     let todo = std::mem::take(&mut job.todo);
     for (index, shot) in todo.iter().enumerate() {
-        match reader.read_lines(&shot.absolute) {
-            Ok(lines) => {
+        match reader.read(&shot.absolute) {
+            Ok(reading) => {
                 job.changed = true;
-                job.cache
-                    .entries
-                    .insert(shot.relative.clone(), OcrEntry { lines, error: None });
+                job.cache.entries.insert(
+                    shot.relative.clone(),
+                    OcrEntry {
+                        lines: reading.lines,
+                        retries: reading.retries,
+                        error: None,
+                    },
+                );
             }
             Err(e) if is_fatal(&e) => {
                 job.todo = todo[index..].to_vec();
@@ -135,6 +163,7 @@ pub fn run_job(
                     shot.relative.clone(),
                     OcrEntry {
                         lines: Vec::new(),
+                        retries: Vec::new(),
                         error: Some(e.to_string()),
                     },
                 );
@@ -162,6 +191,7 @@ mod tests {
     fn entry(lines: &[&str]) -> OcrEntry {
         OcrEntry {
             lines: lines.iter().map(|l| l.to_string()).collect(),
+            retries: Vec::new(),
             error: None,
         }
     }
@@ -206,12 +236,18 @@ mod tests {
     }
 
     impl LineReader for FakeReader {
-        fn read_lines(&self, png: &Path) -> Result<Vec<String>, OcrError> {
+        fn read(&self, png: &Path) -> Result<ShotReading, OcrError> {
             let name = png.file_stem().unwrap().to_string_lossy().into_owned();
             self.read.borrow_mut().push(name.clone());
             match (self.fail)(&name) {
                 Some(e) => Err(e),
-                None => Ok(vec![format!("lines of {name}")]),
+                None => Ok(ShotReading {
+                    lines: vec![format!("lines of {name}")],
+                    retries: vec![OcrRetry {
+                        variant: "contrast1.8".into(),
+                        lines: vec![format!("retry of {name}")],
+                    }],
+                }),
             }
         }
     }
@@ -238,8 +274,38 @@ mod tests {
         assert_eq!(count, 1);
         assert_eq!(job.cache.entries.len(), 2);
         assert_eq!(job.cache.entries["marks/a.png"], entry(&["東 1 局"]));
-        assert_eq!(job.cache.entries["marks/b.png"], entry(&["lines of b"]));
+        assert_eq!(
+            job.cache.entries["marks/b.png"].lines,
+            vec!["lines of b".to_string()]
+        );
         assert!(job.todo.is_empty());
+    }
+
+    #[test]
+    fn the_first_reading_and_every_retry_are_kept_in_the_cache_in_reading_order() {
+        let mut job = plan_session("s", vec![shot("a")], None);
+        run_job(&FakeReader::ok(), &mut job, &mut || {}).unwrap();
+        let a = &job.cache.entries["marks/a.png"];
+        assert_eq!(a.lines, vec!["lines of a".to_string()]);
+        assert_eq!(
+            a.retries,
+            vec![OcrRetry {
+                variant: "contrast1.8".into(),
+                lines: vec!["retry of a".into()],
+            }]
+        );
+        assert!(a.error.is_none());
+    }
+
+    #[test]
+    fn a_cache_from_the_first_geometry_is_read_again_so_that_the_retries_are_filled_in() {
+        // v1 の写し（読み直しが無い）は、決まりの名前が違うので捨てて、全部を読み直す。
+        let old = cache("center-v1-lanczos3x", &[("a", entry(&["崩れた行"]))]);
+        let mut job = plan_session("s", vec![shot("a")], Some(old));
+        assert_eq!(job.todo, vec![shot("a")]);
+        run_job(&FakeReader::ok(), &mut job, &mut || {}).unwrap();
+        assert_eq!(job.cache.geometry, GEOMETRY_ID);
+        assert_eq!(job.cache.entries["marks/a.png"].retries.len(), 1);
     }
 
     #[test]

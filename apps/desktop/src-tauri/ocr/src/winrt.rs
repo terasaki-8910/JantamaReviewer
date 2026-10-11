@@ -3,6 +3,9 @@
 //! 待ちのある呼び出し（`join`）は、すべて `OcrWorker` の専用のスレッドの中で行う。画面（UI）のスレッドや、
 //! 窓のメッセージを処理するスレッドで待つと、画面が止まるため。
 //! 文字認識の部品（`OcrEngine`）は、その専用のスレッドで 1 回だけ作って使い回す。
+//!
+//! 1 枚の画像は、1 回目の画像（`Variant::Plain`）に加えて、読み直し用の画像（`Contrast`・`Enlarged`。E-20）でも読める
+//! （`read_center_variants`）。どの読み取りを使うかは、結果の文字から局・残り枚数・点数を取り出す側（エンジン）が決める。
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -19,8 +22,8 @@ use windows::Storage::Streams::{Buffer, DataReader, DataWriter};
 use windows::Storage::{FileAccessMode, StorageFile};
 
 use crate::error::OcrError;
-use crate::geometry::{center_crop, UPSCALE};
-use crate::resample::crop_and_upscale;
+use crate::geometry::{center_crop, Variant, UPSCALE};
+use crate::resample::{crop_and_upscale, variant_pixels};
 
 /// 文字認識にかける言語（日本語）。
 const LANGUAGE_TAG: &str = "ja";
@@ -34,11 +37,22 @@ enum Region {
     Whole,
 }
 
+/// 1 通りの画像を文字認識で読んだ結果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reading {
+    /// どの画像で読んだか。
+    pub variant: Variant,
+    /// 認識した行（上から順）。
+    pub lines: Vec<String>,
+}
+
 enum Request {
     Read {
         path: PathBuf,
         region: Region,
-        reply: Sender<Result<Vec<String>, OcrError>>,
+        /// true なら、読み直し用の画像（コントラストを上げたもの・1.5 倍に広げたもの）でも読む。
+        variants: bool,
+        reply: Sender<Result<Vec<Reading>, OcrError>>,
     },
 }
 
@@ -75,17 +89,34 @@ impl OcrWorker {
         }
     }
 
-    /// 迷いマーク・評価の画面（雀魂の窓のスクリーンショット）の中央の板を読んで、行ごとの文字を返す。
+    /// 迷いマーク・評価の画面（雀魂の窓のスクリーンショット）の中央の板を読んで、行ごとの文字を返す（1 回目の画像だけ）。
     pub fn read_center_lines(&self, png: &Path) -> Result<Vec<String>, OcrError> {
-        self.request(png, Region::Center)
+        Ok(first_lines(self.request(png, Region::Center, false)?))
     }
 
     /// 切り出さずに、画像そのままを読む。切り出し・拡大が済んだ画像（試験の素材）を読むためのもの。
     pub fn read_lines_uncropped(&self, png: &Path) -> Result<Vec<String>, OcrError> {
-        self.request(png, Region::Whole)
+        Ok(first_lines(self.request(png, Region::Whole, false)?))
     }
 
-    fn request(&self, png: &Path, region: Region) -> Result<Vec<String>, OcrError> {
+    /// 中央の板を、1 回目の画像（3 倍）と、読み直し用の画像（コントラストを上げたもの・1.5 倍に広げたもの）で読む（E-20）。
+    /// 先頭は必ず 1 回目（`Variant::Plain`。これが読めなければ失敗）。読み直しの画像が文字認識の上限より大きくなるときなどは、
+    /// その画像だけを飛ばす（返す結果に入れない）。
+    pub fn read_center_variants(&self, png: &Path) -> Result<Vec<Reading>, OcrError> {
+        self.request(png, Region::Center, true)
+    }
+
+    /// 切り出さずに、画像そのままを 1 回目の画像として、読み直し用の画像も作って読む（試験の素材用）。
+    pub fn read_variants_uncropped(&self, png: &Path) -> Result<Vec<Reading>, OcrError> {
+        self.request(png, Region::Whole, true)
+    }
+
+    fn request(
+        &self,
+        png: &Path,
+        region: Region,
+        variants: bool,
+    ) -> Result<Vec<Reading>, OcrError> {
         let (reply, answer) = mpsc::channel();
         let tx = self
             .tx
@@ -94,6 +125,7 @@ impl OcrWorker {
         tx.send(Request::Read {
             path: png.to_path_buf(),
             region,
+            variants,
             reply,
         })
         .map_err(|_| OcrError::Worker("担当は止まっています".into()))?;
@@ -101,6 +133,15 @@ impl OcrWorker {
             .recv()
             .map_err(|_| OcrError::Worker("答えが届きませんでした".into()))?
     }
+}
+
+/// 読み取りの先頭（1 回目の画像）の行。
+fn first_lines(readings: Vec<Reading>) -> Vec<String> {
+    readings
+        .into_iter()
+        .next()
+        .map(|reading| reading.lines)
+        .unwrap_or_default()
 }
 
 impl Drop for OcrWorker {
@@ -140,9 +181,10 @@ fn worker_main(rx: Receiver<Request>, ready: Sender<Result<(), OcrError>>) {
             Request::Read {
                 path,
                 region,
+                variants,
                 reply,
             } => {
-                let _ = reply.send(read_one(&engine, &path, region));
+                let _ = reply.send(read_one(&engine, &path, region, variants));
             }
         }
     }
@@ -157,9 +199,45 @@ fn create_engine() -> Result<OcrEngine, OcrError> {
     OcrEngine::TryCreateFromLanguage(&language).map_err(|_| OcrError::JapaneseEngineMissing)
 }
 
-fn read_one(engine: &OcrEngine, path: &Path, region: Region) -> Result<Vec<String>, OcrError> {
-    let bitmap = decode(path, region)?;
-    recognize(engine, &bitmap)
+/// 画像を読む。`variants` が true なら、1 回目の画像のあとに、読み直し用の画像（`Variant::ALL` の順）も読む。
+/// 1 回目の失敗は、そのまま返す。読み直しの画像の失敗（上限を超える大きさなど）は、その画像だけ飛ばす。
+fn read_one(
+    engine: &OcrEngine,
+    path: &Path,
+    region: Region,
+    variants: bool,
+) -> Result<Vec<Reading>, OcrError> {
+    let base = decode_base(path, region)?;
+    let plain = bitmap_of(path, &base.pixels, base.width, base.height)?;
+    let mut readings = vec![Reading {
+        variant: Variant::Plain,
+        lines: recognize(engine, &plain)?,
+    }];
+    if variants {
+        for variant in Variant::ALL.into_iter().filter(|v| *v != Variant::Plain) {
+            let (pixels, width, height) =
+                variant_pixels(variant, &base.pixels, base.width, base.height);
+            let read = bitmap_of(path, &pixels, width, height)
+                .and_then(|bitmap| recognize(engine, &bitmap));
+            if let Ok(lines) = read {
+                readings.push(Reading { variant, lines });
+            }
+        }
+    }
+    Ok(readings)
+}
+
+/// 行を詰めた BGRA の並びから、文字認識にかける `SoftwareBitmap` を作る（失敗は、画像を読めなかった失敗にする）。
+fn bitmap_of(
+    path: &Path,
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<SoftwareBitmap, OcrError> {
+    bitmap_from_bgra(pixels, width, height).map_err(|e| OcrError::Decode {
+        path: path.display().to_string(),
+        reason: e.message(),
+    })
 }
 
 fn recognize(engine: &OcrEngine, bitmap: &SoftwareBitmap) -> Result<Vec<String>, OcrError> {
@@ -184,26 +262,48 @@ fn recognize(engine: &OcrEngine, bitmap: &SoftwareBitmap) -> Result<Vec<String>,
     Ok(texts)
 }
 
-/// 画像のファイルを読んで、文字認識にかける `SoftwareBitmap`（Bgra8）にする。
+/// 文字認識にかける 1 回目の画像の画素（B, G, R, A の並び）と大きさ。
+struct Base {
+    pixels: Vec<u8>,
+    width: u32,
+    height: u32,
+}
+
+/// 画像のファイルを読んで、1 回目の画像の画素にする。
 /// `Region::Center` なら、中央の板を切り出して `UPSCALE` 倍にした画像（WinRT で読み、切り出しと拡大は `resample`）。
-fn decode(path: &Path, region: Region) -> Result<SoftwareBitmap, OcrError> {
+/// `Region::Whole` なら、画像そのまま。
+fn decode_base(path: &Path, region: Region) -> Result<Base, OcrError> {
     let shown = path.display().to_string();
     let decode_err = |reason: String| OcrError::Decode {
         path: shown.clone(),
         reason,
     };
     let full = decode_whole(path)?;
-    if region == Region::Whole {
-        return Ok(full);
-    }
     let width = full.PixelWidth().map_err(|e| decode_err(e.message()))? as u32;
     let height = full.PixelHeight().map_err(|e| decode_err(e.message()))? as u32;
+    let pixels = copy_pixels(&full).map_err(|e| decode_err(e.message()))?;
+    if region == Region::Whole {
+        return Ok(Base {
+            pixels,
+            width,
+            height,
+        });
+    }
     let crop = center_crop(width, height)
         .ok_or_else(|| decode_err(format!("画像が小さすぎます（{width}×{height}）")))?;
-    let pixels = copy_pixels(&full).map_err(|e| decode_err(e.message()))?;
-    let big = crop_and_upscale(&pixels, width, height, crop, UPSCALE);
     let (big_width, big_height) = crop.scaled(UPSCALE);
-    bitmap_from_bgra(&big, big_width, big_height).map_err(|e| decode_err(e.message()))
+    Ok(Base {
+        pixels: crop_and_upscale(&pixels, width, height, crop, UPSCALE),
+        width: big_width,
+        height: big_height,
+    })
+}
+
+/// 画像のファイルを読んで、文字認識にかける `SoftwareBitmap`（Bgra8）にする（1 回目の画像。切り出しと拡大の試験が使う）。
+#[cfg(test)]
+fn decode(path: &Path, region: Region) -> Result<SoftwareBitmap, OcrError> {
+    let base = decode_base(path, region)?;
+    bitmap_of(path, &base.pixels, base.width, base.height)
 }
 
 /// 画像のファイルを、そのまま（切り出しも拡大も、色の補正もせずに）`SoftwareBitmap`（Bgra8）として読む。

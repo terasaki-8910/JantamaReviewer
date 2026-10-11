@@ -284,10 +284,23 @@ pub struct RatingRecord {
     pub screenshot_path: Option<String>,
 }
 
+/// 読み直し 1 回分（E-20）。1 回目の画像で読めなかったときのために、同じ画像を作り変えて読んだ結果。
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct OcrRetry {
+    /// どの画像で読み直したか（`contrast1.8` = コントラストを上げた画像、`upscale1.5` = 1.5 倍に広げた画像）。
+    pub variant: String,
+    pub lines: Vec<String>,
+}
+
 /// 画像 1 枚の文字認識の結果（行ごとの文字）。読めなかったときは、理由が `error` に入る。
+/// `retries` は、読み直し（コントラストを上げた画像・1.5 倍に広げた画像）の結果で、読む順に並ぶ。
+/// 1 回目の `lines` と、読み直しのどれを使うかは、行から局・残り枚数・点数を取り出す側（エンジン）が決める
+/// （1 回目で読めればそれ。読めなければ、読み直しの最初に読めたもの）。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct OcrEntry {
     pub lines: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retries: Vec<OcrRetry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -2531,13 +2544,17 @@ mod tests {
         let id = session_with_records(&mut store);
         assert_eq!(store.load_ocr(&id).unwrap(), None);
         let mut cache = OcrCache {
-            geometry: "center-v1-lanczos3x".into(),
+            geometry: "center-v2-lanczos3x-variants".into(),
             entries: BTreeMap::new(),
         };
         cache.entries.insert(
             "marks/a.png".into(),
             OcrEntry {
                 lines: vec!["東 1 局".into(), "个 5 9".into(), "25000".into()],
+                retries: vec![OcrRetry {
+                    variant: "contrast1.8".into(),
+                    lines: vec!["東 1 局".into(), "个 5 9".into(), "25000".into()],
+                }],
                 error: None,
             },
         );
@@ -2545,6 +2562,7 @@ mod tests {
             "marks/b.png".into(),
             OcrEntry {
                 lines: vec![],
+                retries: vec![],
                 error: Some("画像を開けませんでした".into()),
             },
         );
@@ -2555,6 +2573,38 @@ mod tests {
         let dir = store.root().join(GAMES_DIR).join(&id);
         assert!(dir.join(OCR_FILE).is_file());
         assert!(!dir.join("ocr.json.tmp").exists());
+    }
+
+    #[test]
+    fn the_ocr_entry_json_has_a_stable_shape_and_old_entries_without_retries_still_read() {
+        // 読み直しが無いものは、retries を書かない。無い項目は、空として読む（古い写しは、geometry が違うので読み直されるが、読めはする）。
+        let plain = OcrEntry {
+            lines: vec!["東 1 局".into()],
+            ..OcrEntry::default()
+        };
+        assert_eq!(
+            serde_json::to_string(&plain).unwrap(),
+            r#"{"lines":["東 1 局"]}"#
+        );
+        let with = OcrEntry {
+            lines: vec!["a".into()],
+            retries: vec![OcrRetry {
+                variant: "upscale1.5".into(),
+                lines: vec!["b".into()],
+            }],
+            error: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&with).unwrap(),
+            r#"{"lines":["a"],"retries":[{"variant":"upscale1.5","lines":["b"]}]}"#
+        );
+        let old: OcrEntry = serde_json::from_str(r#"{"lines":["東 1 局"]}"#).unwrap();
+        assert_eq!(old, plain);
+        let cache: OcrCache = serde_json::from_str(
+            r#"{"geometry":"center-v1-lanczos3x","entries":{"marks/a.png":{"lines":["x"]}}}"#,
+        )
+        .unwrap();
+        assert_eq!(cache.entries["marks/a.png"].retries, Vec::<OcrRetry>::new());
     }
 
     #[test]
