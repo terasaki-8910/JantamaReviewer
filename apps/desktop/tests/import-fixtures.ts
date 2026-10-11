@@ -30,7 +30,7 @@ export const FX4_OCR: Fx4OcrMark[] = (
 ).marks;
 
 /** 切り出しの決まりの名前（Rust 側の `jantama_ocr::GEOMETRY_ID`）。 */
-export const OCR_GEOMETRY = 'center-v2-lanczos3x-variants';
+export const OCR_GEOMETRY = 'center-v3-cyan-tight';
 
 /** FX-4 の迷いマーク 6 枚（id は 1〜6）と、評価 5 件（id は 7〜11。スクショは読み取れていない）を持つ半荘。 */
 export function fx4Session(
