@@ -928,6 +928,25 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     expect(document.querySelector('.pin[data-key="k1h1e7"]')?.getAttribute('aria-label')).toMatch(/（解答済み）$/);
   });
 
+  it('U-11: Ctrl+Z・Ctrl+Y は、通して見る画面の操作ではない。答え合わせのあとの答えは、Ctrl+Z でも戻らない', async () => {
+    const { user, study } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
+    await screen.findByLabelText('理由（1行）');
+    await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
+    await user.type(reasonBox(), '形を崩さない');
+    await user.click(screen.getByRole('button', { name: '答え合わせ' }));
+    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    const here = pos();
+    press({ code: 'KeyZ', key: 'z', ctrlKey: true });
+    press({ code: 'KeyY', key: 'y', ctrlKey: true });
+    press({ code: 'KeyZ', key: 'Z', ctrlKey: true, shiftKey: true });
+    expect(pos()).toBe(here);
+    expect(answeringState()).toBe('revealed');
+    expect(study.rows).toHaveLength(1);
+    await waitFor(() => expect(sideCount(/^今日の出題/)).toBe('4'));
+  });
+
   it('答えた場面を離れて戻ると、答え合わせのあとの形で開く（保存した答え・理由・AI の評価）。ほかの手を見ている間は、AI の情報は出ない', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');

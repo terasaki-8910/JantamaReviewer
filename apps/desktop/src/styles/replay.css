@@ -446,6 +446,18 @@
   list-style: none;
 }
 
+/*
+  卓と欄が横に並ぶとき（.work と同じ、主の欄が 840px 以上）は、場面の一覧の高さを決めて、一覧の中でスクロールする
+  （不一致を増やす設定のとき、場面が 40 を超えることがあり、ページが一覧の長さだけ伸びるため）。縦に並ぶ狭いときは、ページをスクロールする。
+*/
+@container main (width >= 840px) {
+  .scenes {
+    max-height: min(26rem, 52vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
 .sc-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -616,6 +628,7 @@
 .kp-note {
   font-size: 11.5px;
   color: var(--muted);
+  word-break: auto-phrase;
 }
 
 .kp-key {

@@ -92,6 +92,8 @@ export function Strip({ timeline, g, scenes, answered, currentKey, go }: StripPr
   );
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    // 動くのは、主のボタン（左）だけ。中ボタン・右ボタンでは、動かさない
+    if (event.button !== 0) return;
     dragging.current = true;
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
