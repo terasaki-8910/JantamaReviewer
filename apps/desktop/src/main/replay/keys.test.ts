@@ -26,8 +26,8 @@ const event = (code: string, init: { ctrl?: boolean; alt?: boolean; shift?: bool
   metaKey: init.meta ?? false,
 });
 
-describe('U-21 通して見る画面のキーの既定（R10-3）', () => {
-  it('U-21 既定のキー: , . で 1 手、← → で自分の判断、↑ ↓ で不一致、Shift+↑ ↓ で迷い、Shift+← → で局。巡目・局の頭・局の終わりはボタンだけ', () => {
+describe('U-21 通して見る画面のキーの既定（R10-3、R11-4）', () => {
+  it('U-21 既定のキー: , . で 1 手、← → で自分の判断、↑ ↓ で不一致、Shift+↑ ↓ で迷い、Shift+← → で局、Home・End で局の頭・局の終わり。巡目はボタンだけ', () => {
     const keys = defaultReplayKeys();
     expect(keys).toEqual({
       step_back: 'Comma',
@@ -42,8 +42,8 @@ describe('U-21 通して見る画面のキーの既定（R10-3）', () => {
       next_kyoku: 'Shift+ArrowRight',
       prev_turn: null,
       next_turn: null,
-      kyoku_start: null,
-      kyoku_end: null,
+      kyoku_start: 'Home',
+      kyoku_end: 'End',
     });
   });
 
@@ -192,5 +192,49 @@ describe('U-21 設定の値を割り当てにする', () => {
     expect(Object.keys(keys)).toHaveLength(REPLAY_ACTIONS.length);
     expect(normalizeReplayKeys(undefined)).toEqual(defaultReplayKeys());
     expect(normalizeReplayKeys('Comma')).toEqual(defaultReplayKeys());
+  });
+
+  it('U-21 Home・End: 保存してある設定にこの 2 つの操作の値が無ければ、既定の Home・End が入る。書いてあるキーは守る', () => {
+    const keys = normalizeReplayKeys({ step_back: 'KeyJ', next_turn: 'KeyL' });
+    expect(keys.kyoku_start).toBe('Home');
+    expect(keys.kyoku_end).toBe('End');
+    expect(keys.step_back).toBe('KeyJ');
+    expect(keys.next_turn).toBe('KeyL');
+    expect(Object.keys(keys)).toEqual(REPLAY_ACTIONS.map((action) => action.id));
+  });
+
+  it('U-21 Home・End: 利用者が外した操作（null）は、外れたまま。別のキーに替えたものも、そのまま', () => {
+    const cleared = normalizeReplayKeys({ ...defaultReplayKeys(), kyoku_start: null });
+    expect(cleared.kyoku_start).toBeNull();
+    expect(cleared.kyoku_end).toBe('End');
+    const changed = normalizeReplayKeys({ ...defaultReplayKeys(), kyoku_start: 'KeyH', kyoku_end: null });
+    expect(changed.kyoku_start).toBe('KeyH');
+    expect(changed.kyoku_end).toBeNull();
+  });
+
+  it('U-21 Home・End: ほかの操作がすでに Home か End を使っていれば、局の頭・局の終わりは割り当て無し（重なりを作らない）', () => {
+    const keys = normalizeReplayKeys({ prev_turn: 'Home', step_back: 'KeyJ' });
+    expect(keys.prev_turn).toBe('Home');
+    expect(keys.kyoku_start).toBeNull();
+    expect(keys.kyoku_end).toBe('End');
+    expect(keys.step_back).toBe('KeyJ');
+    const both = normalizeReplayKeys({ prev_turn: 'Home', next_turn: 'End' });
+    expect(both.kyoku_start).toBeNull();
+    expect(both.kyoku_end).toBeNull();
+    for (const result of [keys, both]) {
+      const assigned = Object.values(result).filter((key): key is string => key !== null);
+      expect(new Set(assigned).size).toBe(assigned.length);
+    }
+  });
+
+  it('U-21 Home・End は、割り当ての操作で、ほかの操作が使っていれば断る（局の頭に End は付けられない）', () => {
+    const keys = defaultReplayKeys();
+    const refused = assignKey(keys, 'kyoku_start', 'End');
+    expect(refused).toMatchObject({ ok: false, reason: 'duplicate', other: 'kyoku_end' });
+    expect(assignKey(keys, 'prev_turn', 'Home')).toMatchObject({ ok: false, reason: 'duplicate', other: 'kyoku_start' });
+    expect(checkChord('Home')).toEqual({ kind: 'ok' });
+    expect(checkChord('End')).toEqual({ kind: 'ok' });
+    expect(formatChord('Home')).toBe('Home');
+    expect(spokenChord('End')).toBe('End');
   });
 });

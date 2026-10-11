@@ -161,6 +161,9 @@ pub struct Settings {
     pub show_all_mismatches: bool,
     /// 半荘を通して見る画面のキーの割り当て（操作の名前 → キー。割り当て無しは null。R10-3、U-21）。
     pub replay_keys: ReplayKeys,
+    /// `replay_keys` の表の版（`replay_keys::KEYS_REVISION`）。読み込みと保存のたびに、いまの版にそろえる。
+    /// 版 1 のファイル（この項目が無い）の、局の頭・局の終わりの null を、「書いていない」と読み分けるために書く（R11-4）。
+    pub replay_keys_revision: u32,
 }
 
 impl Default for Settings {
@@ -180,6 +183,7 @@ impl Default for Settings {
             highlight_dora: false,
             show_all_mismatches: false,
             replay_keys: replay_keys::default_keys(),
+            replay_keys_revision: replay_keys::KEYS_REVISION,
         }
     }
 }
@@ -263,8 +267,12 @@ impl Settings {
             highlight_dora: field(value, "highlight_dora").unwrap_or(defaults.highlight_dora),
             show_all_mismatches: field(value, "show_all_mismatches")
                 .unwrap_or(defaults.show_all_mismatches),
-            // 無い・読めない・使えないキーは、既定のキーにする（replay_keys.rs）。
-            replay_keys: replay_keys::from_value(value.get("replay_keys")),
+            // 無い・読めない・使えないキーは、既定のキーにする（replay_keys.rs）。版 1 のファイルの null は、書いていないものとして読む。
+            replay_keys: replay_keys::from_value(
+                value.get("replay_keys"),
+                field::<u32>(value, "replay_keys_revision").unwrap_or(0),
+            ),
+            replay_keys_revision: replay_keys::KEYS_REVISION,
         }
     }
 
@@ -281,6 +289,7 @@ impl Settings {
         self.capture_keywords = kept;
         // キーの割り当ては、足りない操作に既定を入れ、書き方をそろえる（使えないものは、`validate` が断る）。
         self.replay_keys = replay_keys::normalized(std::mem::take(&mut self.replay_keys));
+        self.replay_keys_revision = replay_keys::KEYS_REVISION;
         self
     }
 
@@ -465,6 +474,9 @@ mod tests {
             Some("Shift+ArrowRight")
         );
         assert_eq!(s.replay_keys["next_turn"], None);
+        // 局の頭・局の終わりは、Home・End（R11-4）
+        assert_eq!(s.replay_keys["kyoku_start"].as_deref(), Some("Home"));
+        assert_eq!(s.replay_keys["kyoku_end"].as_deref(), Some("End"));
         // 昔の設定ファイル（この 2 つの項目が無い）は、既定値
         let old = Settings::from_json_str(r#"{ "sound": false, "highlight_dora": true }"#).unwrap();
         assert!(!old.show_all_mismatches);
@@ -502,6 +514,65 @@ mod tests {
         assert!(text.contains("\"show_all_mismatches\": true"), "{text}");
         assert!(text.contains("\"step_back\": \"KeyJ\""), "{text}");
         assert!(text.contains("\"next_kyoku\": null"), "{text}");
+    }
+
+    #[test]
+    fn u21_home_and_end_reach_a_settings_file_written_before_they_were_the_defaults() {
+        // 版 1 のアプリが書いた設定ファイル: 割り当ての表は全部の操作が入り、局の頭・終わりは、既定の null
+        let old = r#"{ "sound": false, "show_all_mismatches": true,
+            "replay_keys": { "step_back": "KeyJ", "step_forward": "Period",
+              "prev_decision": "ArrowLeft", "next_decision": "ArrowRight",
+              "prev_mismatch": "ArrowUp", "next_mismatch": "ArrowDown",
+              "prev_doubt": "Shift+ArrowUp", "next_doubt": "Shift+ArrowDown",
+              "prev_kyoku": "Shift+ArrowLeft", "next_kyoku": "Shift+ArrowRight",
+              "prev_turn": null, "next_turn": null, "kyoku_start": null, "kyoku_end": null } }"#;
+        let s = Settings::from_json_str(old).unwrap().normalized();
+        assert_eq!(s.replay_keys["kyoku_start"].as_deref(), Some("Home"));
+        assert_eq!(s.replay_keys["kyoku_end"].as_deref(), Some("End"));
+        // 書いてあったキーと、ほかの設定は守る
+        assert_eq!(s.replay_keys["step_back"].as_deref(), Some("KeyJ"));
+        assert_eq!(s.replay_keys["next_turn"], None);
+        assert!(s.show_all_mismatches);
+        assert!(!s.sound);
+        assert_eq!(s.replay_keys_revision, replay_keys::KEYS_REVISION);
+        assert_eq!(s.validate(), Ok(()));
+    }
+
+    #[test]
+    fn u21_a_key_cleared_after_the_change_stays_cleared_through_save_and_load() {
+        let dir = temp_dir();
+        let path = settings_path(dir.path());
+        // 局の頭を外して保存する → 読み直しても外れたまま（版が書いてあるので、「書いていない」とは読まれない）
+        let mut s = Settings::default();
+        s.replay_keys.insert("kyoku_start".into(), None);
+        s.save(&path).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"kyoku_start\": null"), "{text}");
+        assert!(text.contains("\"kyoku_end\": \"End\""), "{text}");
+        assert!(
+            text.contains(&format!(
+                "\"replay_keys_revision\": {}",
+                replay_keys::KEYS_REVISION
+            )),
+            "{text}"
+        );
+        let loaded = Settings::load(&path).unwrap();
+        assert_eq!(loaded.replay_keys["kyoku_start"], None);
+        assert_eq!(loaded.replay_keys["kyoku_end"].as_deref(), Some("End"));
+        // もう一度保存して読み直しても、同じ
+        loaded.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).unwrap(), loaded);
+        // 版を持たずに保存された設定（画面から版が落ちて届いた設定）も、保存のときに、いまの版にそろえる
+        let mut stale = Settings::default();
+        stale.replay_keys.insert("kyoku_end".into(), None);
+        stale.replay_keys_revision = 0;
+        let stale = stale.normalized();
+        assert_eq!(stale.replay_keys_revision, replay_keys::KEYS_REVISION);
+        stale.save(&path).unwrap();
+        assert_eq!(
+            Settings::load(&path).unwrap().replay_keys["kyoku_end"],
+            None
+        );
     }
 
     #[test]

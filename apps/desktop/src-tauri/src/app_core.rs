@@ -599,6 +599,37 @@ mod tests {
     }
 
     #[test]
+    fn u21_home_and_end_are_the_defaults_and_a_key_the_user_cleared_stays_cleared_after_a_restart()
+    {
+        let mut f = fixture();
+        assert_eq!(
+            f.core.settings().replay_keys["kyoku_start"].as_deref(),
+            Some("Home")
+        );
+        assert_eq!(
+            f.core.settings().replay_keys["kyoku_end"].as_deref(),
+            Some("End")
+        );
+        // 局の頭のキーを外して保存する（画面は、いま保存してある設定に、変えた分だけを重ねて送る）
+        let mut next = f.core.settings().clone();
+        next.replay_keys.insert("kyoku_start".into(), None);
+        f.core.apply_settings(next).unwrap();
+        let reloaded = Core::load(f.config_dir(), FakeCapturer::ok(&[1]), CountingSound::new());
+        assert_eq!(reloaded.settings().replay_keys["kyoku_start"], None);
+        assert_eq!(
+            reloaded.settings().replay_keys["kyoku_end"].as_deref(),
+            Some("End")
+        );
+        // 局の終わりに、ほかの操作のキーと同じ End を割り当てると断る（重なりを作らない）
+        let mut twice = f.core.settings().clone();
+        twice
+            .replay_keys
+            .insert("next_turn".into(), Some("End".into()));
+        let error = f.core.apply_settings(twice).unwrap_err();
+        assert!(error.contains("2 つの操作"), "{error}");
+    }
+
+    #[test]
     fn keywords_are_normalized_when_applied() {
         let mut f = fixture();
         let mut next = f.core.settings().clone();

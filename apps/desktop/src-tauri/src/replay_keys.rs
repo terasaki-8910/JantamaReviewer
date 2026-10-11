@@ -7,12 +7,25 @@
 //! - 割り当てられない: 画面の操作に使うキー（Tab・Esc・Enter・Space）、画面の戻る・進む（Alt+←・Alt+→）、検索の重ね表示（Ctrl+K）、
 //!   取り消しとやり直し（Ctrl+Z・Ctrl+Y・Ctrl+Shift+Z）
 //! - 同じキーを 2 つの操作に割り当てられない（入れ替えもしない）
+//!
+//! 既定のキーは、版（`KEYS_REVISION`）で変わってきた。版 2（R11-4）で、局の頭・局の終わりが、ボタンだけ（null）から Home・End になった。
+//! 設定ファイルに書いていない操作は、既定のキーにする。ただし、ほかの操作がそのキーを使っていれば、割り当て無しにする
+//! （重なりを作らない。保存してある、ほかのキーは守る）。null と書いてある操作は、利用者が外したものとして、そのまま。
+//! 版 1 のアプリは、既定の「ボタンだけ」も null として書き出していたので、版 1 のファイル（`replay_keys_revision` が無い）の
+//! 局の頭・局の終わりの null は、「書いていない」ものとして扱う（扱わないと、Home・End が一度も効かないまま残る）。
 
 use std::collections::BTreeMap;
 use std::fmt;
 
 /// 操作の名前 → キー。割り当て無しは `None`。
 pub type ReplayKeys = BTreeMap<String, Option<String>>;
+
+/// キーの割り当ての表の版。設定ファイルの `replay_keys_revision` に書く。
+/// 1: 局の頭・局の終わりは、既定ではボタンだけ（R10-3）。2: 局の頭・局の終わりの既定が Home・End（R11-4）。
+pub const KEYS_REVISION: u32 = 2;
+
+/// 版 2 で、既定がボタンだけ（null）から変わった操作。版 1 のファイルでは、この操作の null は「書いていない」と同じ。
+const CHANGED_IN_REVISION_2: [&str; 2] = ["kyoku_start", "kyoku_end"];
 
 /// 操作と、既定のキー（割り当て無しは `None`）。画面の表と同じ並び・同じ名前（試験が、画面のソースと突き合わせる）。
 pub const ACTIONS: [(&str, Option<&str>); 14] = [
@@ -28,8 +41,8 @@ pub const ACTIONS: [(&str, Option<&str>); 14] = [
     ("next_kyoku", Some("Shift+ArrowRight")),
     ("prev_turn", None),
     ("next_turn", None),
-    ("kyoku_start", None),
-    ("kyoku_end", None),
+    ("kyoku_start", Some("Home")),
+    ("kyoku_end", Some("End")),
 ];
 
 /// 割り当てられないキー（画面の操作に使う）。修飾キーを足しても、同じキーとして断る。
@@ -217,44 +230,63 @@ pub fn validate(keys: &ReplayKeys) -> Result<(), ReplayKeysError> {
     Ok(())
 }
 
-/// 保存するときの整え方: 知らない操作を捨て、足りない操作に既定のキーを入れ、キーを決まった書き方にする。
+/// 書いていない操作を埋める。既定のキーを入れる。ただし、ほかの操作がそのキーを使っていれば、割り当て無し（重なりを作らない）。
+/// 既定が割り当て無しの操作は、割り当て無しのまま。
+fn fill_missing(given: BTreeMap<String, Option<String>>) -> ReplayKeys {
+    let mut out: ReplayKeys = given;
+    for (action, default) in ACTIONS {
+        if out.contains_key(action) {
+            continue;
+        }
+        let free = default.filter(|key| !out.values().any(|used| used.as_deref() == Some(*key)));
+        out.insert(action.to_string(), free.map(str::to_string));
+    }
+    out
+}
+
+/// 保存するときの整え方: 知らない操作を捨て、足りない操作に既定のキーを入れ（ほかの操作が使っているキーは避ける）、キーを決まった書き方にする。
 /// 使えないキーや重なりは、そのまま残して、`validate` が理由つきで断る（黙って書き換えない）。
 pub fn normalized(keys: ReplayKeys) -> ReplayKeys {
-    let mut out = default_keys();
+    let mut given = ReplayKeys::new();
     for (action, key) in keys {
         if !known_action(&action) {
             continue;
         }
         let kept = key.map(|chord| canonical_chord(&chord).unwrap_or(chord));
-        out.insert(action, kept);
+        given.insert(action, kept);
     }
-    out
+    fill_missing(given)
 }
 
-/// 設定ファイルの `replay_keys` を読む。無い・型が合わない項目は、その操作だけ既定のキーにする。
-/// 読んだ結果に、割り当てられないキーや重なりがあれば（手で書き換えたファイル）、すべて既定に戻す。
-pub fn from_value(value: Option<&serde_json::Value>) -> ReplayKeys {
+/// 設定ファイルの `replay_keys` を読む。`saved_revision` は、ファイルの `replay_keys_revision`（無ければ 0）。
+/// 書いていない・型が合わない・書き方の違うキーの操作は、既定のキー（ほかの操作が使っていれば、割り当て無し）。
+/// 書いてあるキーに、割り当てられないキーや重なりがあれば（手で書き換えたファイル）、すべて既定に戻す。
+pub fn from_value(value: Option<&serde_json::Value>, saved_revision: u32) -> ReplayKeys {
     let Some(serde_json::Value::Object(map)) = value else {
         return default_keys();
     };
-    let mut keys = default_keys();
+    let mut given = ReplayKeys::new();
     for (action, _) in ACTIONS {
         match map.get(action) {
             Some(serde_json::Value::Null) => {
-                keys.insert(action.to_string(), None);
+                // 版 1 のファイルの、局の頭・局の終わりの null は、既定の「ボタンだけ」を書き出したもの
+                if saved_revision < 2 && CHANGED_IN_REVISION_2.contains(&action) {
+                    continue;
+                }
+                given.insert(action.to_string(), None);
             }
             Some(serde_json::Value::String(chord)) => {
                 if let Some(canonical) = canonical_chord(chord) {
-                    keys.insert(action.to_string(), Some(canonical));
+                    given.insert(action.to_string(), Some(canonical));
                 }
             }
             _ => {}
         }
     }
-    if validate(&keys).is_err() {
+    if validate(&given).is_err() {
         return default_keys();
     }
-    keys
+    fill_missing(given)
 }
 
 #[cfg(test)]
@@ -280,6 +312,9 @@ mod tests {
         // 巡目の移動はボタンだけ（キーは、割り当てで足せる）
         assert_eq!(key("prev_turn"), None);
         assert_eq!(key("next_turn"), None);
+        // 局の頭・局の終わりは、Home・End（R11-4）
+        assert_eq!(key("kyoku_start").as_deref(), Some("Home"));
+        assert_eq!(key("kyoku_end").as_deref(), Some("End"));
         assert_eq!(validate(&keys), Ok(()));
     }
 
@@ -421,36 +456,149 @@ mod tests {
 
     #[test]
     fn u21_a_settings_file_without_keys_or_with_broken_keys_falls_back_to_defaults() {
-        assert_eq!(from_value(None), default_keys());
-        assert_eq!(from_value(Some(&json!("Comma"))), default_keys());
+        assert_eq!(from_value(None, KEYS_REVISION), default_keys());
+        assert_eq!(
+            from_value(Some(&json!("Comma")), KEYS_REVISION),
+            default_keys()
+        );
         // 一部だけの設定: 書いてある分は使い、無い分は既定
-        let keys = from_value(Some(
-            &json!({ "step_back": "KeyJ", "prev_turn": null, "next_turn": "KeyL" }),
-        ));
+        let keys = from_value(
+            Some(&json!({ "step_back": "KeyJ", "prev_turn": null, "next_turn": "KeyL" })),
+            KEYS_REVISION,
+        );
         assert_eq!(keys["step_back"].as_deref(), Some("KeyJ"));
         assert_eq!(keys["next_turn"].as_deref(), Some("KeyL"));
         assert_eq!(keys["step_forward"].as_deref(), Some("Period"));
         // 読めない項目は、その操作だけ既定
-        let keys = from_value(Some(
-            &json!({ "step_back": 5, "step_forward": "F5", "prev_decision": "KeyJ" }),
-        ));
+        let keys = from_value(
+            Some(&json!({ "step_back": 5, "step_forward": "F5", "prev_decision": "KeyJ" })),
+            KEYS_REVISION,
+        );
         assert_eq!(keys["step_back"].as_deref(), Some("Comma"));
         assert_eq!(keys["step_forward"].as_deref(), Some("Period"));
         assert_eq!(keys["prev_decision"].as_deref(), Some("KeyJ"));
         // 重なり・割り当てられないキーが入っているファイルは、すべて既定
         assert_eq!(
-            from_value(Some(
-                &json!({ "step_back": "KeyJ", "step_forward": "KeyJ" })
-            )),
+            from_value(
+                Some(&json!({ "step_back": "KeyJ", "step_forward": "KeyJ" })),
+                KEYS_REVISION
+            ),
             default_keys()
         );
         assert_eq!(
-            from_value(Some(&json!({ "step_back": "Escape" }))),
+            from_value(Some(&json!({ "step_back": "Escape" })), KEYS_REVISION),
             default_keys()
         );
         assert_eq!(
-            from_value(Some(&json!({ "step_back": "Alt+ArrowLeft" }))),
+            from_value(
+                Some(&json!({ "step_back": "Alt+ArrowLeft" })),
+                KEYS_REVISION
+            ),
             default_keys()
         );
+    }
+
+    /// 版 1 のアプリが書き出した割り当て（全部の操作。局の頭・局の終わりは、既定どおり null）。
+    fn revision_1_file() -> serde_json::Value {
+        json!({
+            "step_back": "Comma", "step_forward": "Period",
+            "prev_decision": "ArrowLeft", "next_decision": "ArrowRight",
+            "prev_mismatch": "ArrowUp", "next_mismatch": "ArrowDown",
+            "prev_doubt": "Shift+ArrowUp", "next_doubt": "Shift+ArrowDown",
+            "prev_kyoku": "Shift+ArrowLeft", "next_kyoku": "Shift+ArrowRight",
+            "prev_turn": null, "next_turn": null,
+            "kyoku_start": null, "kyoku_end": null
+        })
+    }
+
+    #[test]
+    fn u21_home_and_end_apply_to_saved_settings_that_have_no_value_for_them() {
+        // 昔の設定（この 2 つの操作が書いていない）: 書いてあるキーは守り、Home・End が入る
+        let keys = from_value(
+            Some(&json!({ "step_back": "KeyJ", "next_turn": "KeyL" })),
+            1,
+        );
+        assert_eq!(keys["step_back"].as_deref(), Some("KeyJ"));
+        assert_eq!(keys["next_turn"].as_deref(), Some("KeyL"));
+        assert_eq!(keys["kyoku_start"].as_deref(), Some("Home"));
+        assert_eq!(keys["kyoku_end"].as_deref(), Some("End"));
+        assert_eq!(validate(&keys), Ok(()));
+        // 版 1 のアプリが書き出したファイル（局の頭・終わりが、既定の null として書いてある）も、同じ
+        let keys = from_value(Some(&revision_1_file()), 0);
+        assert_eq!(keys["kyoku_start"].as_deref(), Some("Home"));
+        assert_eq!(keys["kyoku_end"].as_deref(), Some("End"));
+        assert_eq!(keys["prev_turn"], None);
+        assert_eq!(keys["next_turn"], None);
+        assert_eq!(keys["step_back"].as_deref(), Some("Comma"));
+        assert_eq!(validate(&keys), Ok(()));
+        // 版 1 のファイルでも、局の頭・終わり以外の null は、利用者が外したもの
+        let mut file = revision_1_file();
+        file["step_back"] = json!(null);
+        assert_eq!(from_value(Some(&file), 1)["step_back"], None);
+    }
+
+    #[test]
+    fn u21_a_key_the_user_cleared_stays_cleared() {
+        // 版 2 のファイル: null は、利用者が外したもの（Home・End を外しても、戻らない）
+        let mut file = revision_1_file();
+        file["kyoku_start"] = json!(null);
+        file["kyoku_end"] = json!("End");
+        let keys = from_value(Some(&file), KEYS_REVISION);
+        assert_eq!(keys["kyoku_start"], None);
+        assert_eq!(keys["kyoku_end"].as_deref(), Some("End"));
+        file["kyoku_end"] = json!(null);
+        let keys = from_value(Some(&file), KEYS_REVISION);
+        assert_eq!(keys["kyoku_start"], None);
+        assert_eq!(keys["kyoku_end"], None);
+        // 版 2 で別のキーに替えたものも、そのまま
+        file["kyoku_start"] = json!("KeyH");
+        let keys = from_value(Some(&file), KEYS_REVISION);
+        assert_eq!(keys["kyoku_start"].as_deref(), Some("KeyH"));
+    }
+
+    #[test]
+    fn u21_a_default_key_that_another_action_uses_is_left_unassigned_instead_of_making_a_duplicate()
+    {
+        // 保存してある設定で、Home を別の操作が使っている: 局の頭は割り当て無し。ほかのキーは守る（全部が既定に戻ったりしない）
+        let keys = from_value(
+            Some(&json!({ "prev_turn": "Home", "step_back": "KeyJ" })),
+            KEYS_REVISION,
+        );
+        assert_eq!(keys["prev_turn"].as_deref(), Some("Home"));
+        assert_eq!(keys["kyoku_start"], None);
+        assert_eq!(keys["kyoku_end"].as_deref(), Some("End"));
+        assert_eq!(keys["step_back"].as_deref(), Some("KeyJ"));
+        assert_eq!(validate(&keys), Ok(()));
+        // 版 1 のファイルで、End を別の操作に割り当てていて、局の終わりが null と書いてある
+        let mut file = revision_1_file();
+        file["next_turn"] = json!("End");
+        let keys = from_value(Some(&file), 1);
+        assert_eq!(keys["next_turn"].as_deref(), Some("End"));
+        assert_eq!(keys["kyoku_end"], None);
+        assert_eq!(keys["kyoku_start"].as_deref(), Some("Home"));
+        assert_eq!(validate(&keys), Ok(()));
+        // 両方とも使われている
+        let keys = from_value(
+            Some(&json!({ "prev_turn": "Home", "next_turn": "End" })),
+            KEYS_REVISION,
+        );
+        assert_eq!(keys["kyoku_start"], None);
+        assert_eq!(keys["kyoku_end"], None);
+        assert_eq!(validate(&keys), Ok(()));
+    }
+
+    #[test]
+    fn u21_filling_the_missing_actions_when_saving_does_not_make_duplicates_either() {
+        let mut given = ReplayKeys::new();
+        given.insert("prev_turn".into(), Some("Home".into()));
+        let keys = normalized(given);
+        assert_eq!(keys["prev_turn"].as_deref(), Some("Home"));
+        assert_eq!(keys["kyoku_start"], None);
+        assert_eq!(keys["kyoku_end"].as_deref(), Some("End"));
+        assert_eq!(validate(&keys), Ok(()));
+        // 割り当て無し（null）と書いてあれば、既定には戻さない
+        let mut cleared = default_keys();
+        cleared.insert("kyoku_start".into(), None);
+        assert_eq!(normalized(cleared)["kyoku_start"], None);
     }
 }

@@ -7,7 +7,8 @@
  *   ↑ ↓        前・次の不一致
  *   Shift+↑ ↓  前・次の迷い
  *   Shift+← →  前・次の局
- * 巡目の移動・局の頭・局の終わりは、ボタンだけ（キーは割り当てで足せる）。
+ *   Home End   局の頭・局の終わり（R11-4）。手牌の牌・位置の帯・答えの選択肢にキーボードの位置があるときは、それぞれの Home・End が先
+ * 巡目の移動は、ボタンだけ（キーは割り当てで足せる）。
  *
  * キーは、`KeyboardEvent.code` に、押していた修飾キーを `Ctrl+` `Alt+` `Shift+` の順に付けた文字（例: `Shift+ArrowUp`・`Comma`）。
  * 配列によらず、同じ位置のキーが同じ意味になる。設定ファイルの `replay_keys`（settings.rs。同じ表と同じ検査を持つ。試験が突き合わせる）に保存する。
@@ -56,8 +57,8 @@ export const REPLAY_ACTIONS: readonly ReplayActionDef[] = [
   { id: 'next_kyoku', label: '次の局', key: 'Shift+ArrowRight' },
   { id: 'prev_turn', label: '前の巡目', key: null },
   { id: 'next_turn', label: '次の巡目', key: null },
-  { id: 'kyoku_start', label: '局の頭', key: null },
-  { id: 'kyoku_end', label: '局の終わり', key: null },
+  { id: 'kyoku_start', label: '局の頭', key: 'Home' },
+  { id: 'kyoku_end', label: '局の終わり', key: 'End' },
 ];
 
 const ACTION_BY_ID = new Map<string, ReplayActionDef>(REPLAY_ACTIONS.map((action) => [action.id, action]));
@@ -71,17 +72,28 @@ export function defaultReplayKeys(): ReplayKeys {
   return Object.fromEntries(REPLAY_ACTIONS.map((action) => [action.id, action.key]));
 }
 
-/** 設定の値（足りない操作・読めない値があってもよい）を、すべての操作が入った割り当てにする。足りない操作は既定のキー。 */
+/**
+ * 設定の値（足りない操作・読めない値があってもよい）を、すべての操作が入った割り当てにする。
+ * 値の無い操作は、既定のキー。ただし、ほかの操作がそのキーを使っていれば、割り当て無し（重なりを作らない。settings の replay_keys.rs と同じ）。
+ * null（割り当て無し）と書いてある操作は、そのまま（利用者が外したもの）。
+ */
 export function normalizeReplayKeys(raw: unknown): ReplayKeys {
-  const keys = defaultReplayKeys();
-  if (typeof raw !== 'object' || raw === null) return keys;
+  if (typeof raw !== 'object' || raw === null) return defaultReplayKeys();
   const given = raw as Record<string, unknown>;
+  const keys: ReplayKeys = {};
+  const missing: ReplayActionDef[] = [];
   for (const action of REPLAY_ACTIONS) {
     const value = given[action.id];
     if (value === null) keys[action.id] = null;
     else if (typeof value === 'string') keys[action.id] = value;
+    else missing.push(action);
   }
-  return keys;
+  for (const action of missing) {
+    const taken = action.key !== null && Object.values(keys).includes(action.key);
+    keys[action.id] = taken ? null : action.key;
+  }
+  // 表の順に並べ直す（キーの説明に出す順）
+  return Object.fromEntries(REPLAY_ACTIONS.map((action) => [action.id, keys[action.id] ?? null]));
 }
 
 // ---- キーの書き方 ----
