@@ -132,7 +132,7 @@ pnpm build:debug      # デバッグビルド（本体と補助プログラム�
   - Zen Old Mincho（ラテン文字の 700）: `@fontsource/zen-old-mincho` 5.3.0。Copyright 2021 The Zen Old Mincho Project Authors (https://github.com/googlefonts/zen-oldmincho)
   - ライセンスの全文は、`pnpm install` のあと、`apps/desktop/node_modules/@fontsource/ibm-plex-mono/LICENSE` と `apps/desktop/node_modules/@fontsource/zen-old-mincho/LICENSE` にあります。
   - 本文の文字は、Windows に入っている書体（BIZ UDPGothic、Yu Gothic UI、Meiryo の順）を使い、同梱していません。
-- 牌の画像（使う予定）: [FluffyStuff/riichi-mahjong-tiles](https://github.com/FluffyStuff/riichi-mahjong-tiles)（パブリックドメイン）を使います。使う画面（出題など）はまだ作っていないので、今のリポジトリには、画像のファイルは入っていません。
+- 牌の画像: [FluffyStuff/riichi-mahjong-tiles](https://github.com/FluffyStuff/riichi-mahjong-tiles)（パブリックドメイン）。いまは確認シート（`docs/sheet/tiles`）で使っていて、アプリでは作っている出題の画面から使います。
 
 そのほかの依存パッケージ（Tauri・React・Rust のクレートなど）は、それぞれのライセンスに従います。`docs/images` の画面写真に写っている雀魂の画面の権利は、それぞれの権利者にあります。
 
