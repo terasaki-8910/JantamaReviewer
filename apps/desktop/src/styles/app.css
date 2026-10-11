@@ -130,6 +130,7 @@
   line-height: 1.6;
   text-align: left;
   text-wrap: pretty;
+  word-break: auto-phrase;
 }
 
 .infotip-pop[hidden] {
