@@ -265,6 +265,18 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'clear_maka_grade': mutate(args.sessionId, function (s) { delete s.maka.kyokus[args.kyoku]; }); return null;
       case 'set_maka_hanchan': mutate(args.sessionId, function (s) { s.maka.hanchan = args.grade; }); return null;
       case 'clear_maka_hanchan': mutate(args.sessionId, function (s) { delete s.maka.hanchan; }); return null;
+      case 'set_memo': mutate(args.sessionId, function (s) {
+        var text = { candidates: args.candidates.trim(), reason: args.reason.trim() };
+        if (text.candidates === '' && text.reason === '') delete s.memos.marks[String(args.markId)];
+        else s.memos.marks[String(args.markId)] = text;
+      }); return null;
+      case 'clear_memo': mutate(args.sessionId, function (s) { delete s.memos.marks[String(args.markId)]; }); return null;
+      case 'set_extra_memo': mutate(args.sessionId, function (s) {
+        var extra = { id: args.id, decision: args.decision, candidates: args.candidates.trim(), reason: args.reason.trim() };
+        var at = s.memos.extras.findIndex(function (e) { return e.id === args.id; });
+        if (at < 0) s.memos.extras.push(extra); else s.memos.extras[at] = extra;
+      }); return null;
+      case 'clear_extra_memo': mutate(args.sessionId, function (s) { s.memos.extras = s.memos.extras.filter(function (e) { return e.id !== args.id; }); }); return null;
       case 'read_report': return reports[args.sessionId] === undefined ? null : reports[args.sessionId];
       case 'list_answers': return JSON.parse(JSON.stringify(answers));
       case 'record_answer': {

@@ -120,15 +120,15 @@ describe('U-27 局の評価の表の「迷い」の列（FX-5）', () => {
     const table = await tableReady();
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['局', '結果', '点', '自分', 'AI 基準', 'MAKA', '迷い']);
     expect(chipTexts(rowOf(table, '東1局'))).toEqual([]);
-    expect(chipTexts(rowOf(table, '東2局'))).toEqual(['迷い15巡目 打6s', '迷い26巡目 打9m', '迷い3巡目は未定']);
+    expect(chipTexts(rowOf(table, '東2局'))).toEqual(['迷い1 5巡目 打6s', '迷い2 6巡目 打9m', '迷い3 巡目は未定']);
     expect(chipTexts(rowOf(table, '東3局'))).toEqual([]);
-    expect(chipTexts(rowOf(table, '東3局1本場'))).toEqual(['迷い43巡目 打中']);
-    expect(chipTexts(rowOf(table, '東4局'))).toEqual(['迷い5巡目は未定', '迷い65巡目 白をポン', '迷い78巡目 打3m']);
+    expect(chipTexts(rowOf(table, '東3局1本場'))).toEqual(['迷い4 3巡目 打中']);
+    expect(chipTexts(rowOf(table, '東4局'))).toEqual(['迷い5 巡目は未定', '迷い6 5巡目 白をポン', '迷い7 8巡目 打3m']);
     expect(chipTexts(rowOf(table, '東4局1本場'))).toEqual([]);
-    expect(chipTexts(rowOf(table, '南1局2本場'))).toEqual(['迷い83巡目 打1s', '迷い910巡目 打8p']);
-    expect(chipTexts(rowOf(table, '南2局'))).toEqual(['迷い106巡目 打2m', '迷い119巡目 7mをポン']);
-    expect(chipTexts(rowOf(table, '南3局'))).toEqual(['迷い124巡目 打發']);
-    expect(chipTexts(rowOf(table, '南4局'))).toEqual(['迷い136巡目 打2p']);
+    expect(chipTexts(rowOf(table, '南1局2本場'))).toEqual(['迷い8 3巡目 打1s', '迷い9 10巡目 打8p']);
+    expect(chipTexts(rowOf(table, '南2局'))).toEqual(['迷い10 6巡目 打2m', '迷い11 9巡目 7mをポン']);
+    expect(chipTexts(rowOf(table, '南3局'))).toEqual(['迷い12 4巡目 打發']);
+    expect(chipTexts(rowOf(table, '南4局'))).toEqual(['迷い13 6巡目 打2p']);
     expect(chipsIn(within(table).getByRole('rowheader', { name: '半荘全体' }).closest('tr') as HTMLElement)).toEqual([]);
     // 札の総数は迷いの数（13）と同じ
     expect(within(table).getAllByRole('button', { name: /カードへ移る$/ })).toHaveLength(13);
@@ -146,6 +146,8 @@ describe('U-27 局の評価の表の「迷い」の列（FX-5）', () => {
     expect(two).toHaveAttribute('data-kind', 'estimate');
     expect(two.querySelector('svg')).toBeNull();
     expect(three).toHaveAccessibleName('迷い3 8巡目 打9m（選んだ）。カードへ移る');
+    // 見える文字が、そのまま読み上げの名前の頭にある（ラベルの文字と名前をそろえる。axe の label-content-name-mismatch）
+    for (const chip of [one, two, three]) expect(chip.getAttribute('aria-label')?.startsWith(chip.textContent ?? '?')).toBe(true);
     // 選ぶ前は、迷い 3 は巡目が未定（点線）
     cleanup();
     setup({ session: fx5Imported(), report: 'fx5' });
@@ -223,7 +225,7 @@ describe('U-27 局の評価の表の「迷い」の列（FX-5）', () => {
   it('迷いを選び直すと、札が替わる（推定の枠だけの札が、選んだチェックつきの札になり、局も移る）', async () => {
     const { user } = setup({ session: fx5Imported(), report: 'fx5' });
     const table = await tableReady();
-    expect(chipTexts(rowOf(table, '東2局'))).toContain('迷い3巡目は未定');
+    expect(chipTexts(rowOf(table, '東2局'))).toContain('迷い3 巡目は未定');
     await user.click(within(card(3)).getByRole('button', { name: '迷い3の判断を選ぶ' }));
     await user.click(screen.getByRole('menuitemradio', { name: '8巡目 · 打9m' }));
     await waitFor(() => expect(chipsIn(rowOf(table, '東2局'))[2]).toHaveAttribute('data-kind', 'chosen'));

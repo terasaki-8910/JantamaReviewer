@@ -136,8 +136,7 @@ function KyokuChips({ chips, onJump }: { chips: readonly MarkChip[]; onJump: Han
           onClick={() => onJump?.(chip.markId)}
         >
           {chip.kind === 'chosen' && <Icon name="check" className="mk-ck" />}
-          <b>{chip.head}</b>
-          <span>{chip.what}</span>
+          <b>{chip.head}</b> <span>{chip.what}</span>
         </button>
       ))}
     </span>
