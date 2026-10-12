@@ -267,3 +267,29 @@ describe('U-31 まとめの覚え方と、MAKA の評価からの当てはめ直
     expect(store.getFit().revision).toBe(2);
   });
 });
+
+describe('U-31 当てはめ直しは速い（局が 200 のとき。アプリの中で）', () => {
+  it('MAKA の評価が 200 局ぶん（FX-4 の半荘 40 個に 5 局ずつ）のとき、1 つ入れ直してからまとめの段階を付け直すまでが、300 ミリ秒以内', async () => {
+    const ids = Array.from({ length: 40 }, (_, i) => `20261009-19${String(i).padStart(2, '0')}00`);
+    const all = (grade: string) => ({ k0h0: grade, k1h0: grade, k1h1: grade, k2h0: grade, k2h1: grade });
+    const store = storeOf(Object.fromEntries(ids.map((id) => [id, FX4_TEXT])));
+    store.sync(ids.map((id) => session(id, all('S'))));
+    await settle(store, ids);
+    expect(store.getFit().fit.userCount).toBe(200);
+    expect(store.getFit().fit.recordCount).toBe(67 + 200);
+    const times: number[] = [];
+    for (let round = 0; round < 7; round += 1) {
+      // 1 つの半荘の 5 局の評価を替えて、一覧を読み直す（評価を入れるたびに起きること）
+      const grade = round % 2 === 0 ? 'A' : 'B';
+      const start = performance.now();
+      store.sync(ids.map((id, i) => session(id, i === 0 ? all(grade) : all('S'))));
+      times.push(performance.now() - start);
+    }
+    times.sort((a, b) => a - b);
+    const median = times[3] as number;
+    console.log(`SummaryStore の当てはめ直し（評価 200 局・半荘 40）: 中央値 ${median.toFixed(2)} ms、最大 ${(times[6] as number).toFixed(2)} ms`);
+    expect(median).toBeLessThan(300);
+    expect(store.getFit().revision).toBeGreaterThan(1);
+  });
+});
+
