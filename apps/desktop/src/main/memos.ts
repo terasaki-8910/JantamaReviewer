@@ -8,7 +8,9 @@
  *   自動で結びつけ（`autoLinkTarget`）、そうでなければ、近い判断から選んでもらう（`decisionsNearPosition`）
  *
  * 答え合わせのあとの「終局直後のメモ」には、その問題（判断の鍵）に結びつく迷いマークのメモと、その判断の鍵のメモを出す
- * （`memosForDecision`）。判断の鍵がまだ無い（位置だけの）メモは出さない。AI の情報は、ここにも出てこない（U-1）。
+ * （`memosForDecision`）。判断の鍵がまだ無い（位置だけの）メモは、半荘のページがまだ結びつけていなくても、その位置にある自分の判断が
+ * ちょうど 1 つ（`autoLinkTarget` と同じ決まり）なら、その判断のメモとして出す（出すだけで、保存はしない）。判断が 2 つ以上なら、選ばれるまで出さない。
+ * AI の情報は、ここにも出てこない（U-1）。
  */
 import { kyokuLabel, type DecisionRef } from '@jantama/engine';
 
@@ -78,14 +80,17 @@ export interface ShownMemo {
 /**
  * ある判断（鍵）に結びつくメモ（答え合わせのあとの「終局直後のメモ」）。迷いマークのメモは、その判断に結びついた迷い
  * （保存した選びか、推定で結びついたもの。`resolution.kind === 'linked'`）の番号の順、そのあとに、その鍵の迷いマークの無い迷いのメモ（足した順）。
+ * 位置だけの追加のメモ（判断の鍵が無い）は、`decisions`（この半荘のすべての判断）の中で、その位置にある判断がちょうど 1 つで、それがこの判断
+ * のとき（`autoLinkTarget`）だけ、この判断のメモとして出す。保存はしない（半荘のページを開いたときの結びつけと、同じ結果になる）。
  * 「候補」も「理由」も空のメモは出さない。
  */
 export function memosForDecision(args: {
   memos: Memos;
   resolved: readonly ResolvedMark[];
   decisionKey: string;
+  decisions: readonly DecisionRef[];
 }): ShownMemo[] {
-  const { memos, resolved, decisionKey } = args;
+  const { memos, resolved, decisionKey, decisions } = args;
   const shown: ShownMemo[] = [];
   for (const mark of resolved) {
     if (mark.resolution.kind !== 'linked' || mark.resolution.ref.key !== decisionKey) continue;
@@ -93,7 +98,8 @@ export function memosForDecision(args: {
     if (memo !== undefined) shown.push({ source: 'mark', label: `迷い${mark.number}`, memo });
   }
   for (const extra of memos.extras) {
-    if (extra.decision !== decisionKey) continue;
+    const key = extra.decision ?? autoLinkTarget(extra, decisions)?.key;
+    if (key !== decisionKey) continue;
     const memo = normalizeMemo({ candidates: extra.candidates, reason: extra.reason });
     if (memo !== undefined) shown.push({ source: 'extra', label: '追加のメモ', memo });
   }

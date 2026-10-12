@@ -7,7 +7,7 @@
  * - 問題ごとに作り直す（呼ぶ側が `key` に問題の識別を入れる）。答えるまでの時間は、この画面を出した時刻から数える
  * - 答え合わせのあと、自分の答えの下に「終局直後のメモ」（その問題に結びつく迷いのメモ・追加のメモ。F4、U-28）。答える前は、DOM にも無い
  */
-import { actualText, keyOfDecision, shantenTag } from '@jantama/engine';
+import { actualText, keyOfDecision, listDecisionRefs, shantenTag } from '@jantama/engine';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { AnswerMode, AnswerRow } from '../../api/types';
@@ -81,6 +81,7 @@ export function QuizScreen({
             memos: session.memos,
             resolved: resolveMarks(game.report, session),
             decisionKey: keyOfDecision(decision),
+            decisions: listDecisionRefs(game.report),
           })
         : undefined,
     [work.revealed, session, game.report, decision],

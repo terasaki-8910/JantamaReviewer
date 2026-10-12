@@ -25,6 +25,9 @@ import {
 const parsed = parseReportText(FX4_TEXT);
 if (!parsed.ok) throw new Error(parsed.error.message);
 const report: MortalReport = parsed.value;
+const fx4Decisions = listDecisionRefs(report);
+/** FX-4 の判断の一覧つきで、問題（判断の鍵）に結びつくメモを探す。 */
+const shown = (args: Omit<Parameters<typeof memosForDecision>[0], 'decisions'>) => memosForDecision({ ...args, decisions: fx4Decisions });
 
 describe('U-28 メモの値', () => {
   it('前後の空白を除く。「候補」も「理由」も空なら、メモは無い（undefined）', () => {
@@ -68,16 +71,16 @@ describe('U-28 問題（判断の鍵）に結びつくメモ（FX-4）', () => {
 
   it('その判断に結びついた迷い（推定でもよい）のメモを出す。名前は「迷いN」', () => {
     const memos: Memos = { marks: { '3': { candidates: '南・6m', reason: '東を残したい' } }, extras: [] };
-    expect(memosForDecision({ memos, resolved, decisionKey: keyOf(2) })).toEqual([
+    expect(shown({ memos, resolved, decisionKey: keyOf(2) })).toEqual([
       { source: 'mark', label: '迷い3', memo: { candidates: '南・6m', reason: '東を残したい' } },
     ]);
   });
 
   it('ほかの判断・メモの無い迷い・空のメモには、出さない', () => {
     const memos: Memos = { marks: { '3': { candidates: '南・6m', reason: '' }, '4': { candidates: ' ', reason: '' } }, extras: [] };
-    expect(memosForDecision({ memos, resolved, decisionKey: keyOf(0) })).toEqual([]);
-    expect(memosForDecision({ memos, resolved, decisionKey: keyOf(3) })).toEqual([]);
-    expect(memosForDecision({ memos: { marks: {}, extras: [] }, resolved, decisionKey: keyOf(2) })).toEqual([]);
+    expect(shown({ memos, resolved, decisionKey: keyOf(0) })).toEqual([]);
+    expect(shown({ memos, resolved, decisionKey: keyOf(3) })).toEqual([]);
+    expect(shown({ memos: { marks: {}, extras: [] }, resolved, decisionKey: keyOf(2) })).toEqual([]);
   });
 
   it('迷いマークの無い迷いのメモは、その判断の鍵で出す（足した順）。迷いのメモのあとに並ぶ。空のメモは出さない', () => {
@@ -91,7 +94,7 @@ describe('U-28 問題（判断の鍵）に結びつくメモ（FX-4）', () => {
         { id: 'x4', decision: key, candidates: 'b', reason: '' },
       ],
     };
-    expect(memosForDecision({ memos, resolved, decisionKey: key }).map((m) => `${m.source}:${m.label}:${m.memo.candidates}|${m.memo.reason}`)).toEqual([
+    expect(shown({ memos, resolved, decisionKey: key }).map((m) => `${m.source}:${m.label}:${m.memo.candidates}|${m.memo.reason}`)).toEqual([
       'mark:迷い3:a|',
       'extra:追加のメモ:|押した',
       'extra:追加のメモ:b|',
@@ -102,7 +105,7 @@ describe('U-28 問題（判断の鍵）に結びつくメモ（FX-4）', () => {
     expect(resolved[5]?.resolution.kind).toBe('kyoku');
     const memos: Memos = { marks: { '6': { candidates: 'x', reason: 'y' } }, extras: [] };
     for (let index = 0; index < 5; index += 1) {
-      expect(memosForDecision({ memos, resolved, decisionKey: keyOf(index) })).toEqual([]);
+      expect(shown({ memos, resolved, decisionKey: keyOf(index) })).toEqual([]);
     }
   });
 
@@ -113,7 +116,7 @@ describe('U-28 問題（判断の鍵）に結びつくメモ（FX-4）', () => {
     });
     const both = resolveMarks(report, doubled);
     const memos: Memos = { marks: { '3': { candidates: 'c3', reason: '' }, '1': { candidates: 'c1', reason: '' } }, extras: [] };
-    expect(memosForDecision({ memos, resolved: both, decisionKey: keyOf(2) }).map((m) => m.label)).toEqual(['迷い1', '迷い3']);
+    expect(shown({ memos, resolved: both, decisionKey: keyOf(2) }).map((m) => m.label)).toEqual(['迷い1', '迷い3']);
   });
 });
 
@@ -212,24 +215,56 @@ describe('U-28 位置だけのメモを判断に結びつける（FX-5）', () =
     for (const label of placePickLabels(decisions)) expect(label).not.toMatch(/\d\s*[%％]|確率|順位/);
   });
 
-  it('答え合わせのあとの「終局直後のメモ」には、判断の鍵が付いたメモだけが出る（位置だけのメモは、結びつくまで出ない）', () => {
+  it('答え合わせのあとのメモ: 判断の鍵が付いたメモ（位置が残っていても）と、古い形（判断の鍵だけ）のメモは、その判断の問題に出る', () => {
     const resolved = resolveMarks(report, fx4Session('20261009-190953', 0, { ocr: fx4Ocr(), links: { marks: {}, ratings: {} } }));
     const position = { kyoku: 1, honba: 1, junme: 6 };
     const memos = (extras: ExtraMemo[]): Memos => ({ marks: {}, extras });
-    const only = extra(position, { candidates: '南', reason: '東を残す' });
-    // 位置だけ: その位置の判断の問題（k1h1e7）にも出ない
-    expect(memosForDecision({ memos: memos([only]), resolved, decisionKey: 'k1h1e7' })).toEqual([]);
-    // 判断の鍵が付いたあと（位置は残る）は、その判断の問題に出る
-    expect(memosForDecision({ memos: memos([{ ...only, decision: 'k1h1e7' }]), resolved, decisionKey: 'k1h1e7' })).toEqual([
+    const linked = extra(position, { candidates: '南', reason: '東を残す', decision: 'k1h1e7' });
+    expect(shown({ memos: memos([linked]), resolved, decisionKey: 'k1h1e7' })).toEqual([
       { source: 'extra', label: '追加のメモ', memo: { candidates: '南', reason: '東を残す' } },
     ]);
-    // 古い形（判断の鍵だけ）も出る
+    // 判断の鍵があれば、位置ではなく、鍵に従う（位置は 6巡目でも、鍵が別の判断なら、そちらの問題に出る）
+    expect(shown({ memos: memos([{ ...linked, decision: 'k1h1e5' }]), resolved, decisionKey: 'k1h1e7' })).toEqual([]);
+    expect(shown({ memos: memos([{ ...linked, decision: 'k1h1e5' }]), resolved, decisionKey: 'k1h1e5' })).toHaveLength(1);
     expect(
-      memosForDecision({
+      shown({
         memos: memos([{ id: 'x2', decision: 'k1h1e7', candidates: 'a', reason: '' }]),
         resolved,
         decisionKey: 'k1h1e7',
       }).map((m) => m.memo.candidates),
     ).toEqual(['a']);
+  });
+
+  it('位置だけのメモ（判断の鍵が無い）は、半荘のページが結びつける前でも、位置に自分の判断がちょうど 1 つ（東2局1本場 6巡目 = k1h1e7）なら、その判断の問題に出る', () => {
+    const resolved = resolveMarks(report, fx4Session('20261009-190953', 0, { ocr: fx4Ocr(), links: { marks: {}, ratings: {} } }));
+    const only = extra({ kyoku: 1, honba: 1, junme: 6 }, { candidates: '南', reason: '東を残す' });
+    const memos: Memos = { marks: {}, extras: [only] };
+    expect(shown({ memos, resolved, decisionKey: 'k1h1e7' })).toEqual([
+      { source: 'extra', label: '追加のメモ', memo: { candidates: '南', reason: '東を残す' } },
+    ]);
+    // 同じ巡目の別の判断・ほかの巡目の判断の問題には出ない
+    expect(shown({ memos, resolved, decisionKey: 'k1h1e6' })).toEqual([]);
+    expect(shown({ memos, resolved, decisionKey: 'k1h1e8' })).toEqual([]);
+    // 自動の結びつけと同じ結果: 保存した鍵が付いても、出る問題は変わらない
+    expect(shown({ memos: { marks: {}, extras: [{ ...only, decision: 'k1h1e7' }] }, resolved, decisionKey: 'k1h1e7' })).toHaveLength(1);
+    // 足した順に、迷いのメモのあとへ並ぶ（鍵のあるメモと、位置だけのメモが混ざっても）
+    const mixed: Memos = {
+      marks: {},
+      extras: [{ id: 'x1', decision: 'k1h1e7', candidates: 'first', reason: '' }, { ...only, id: 'x2', candidates: 'second' }],
+    };
+    expect(shown({ memos: mixed, resolved, decisionKey: 'k1h1e7' }).map((m) => m.memo.candidates)).toEqual(['first', 'second']);
+    // 保存はしない（渡したメモは、そのまま）
+    expect(only).toEqual({ id: 'x1', position: { kyoku: 1, honba: 1, junme: 6 }, candidates: '南', reason: '東を残す' });
+  });
+
+  it('位置だけのメモに、位置の判断が 2 つ以上（東2局1本場 4巡目 = k1h1e4・k1h1e5）あるときは、選ばれるまで、どの問題にも出ない。巡目に判断が無いとき（局のほかの判断）も出ない', () => {
+    const resolved = resolveMarks(report, fx4Session('20261009-190953', 0, { ocr: fx4Ocr(), links: { marks: {}, ratings: {} } }));
+    const several: Memos = { marks: {}, extras: [extra({ kyoku: 1, honba: 1, junme: 4 }, { candidates: '鳴く' })] };
+    for (const key of ['k1h1e4', 'k1h1e5', 'k1h1e3', 'k1h1e6']) expect(shown({ memos: several, resolved, decisionKey: key }), key).toEqual([]);
+    const none: Memos = { marks: {}, extras: [extra({ kyoku: 1, honba: 1, junme: 20 }, { candidates: '遠い' })] };
+    for (const decision of fx4Decisions) expect(shown({ memos: none, resolved, decisionKey: decision.key }), decision.key).toEqual([]);
+    // 判断の一覧が無いとき（結果を読めていない）も、出さない
+    const single: Memos = { marks: {}, extras: [extra({ kyoku: 1, honba: 1, junme: 6 }, { candidates: '南' })] };
+    expect(memosForDecision({ memos: single, resolved, decisionKey: 'k1h1e7', decisions: [] })).toEqual([]);
   });
 });

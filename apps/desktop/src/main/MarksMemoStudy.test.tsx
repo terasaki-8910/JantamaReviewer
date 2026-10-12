@@ -4,6 +4,7 @@
  * - 半荘を通して見る画面の迷いの場面では、答える前にメモを書ける・直せる（迷いのカードと同じ保存先）。答えたあとは、書き換えられず、自分の答えの下に出る
  * 半荘のページの列・メモの欄・追加のメモは、MarksMemo.test.tsx。
  */
+import { invoke } from '@tauri-apps/api/core';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -117,23 +118,75 @@ describe('U-28 答え合わせのあとの「終局直後のメモ」（出題�
     expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['a', '押すか引くか']);
   });
 
-  it('位置だけの追加のメモ（判断の鍵がまだ無い）は、答え合わせのあとにも出ない。判断の鍵が付いたメモは、位置が残っていても出る（出題・解き直し）', async () => {
-    const position = { kyoku: 3, honba: 0, junme: 13 };
-    const only: Memos = { marks: {}, extras: [{ id: 'x1', position, candidates: '位置だけ', reason: '' }] };
+  const extraWrites = () => vi.mocked(invoke).mock.calls.filter(([command]) => String(command).includes('extra_memo'));
+  const ddTexts = () => [...(memoBlock() as HTMLElement).querySelectorAll('dd')].map((dd) => dd.textContent);
+
+  it('位置だけの追加のメモ（判断の鍵がまだ無い）は、半荘のページを開かなくても、位置（東4局 13巡目）に自分の判断がちょうど 1 つ（打3m）なら、その問題の答え合わせのあとに出る（出題・解き直し）。答える前は出ず、何も保存しない', async () => {
+    const only: Memos = { marks: {}, extras: [{ id: 'x1', position: { kyoku: 3, honba: 0, junme: 13 }, candidates: '位置から', reason: '押す' }] };
+    vi.mocked(invoke).mockClear();
     const first = renderQuiz({ session: quizSession(only) });
-    await answer(first.user);
     expect(memoBlock()).toBeNull();
-    expect(screen.queryByRole('heading', { name: '終局直後のメモ' })).toBeNull();
-    expect(document.body.textContent).not.toContain('位置だけ');
+    expect(document.body.textContent).not.toContain('位置から');
+    await answer(first.user);
+    expect(ddTexts()).toEqual(['位置から', '押す']);
     cleanup();
     const review = renderQuiz({ mode: 'review', previousIntervalDays: 1, session: quizSession(only) });
+    expect(memoBlock()).toBeNull();
     await answer(review.user);
+    expect(ddTexts()).toEqual(['位置から', '押す']);
+    // 出すだけで、保存はしない（結びつけは、半荘のページを開いたときにする）
+    expect(extraWrites()).toEqual([]);
+  });
+
+  it('位置の判断が 2 つ以上（東4局 7巡目 = 打南・鳴かない判断）の位置だけのメモ・位置に判断が無い（同じ局の別の巡目）メモ・ほかの位置のメモは、この問題の答え合わせのあとにも出ない', async () => {
+    const memos: Memos = {
+      marks: {},
+      extras: [
+        { id: 'x1', position: { kyoku: 3, honba: 0, junme: 7 }, candidates: '2つある', reason: '' },
+        { id: 'x2', position: { kyoku: 3, honba: 0, junme: 25 }, candidates: '巡目が無い', reason: '' },
+        { id: 'x3', position: { kyoku: 3, honba: 0, junme: 12 }, candidates: 'ほかの巡目', reason: '' },
+        { id: 'x4', position: { kyoku: 3, honba: 1, junme: 13 }, candidates: 'ほかの本場', reason: '' },
+      ],
+    };
+    vi.mocked(invoke).mockClear();
+    const { user } = renderQuiz({ session: quizSession(memos) });
+    await answer(user);
+    expect(memoBlock()).toBeNull();
+    expect(screen.queryByRole('heading', { name: '終局直後のメモ' })).toBeNull();
+    for (const text of ['2つある', '巡目が無い', 'ほかの巡目', 'ほかの本場']) expect(document.body.textContent).not.toContain(text);
+    expect(extraWrites()).toEqual([]);
+    cleanup();
+    // 判断が 2 つの位置の問題（東4局 7巡目の打南 = k3h0e6。答えた形で開く）にも、選ばれるまで出ない
+    const existing = answerRow({ id: 3, session_id: 'sess', decision_key: 'k3h0e6', choice: { type: 'dahai', tile: 'S' }, reason: '前に書いた理由' });
+    renderQuiz({ existing, key: 'k3h0e6', session: quizSession(memos) });
+    expect(document.querySelector('.qz')?.getAttribute('data-state')).toBe('revealed');
+    expect(memoBlock()).toBeNull();
+    expect(document.body.textContent).not.toContain('2つある');
+  });
+
+  it('判断の鍵が付いたメモは、位置が残っていても、鍵に従って出る。位置だけのメモと鍵つきのメモは、足した順に並ぶ', async () => {
+    const position = { kyoku: 3, honba: 0, junme: 13 };
+    const linked: Memos = { marks: {}, extras: [{ id: 'x1', decision: 'k3h0e15', position, candidates: '鍵あり', reason: '押す' }] };
+    const first = renderQuiz({ session: quizSession(linked) });
+    await answer(first.user);
+    expect(ddTexts()).toEqual(['鍵あり', '押す']);
+    cleanup();
+    // 位置は 13巡目でも、鍵が別の判断（k3h0e14）なら、この問題には出ない
+    const elsewhere: Memos = { marks: {}, extras: [{ id: 'x1', decision: 'k3h0e14', position, candidates: '別の判断', reason: '' }] };
+    const second = renderQuiz({ session: quizSession(elsewhere) });
+    await answer(second.user);
     expect(memoBlock()).toBeNull();
     cleanup();
-    const linked: Memos = { marks: {}, extras: [{ id: 'x1', decision: 'k3h0e15', position, candidates: '鍵あり', reason: '押す' }] };
-    const second = renderQuiz({ session: quizSession(linked) });
-    await answer(second.user);
-    expect([...(memoBlock() as HTMLElement).querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['鍵あり', '押す']);
+    const mixed: Memos = {
+      marks: {},
+      extras: [
+        { id: 'x1', decision: 'k3h0e15', candidates: '先', reason: '' },
+        { id: 'x2', position, candidates: '後', reason: '' },
+      ],
+    };
+    const third = renderQuiz({ session: quizSession(mixed) });
+    await answer(third.user);
+    expect(ddTexts()).toEqual(['先', '後']);
   });
 
   it('メモが 1 つだけのとき、名前は付けない。メモの無い問題には、見出しも出ない', async () => {
@@ -182,7 +235,7 @@ const USER_LINKS: Links = {
   marks: { '1': 'k0h0e4', '2': 'k1h0e12', '3': 'k1h1e7', '4': 'k1h1e10', '5': 'k2h1e6', '6': 'k2h1e14' },
 };
 
-function replaySetup(memos: Memos = { marks: {}, extras: [] }) {
+function replaySetup(memos: Memos = { marks: {}, extras: [] }, overrides: Record<string, (args: unknown) => unknown> = {}) {
   const fx4 = {
     session: fx4Session(FX4_ID, local(2026, 10, 9, 19, 9), {
       report_path: `C:\\data\\games\\${FX4_ID}\\report.json`,
@@ -194,7 +247,7 @@ function replaySetup(memos: Memos = { marks: {}, extras: [] }) {
   };
   const sessions = new FakeSessionStore([fx4, seedSession(local(2026, 10, 9, 17, 12), { id: FX1A_ID, report: 'fx1a' })]);
   const study = new FakeStudyStore();
-  const mock = installTauriMock({ handlers: { ...sessions.handlers, ...study.handlers } });
+  const mock = installTauriMock({ handlers: { ...sessions.handlers, ...study.handlers, ...overrides } });
   const user = userEvent.setup();
   render(<App />);
   return { user, mock, sessions, study };
@@ -313,6 +366,35 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
     const block = document.querySelector('[data-memo="shown"]') as HTMLElement;
     expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['位置から', '速さ']);
+  });
+
+  it('結びつけを保存できないときも（半荘のページの結びつけが失敗しても）、位置だけのメモは、位置の判断が 1 つなら、答え合わせのあとに出る。位置の判断が 2 つのメモは、出ない。保存はしない', async () => {
+    const memos: Memos = {
+      marks: {},
+      extras: [
+        { id: 'x1', position: { kyoku: 1, honba: 1, junme: 6 }, candidates: '位置から', reason: '速さ' },
+        { id: 'x2', position: { kyoku: 1, honba: 1, junme: 4 }, candidates: '2つある', reason: '' },
+      ],
+    };
+    const writes: unknown[] = [];
+    const { user, sessions } = replaySetup(memos, {
+      set_extra_memo: (args) => {
+        writes.push(args);
+        throw '保存できません';
+      },
+    });
+    await loaded();
+    await openScene(user, 3);
+    // 保存は失敗した（試みた）が、保存先は位置だけのまま
+    await waitFor(() => expect(writes.length).toBeGreaterThan(0), LOAD);
+    expect(sessions.session(FX4_ID).memos.extras.every((e) => e.decision === undefined)).toBe(true);
+    await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
+    await user.type(screen.getByLabelText('理由（1行）'), '形を崩さない');
+    await user.click(screen.getByRole('button', { name: '答え合わせ' }));
+    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    const block = document.querySelector('[data-memo="shown"]') as HTMLElement;
+    expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['位置から', '速さ']);
+    expect(document.body.textContent).not.toContain('2つある');
   });
 
   it('迷いではない場面（不一致だけの場面）には、メモの欄は出ない', async () => {
