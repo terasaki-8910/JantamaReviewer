@@ -32,6 +32,7 @@ run state/init-tools.sh myself. Never auto-install or enable tools.
 - ボタンが効かないときの原因調べ: 環境変数 `JANTAMA_TRACE_INPUT=1` を付けて本体を起動し、標準エラーを見る（入力の流れが受け取った入力とやること、フックの手続きが受け取ったキーの仮想キーコード・フラグ・時刻、マウスの入力の数が出る）。実機で、本体が最後に入れたキーボードのフックには、前面が本体自身の窓（検討画面）のとき入力が届かず、先に入っているほかのアプリのフックにも届かなくなる（窓の中には届く。マウスのフックと、別のプロセスのフックは影響を受けない）と確かめた。そのため、検討画面が前面にある間は、本体のキーボードのフックを外し（`Effect::InProcessKeyboard`）、その間のキーは設定ページが拾って `report_page_key` で知らせる（登録とテスト）。
 - 試しに動かすときは、環境変数 `JANTAMA_CONFIG_DIR` に一時フォルダを指定し、そこの `settings.json` で `data_dir` も一時フォルダにする。本物のデータ（`%USERPROFILE%\JantamaReviewerData`）には触れない。`--show-main` を付けると検討画面も開く。
 - README の画面写真: `node scripts/readme-shots.mjs <迷いマークの画像のフォルダ>`（先に release を作っておく。フォルダには、プレイヤー名をぼかした雀魂の画面 `mark-1.jpg` ... `mark-6.jpg` を置く。一時フォルダだけを使い、本物のデータには触れない。出力は `docs/images`。機能が増えて写真を撮り直すときは、この道具に撮る画面を足し、README に説明を足す）。
+- README の GIF: `node scripts/readme-gifs.mjs <迷いマークの画像のフォルダ>`（先に release を作っておく。ffmpeg が PATH に要る。ウィジェット・取り込み・出題・半荘を通して見る・週の集計の動きを、アプリ自身の窓だけを CDP で撮って `docs/images/*.gif`（各 3 MB 以内）にする。一時フォルダだけを使い、本物の画面・データには触れない。ウィジェットの迷い・〇△✕・取り消しは、窓の通信の層で受け止め、本体に通さない。共通の部品は `scripts/readme-lib.mjs`。動きが増えたら、この道具に録る場面を足し、README に説明を足す）。
 
 ## UI rules
 IMPORTANT: colors ONLY via design tokens; never hardcode hex. No emoji in UI or source.
