@@ -116,6 +116,34 @@ describe('記録の書き出しの欄（D-2、R11-14）', () => {
     await waitFor(() => expect(done).toHaveFocus());
   });
 
+  it('同じ知らせが続けて出ても、キーボードの位置を知らせに移し直す。失敗の理由にも移す（押したボタンは、処理の間は押せない）', async () => {
+    const user = userEvent.setup();
+    vi.mocked(save).mockResolvedValue(PICKED);
+    setup();
+    const exportButton = screen.getByRole('button', { name: '書き出す' });
+    await user.click(exportButton);
+    const done = await screen.findByRole('status');
+    await waitFor(() => expect(done).toHaveFocus());
+    // 位置が別の所へ移ってから、もう一度書き出すと、同じ文でも、また知らせへ移る
+    exportButton.focus();
+    expect(exportButton).toHaveFocus();
+    await user.click(exportButton);
+    await waitFor(() => expect(screen.getByRole('status')).toHaveFocus());
+  });
+
+  it('失敗したときは、理由の文にキーボードの位置を移す', async () => {
+    const user = userEvent.setup();
+    vi.mocked(save).mockResolvedValue(PICKED);
+    setup({
+      exported: () => {
+        throw 'ファイルを書けませんでした';
+      },
+    });
+    await user.click(screen.getByRole('button', { name: '書き出す' }));
+    const alert = await screen.findByRole('alert');
+    await waitFor(() => expect(alert).toHaveFocus());
+  });
+
   it('「書き出す」: ダイアログをやめたら、何も書かない・何も出さない', async () => {
     const user = userEvent.setup();
     vi.mocked(save).mockResolvedValue(null);

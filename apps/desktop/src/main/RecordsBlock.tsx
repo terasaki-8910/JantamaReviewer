@@ -34,6 +34,12 @@ interface RecordsBlockProps {
   initialNotice?: string | null;
 }
 
+/** 画面に出している知らせか失敗の理由（`seq` は、出すたびに進む番号）。 */
+interface Notice {
+  text: string;
+  seq: number;
+}
+
 /** 確認を出している読み込み（選んだファイルと、確かめた中身の数）。 */
 interface PendingImport {
   path: string;
@@ -49,11 +55,16 @@ interface PendingImport {
  */
 export function RecordsBlock({ onModalChange, onReplaced, initialNotice = null }: RecordsBlockProps) {
   const [overview, setOverview] = useState<RecordsOverview | null>(null);
-  const [message, setMessage] = useState<string | null>(initialNotice);
-  const [error, setError] = useState<string | null>(null);
+  // 知らせと失敗の理由は、出すたびに番号を進める（同じ文でも、キーボードの位置をそこへ移し直し、読み上げ直すため）
+  const [message, setMessageText] = useState<Notice | null>(
+    initialNotice === null ? null : { text: initialNotice, seq: 0 },
+  );
+  const [error, setErrorText] = useState<Notice | null>(null);
   const [busy, setBusy] = useState(false);
   const [ask, setAsk] = useState<PendingImport | null>(null);
   const messageRef = useRef<HTMLParagraphElement>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const seq = useRef(0);
   const importRef = useRef<HTMLButtonElement>(null);
   // 確認を閉じたあと（裏の画面が操作できるようになってから）、キーボードの位置を戻す先
   const focusAfter = useRef<'import' | null>(null);
@@ -69,10 +80,22 @@ export function RecordsBlock({ onModalChange, onReplaced, initialNotice = null }
     reloadOverview();
   }, [reloadOverview]);
 
-  // 知らせが出たら、そこへキーボードの位置を移す（読み上げにも届く）
+  const setMessage = (text: string | null) => {
+    seq.current += 1;
+    setMessageText(text === null ? null : { text, seq: seq.current });
+  };
+  const setError = (text: string | null) => {
+    seq.current += 1;
+    setErrorText(text === null ? null : { text, seq: seq.current });
+  };
+
+  // 知らせ・失敗の理由が出たら、そこへキーボードの位置を移す（押したボタンは、処理の間は押せないので、位置が消えないように）
   useEffect(() => {
     if (message !== null) messageRef.current?.focus();
   }, [message]);
+  useEffect(() => {
+    if (error !== null) errorRef.current?.focus();
+  }, [error]);
 
   // 確認を閉じたあと、キーボードの位置を戻す
   useEffect(() => {
@@ -229,12 +252,12 @@ export function RecordsBlock({ onModalChange, onReplaced, initialNotice = null }
           <span className="ex-ic">
             <Icon name="check" />
           </span>
-          <span>{message}</span>
+          <span>{message.text}</span>
         </p>
       )}
       {error !== null && (
-        <p className="error selectable" role="alert">
-          {error}
+        <p className="error selectable" role="alert" tabIndex={-1} ref={errorRef}>
+          {error.text}
         </p>
       )}
       {ask !== null &&
