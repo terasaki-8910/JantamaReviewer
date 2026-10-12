@@ -235,7 +235,7 @@ export function YakuSection({ box, dora }: SectionProps) {
       <div className="sec-head">
         <h2 className="sec-title">役</h2>
         <InfoTip label="役の欄の説明" id="yk-hint">
-          確定している役は、その行動のあとの手が、どう和了っても付く役です（聴牌なら、どの待ちでも付く役）。近い役は、あと3枚以内で付く役です。立直・門前清自摸和・ドラは数えません。
+          確定している役は、その行動のあとの手が、どう和了っても付く役です（聴牌なら、どの待ちでも付く役）。近い役は、あと3枚以内で付く役（いちばん早い和了より、遠回りは1枚まで）です。立直・門前清自摸和・ドラは数えません。
         </InfoTip>
       </div>
       <ul className="yk">
