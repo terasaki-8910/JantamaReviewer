@@ -447,12 +447,11 @@ async function screensPhase() {
   // 役の欄（F13）: 鳴きの場面（ポン・スルーのボタンがある迷い）に戻って答え、答え合わせのあとの欄「役」だけを撮る（panel の幅、2 倍の細かさ）
   for (let i = 0; i < 5; i += 1) {
     if (await main.evalJs(`!!document.querySelector('.q-choices [role=radio]')`)) break;
-    await main.click(byTextIncludes('button', '前の迷いへ'), '前の迷いへ');
+    await main.click(`document.querySelector('#j-doubt-prev')`, '前の迷いへ');
     await sleep(500);
   }
   await A.answerQuiz({ pick: 0, reason: '役牌なので、鳴いて手を進める' });
-  await main.fit(1280, 900);
-  await main.viewport(1280, 900, 2);
+  await main.fit(1280, 900, 2);
   await sleep(300);
   const yakuBox = await main.rectOf(`document.querySelector('[data-ai="yaku-box"]')`);
   const answerPanel = await main.rectOf(`document.querySelector('.answer')`);
