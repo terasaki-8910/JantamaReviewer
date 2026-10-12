@@ -13,6 +13,7 @@ import {
   actualText,
   buildReplayTimeline,
   findDecisionByKey,
+  listDecisionRefs,
   listReplayScenes,
   shantenTag,
   type ImportedGame,
@@ -53,6 +54,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   const settings = useReplaySettings();
   const timeline = useMemo(() => buildReplayTimeline(game), [game]);
   const resolved = useMemo(() => resolveMarks(game.report, session), [game.report, session]);
+  const decisionRefs = useMemo(() => listDecisionRefs(game.report), [game.report]);
   const markKeys = useMemo(
     () => resolved.map((mark) => (mark.resolution.kind === 'linked' ? mark.resolution.ref.key : null)),
     [resolved],
@@ -168,6 +170,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
           scene={scene}
           session={session}
           resolved={resolved}
+          decisions={decisionRefs}
           existing={latestAnswerFor(study.answers, session.id, scene.key, 'quiz')}
           drafts={drafts}
           nextLabel={nextScene === undefined ? '続きを見る' : '次の場面へ'}

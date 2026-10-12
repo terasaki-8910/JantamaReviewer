@@ -175,16 +175,40 @@ export interface MemoEntry {
   reason: string;
 }
 
-/** 迷いマークの無い迷いのメモ。局・巡目は、判断の鍵（エンジンの `DecisionRef.key`）で持つ。`id` は画面が付ける名前（英数字）。 */
+/**
+ * 迷いマークの無い迷いの位置（局・本場・巡目）。結果を取り込む前の半荘では、判断の一覧が無いので、手で選んだ位置で持つ。
+ * `kyoku` は局の通し番号（エンジンの `DecisionRef.kyoku` と同じ。東1局が 0、南4局が 7、西1局が 8。0〜15）、
+ * `honba` は本場（0〜99）、`junme` は巡目（1〜30）。範囲は Rust 側が確かめる。
+ */
+export interface MemoPosition {
+  kyoku: number;
+  honba: number;
+  junme: number;
+}
+
+/**
+ * 迷いマークの無い迷いのメモ。局面は、次のどちらか、または両方で持つ:
+ * - `position`: 手で選んだ局・本場・巡目（結果を取り込む前に足したもの）
+ * - `decision`: 判断の鍵（エンジンの `DecisionRef.key`。取り込んだあとに、判断を選んだ・位置から自動で結びつけたもの。
+ *   結びつけたあとも `position` は残す）
+ * 判断の鍵だけを持つ古いファイルも読める。`id` は画面が付ける名前（英数字）。
+ */
 export interface ExtraMemo extends MemoEntry {
   id: string;
-  decision: string;
+  decision?: string;
+  position?: MemoPosition;
+}
+
+/** 迷いマークの無い迷いのメモを保存するときの局面（`ExtraMemo` の `decision`・`position`。どちらか、または両方）。 */
+export interface ExtraMemoPlace {
+  decision?: string;
+  position?: MemoPosition;
 }
 
 /**
  * 終局直後のメモ（`memos.json`。F4、U-28）。
  * - `marks`: 迷いマークの id（10 進の文字列）→ メモ
- * - `extras`: 迷いマークの無い迷いのメモ（足した順）
+ * - `extras`: 迷いマークの無い迷いのメモ（足した順。局面は `ExtraMemo` を見る）
  */
 export interface Memos {
   marks: Record<string, MemoEntry>;

@@ -276,7 +276,9 @@ export function tauriMockScript(scenario: Scenario): string {
       }); return null;
       case 'clear_memo': mutate(args.sessionId, function (s) { delete s.memos.marks[String(args.markId)]; }); return null;
       case 'set_extra_memo': mutate(args.sessionId, function (s) {
-        var extra = { id: args.id, decision: args.decision, candidates: args.candidates.trim(), reason: args.reason.trim() };
+        var extra = { id: args.id, candidates: args.candidates.trim(), reason: args.reason.trim() };
+        if (args.decision !== null && args.decision !== undefined) extra.decision = args.decision;
+        if (args.position !== null && args.position !== undefined) extra.position = args.position;
         var at = s.memos.extras.findIndex(function (e) { return e.id === args.id; });
         if (at < 0) s.memos.extras.push(extra); else s.memos.extras[at] = extra;
       }); return null;

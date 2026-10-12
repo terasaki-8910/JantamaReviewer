@@ -6,7 +6,7 @@
  *   迷いの場面は、答える前に、その迷いの終局直後のメモ（「候補」「理由」）を書ける・直せる（迷いのカードと同じ保存先。F4、U-28）。
  *   答えたあとは、メモは書き換えられず、自分の答えの下に出る（AI の情報は、答えるまで出さない）
  */
-import type { ReplayScene, ReplayTimeline, TimelineStep } from '@jantama/engine';
+import type { DecisionRef, ReplayScene, ReplayTimeline, TimelineStep } from '@jantama/engine';
 import { useMemo } from 'react';
 
 import type { AnswerRow, SessionRecord } from '../../api/types';
@@ -81,6 +81,8 @@ interface SceneWorkProps {
   /** 半荘（メモを読み書きする）と、迷いマークの結びつけ（答えたあとに出すメモを探す）。 */
   session: SessionRecord;
   resolved: readonly ResolvedMark[];
+  /** この半荘のすべての判断（位置だけの追加のメモを、位置にある判断に結びつけて出すため）。 */
+  decisions: readonly DecisionRef[];
   /** すでに答えた場面の、保存してある答え。 */
   existing: AnswerRow | null;
   drafts: SceneDrafts;
@@ -88,7 +90,7 @@ interface SceneWorkProps {
   onNext: () => void;
 }
 
-export function SceneWork({ step, info, anyCalled, scene, session, resolved, existing, drafts, nextLabel, onNext }: SceneWorkProps) {
+export function SceneWork({ step, info, anyCalled, scene, session, resolved, decisions, existing, drafts, nextLabel, onNext }: SceneWorkProps) {
   const study = useStudy();
   const reload = study.reloadSessions;
   const sessionId = session.id;
@@ -128,8 +130,8 @@ export function SceneWork({ step, info, anyCalled, scene, session, resolved, exi
       </>
     );
   const memoShown = useMemo(
-    () => (work.revealed ? memosForDecision({ memos: session.memos, resolved, decisionKey: key }) : undefined),
-    [work.revealed, session.memos, resolved, key],
+    () => (work.revealed ? memosForDecision({ memos: session.memos, resolved, decisionKey: key, decisions }) : undefined),
+    [work.revealed, session.memos, resolved, decisions, key],
   );
   return (
     <div className="qz" data-state={work.revealed ? 'revealed' : 'answering'} data-dora={study.highlightDora ? 'on' : 'off'}>

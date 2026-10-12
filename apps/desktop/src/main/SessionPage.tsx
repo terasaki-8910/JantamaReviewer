@@ -19,7 +19,7 @@ import { chipsByKyoku } from './markChips';
 import { markCaptionParts, resolveMarks, type ResolvedMark } from './markCards';
 import { MarkCard } from './MarkCard';
 import { MarkMemoFields } from './MarkMemoFields';
-import { memoOfMark } from './memos';
+import { MEMO_INTRO, memoOfMark } from './memos';
 import { ReplayIcon } from './replay/ReplayIcons';
 import { IDLE_REREADS, type Rereads } from './rereadStore';
 import type { SummaryState } from './sessionSummaries';
@@ -275,6 +275,7 @@ export function SessionPage({
               <h2 className="sec-title" id={marksId}>
                 迷い（{session.marks.length}）
               </h2>
+              <InfoTip label="終局直後のメモの説明">{MEMO_INTRO}</InfoTip>
               {rereading && (
                 <p className="quiet" role="status">
                   スクショを新しい読み取りで読み直しています
