@@ -98,7 +98,7 @@ const answer = (week: string, patch: Partial<WeekAnswer> = {}): WeekAnswer => ({
   mode: 'quiz',
   correct: true,
   causes: [],
-  phases: ['1シャンテン'],
+  phases: ['1向聴'],
   ...patch,
 });
 
@@ -190,7 +190,7 @@ describe('U-30 今週の数・差の原因の割合（局面に対する割合�
   it('原因の一覧は、答え合わせの画面と同じ 5 つ。種類の一覧は、検討ログの絞り込みと同じ 6 つ', () => {
     expect(CAUSES.map((c) => c.label)).toEqual(['受け入れ枚数', '形の質', '打点', '守備', 'その他']);
     const s = summarizeWeeks([W], source({})).get(W);
-    expect(s?.phases.map((p) => p.id)).toEqual(['2シャンテン以上', '1シャンテン', '聴牌', '鳴き', '押し引き', '序盤']);
+    expect(s?.phases.map((p) => p.id)).toEqual(['2向聴以上', '1向聴', '聴牌', '鳴き', '押し引き', '序盤']);
   });
 });
 
@@ -201,17 +201,17 @@ describe('U-30 局面の種類（重なる。正解率は種類ごと）', () =>
       [W],
       source({
         answers: [
-          answer(W, { phases: phases('1シャンテン', '序盤'), correct: true }),
-          answer(W, { phases: phases('1シャンテン', '序盤'), correct: false }),
-          answer(W, { phases: phases('2シャンテン以上'), correct: true }),
+          answer(W, { phases: phases('1向聴', '序盤'), correct: true }),
+          answer(W, { phases: phases('1向聴', '序盤'), correct: false }),
+          answer(W, { phases: phases('2向聴以上'), correct: true }),
           answer(W, { phases: phases('聴牌', '鳴き'), correct: true }),
-          answer(W, { phases: phases('1シャンテン', '押し引き'), correct: false }),
+          answer(W, { phases: phases('1向聴', '押し引き'), correct: false }),
         ],
       }),
     ).get(W);
     const row = (id: LogPhase) => s?.phases.find((p) => p.id === id);
-    expect([row('2シャンテン以上')?.n, row('2シャンテン以上')?.rate]).toEqual([1, 100]);
-    expect([row('1シャンテン')?.n, row('1シャンテン')?.correct, row('1シャンテン')?.rate]).toEqual([3, 1, 33]);
+    expect([row('2向聴以上')?.n, row('2向聴以上')?.rate]).toEqual([1, 100]);
+    expect([row('1向聴')?.n, row('1向聴')?.correct, row('1向聴')?.rate]).toEqual([3, 1, 33]);
     expect([row('聴牌')?.n, row('聴牌')?.rate]).toEqual([1, 100]);
     expect([row('鳴き')?.n, row('鳴き')?.rate]).toEqual([1, 100]);
     expect([row('押し引き')?.n, row('押し引き')?.rate]).toEqual([1, 0]);

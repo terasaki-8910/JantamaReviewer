@@ -131,7 +131,7 @@ describe('公開 API（src/index.ts）', () => {
     expect(engine.FLAG_BAND_GAP).toBe(2);
   });
 
-  it('E-21 場面のシャンテン数・E-22 受け入れの残り・E-23 2シャンテンからの先の入口が使える', () => {
+  it('E-21 場面の向聴数・E-22 受け入れの残り・E-23 2向聴からの先の入口が使える', () => {
     for (const name of [
       'sceneShanten',
       'sceneShantenOfTiles',

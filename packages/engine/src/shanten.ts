@@ -1,9 +1,9 @@
 /**
- * シャンテン数と受け入れ枚数（E-3）。
+ * 向聴数と受け入れ枚数（E-3）。
  *
- * - シャンテン数は、一般形・七対子・国士無双の最小。七対子と国士無双は、閉じた手（副露なしの13・14枚）だけ。
+ * - 向聴数は、一般形・七対子・国士無双の最小。七対子と国士無双は、閉じた手（副露なしの13・14枚）だけ。
  * - 受け入れ枚数は、自分の手牌だけを数える（天鳳牌理と同じ）。他家の捨て牌やドラ表示牌は数えない。
- *   ある牌を1枚加えてシャンテン数が下がるなら受け入れで、残りは 4 - （その牌の手牌の中の枚数）。
+ *   ある牌を1枚加えて向聴数が下がるなら受け入れで、残りは 4 - （その牌の手牌の中の枚数）。
  * - 手牌の枚数は 3n+1 か 3n+2 枚。副露の数は枚数から決まる（14枚・13枚は0、11・10枚は1、8・7枚は2、5・4枚は3、2・1枚は4）。
  *
  * 一般形は、牌の種類（萬子・筒子・索子・字牌）ごとに「面子の数・搭子（対子を含む）の数・雀頭の有無」の
@@ -132,7 +132,7 @@ function tableOf(counts: readonly number[], offset: number, length: number, sequ
   return suitTable(slice, length, sequences, sequences ? numberSuitCache : honorSuitCache, 0);
 }
 
-/** 一般形（4面子1雀頭）のシャンテン数。meldCount は副露の数。 */
+/** 一般形（4面子1雀頭）の向聴数。meldCount は副露の数。 */
 function regularShanten(counts: readonly number[], meldCount: number): number {
   let dp = EMPTY_TABLE;
   for (const [offset, length, sequences] of [
@@ -175,7 +175,7 @@ function regularShanten(counts: readonly number[], meldCount: number): number {
   return best;
 }
 
-/** 七対子のシャンテン数（閉じた手の13・14枚）。 */
+/** 七対子の向聴数（閉じた手の13・14枚）。 */
 function chiitoitsuShanten(counts: readonly number[]): number {
   let pairs = 0;
   let kinds = 0;
@@ -188,7 +188,7 @@ function chiitoitsuShanten(counts: readonly number[]): number {
 
 const ORPHAN_KINDS = [0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33] as const;
 
-/** 国士無双のシャンテン数（閉じた手の13・14枚）。 */
+/** 国士無双の向聴数（閉じた手の13・14枚）。 */
 function kokushiShanten(counts: readonly number[]): number {
   let kinds = 0;
   let pair = 0;
@@ -221,7 +221,7 @@ function validateCounts(counts: readonly number[]): number {
 }
 
 /**
- * 種類ごとの枚数（長さ 34）からシャンテン数を求める。-1 は和了形、0 は聴牌。
+ * 種類ごとの枚数（長さ 34）から向聴数を求める。-1 は和了形、0 は聴牌。
  * 手牌が 13・14 枚なら七対子と国士無双も見る。
  */
 export function shantenOfCounts(counts: readonly number[]): number {
@@ -234,7 +234,7 @@ export function shantenOfCounts(counts: readonly number[]): number {
   return best;
 }
 
-/** 牌の並びからシャンテン数を求める（閉じた手の部分だけを渡す）。 */
+/** 牌の並びから向聴数を求める（閉じた手の部分だけを渡す）。 */
 export function shanten(tiles: readonly Tile[]): number {
   return shantenOfCounts(countTiles(tiles));
 }
@@ -249,7 +249,7 @@ export interface AcceptedTile {
   remaining: number;
 }
 
-/** 3n+1 枚の手牌のシャンテン数と受け入れ。 */
+/** 3n+1 枚の手牌の向聴数と受け入れ。 */
 export interface UkeireResult {
   shanten: number;
   /** 受け入れ枚数の合計。 */
@@ -276,7 +276,7 @@ function ukeireOfCounts(counts: number[]): UkeireResult {
   return { shanten: base, total, accepted };
 }
 
-/** 3n+1 枚（13枚など）の手牌の、シャンテン数と受け入れ枚数。 */
+/** 3n+1 枚（13枚など）の手牌の、向聴数と受け入れ枚数。 */
 export function ukeire(tiles: readonly Tile[]): UkeireResult {
   const counts = countTiles(tiles);
   const total = validateCounts(counts);
@@ -289,7 +289,7 @@ export interface DiscardOption {
   /** 切る牌（赤でない表記。手牌に同じ種類が複数あっても1つにまとめる）。 */
   tile: Tile;
   kind: number;
-  /** 切った後のシャンテン数。 */
+  /** 切った後の向聴数。 */
   shanten: number;
   /** 切った後の受け入れ枚数。 */
   ukeire: number;
@@ -297,7 +297,7 @@ export interface DiscardOption {
 }
 
 /**
- * 3n+2 枚（14枚など）の手牌について、切る牌の種類ごとに、切った後のシャンテン数と受け入れ枚数を返す。
+ * 3n+2 枚（14枚など）の手牌について、切る牌の種類ごとに、切った後の向聴数と受け入れ枚数を返す。
  * 並びは手牌の牌の順（萬子・筒子・索子・字牌）。
  */
 export function discardOptions(tiles: readonly Tile[]): DiscardOption[] {
@@ -317,7 +317,7 @@ export function discardOptions(tiles: readonly Tile[]): DiscardOption[] {
 }
 
 /**
- * 切る牌の候補のうち、切った後のシャンテン数が最小で、その中で受け入れ枚数が最大のもの（複数あれば全部）。
+ * 切る牌の候補のうち、切った後の向聴数が最小で、その中で受け入れ枚数が最大のもの（複数あれば全部）。
  * 「最大の受け入れ枚数」の比較（F6）に使う。候補が空なら空。
  */
 export function bestDiscardOptions(options: readonly DiscardOption[]): DiscardOption[] {

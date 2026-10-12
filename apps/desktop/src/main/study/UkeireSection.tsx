@@ -2,8 +2,8 @@
  * 受け入れ枚数（打牌の判断の答え合わせ。F6・U-18）。
  *
  * 行（自分・実戦・AI・最大。同じ打牌は 1 行）に、手牌だけで数えた枚数（「16枚」。天鳳牌理と同じ）と、場に見えている牌も除いた
- * 「残り」（小さく「残り11」）を並べる。行を押すと小窓が開き、受け入れ牌ごとの枚数と残り、合計を出す。打牌のあとが 2 シャンテンの行には、
- * 「2シャンテンからの先」の欄もある（E-23）。Esc か小窓の外を押すと閉じ、キーボードの位置は押した行に戻る。幅の狭い窓では、画面の下から出る。
+ * 「残り」（小さく「残り11」）を並べる。行を押すと小窓が開き、受け入れ牌ごとの枚数と残り、合計を出す。打牌のあとが 2 向聴の行には、
+ * 「2向聴からの先」の欄もある（E-23）。Esc か小窓の外を押すと閉じ、キーボードの位置は押した行に戻る。幅の狭い窓では、画面の下から出る。
  */
 import { shantenTag, tenhouPairiUrl, type AcceptedDetail } from '@jantama/engine';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
@@ -39,7 +39,7 @@ function Count({ value }: { value: number }) {
   );
 }
 
-/** 自分の打牌との違い（同じシャンテン数どうしのときだけ）。枚数は、手牌だけで数えた数。 */
+/** 自分の打牌との違い（同じ向聴数どうしのときだけ）。枚数は、手牌だけで数えた数。 */
 function Difference({ row, mine }: { row: UkeireRow; mine: UkeireRow | undefined }) {
   if (mine === undefined || row === mine || row.detail.shanten !== mine.detail.shanten) return null;
   const theirs = new Map<string, number>(row.detail.accepted.map((a) => [a.tile, a.count]));
@@ -124,7 +124,7 @@ function FollowPanel({ box, row, dora }: { box: UkeireBox; row: UkeireRow; dora:
     <>
       <p className="up-sum">
         <b>
-          1シャンテンに進む牌 {follow.total}枚
+          1向聴に進む牌 {follow.total}枚
         </b>
         （{follow.kinds}種類）
       </p>
@@ -134,7 +134,7 @@ function FollowPanel({ box, row, dora }: { box: UkeireBox; row: UkeireRow; dora:
       </p>
       <div className="fl-wrap">
         <table className="fl">
-          <caption className="sr-only">2シャンテンの手から、1シャンテンに進む牌と、進んだあとの受け入れ枚数</caption>
+          <caption className="sr-only">2向聴の手から、1向聴に進む牌と、進んだあとの受け入れ枚数</caption>
           <thead>
             <tr>
               <th scope="col">引く牌</th>
@@ -324,7 +324,7 @@ function Popover({ box, row, mine, dora, trigger, initialTab, onClose }: Popover
         </div>
         {row.worse && (
           <p className="up-note warn">
-            この打牌は{shantenTag(detail.shanten)}です（いちばん進む打牌は{shantenTag(box.minShanten)}）。受け入れ枚数は「あと1つ進む牌の数」なので、シャンテン数が違う打牌とは枚数で比べられません。
+            この打牌は{shantenTag(detail.shanten)}です（いちばん進む打牌は{shantenTag(box.minShanten)}）。受け入れ枚数は「あと1つ進む牌の数」なので、向聴数が違う打牌とは枚数で比べられません。
           </p>
         )}
         {hasFollow && (
@@ -351,7 +351,7 @@ function Popover({ box, row, mine, dora, trigger, initialTab, onClose }: Popover
               onClick={() => setTab('2sh')}
               onKeyDown={onTabKeys}
             >
-              2シャンテンからの先
+              2向聴からの先
             </button>
           </div>
         )}
@@ -454,7 +454,7 @@ export function UkeireSection({ box, dora }: SectionProps) {
         })}
       </ul>
       {box.takeaway !== '' && <p className="takeaway">{box.takeaway}</p>}
-      {box.anyWorse && <p className="quiet">シャンテン数が違う打牌は、受け入れ枚数では比べられません。</p>}
+      {box.anyWorse && <p className="quiet">向聴数が違う打牌は、受け入れ枚数では比べられません。</p>}
       <div className="uk-links">
         <a className="q-link" href={box.pairiUrl || tenhouPairiUrl(box.tiles)} target="_blank" rel="noopener noreferrer">
           天鳳牌理で見る

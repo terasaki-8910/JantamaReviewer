@@ -1,5 +1,5 @@
 {
-  "description": "E-23: 2シャンテンからの先の正解表（Python の mahjong ライブラリで、素朴に数えたもの）",
+  "description": "E-23: 2向聴からの先の正解表（Python の mahjong ライブラリで、素朴に数えたもの）",
   "generator": "generate_follow.py",
   "library": "mahjong 2.0.0",
   "positions": [

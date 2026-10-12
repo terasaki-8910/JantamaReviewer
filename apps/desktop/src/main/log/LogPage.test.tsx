@@ -455,8 +455,8 @@ describe('U-29 絞り込み', () => {
     // 局面: 鳴き（鳴きの判断）
     await user.click(filterButton(/^局面/));
     expect(within(screen.getByRole('menu', { name: '局面' })).getAllByRole('menuitemcheckbox').map((item) => text(item).replace(/\d+$/, ''))).toEqual([
-      '2シャンテン以上',
-      '1シャンテン',
+      '2向聴以上',
+      '1向聴',
       '聴牌',
       '鳴き',
       '押し引き',

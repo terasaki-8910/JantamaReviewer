@@ -153,9 +153,9 @@ describe('文言', () => {
     expect(sceneTags({ doubts: [], mismatch: 'other' })).toEqual([{ kind: 'mis', text: '不一致' }]);
   });
 
-  it('場面の一覧の 2 行目: 種類とシャンテン数（0 以下はテンパイ）', () => {
-    expect(sceneSubText({ kind: 'discard', shanten: 2 }, '打牌')).toBe('打牌 · 2シャンテン');
-    expect(sceneSubText({ kind: 'call', shanten: 0 }, '鳴き')).toBe('鳴き · テンパイ');
+  it('場面の一覧の 2 行目: 種類と向聴数（0 以下は聴牌）', () => {
+    expect(sceneSubText({ kind: 'discard', shanten: 2 }, '打牌')).toBe('打牌 · 2向聴');
+    expect(sceneSubText({ kind: 'call', shanten: 0 }, '鳴き')).toBe('鳴き · 聴牌');
   });
 });
 

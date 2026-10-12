@@ -483,7 +483,7 @@ describe('U-30: 成績と来週の重点を、本物のキーで入れて保存�
       expect(await page.getByRole('textbox', { name: '平均順位' }).inputValue()).toBe('2.41');
       expect(await page.getByRole('textbox', { name: '来週の重点（任意。1〜3行）' }).inputValue()).toBe('受け入れを数えてから切る。\n鳴く前に打点を確認する。');
       // 先週に書いた重点は、来週の重点の欄の上に出る（先週 = 9/28 の週は、手で入れた重点がある）
-      expect(await text(page, '.wk-prev')).toBe('先週に書いた重点押し引きは、リーチの現物から探す。 2シャンテンは、受け入れを広く取る。');
+      expect(await text(page, '.wk-prev')).toBe('先週に書いた重点押し引きは、リーチの現物から探す。 2向聴は、受け入れを広く取る。');
       expect(problems).toEqual([]);
     } finally {
       await context.close();

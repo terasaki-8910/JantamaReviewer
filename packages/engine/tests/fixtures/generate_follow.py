@@ -1,14 +1,14 @@
-"""E-23（2シャンテンからの先）の正解表を作る。
+"""E-23（2向聴からの先）の正解表を作る。
 
-独立した実装として、Python の `mahjong` ライブラリのシャンテン計算で、素朴に数える。TypeScript 側の実装
+独立した実装として、Python の `mahjong` ライブラリの向聴計算で、素朴に数える。TypeScript 側の実装
 （packages/engine/src/two-shanten-follow.ts）には依存しない。
 
 場面（ACCEPTANCE E-23）:
 - f9da87cbcd7af5e9 の東4局13巡目（実戦の行動の確率が最も低い判断）
 - FX-4（5b821c8a048ff791）の東2局1本場 8巡目（k1h1e9。実戦は打4p）
-それぞれの判断の手牌（結果 JSON に記録された、ツモ牌を含む手牌）で、切る牌（種類）ごとに、切ったあとが 2 シャンテンのものについて:
-- 1 シャンテンに進む牌（2 シャンテンの手の受け入れ牌）と、その枚数（手牌だけで数える）
-- その牌を引いた 14 枚から、切って 1 シャンテンになる打牌のうち、そのあとの受け入れ枚数が最大のもの（同じなら牌の並びの先）と、その枚数
+それぞれの判断の手牌（結果 JSON に記録された、ツモ牌を含む手牌）で、切る牌（種類）ごとに、切ったあとが 2 向聴のものについて:
+- 1 向聴に進む牌（2 向聴の手の受け入れ牌）と、その枚数（手牌だけで数える）
+- その牌を引いた 14 枚から、切って 1 向聴になる打牌のうち、そのあとの受け入れ枚数が最大のもの（同じなら牌の並びの先）と、その枚数
 - 引く牌の枚数で重みを付けた平均（分数のまま: 合計 / 枚数）と最大
 
 実行（このフォルダで）:
@@ -55,7 +55,7 @@ def shanten(counts: list[int]) -> int:
 
 
 def accepted_of(counts: list[int]) -> tuple[int, list[tuple[int, int]]]:
-    """3n+1 枚の手牌（種類ごとの枚数）の、シャンテン数と、受け入れ牌（種類, 手牌だけの枚数）。"""
+    """3n+1 枚の手牌（種類ごとの枚数）の、向聴数と、受け入れ牌（種類, 手牌だけの枚数）。"""
     base = shanten(counts)
     accepted = []
     for k in range(KIND_COUNT):
@@ -70,7 +70,7 @@ def accepted_of(counts: list[int]) -> tuple[int, list[tuple[int, int]]]:
 
 
 def follow_of(after: list[int]) -> dict:
-    """打牌のあと（13 枚。種類ごとの枚数）が 2 シャンテンの手の、1 シャンテンに進む牌ごとの先。"""
+    """打牌のあと（13 枚。種類ごとの枚数）が 2 向聴の手の、1 向聴に進む牌ごとの先。"""
     base, accepted = accepted_of(after)
     assert base == 2
     rows = []
@@ -141,7 +141,7 @@ def main() -> None:
         print(report_id, found_key, label, [(o["discard"], o["follow"]["total"], o["follow"]["kinds"], round(o["follow"]["average"], 3), o["follow"]["max"]) for o in options])
 
     document = {
-        "description": "E-23: 2シャンテンからの先の正解表（Python の mahjong ライブラリで、素朴に数えたもの）",
+        "description": "E-23: 2向聴からの先の正解表（Python の mahjong ライブラリで、素朴に数えたもの）",
         "generator": "generate_follow.py",
         "library": "mahjong " + version("mahjong"),
         "positions": positions,

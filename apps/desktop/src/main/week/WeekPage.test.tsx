@@ -291,7 +291,7 @@ describe('U-30 今週の数・差の原因の割合（局面に対する割合�
     await openWeek(user);
     const table = within(section('局面の種類')).getByRole('table', { name: '局面の種類ごとの問題の数と正解率' });
     const rows = within(table).getAllByRole('row').slice(1);
-    expect(rows.map((r) => textOf(r.querySelector('th')))).toEqual(['2シャンテン以上', '1シャンテン', '聴牌', '鳴き', '押し引き', '序盤']);
+    expect(rows.map((r) => textOf(r.querySelector('th')))).toEqual(['2向聴以上', '1向聴', '聴牌', '鳴き', '押し引き', '序盤']);
     // 期待値は、今週の 4 問の局面（検討ログと同じ規則）から数える
     const week = [
       { decision: A, correct: false },
@@ -308,7 +308,7 @@ describe('U-30 今週の数・差の原因の割合（局面に対する割合�
     }
     expect(
       within(section('局面の種類')).getByRole('button', { name: '局面の種類の説明' }),
-    ).toHaveAccessibleDescription('種類は重なります（1シャンテンの序盤の問題は、両方に数えます）。');
+    ).toHaveAccessibleDescription('種類は重なります（1向聴の序盤の問題は、両方に数えます）。');
   });
 });
 

@@ -103,7 +103,7 @@ export interface WeekAnswer {
   correct: boolean;
   /** 差の原因。 */
   causes: readonly string[];
-  /** 局面の種類（シャンテン数・鳴き・押し引き・序盤）。 */
+  /** 局面の種類（向聴数・鳴き・押し引き・序盤）。 */
   phases: readonly LogPhase[];
 }
 

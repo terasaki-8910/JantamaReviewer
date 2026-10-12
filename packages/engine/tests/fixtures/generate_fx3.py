@@ -1,7 +1,7 @@
 """FX-3（受け入れ枚数の正解表）を作る。
 
-独立した実装として Python の `mahjong` ライブラリ（MahjongRepository/mahjong）のシャンテン計算を使い、
-手牌ごとのシャンテン数と、受け入れ枚数（自分の手牌だけを数える、天鳳牌理と同じ数え方）の正解表を書き出す。
+独立した実装として Python の `mahjong` ライブラリ（MahjongRepository/mahjong）の向聴計算を使い、
+手牌ごとの向聴数と、受け入れ枚数（自分の手牌だけを数える、天鳳牌理と同じ数え方）の正解表を書き出す。
 TypeScript 側の実装（packages/engine/src/shanten.ts）には依存しない。
 
 実行（このフォルダで）:
@@ -11,7 +11,7 @@ TypeScript 側の実装（packages/engine/src/shanten.ts）には依存しない
 出力: fx3-shanten-ukeire.json（乱数の種を固定してあるので、同じライブラリのバージョンなら同じ内容になる）。
 
 受け入れ枚数の定め方:
-- 3n+1 枚の手牌（13枚など）: ある牌を1枚加えて、手牌全体（3n+2 枚）のシャンテン数が下がるなら受け入れ。
+- 3n+1 枚の手牌（13枚など）: ある牌を1枚加えて、手牌全体（3n+2 枚）の向聴数が下がるなら受け入れ。
   残り枚数は 4 - （その牌の手牌の中の枚数）。他家の捨て牌やドラ表示牌は数えない。
 - 3n+2 枚の手牌（14枚など）: 牌の種類ごとに1枚切った後の 3n+1 枚で、上と同じ数え方をする。
   切った牌の種類も、手牌から1枚減った状態で数える（切った牌は残り枚数に戻る）。
@@ -72,7 +72,7 @@ def shanten(counts: list[int]) -> int:
 
 
 def ukeire(counts: list[int]) -> tuple[int, dict[str, int]]:
-    """3n+1 枚の手牌のシャンテン数と、受け入れの牌（種類 -> 残り枚数）。"""
+    """3n+1 枚の手牌の向聴数と、受け入れの牌（種類 -> 残り枚数）。"""
     base = shanten(counts)
     accepts: dict[str, int] = {}
     for kind in range(KIND_COUNT):
@@ -87,7 +87,7 @@ def ukeire(counts: list[int]) -> tuple[int, dict[str, int]]:
 
 
 def discard_table(counts: list[int]) -> list[dict]:
-    """3n+2 枚の手牌の、切る牌の種類ごとのシャンテン数と受け入れ枚数。"""
+    """3n+2 枚の手牌の、切る牌の種類ごとの向聴数と受け入れ枚数。"""
     rows = []
     for kind in range(KIND_COUNT):
         if counts[kind] == 0:
@@ -117,7 +117,7 @@ def record(style: str, counts: list[int]) -> dict:
 
 
 def deal_from_wall(rng: random.Random, total: int) -> list[int]:
-    """136枚の壁から total 枚を配る（普通の配牌・ツモに近い分布。たいてい 3〜5 シャンテン）。"""
+    """136枚の壁から total 枚を配る（普通の配牌・ツモに近い分布。たいてい 3〜5 向聴）。"""
     wall = [k for k in range(KIND_COUNT) for _ in range(4)]
     rng.shuffle(wall)
     counts = [0] * KIND_COUNT
@@ -205,7 +205,7 @@ def complete_hand(rng: random.Random, sets: int) -> list[int]:
 
 
 def near_hand(rng: random.Random, sets: int, total: int) -> list[int]:
-    """完成形から何枚か抜いて、別の牌に入れ替えた手（聴牌や1シャンテンが多い）。"""
+    """完成形から何枚か抜いて、別の牌に入れ替えた手（聴牌や1向聴が多い）。"""
     counts = complete_hand(rng, sets)
     drop = rng.randint(0, 3)
     for _ in range(drop):
@@ -225,7 +225,7 @@ def main() -> None:
     rng = random.Random(SEED)
     hands: list[dict] = []
 
-    # 受け入れ基準 FX-3 に書かれた例（打4p 38、打5m・6m・4s・5s 34、打6p・8p 28、打1s 24、打8s 15、いずれも2シャンテン）
+    # 受け入れ基準 FX-3 に書かれた例（打4p 38、打5m・6m・4s・5s 34、打6p・8p 28、打1s 24、打8s 15、いずれも2向聴）
     hands.append(record("fixed", parse_notation("56m46688p1145888s")))
 
     def add(style: str, make, totals: list[int], n: int) -> None:
@@ -243,7 +243,7 @@ def main() -> None:
     add("melded", lambda t: near_hand(rng, (t - 2) // 3 if t % 3 == 2 else (t - 1) // 3, t), melded_totals, 60)
 
     document = {
-        "description": "FX-3: 手牌ごとのシャンテン数と受け入れ枚数の正解表（Python の mahjong ライブラリで作成）",
+        "description": "FX-3: 手牌ごとの向聴数と受け入れ枚数の正解表（Python の mahjong ライブラリで作成）",
         "generator": "generate_fx3.py",
         "library": "mahjong " + version("mahjong"),
         "seed": SEED,

@@ -10,7 +10,7 @@ import type { Tile } from './tiles';
 import { type DiscardDetail, discardDetails } from './ukeire-remaining';
 
 export interface DiscardComparison {
-  /** 切る牌の種類ごとの、切った後のシャンテン数と受け入れ枚数（手牌の牌の順）。 */
+  /** 切る牌の種類ごとの、切った後の向聴数と受け入れ枚数（手牌の牌の順）。 */
   options: DiscardOption[];
   /** `options` と同じ並びで、受け入れ牌ごとの手牌だけの枚数と、場に見えている牌も除いた残り（E-22）。 */
   details: DiscardDetail[];
@@ -20,7 +20,7 @@ export interface DiscardComparison {
   actual?: DiscardOption;
   /** AI の 1 位の打牌の結果。1 位が打牌でないときは undefined。 */
   top?: DiscardOption;
-  /** 切った後のシャンテン数が最小で、その中で受け入れ枚数が最大のもの（複数あれば全部）。 */
+  /** 切った後の向聴数が最小で、その中で受け入れ枚数が最大のもの（複数あれば全部）。 */
   best: DiscardOption[];
   /** 天鳳牌理の URL（ツモ牌を含む手牌）。 */
   pairiUrl: string;

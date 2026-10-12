@@ -1,5 +1,5 @@
 {
-  "description": "E-21: 判断ごとの場面のシャンテン数の正解表（Python の mahjong ライブラリで作成）",
+  "description": "E-21: 判断ごとの場面の向聴数の正解表（Python の mahjong ライブラリで作成）",
   "generator": "generate_scene_shanten.py",
   "library": "mahjong 2.0.0",
   "reports": {

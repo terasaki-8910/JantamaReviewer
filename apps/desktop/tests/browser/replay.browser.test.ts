@@ -492,7 +492,7 @@ describe('U-21: 既定のキー（実ブラウザ）', () => {
       // ↓ は次の不一致（東2局 11巡目。迷い 2 でもある）。↑ は前の不一致（無い）
       await page.keyboard.press('ArrowDown');
       expect(await titleText(page)).toBe('東2局 11巡目');
-      expect(await page.locator('.q-chips .q-chip').allTextContents()).toEqual(['1シャンテン', '実戦：打8p', '迷い2', '大きな不一致']);
+      expect(await page.locator('.q-chips .q-chip').allTextContents()).toEqual(['1向聴', '実戦：打8p', '迷い2', '大きな不一致']);
       await page.keyboard.press('ArrowUp');
       expect(await titleText(page)).toBe('東2局 11巡目');
       // Shift+↑ は前の迷い（東1局 4巡目）。Shift+→ は次の局の頭。Shift+← は前の局の頭

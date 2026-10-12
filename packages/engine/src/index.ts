@@ -13,9 +13,9 @@
  * - 局の結果と暫定の〇△✕: `summarizeKyokus`（E-6）、評価の突き合わせ: `alignRatings`（E-7）
  * - 解き直しの予定: `scheduleReview`（E-5。答えを選び直した問題は間隔を進めない）・`scheduleFirstReview`（出題で答えたら 1 日後。E-25）・
  *   `studyDate`（出題・解き直しの「今日」。午前 4 時まで前の日）、牌譜リンク: `parsePaipuLink`（E-9）、MAKA の打牌: `recordMakaMove`（E-14）
- * - 場面のシャンテン数: `sceneShanten`（E-21。打牌の判断はツモったあとの手から切る牌ごとの最小、鳴きの判断は鳴く前の手）
+ * - 場面の向聴数: `sceneShanten`（E-21。打牌の判断はツモったあとの手から切る牌ごとの最小、鳴きの判断は鳴く前の手）
  * - 受け入れの残り: `discardDetails`（E-22。受け入れ牌ごとに、手牌だけの枚数と、場に見えている牌も除いた残り）、
- *   2シャンテンからの先: `followAfterTwoShanten`（E-23）
+ *   2向聴からの先: `followAfterTwoShanten`（E-23）
  * - 出題: 問題の一覧 `listProblems`・今日の出題の組 `buildDailySet`・「残り」`restOfProblems`・解き直しの期限 `dueAnswers`（E-24・E-25）、
  *   答えのボタンと AI の候補への当てはめ `answerOptions` / `choiceProbability`（打牌以外の答えは、雀魂と同じ並びのボタン）
  * - 半荘を通して見る画面（F12）: 時間軸 `buildReplayTimeline`（局ごとの手の列。手のあとの盤面は `replayFrames` の盤面そのもの。

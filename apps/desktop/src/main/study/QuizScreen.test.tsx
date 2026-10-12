@@ -41,7 +41,7 @@ describe('U-1 答える前は、AI の候補・確率・順位を DOM に出さ�
   it('見出しに実戦の行動（実戦：打3m）。AI の情報は、属性にも文字にも無い', () => {
     renderQuiz();
     expect(screen.getByRole('heading', { level: 1, name: '東4局 13巡目' })).toBeInTheDocument();
-    expect(screen.getByText('1シャンテン')).toBeInTheDocument();
+    expect(screen.getByText('1向聴')).toBeInTheDocument();
     expect(screen.getByText('実戦：打3m')).toBeInTheDocument();
     expect(document.querySelector('[data-ai]')).toBeNull();
     expect(document.body.textContent).not.toMatch(/\d\s*%|Mortal|AIの評価（/);
@@ -208,10 +208,10 @@ describe('U-18 受け入れ枚数の行と小窓', () => {
     // 「16枚」の右に、小さく「残り10」（手牌だけの枚数 16 のうち、場に見えている牌を除いて、あと 10 枚）
     expect(mine.querySelector('.uk-n')?.textContent).toBe('16枚 残り10');
     expect(mine.querySelector('.uk-rem')?.textContent).toBe('残り10');
-    expect(mine.querySelector('.uk-sh')?.textContent).toBe('1シャンテン');
-    // 実戦の 3m は 2 シャンテン（枚数で比べられない旨の注）
-    expect(rows[1]?.querySelector('.uk-sh')?.textContent).toBe('2シャンテン');
-    expect(screen.getByText('シャンテン数が違う打牌は、受け入れ枚数では比べられません。')).toBeInTheDocument();
+    expect(mine.querySelector('.uk-sh')?.textContent).toBe('1向聴');
+    // 実戦の 3m は 2 向聴（枚数で比べられない旨の注）
+    expect(rows[1]?.querySelector('.uk-sh')?.textContent).toBe('2向聴');
+    expect(screen.getByText('向聴数が違う打牌は、受け入れ枚数では比べられません。')).toBeInTheDocument();
     expect(screen.getByText('AIの打牌のほうが受け入れが少ない → 形の質・打点・守備のどれかで差がついた')).toBeInTheDocument();
     // 天鳳牌理へのリンク（外部のページを新しい窓で開かない。既定のブラウザは、本体が開く）
     const link = screen.getByRole('link', { name: /天鳳牌理で見る/ });
@@ -258,7 +258,7 @@ describe('U-18 受け入れ枚数の行と小窓', () => {
     await user.click(row);
     const dialog = screen.getByRole('dialog');
     expect(row).toHaveAttribute('aria-expanded', 'true');
-    expect(dialog.querySelector('.up-sum')?.textContent).toBe('1シャンテン・受け入れ 16枚（5種類）・残り 10枚');
+    expect(dialog.querySelector('.up-sum')?.textContent).toBe('1向聴・受け入れ 16枚（5種類）・残り 10枚');
     const items = [...dialog.querySelectorAll('.ut-list > li')].map((li) => li.textContent);
     expect(items).toHaveLength(5);
     // 受け入れ牌ごとに、枚数と残り（3m 2枚・残り2、2p 4枚・残り4、5p 4枚・残り4、6s 4枚・残り0、7s 2枚・残り0）
@@ -266,7 +266,7 @@ describe('U-18 受け入れ枚数の行と小窓', () => {
     expect(
       within(dialog).getByText('枚数は自分の手牌だけで数えた数です（天鳳牌理と同じ）。残りは、場に見えている牌（全員の河・副露・ドラ表示牌）も除いた数です。'),
     ).toBeInTheDocument();
-    // 1 シャンテンの打牌には、「2シャンテンからの先」の欄は無い
+    // 1 向聴の打牌には、「2向聴からの先」の欄は無い
     expect(within(dialog).queryByRole('tab')).toBeNull();
     // 小窓にキーボードの位置が移る
     expect(dialog).toHaveFocus();
@@ -295,23 +295,23 @@ describe('U-18 受け入れ枚数の行と小窓', () => {
     expect(row).toHaveFocus();
   });
 
-  it('打牌のあとが 2 シャンテンの行だけ、「2シャンテンからの先」の欄がある（E-23: 48枚・14種類・平均 19.3・最大 33）', async () => {
+  it('打牌のあとが 2 向聴の行だけ、「2向聴からの先」の欄がある（E-23: 48枚・14種類・平均 19.3・最大 33）', async () => {
     const { user } = renderQuiz();
-    await user.click(handButtons()[0] as HTMLElement); // 3m（実戦と同じ。2 シャンテンになる）
+    await user.click(handButtons()[0] as HTMLElement); // 3m（実戦と同じ。2 向聴になる）
     await user.type(reasonBox(), '試験');
     await user.click(submit());
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
     await user.click(ukRow('自分・実戦'));
     const dialog = screen.getByRole('dialog');
     const tabs = within(dialog).getAllByRole('tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['受け入れ牌', '2シャンテンからの先']);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['受け入れ牌', '2向聴からの先']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
     // この打牌は、枚数で比べられない注
-    expect(within(dialog).getByText(/この打牌は2シャンテンです（いちばん進む打牌は1シャンテン）/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/この打牌は2向聴です（いちばん進む打牌は1向聴）/)).toBeInTheDocument();
     await user.click(tabs[1] as HTMLElement);
     expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
     const panel = within(dialog).getByRole('tabpanel');
-    expect(panel.querySelector('.up-sum')?.textContent).toBe('1シャンテンに進む牌 48枚（14種類）');
+    expect(panel.querySelector('.up-sum')?.textContent).toBe('1向聴に進む牌 48枚（14種類）');
     expect(panel.querySelector('.up-sum2')?.textContent).toContain('平均 19.3枚・最大 33枚');
     expect(panel.querySelectorAll('tbody tr')).toHaveLength(14);
     // 矢印キーでタブを動かせる
@@ -321,7 +321,7 @@ describe('U-18 受け入れ枚数の行と小窓', () => {
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('自分の打牌との違い: 同じシャンテン数どうしの行は、自分にだけ・相手にだけの牌を出す', async () => {
+  it('自分の打牌との違い: 同じ向聴数どうしの行は、自分にだけ・相手にだけの牌を出す', async () => {
     const { user } = renderQuiz();
     await answer(user, drawn);
     await user.click(ukRow('AI'));
@@ -593,7 +593,7 @@ describe('U-16 リーチ・和了・カンの判断も、雀魂と同じ並び�
   it('リーチの答え合わせ: 棒は「リーチ」「しない」。受け入れ枚数は出さない。実戦の行動は見出しに', async () => {
     const { user, probe } = renderQuiz({ report: 'fx1a', key: 'k1h0e10' });
     await user.click(screen.getAllByRole('radio')[0] as HTMLElement);
-    await user.type(reasonBox(), '良形のテンパイ');
+    await user.type(reasonBox(), '良形の聴牌');
     await user.click(submit());
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
     expect(probe.recorded[0]?.choice).toEqual({ type: 'option', id: 'reach' });
