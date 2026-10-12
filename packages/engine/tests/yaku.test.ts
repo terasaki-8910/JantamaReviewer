@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { SHAPE_YAKU, type YakuId, evaluateWin, settledYaku, waitsOf, yakuMeldOf } from '../src/yaku';
 import { loadFixtureJson } from './helpers/fixtures';
-import { type OracleWin, type YakuOracleFixture, oracleIds, shapeOf } from './helpers/yaku-oracle';
+import { type OracleWin, type YakuOracleFixture, oracleIds, oracleYakuman, shapeOf } from './helpers/yaku-oracle';
 
 const oracle = loadFixtureJson<YakuOracleFixture>('yaku-oracle.json');
 
@@ -27,12 +27,18 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
     }
   });
 
-  it('和了形（役満を除く）: 役の一覧・飜数・符が全部一致する', () => {
+  it('和了形: 役の一覧・飜数・符が全部一致する。役満の手は、役満の種類が一致する', () => {
     let compared = 0;
+    let yakuman = 0;
     for (const r of oracle.complete) {
-      if (r.oracle.yakuman) continue;
       const ev = evaluate(r);
       const where = `${r.closed} ${JSON.stringify(r.melds)} 和了牌 ${r.win} ${r.tsumo ? '自摸' : 'ロン'}`;
+      if (r.oracle.yakuman) {
+        expect([...ev.yakuman].sort(), where).toEqual(oracleYakuman(r.oracle.yaku));
+        yakuman++;
+        continue;
+      }
+      expect(ev.yakuman, where).toEqual([]);
       expect(ev.hits.map((h) => h.id).sort(), where).toEqual(oracleIds(r.oracle.yaku));
       if (r.oracle.error === null) {
         expect(ev.han, where).toBe(r.oracle.han);
@@ -44,6 +50,7 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
       compared++;
     }
     expect(compared).toBeGreaterThan(4500);
+    expect(yakuman).toBeGreaterThan(100);
   });
 
   it('実戦の和了 69 件（7 半荘）: 役の一覧・飜数・符が全部一致する（役満は無い）', () => {
@@ -63,7 +70,6 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
     let compared = 0;
     let dead = 0;
     for (const r of oracle.tenpai) {
-      if (r.yakuman) continue;
       const shape = shapeOf(r);
       const waits = waitsOf(shape, r.riichi);
       const where = `${r.closed} ${JSON.stringify(r.melds)}`;
@@ -75,6 +81,8 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
         const theirs = r.waits[String(w.kind)];
         expect(theirs, where).toBeDefined();
         if (theirs === undefined) continue;
+        expect(w.yakuman.length > 0, `${where} 待ち ${w.tile}`).toBe(theirs.yakuman);
+        if (theirs.yakuman) continue;
         expect(w.hits.map((h) => h.id).sort(), `${where} 待ち ${w.tile}`).toEqual(oracleIds(theirs.yaku));
         if (theirs.error === 'no_yaku') dead++;
         else expect(w.han, `${where} 待ち ${w.tile}`).toBe(theirs.han);
@@ -88,12 +96,14 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
   it('確定している役: 聴牌なら全ての待ちで付く役、そうでなければ副露で決まる役だけ', () => {
     let tenpai = 0;
     for (const r of oracle.tenpai) {
-      if (r.yakuman) continue;
       const settled = settledYaku(shapeOf(r), r.riichi);
-      const lists = Object.values(r.waits).map((w) => oracleIds(w.yaku));
+      const lists = Object.values(r.waits)
+        .filter((w) => !w.yakuman)
+        .map((w) => oracleIds(w.yaku));
+      if (lists.length === 0) continue; // 待ちが全部役満の手は、普通の役を数えない
       const common = (lists[0] ?? []).filter((id) => lists.every((l) => l.includes(id)));
       expect(settled.settled.map((h) => h.id).sort(), `${r.closed} ${JSON.stringify(r.melds)}`).toEqual(common);
-      expect(settled.tenpai).toBe(lists.length > 0);
+      expect(settled.tenpai).toBe(Object.keys(r.waits).length > 0);
       if (settled.tenpai) tenpai++;
     }
     expect(tenpai).toBeGreaterThan(1500);

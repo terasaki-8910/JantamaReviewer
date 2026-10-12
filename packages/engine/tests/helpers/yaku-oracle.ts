@@ -1,6 +1,6 @@
 import type { Wind } from '../../src/report-types';
 import { countTiles, parseTenhouNotation } from '../../src/tiles';
-import type { YakuId, YakuMeld, YakuShape } from '../../src/yaku';
+import type { YakumanId, YakuId, YakuMeld, YakuShape } from '../../src/yaku';
 
 /**
  * Python の mahjong ライブラリの役の名前 → 役の識別子。場風・自風の役牌は、牌によって名前が分かれるので、まとめる。
@@ -37,6 +37,23 @@ export const ORACLE_YAKU_IDS: Readonly<Record<string, YakuId>> = {
   'Shou Sangen': 'shosangen',
   Honitsu: 'honitsu',
   Chinitsu: 'chinitsu',
+};
+
+/** 役満の名前 → 識別子（ダブル役満の名前は、同じ役満にまとめる）。 */
+export const ORACLE_YAKUMAN_IDS: Readonly<Record<string, YakumanId>> = {
+  'Kokushi Musou': 'kokushi',
+  'Kokushi Musou Juusanmen Matchi': 'kokushi',
+  'Chuuren Poutou': 'chuuren',
+  'Daburu Chuuren Poutou': 'chuuren',
+  'Suu Ankou': 'suuankou',
+  'Suu Ankou Tanki': 'suuankou',
+  Daisangen: 'daisangen',
+  Shousuushii: 'shosuushi',
+  'Dai Suushii': 'daisuushi',
+  Ryuuiisou: 'ryuisou',
+  'Suu Kantsu': 'suukantsu',
+  'Tsuu Iisou': 'tsuisou',
+  Chinroutou: 'chinroto',
 };
 
 /** 正解表の和了の記録 1 件（generate_yaku.py）。 */
@@ -93,4 +110,17 @@ export function oracleIds(names: readonly string[]): YakuId[] {
       return id;
     })
     .sort();
+}
+
+/** 正解表の役満の名前を識別子の並び（並べ替え済み・重複なし）にする。 */
+export function oracleYakuman(names: readonly string[]): YakumanId[] {
+  return [
+    ...new Set(
+      names.map((n) => {
+        const id = ORACLE_YAKUMAN_IDS[n];
+        if (id === undefined) throw new Error(`知らない役満の名前: ${n}`);
+        return id;
+      }),
+    ),
+  ].sort();
 }

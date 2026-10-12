@@ -401,6 +401,49 @@ export function hitsOfDecomposition(blocks: readonly Block[], ctx: HitContext, i
   return hits;
 }
 
+/** 役満の識別子（調べるのは、近い役の探索で、役満の和了形を普通の役の候補から外すため。画面には出さない）。 */
+export type YakumanId = 'daisangen' | 'shosuushi' | 'daisuushi' | 'tsuisou' | 'chinroto' | 'ryuisou' | 'chuuren' | 'suuankou' | 'suukantsu' | 'kokushi';
+
+const GREEN_KINDS = new Set([19, 20, 21, 23, 25, 32]);
+
+/** 分解 1 つに付く役満（国士無双を除く）。HandCalculator の条件に合わせる。 */
+export function yakumanOfDecomposition(blocks: readonly Block[], ctx: HitContext, interp: WinInterpretation | null): YakumanId[] {
+  const out: YakumanId[] = [];
+  const trips = blocks.filter((b) => b.type === 'tri' || b.type === 'kan');
+  const pairs = blocks.filter((b) => b.type === 'pair');
+  const hasSeq = blocks.some((b) => b.type === 'seq');
+  const kindsOf = (b: Block): number[] => (b.type === 'seq' ? [b.kind, b.kind + 1, b.kind + 2] : [b.kind]);
+  const allKinds = blocks.flatMap(kindsOf);
+  const melds = blocks.filter((b) => b.meld);
+  if (trips.filter((t) => t.kind >= 31).length === 3) out.push('daisangen');
+  const windTrips = trips.filter((t) => t.kind >= 27 && t.kind <= 30).length;
+  if (windTrips === 4) out.push('daisuushi');
+  else if (windTrips === 3 && pairs.some((p) => p.kind >= 27 && p.kind <= 30)) out.push('shosuushi');
+  if (!hasSeq && allKinds.every((k) => k >= 27)) out.push('tsuisou');
+  if (!hasSeq && allKinds.every((k) => k < 27 && (k % 9 === 0 || k % 9 === 8))) out.push('chinroto');
+  if (allKinds.every((k) => GREEN_KINDS.has(k))) out.push('ryuisou');
+  if (blocks.length !== 7 && trips.length > 0 && melds.length === 0) {
+    const suits = new Set(allKinds.filter((k) => k < 27).map((k) => Math.floor(k / 9)));
+    if (suits.size === 1 && allKinds.every((k) => k < 27)) {
+      const counts = new Array<number>(9).fill(0);
+      for (const b of blocks) for (const k of b.type === 'seq' ? [b.kind, b.kind + 1, b.kind + 2] : b.type === 'pair' ? [b.kind, b.kind] : b.type === 'tri' ? [b.kind, b.kind, b.kind] : [b.kind, b.kind, b.kind, b.kind]) counts[k % 9] = (counts[k % 9] as number) + 1;
+      const base = [3, 1, 1, 1, 1, 1, 1, 1, 3];
+      const extra = counts.map((c, i) => c - (base[i] as number));
+      if (extra.every((e) => e >= 0) && extra.reduce((a, b) => a + b, 0) === 1) out.push('chuuren');
+    }
+  }
+  if (blocks.every((b) => !b.open)) {
+    let concealed = trips.length;
+    if (interp !== null && !ctx.tsumo) {
+      const w = blocks[interp.index];
+      if (w !== undefined && (w.type === 'tri' || w.type === 'kan')) concealed--;
+    }
+    if (concealed === 4) out.push('suuankou');
+  }
+  if (blocks.filter((b) => b.type === 'kan').length === 4) out.push('suukantsu');
+  return out;
+}
+
 /**
  * 符（和了の形で決まる符。HandCalculator の数え方に合わせる）。同じ飜数の解釈のうち、どれが選ばれるかを決めるのに使う。
  * 戻り値は、10 符単位に切り上げる前の値（`raw`）と、切り上げた値（`fu`）。七対子は 25 符。
@@ -452,8 +495,10 @@ export interface WinInput extends YakuShape {
 
 /** 和了の評価。`hits` は、点の高い解釈（飜数、同じなら符）の役。点が同じで役が違う解釈が複数あれば、そのすべてに付く役だけを返す。 */
 export interface WinEvaluation {
-  /** regular: 4 面子 1 雀頭、chiitoitsu: 七対子、kokushi: 国士無双（役満。役は数えない）、none: 和了形ではない。 */
+  /** regular: 4 面子 1 雀頭、chiitoitsu: 七対子、kokushi: 国士無双、none: 和了形ではない。 */
   kind: 'regular' | 'chiitoitsu' | 'kokushi' | 'none';
+  /** 役満のとき、その役満（`hits` は空。HandCalculator と同じく、役満には普通の役を足さない）。 */
+  yakuman: YakumanId[];
   hits: YakuHit[];
   han: number;
   fu: number;
@@ -485,41 +530,53 @@ function interpretations(blocks: readonly Block[], winKind: number): WinInterpre
 /** 和了の役を数える。点（飜数、同じなら符）がいちばん高い解釈（和了牌の入り方を含む）を選ぶ。HandCalculator と同じ選び方。 */
 export function evaluateWin(input: WinInput): WinEvaluation {
   const ctx: HitContext = { seatKind: windKind(input.seatWind), roundKind: windKind(input.roundWind), tsumo: input.tsumo, riichi: input.riichi };
-  let best: YakuHit[][] = [];
+  interface Candidate {
+    hits: YakuHit[];
+    yakuman: YakumanId[];
+  }
+  let best: Candidate[] = [];
   let bestHan = -1;
   let bestFu = -1;
   let bestRaw = -1;
   let kind: WinEvaluation['kind'] = 'none';
-  const consider = (hits: YakuHit[], fu: { raw: number; fu: number }, k: WinEvaluation['kind']) => {
-    const han = hanOf(hits);
+  const sameCandidate = (a: Candidate, b: Candidate): boolean =>
+    a.yakuman.length > 0 || b.yakuman.length > 0
+      ? a.yakuman.length === b.yakuman.length && a.yakuman.every((y) => b.yakuman.includes(y))
+      : sameIds(a.hits, b.hits);
+  const consider = (c: Candidate, fu: { raw: number; fu: number }, k: WinEvaluation['kind']) => {
+    const han = c.yakuman.length > 0 ? 13 * c.yakuman.length : hanOf(c.hits);
     const better = han > bestHan || (han === bestHan && (fu.fu > bestFu || (fu.fu === bestFu && fu.raw > bestRaw)));
     if (better) {
       bestHan = han;
       bestFu = fu.fu;
       bestRaw = fu.raw;
-      best = [hits];
+      best = [c];
       kind = k;
-    } else if (han === bestHan && fu.fu === bestFu && fu.raw === bestRaw && !best.some((b) => sameIds(b, hits))) {
-      best.push(hits);
+    } else if (han === bestHan && fu.fu === bestFu && fu.raw === bestRaw && !best.some((b) => sameCandidate(b, c))) {
+      best.push(c);
     }
   };
 
   for (const blocks of decompose(input.counts, input.melds)) {
     for (const interp of interpretations(blocks, input.winKind)) {
-      consider(hitsOfDecomposition(blocks, ctx, interp), fuOfDecomposition(blocks, ctx, interp), 'regular');
+      const yakuman = yakumanOfDecomposition(blocks, ctx, interp);
+      consider({ hits: yakuman.length > 0 ? [] : hitsOfDecomposition(blocks, ctx, interp), yakuman }, fuOfDecomposition(blocks, ctx, interp), 'regular');
     }
   }
   if (input.melds.length === 0 && isChiitoitsuCounts(input.counts)) {
     const pairs: Block[] = [];
     for (let k = 0; k < TILE_KIND_COUNT; k++) if (input.counts[k] === 2) pairs.push({ type: 'pair', kind: k, open: false, meld: false });
-    consider(hitsOfDecomposition(pairs, ctx, null), { raw: 25, fu: 25 }, 'chiitoitsu');
+    const yakuman = yakumanOfDecomposition(pairs, ctx, null);
+    consider({ hits: yakuman.length > 0 ? [] : hitsOfDecomposition(pairs, ctx, null), yakuman }, { raw: 25, fu: 25 }, 'chiitoitsu');
   }
-  if (kind === 'none' && input.melds.length === 0 && isKokushiCounts(input.counts)) return { kind: 'kokushi', hits: [], han: 0, fu: 0, ties: 1 };
-  if (kind === 'none') return { kind: 'none', hits: [], han: 0, fu: 0, ties: 0 };
+  if (kind === 'none' && input.melds.length === 0 && isKokushiCounts(input.counts)) {
+    return { kind: 'kokushi', yakuman: ['kokushi'], hits: [], han: 13, fu: 0, ties: 1 };
+  }
+  if (kind === 'none') return { kind: 'none', yakuman: [], hits: [], han: 0, fu: 0, ties: 0 };
   // 点が最大のうち、同点が複数あれば、そのすべてに共通する役だけを返す（どれが選ばれても付く役）
-  const first = best[0] as YakuHit[];
-  const common = first.filter((h) => best.every((b) => b.some((x) => x.id === h.id)));
-  return { kind, hits: common, han: bestHan, fu: bestFu, ties: best.length };
+  const first = best[0] as Candidate;
+  const common = first.hits.filter((h) => best.every((b) => b.hits.some((x) => x.id === h.id)));
+  return { kind, yakuman: first.yakuman, hits: common, han: bestHan, fu: bestFu, ties: best.length };
 }
 
 function sameIds(a: readonly YakuHit[], b: readonly YakuHit[]): boolean {
@@ -538,6 +595,8 @@ export interface WaitYaku {
   han: number;
   /** 国士無双の待ち（役満。役は数えない）。 */
   kokushi: boolean;
+  /** 役満になる待ち（国士無双を含む。`hits` は空）。 */
+  yakuman: YakumanId[];
 }
 
 /** 聴牌の手（閉じた手牌が 3n+1 枚）の、待ちごとの役。聴牌でなければ空。ロンで和了る前提（門前清自摸和は数えない）。 */
@@ -560,6 +619,7 @@ export function waitsOf(shape: YakuShape, riichi = false): WaitYaku[] {
         hits: evaluation.hits,
         han: evaluation.han,
         kokushi: evaluation.kind === 'kokushi',
+        yakuman: evaluation.yakuman,
       });
     }
     counts[kind] = have;
@@ -596,6 +656,7 @@ export interface SettledYaku {
   closed: boolean;
   /** 聴牌か。聴牌でなければ `waits` は空で、`settled` は副露で決まる役だけ。 */
   tenpai: boolean;
+  /** 待ちごとの役（役満になる待ちは含めない）。 */
   waits: WaitYaku[];
   /** 確定している役。聴牌なら全ての待ちで付く役（副露で決まる役を含む）、そうでなければ副露で決まる役。 */
   settled: YakuHit[];
@@ -603,6 +664,8 @@ export interface SettledYaku {
   partial: PartialYaku[];
   /** 役が 1 つも付かない待ち（聴牌のとき。副露した手なら和了れない待ち、門前ならロンできない（自摸なら門前清自摸和が付く）待ち）。 */
   deadWaits: number[];
+  /** 役満になる待ち（国士無双を含む。役は数えない）。 */
+  yakumanWaits: number[];
 }
 
 /**
@@ -615,9 +678,11 @@ export function settledYaku(shape: YakuShape, riichi = false): SettledYaku {
   if (total % 3 !== 1) throw new RangeError(`確定している役を数えるのは 3n+1 枚の手牌です: ${total}枚`);
   const closed = shape.melds.every((m) => !m.open);
   const fromMelds = meldYaku(shape);
-  const waits = waitsOf(shape, riichi).filter((w) => !w.kokushi);
+  const all = waitsOf(shape, riichi);
+  const yakumanWaits = all.filter((w) => w.yakuman.length > 0).map((w) => w.kind);
+  const waits = all.filter((w) => w.yakuman.length === 0);
   if (waits.length === 0) {
-    return { closed, tenpai: false, waits: [], settled: fromMelds, partial: [], deadWaits: [] };
+    return { closed, tenpai: all.length > 0, waits: [], settled: fromMelds, partial: [], deadWaits: [], yakumanWaits };
   }
   const ids = new Set<YakuId>();
   for (const w of waits) for (const h of w.hits) ids.add(h.id);
@@ -642,5 +707,6 @@ export function settledYaku(shape: YakuShape, riichi = false): SettledYaku {
     settled,
     partial,
     deadWaits: waits.filter((w) => w.hits.length === 0).map((w) => w.kind),
+    yakumanWaits,
   };
 }
