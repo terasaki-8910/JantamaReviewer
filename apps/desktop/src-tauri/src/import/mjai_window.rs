@@ -5,7 +5,7 @@
 //! その移動を止めて窓を閉じ、結果の ID を検討画面に知らせる（結果の JSON は、画面から `fetch_report` で取る）。AI の答えは画面に出さない。
 //!
 //! - 開けるのは mjai のサイトと Cloudflare の確認の画面だけ（`mjai_nav::decide_navigation`）。新しい窓の要求・ダウンロードは断る。
-//! - ブラウザの名残を出さない設定（SPEC 3a 節）は、ほかの窓と同じ `WebviewFlags::strict` と `webview_win::harden` をかける。
+//! - ブラウザの名残を出さない設定（SPEC 3a 節）は、ほかの窓と同じ `WebviewFlags::strict` と `platform::harden_webview` をかける。
 //!   窓の題名は日本語の名前だけ（N-13）。隠したまま作り、最初のページを読み終えたら見せる（N-7）。
 //!   取り込み前の半荘のページから、その半荘に取り込むときは（U-14）、題名に取り込み先の半荘を出す
 //!   （「10月9日 19:09 の半荘を検討（mjai）」。`mjai_title`）。別の窓に移っても、どの半荘に取り込むかが分かるように。
@@ -314,8 +314,7 @@ pub fn open<R: Runtime>(
     };
     let _ = window.set_size(LogicalSize::new(WINDOW_SIZE.0, WINDOW_SIZE.1));
     place_near_main(app, &window);
-    #[cfg(windows)]
-    crate::webview_win::harden(&window, flags);
+    crate::platform::harden_webview(&window, flags);
 
     // ページの読み込みの知らせが来なくても、窓が見えないままにならないようにする（N-7）。
     let watchdog_app = app.clone();

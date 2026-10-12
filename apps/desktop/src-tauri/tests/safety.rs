@@ -1404,10 +1404,19 @@ fn s3_the_ocr_crate_reads_saved_images_and_does_nothing_else() {
 
 // ---- クリップボード: 文字を読むだけ（F1・E-15） ----
 
+/// クリップボードの文字を読む OS ごとの実装（読み取りの口はここだけ）。
+fn clipboard_reader_source() -> PathBuf {
+    crate_dir()
+        .join("src")
+        .join("platform")
+        .join("win")
+        .join("clipboard.rs")
+}
+
 #[test]
 fn s4_the_clipboard_is_only_read_as_text_and_only_the_import_command_reads_it() {
-    let clipboard = read(&crate_dir().join("src").join("clipboard.rs"));
-    let product = product_part(&clipboard);
+    let reader = read(&clipboard_reader_source());
+    let product = product_part(&reader);
     // 読む口は 1 つ（文字の形式だけ）。書き込み・消去・ほかの形式（画像・ファイルの一覧・HTML など）・監視は使わない。
     assert!(product.contains("get_clipboard_string()"));
     assert!(product.contains("CF_UNICODETEXT"));
@@ -1428,6 +1437,8 @@ fn s4_the_clipboard_is_only_read_as_text_and_only_the_import_command_reads_it() 
     }
     // クリップボードのクレートに触れるのは、このファイルだけ。
     let mut users: Vec<String> = Vec::new();
+    // OS ごとの読み取り（`platform::read_clipboard_string`）を呼ぶのは、鍵を持つ `src/clipboard.rs` だけ。
+    let mut platform_callers: Vec<String> = Vec::new();
     // 文字を読む関数を呼ぶのは、取り込みのコマンドだけ。
     let mut readers: Vec<String> = Vec::new();
     for file in rust_sources() {
@@ -1436,12 +1447,17 @@ fn s4_the_clipboard_is_only_read_as_text_and_only_the_import_command_reads_it() 
         if text.contains("clipboard_win") {
             users.push(name.clone());
         }
+        if product_part(&text).contains("platform::read_clipboard_string(") {
+            platform_callers.push(name.clone());
+        }
         if text.contains("clipboard::read_text") {
             readers.push(name);
         }
     }
     assert_eq!(users.len(), 1, "{users:?}");
-    assert!(users[0].ends_with("src/clipboard.rs"));
+    assert!(users[0].ends_with("src/platform/win/clipboard.rs"));
+    assert_eq!(platform_callers.len(), 1, "{platform_callers:?}");
+    assert!(platform_callers[0].ends_with("src/clipboard.rs"));
     assert_eq!(readers.len(), 1, "{readers:?}");
     assert!(readers[0].ends_with("src/import/commands.rs"));
 }
@@ -1487,14 +1503,19 @@ fn s4_the_clipboard_is_read_one_caller_at_a_time() {
     let lock_at = read_text
         .find("exclusive(")
         .expect("read_text が鍵の中で動かす");
-    for call in ["is_format_avail(", "get_clipboard_string()"] {
-        let at = read_text
-            .find(call)
-            .unwrap_or_else(|| panic!("{call} がある"));
-        assert!(at > lock_at, "{call} が鍵の外にある");
-    }
-    // クリップボードのクレートの読み取りを呼ぶのは、この 1 つの関数だけ。
-    assert_eq!(product.matches("get_clipboard_string()").count(), 1);
+    let call = "crate::platform::read_clipboard_string()";
+    let at = read_text
+        .find(call)
+        .unwrap_or_else(|| panic!("{call} がある"));
+    assert!(at > lock_at, "{call} が鍵の外にある");
+    // OS ごとの読み取りを呼ぶのは、この 1 つの関数だけ。
+    assert_eq!(product.matches("read_clipboard_string()").count(), 1);
+
+    // Windows の読み取りは、クリップボードのクレートの読み取りを 1 回だけ呼ぶ。
+    let reader = read(&clipboard_reader_source());
+    let reader = product_part(&reader);
+    assert_eq!(reader.matches("get_clipboard_string()").count(), 1);
+    assert_eq!(reader.matches("is_format_avail(").count(), 1);
 }
 
 // ---- mjai の窓: 外のページにアプリの権限を与えない（F1・R3-3） ----
@@ -2155,9 +2176,15 @@ fn u9_the_recycle_bin_api_is_called_from_one_place_and_with_the_undo_flag() {
         1,
         "ごみ箱の API を呼ぶファイルが 1 つではない: {users:?}"
     );
-    assert!(users[0].ends_with("src/trash.rs"), "{users:?}");
+    assert!(users[0].ends_with("src/platform/win/trash.rs"), "{users:?}");
 
-    let trash = read(&crate_dir().join("src").join("trash.rs"));
+    let trash = read(
+        &crate_dir()
+            .join("src")
+            .join("platform")
+            .join("win")
+            .join("trash.rs"),
+    );
     let product = product_part(&trash);
     assert_eq!(
         product.matches(&format!("{RECYCLE_API}(&mut op)")).count(),
@@ -2188,13 +2215,30 @@ fn u9_the_recycle_bin_api_is_called_from_one_place_and_with_the_undo_flag() {
 
 #[test]
 fn u9_the_real_recycler_is_made_in_one_function_and_nothing_deletes_folders_in_place() {
-    // 本物のごみ箱の道具を作るのは、置き場を片づける 1 つの関数だけ。ほかは、その関数を呼ぶ。
+    // 本物のごみ箱の道具は、OS ごとの実装の 1 つのファイルの 1 つの関数（`platform::recycler`）だけが作る。
     let makers = product_files_containing("WindowsRecycler");
     assert_eq!(makers.len(), 1, "{makers:?}");
-    assert!(makers[0].ends_with("src/trash.rs"), "{makers:?}");
+    assert!(
+        makers[0].ends_with("src/platform/win/trash.rs"),
+        "{makers:?}"
+    );
+    let windows_trash = read(&PathBuf::from(&makers[0]));
+    assert_eq!(
+        product_part(&windows_trash)
+            .matches("Box::new(WindowsRecycler)")
+            .count(),
+        1,
+        "recycler の 1 か所だけ"
+    );
+    // その関数を呼ぶのは、置き場を片づける 1 つの関数（recycle_pending）だけ。
+    let callers = product_files_containing("platform::recycler(");
+    assert_eq!(callers.len(), 1, "{callers:?}");
+    assert!(callers[0].ends_with("src/trash.rs"), "{callers:?}");
     let trash = read(&crate_dir().join("src").join("trash.rs"));
     assert_eq!(
-        product_part(&trash).matches("&WindowsRecycler").count(),
+        product_part(&trash)
+            .matches("crate::platform::recycler()")
+            .count(),
         1,
         "recycle_pending の 1 か所だけ"
     );

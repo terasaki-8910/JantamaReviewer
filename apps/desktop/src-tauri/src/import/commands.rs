@@ -15,7 +15,7 @@ use super::mjai_nav;
 use super::mjai_window;
 use super::ocr_job::{
     finish_reread, needs_reread, plan_reread, plan_session, run_job, run_reread, LineReader,
-    Progress, SessionJob, Shot, WindowsReader,
+    NativeReader, Progress, SessionJob, Shot,
 };
 use super::report_fetch::{fetch_report_by_text, ReportEndpoint};
 use super::report_file::read_report_file;
@@ -132,7 +132,7 @@ fn plan_jobs(app: &AppHandle, session_ids: &[String]) -> Result<Vec<SessionJob>,
 fn run_ocr(app: &AppHandle, mut jobs: Vec<SessionJob>) -> Result<Vec<SessionOcr>, String> {
     let total: usize = jobs.iter().map(|job| job.todo.len()).sum();
     if total > 0 {
-        let reader = WindowsReader::start().map_err(|e| e.to_string())?;
+        let reader = NativeReader::start().map_err(|e| e.to_string())?;
         let mut done = 0;
         report_progress(app, done, total);
         for job in &mut jobs {
@@ -219,7 +219,7 @@ fn reread_steps(app: &AppHandle, session_id: &str) -> Result<bool, String> {
         return Ok(false);
     };
     let job = run_reread(job, || {
-        WindowsReader::start().map(|reader| Box::new(reader) as Box<dyn LineReader>)
+        NativeReader::start().map(|reader| Box::new(reader) as Box<dyn LineReader>)
     })
     .map_err(|e| e.to_string())?;
     let shared = app.state::<SharedCore>();

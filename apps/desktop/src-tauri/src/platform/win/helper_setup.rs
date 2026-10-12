@@ -16,7 +16,6 @@ use jantama_input::setup::{
     HELPER_EXE_NAME,
 };
 
-#[cfg(windows)]
 pub use win::{install, query_installed, run_task, uninstall};
 
 /// 補助プログラムの実行ファイルの場所（本体の実行ファイルと同じフォルダ）。
@@ -76,7 +75,6 @@ fn schtasks(system_dir: &Path, args: &[String]) -> io::Result<i32> {
     Ok(status.code().unwrap_or(-1))
 }
 
-#[cfg(windows)]
 mod win {
     use std::ffi::OsStr;
     use std::mem::size_of;

@@ -16,10 +16,10 @@
 pub mod error;
 pub mod geometry;
 pub mod locate;
-mod reading;
-pub mod resample;
 #[cfg(target_os = "macos")]
 mod mac;
+mod reading;
+pub mod resample;
 #[cfg(windows)]
 mod winrt;
 

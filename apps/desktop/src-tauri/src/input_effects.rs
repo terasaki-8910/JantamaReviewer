@@ -4,17 +4,16 @@
 //! 登録の時間切れを知らせる、画面に状態を知らせる。判断はここでは行わない（`input_flow` の純粋な部分が行う）。
 
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
 
-use jantama_input::hook_win::{self, HookHandle};
 use jantama_input::logic::Config;
 use jantama_input::protocol::ToHelper;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::commands::{self, SharedCore};
-use crate::helper_link::HelperWriter;
 use crate::input_flow::{Effect, Effects, Input, InputStatus, REGISTRATION_TIMEOUT};
+use crate::platform::{self, HelperHost, InputHook};
 use crate::settings::Trigger;
 
 /// 入力の状態が変わったときに全部の窓へ送るイベント。
@@ -22,9 +21,9 @@ pub const EVENT_INPUT_STATUS: &str = "input-status-changed";
 
 pub struct TauriEffects<R: Runtime> {
     app: AppHandle<R>,
-    /// 本体のフックのスレッド。起こせなかったときは `None`。
-    hook: Option<HookHandle>,
-    helper: HelperWriter,
+    /// 本体のフックのスレッド。起こせなかったときは `None`（この OS にフックが無いときも）。
+    hook: Option<Box<dyn InputHook>>,
+    helper: Arc<dyn HelperHost>,
     /// 入力の流れに入力を戻す口（時間切れ・保存の失敗の知らせ）。
     feedback: Sender<Input>,
 }
@@ -33,12 +32,12 @@ impl<R: Runtime> TauriEffects<R> {
     /// 本体のフックのスレッドを起こして、やることを実行する側を作る。
     /// フックは、最初は何も入れない。入れるのは、入力の流れが最初に決める設定のとき（`InProcessHook` を知らせる）。
     /// 割り当てたボタンの押下と登録の候補は、`feedback`（入力の流れの列）へそのまま入る。
-    pub fn start(app: AppHandle<R>, helper: HelperWriter, feedback: Sender<Input>) -> Self {
+    pub fn start(app: AppHandle<R>, helper: Arc<dyn HelperHost>, feedback: Sender<Input>) -> Self {
         let sink = feedback.clone();
-        let hook = match hook_win::start(Config::OFF, move |report| {
+        let hook = match platform::start_input_hook(move |report| {
             let _ = sink.send(Input::from(report));
         }) {
-            Ok((handle, _)) => Some(handle),
+            Ok(hook) => Some(hook),
             Err(e) => {
                 eprintln!("ボタンのフックを起こせませんでした: {e}");
                 None
@@ -46,7 +45,9 @@ impl<R: Runtime> TauriEffects<R> {
         };
         let _ = feedback.send(Input::InProcessHook(hook.is_some()));
         if std::env::var_os(crate::input_flow::TRACE_ENV).is_some_and(|v| !v.is_empty()) {
-            spawn_hook_trace();
+            if let Some(hook) = &hook {
+                hook.start_trace();
+            }
         }
         TauriEffects {
             app,
@@ -73,8 +74,10 @@ impl<R: Runtime> TauriEffects<R> {
 
 impl<R: Runtime> Effects for TauriEffects<R> {
     fn trace_info(&self) -> String {
-        let (keys, mouse) = hook_win::event_counts();
-        format!("（フックが見た入力: キー {keys}、マウス {mouse}）")
+        self.hook
+            .as_ref()
+            .map(|hook| hook.trace_info())
+            .unwrap_or_default()
     }
 
     fn run(&mut self, effect: Effect) {
@@ -138,44 +141,6 @@ impl<R: Runtime> Effects for TauriEffects<R> {
             }
             Effect::EmitStatus(status) => emit_status(&self.app, &status),
         }
-    }
-}
-
-/// 原因調べ（`TRACE_ENV`）のとき、フックが受け取ったキーボードの入力を、標準エラーに 1 つずつ出す。
-/// マウスは動かすだけでも大量に来るので、数が変わったときに 1 秒に 1 回だけ出す。
-fn spawn_hook_trace() {
-    let spawned = thread::Builder::new()
-        .name("hook-trace".to_string())
-        .spawn(|| {
-            let started = Instant::now();
-            let mut next = 0usize;
-            let mut last_mouse = 0u64;
-            let mut last_mouse_print = Instant::now();
-            loop {
-                thread::sleep(Duration::from_millis(20));
-                for note in hook_win::recent_keys(&mut next) {
-                    eprintln!(
-                        "[フック] キー vk=0x{:02X} flags=0x{:02X}{} 起動から {} ms（記録 {:.3} 秒）",
-                        note.vk,
-                        note.flags,
-                        if note.flags & 0x10 != 0 { "（注入）" } else { "" },
-                        note.at_ms,
-                        started.elapsed().as_secs_f32()
-                    );
-                }
-                let (_, mouse) = hook_win::event_counts();
-                if mouse != last_mouse && last_mouse_print.elapsed() >= Duration::from_secs(1) {
-                    eprintln!(
-                        "[フック] マウス {mouse}（フックの手続きの最長 {} マイクロ秒）",
-                        hook_win::max_proc_micros()
-                    );
-                    last_mouse = mouse;
-                    last_mouse_print = Instant::now();
-                }
-            }
-        });
-    if let Err(e) = spawned {
-        eprintln!("フックの記録の見張りを起こせませんでした: {e}");
     }
 }
 

@@ -3,9 +3,11 @@
 //! 対局中にやるのは「保存するだけ」。画面の中身は読まない（SPEC 2章、S-3）。
 //! - どの窓を撮るかを決める純粋な関数 `select_window`（W-7）
 //! - 撮る処理の差し替え口 `Capturer`（W-1 のテストでは偽物を入れる）
+//! - OS ごとの部分（窓の一覧・画面の長方形を写す・カーソルのある画面）の口 `ScreenSource` と、それを使う `ScreenCapturer`
 //! - PNG への書き出し（エンコードのみ）
 //!
-//! 実際に窓の一覧を取り、画面を撮る処理は `capture_win.rs`。
+//! 実際に窓の一覧を取り、画面を撮る処理は OS ごとの `ScreenSource`（Windows は `platform/win/capture.rs`）。
+//! 窓を選び、窓が撮れなければ画面に切り替える手順は、どの OS も同じ `ScreenCapturer`。
 
 use std::fmt;
 
@@ -77,10 +79,47 @@ impl fmt::Display for CaptureError {
 
 impl std::error::Error for CaptureError {}
 
-/// スクリーンショットの取得元。実機では Windows の画面を撮り、テストでは偽物を入れる（W-1）。
+/// スクリーンショットの取得元。実機ではその OS の画面を撮り、テストでは偽物を入れる（W-1）。
 pub trait Capturer: Send + Sync {
     /// `keywords` を題名に含む窓を撮る。見つからなければ全画面を撮る。
     fn capture(&self, keywords: &[String]) -> Result<Screenshot, CaptureError>;
+}
+
+/// 画面と窓の一覧の取得元。OS ごとに実装する。ここでやるのは、窓の題名と位置を調べることと、画面の一部を写すことだけ
+/// （ほかのプロセスの中身には触れない。S-1。写した画像は保存するだけで、中身の解析はしない。S-3）。
+pub trait ScreenSource: Send + Sync {
+    /// 題名のある最上位の窓を、手前の窓から順に並べて返す。このアプリ自身の窓は含めない。
+    fn windows(&self) -> Vec<WindowInfo>;
+    /// 画面の長方形（物理ピクセル。画面全体の座標）を写して PNG にする。
+    fn capture_rect(&self, rect: Rect) -> Result<Vec<u8>, CaptureError>;
+    /// マウスカーソルがある画面全体の長方形。雀魂の窓が見つからないときに撮る範囲
+    /// （ボタンを押した場所 = 対局している画面を撮るため）。
+    fn cursor_screen(&self) -> Rect;
+}
+
+/// `ScreenSource` から `Capturer` を作る。雀魂の窓を選んで撮り（W-7）、窓が見つからない・写せないときは、
+/// 記録を欠かさないよう、カーソルのある画面全体を撮る。
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ScreenCapturer<S>(pub S);
+
+impl<S: ScreenSource> Capturer for ScreenCapturer<S> {
+    fn capture(&self, keywords: &[String]) -> Result<Screenshot, CaptureError> {
+        let windows = self.0.windows();
+        if let Some(window) = select_window(&windows, keywords) {
+            if let Ok(png) = self.0.capture_rect(window.rect) {
+                return Ok(Screenshot {
+                    png,
+                    target: CaptureTarget::Window,
+                });
+            }
+            // 窓を写せなかったときは、記録を欠かさないよう全画面に切り替える。
+        }
+        let png = self.0.capture_rect(self.0.cursor_screen())?;
+        Ok(Screenshot {
+            png,
+            target: CaptureTarget::Screen,
+        })
+    }
 }
 
 /// 雀魂の窓を選ぶ（W-7）。
@@ -275,6 +314,95 @@ mod tests {
         let windows = vec![win("My Game", false, true, false)];
         assert!(select_window(&windows, &kw(&["my game"])).is_some());
         assert!(select_window(&windows, &default_kw()).is_none());
+    }
+
+    /// 窓の一覧と、写せる長方形を決めておく偽物。写した長方形を覚える。
+    struct FakeScreen {
+        windows: Vec<WindowInfo>,
+        /// 写せない長方形（窓の長方形を入れると、窓を写せなかった場面になる）。
+        refuse: Option<Rect>,
+        asked: std::sync::Mutex<Vec<Rect>>,
+    }
+
+    const SCREEN_RECT: Rect = Rect {
+        left: 0,
+        top: 0,
+        right: 2560,
+        bottom: 1440,
+    };
+
+    impl FakeScreen {
+        fn new(windows: Vec<WindowInfo>, refuse: Option<Rect>) -> FakeScreen {
+            FakeScreen {
+                windows,
+                refuse,
+                asked: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl ScreenSource for FakeScreen {
+        fn windows(&self) -> Vec<WindowInfo> {
+            self.windows.clone()
+        }
+
+        fn capture_rect(&self, rect: Rect) -> Result<Vec<u8>, CaptureError> {
+            self.asked.lock().unwrap().push(rect);
+            if self.refuse == Some(rect) {
+                return Err(CaptureError("写せません".to_string()));
+            }
+            Ok(vec![rect.width() as u8])
+        }
+
+        fn cursor_screen(&self) -> Rect {
+            SCREEN_RECT
+        }
+    }
+
+    #[test]
+    fn w7_the_selected_window_is_captured_by_its_own_rectangle() {
+        let capturer = ScreenCapturer(FakeScreen::new(
+            vec![
+                win("メモ帳", false, true, false),
+                win("雀魂", true, true, false),
+            ],
+            None,
+        ));
+        let shot = capturer.capture(&default_kw()).unwrap();
+        assert_eq!(shot.target, CaptureTarget::Window);
+        assert_eq!(*capturer.0.asked.lock().unwrap(), vec![rect(1280, 720)]);
+    }
+
+    #[test]
+    fn w7_without_a_matching_window_the_screen_under_the_cursor_is_captured() {
+        let capturer = ScreenCapturer(FakeScreen::new(
+            vec![win("メモ帳", true, true, false)],
+            None,
+        ));
+        let shot = capturer.capture(&default_kw()).unwrap();
+        assert_eq!(shot.target, CaptureTarget::Screen);
+        assert_eq!(*capturer.0.asked.lock().unwrap(), vec![SCREEN_RECT]);
+    }
+
+    #[test]
+    fn w7_a_window_that_cannot_be_captured_falls_back_to_the_screen() {
+        let capturer = ScreenCapturer(FakeScreen::new(
+            vec![win("雀魂", true, true, false)],
+            Some(rect(1280, 720)),
+        ));
+        let shot = capturer.capture(&default_kw()).unwrap();
+        assert_eq!(shot.target, CaptureTarget::Screen);
+        assert_eq!(
+            *capturer.0.asked.lock().unwrap(),
+            vec![rect(1280, 720), SCREEN_RECT]
+        );
+    }
+
+    #[test]
+    fn w7_when_even_the_screen_cannot_be_captured_the_reason_is_returned() {
+        let capturer = ScreenCapturer(FakeScreen::new(Vec::new(), Some(SCREEN_RECT)));
+        let error = capturer.capture(&default_kw()).unwrap_err();
+        assert_eq!(error.0, "写せません");
     }
 
     #[test]
