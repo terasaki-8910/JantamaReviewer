@@ -846,7 +846,7 @@ describe('U-28 取り込んだあとの位置だけのメモ（FX-5。迷いマ�
     await userEvent.setup().click(button);
     expect(pickerMenuItems().map((item) => item.textContent)).toEqual(['東2局 4巡目 · 打白', '東2局 4巡目 · 鳴かない判断']);
     // AI の候補・確率・順位は出ない
-    expect(document.body.innerHTML.replace(/ src="[^"]*"/g, '')).not.toMatch(/\d\s*[%％]|確率|順位|probab|q_value/i);
+    expect(withoutImagesAndFitLine(document.body.innerHTML)).not.toMatch(/\d\s*[%％]|確率|順位|probab|q_value/i);
     expect(calls(store)).toEqual([]);
     expect(store.session(FX5_ID).memos.extras[0]).not.toHaveProperty('decision');
   });
