@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from 'react';
 
 import { api, errorMessage } from '../api/tauri';
-import type { AnswerMode } from '../api/types';
+import type { AnswerMode, SessionRecord } from '../api/types';
 import { applyTheme, effectiveTheme, storeTheme, type ThemeChoice } from '../shared/theme';
 import { reportBackground, signalWindowReady } from '../shared/windowReady';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -25,15 +25,19 @@ import { QuizPage } from './study/QuizPage';
 import { ReviewPage } from './study/ReviewPage';
 import { StudyProvider, useStudyData } from './study/StudyProvider';
 import { TodayPage } from './study/TodayPage';
+import { WeekPage } from './week/WeekPage';
 import { TOAST_MS, Toast, type ToastModel } from './Toast';
 import { UndoProvider, useUndo, useUndoEvents } from './undo/UndoProvider';
 import { useShortcutsBlocked } from './undo/shortcutGuard';
 import type { UndoCommand, UndoEvent } from './undo/undoStack';
 import { useImportFlow } from './useImportFlow';
-import { useSessionSummaries, useSessions, useToday } from './useSessions';
+import { useSessions, useSummariesAndFit, useToday } from './useSessions';
 import { useSidebar } from './useSidebar';
 import { currentView, historyReducer, isViewAvailable, startHistory, stepTarget } from './viewHistory';
 import { quizView, replayView, sessionView, viewSessionId, type View } from './views';
+
+/** 半荘の一覧を読み終える前の、空の一覧（週の集計に渡す。毎回新しい配列を作らない）。 */
+const NO_SESSIONS: readonly SessionRecord[] = [];
 
 /** 取り消したあとの「元に戻しました」の通知の長さ（ミリ秒）。 */
 const UNDONE_TOAST_MS = 3500;
@@ -83,8 +87,6 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const [nav, dispatch] = useReducer(historyReducer, undefined, () => startHistory());
   const view = currentView(nav);
   const [theme, setTheme] = useState<ThemeChoice>(effectiveTheme);
-  // 取り込みの状態は、画面を移っても保つ（mjai の窓からの知らせを、取りこぼさないため）。
-  const flow = useImportFlow();
   const now = useToday();
   const undo = useUndo();
   const shortcutsBlocked = useShortcutsBlocked();
@@ -97,7 +99,10 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const { sessions, error: loadError, reload } = useSessions((list) =>
     dispatch({ type: 'listChanged', sessionIds: list.map((session) => session.id) }),
   );
-  const summaries = useSessionSummaries(sessions);
+  // 結果を取り込んだ半荘のまとめ（卓・段階・Rating）と、MAKA の評価から合わせ直した当てはめ（F10、U-31）。段階はどこでも、この当てはめで決める
+  const { summaries, fit } = useSummariesAndFit(sessions);
+  // 取り込みの状態は、画面を移っても保つ（mjai の窓からの知らせを、取りこぼさないため）。取り込んだ半荘の段階も、いまの当てはめで決める
+  const flow = useImportFlow(fit.fit.model);
   // 出題（今日の出題・解き直し・答え合わせ）のデータ。半荘の結果の再生・答えの記録・今日の組を、ここで 1 つだけ持つ
   const study = useStudyData(sessions, reload);
   // 前の作り方で読んだ半荘の読み直し（F11）。半荘の画面を開いたときに 1 回だけ。済んだら、一覧を読み直して、新しい読み取りを反映する。
@@ -258,6 +263,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const openToday = useCallback(() => push({ kind: 'today' }), [push]);
   const openReview = useCallback(() => push({ kind: 'review' }), [push]);
   const openLog = useCallback(() => push({ kind: 'log' }), [push]);
+  const openWeek = useCallback(() => push({ kind: 'week' }), [push]);
   // ログの行: 保存した答えで開く（答えの種類は、最後の答えのもの）
   const openLogged = useCallback((sessionId: string, key: string, mode: AnswerMode) => push(quizView(sessionId, key, mode)), [push]);
   const openProblem = useCallback((sessionId: string, key: string) => push(quizView(sessionId, key)), [push]);
@@ -436,6 +442,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           onToday={choose(openToday)}
           onReview={choose(openReview)}
           onLog={choose(openLog)}
+          onWeek={choose(openWeek)}
         >
           <SessionList
             ref={listRef}
@@ -465,6 +472,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           {view.kind === 'today' && <TodayPage onOpen={openProblem} />}
           {view.kind === 'review' && <ReviewPage />}
           {view.kind === 'log' && <LogPage state={log} onOpen={openLogged} />}
+          {view.kind === 'week' && <WeekPage sessions={sessions ?? NO_SESSIONS} summaries={summaries} />}
           {view.kind === 'replay' && <ReplayPage sessionId={view.sessionId} startKey={view.key} />}
           {view.kind === 'quiz' && (
             <QuizPage
@@ -486,6 +494,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
               importFlow={flow}
               rereads={rereads}
               onOpenReplay={openReplay}
+              fit={fit}
             />
           )}
           {sessions !== null && selectedSession === null && (view.kind === 'none' || view.kind === 'session') && (

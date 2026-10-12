@@ -118,14 +118,14 @@ describe('公開 API（src/index.ts）', () => {
   });
 
   it('半荘のまとめ（F9・F10）と、既定の段階の当てはめの入口が使える', () => {
-    for (const name of ['summarizeHanchan', 'roomLabel', 'roomLabelOf', 'roomDispOf'] as const) {
+    for (const name of ['summarizeHanchan', 'regradeSummary', 'roomLabel', 'roomLabelOf', 'roomDispOf'] as const) {
       expect(typeof engine[name], name).toBe('function');
     }
     expect(engine.DEFAULT_GRADE_MODEL.recordCount).toBe(67);
   });
 
   it('F10 局の自己評価と AI 基準の食い違い（印）の入口が使える', () => {
-    for (const name of ['disagreesWithGrade', 'gradeBand', 'markBand'] as const) {
+    for (const name of ['disagreesWithGrade', 'agreesWithGrade', 'markOffsetFromGrade', 'gradeBand', 'markBand'] as const) {
       expect(typeof engine[name], name).toBe('function');
     }
     expect(engine.FLAG_BAND_GAP).toBe(2);
@@ -192,5 +192,11 @@ describe('公開 API（src/index.ts）', () => {
 
   it('パッケージ名の定数がある', () => {
     expect(engine.ENGINE_PACKAGE).toBe('@jantama/engine');
+  });
+  it('U-31 MAKA の当てはめの見込みの入口が使える', () => {
+    for (const name of ['fitMaka', 'baseMakaFit', 'matchBaseGame', 'makaFitRecords', 'baseGradeRecords', 'percentOf'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+    expect(engine.MAKA_BASE_RECORDS).toHaveLength(67);
   });
 });

@@ -12,6 +12,7 @@ import { ExtraMemos } from './ExtraMemos';
 import { buildHandTable, type HandRow } from './handRows';
 import { HandTable, MARK_CHIPS_HINT, MARK_CHIPS_HINT_ID } from './HandTable';
 import { makaCommand, markLinkCommand, selfRatingCommand } from './hanchanEdits';
+import { initialFitState, type MakaFitState } from './makaFit';
 import { useSessionReport } from './hanchanReport';
 import type { ViewerItem, ViewerRequest } from './Lightbox';
 import { chipsByKyoku } from './markChips';
@@ -54,9 +55,17 @@ interface SessionPageProps {
    * （そのカードの局面で開く）を出す。
    */
   onOpenReplay?: (sessionId: string, key?: string) => void;
+  /**
+   * MAKA の当てはめの状態（検討画面のシェルが 1 つだけ持つ。F10、U-31）。渡すと、局の評価の表の下に、当てはめの見込みの 1 行を出す。
+   * このページで MAKA の評価を入れて当てはめが替わったら、「合わせ直しました」も出す。渡さなければ、基礎の 67 局の見込みを出す。
+   */
+  fit?: MakaFitState;
 }
 
 const noop = () => Promise.resolve();
+
+/** 当てはめの状態を渡されなかったときの、基礎の 67 局だけの見込み。 */
+const BASE_FIT_STATE = initialFitState();
 
 /** 局の評価の表の札から移ったあと、迷いのカードを目立たせておく時間（ミリ秒）。 */
 export const FLASH_MS = 1800;
@@ -74,6 +83,7 @@ export function SessionPage({
   importFlow,
   rereads = IDLE_REREADS,
   onOpenReplay,
+  fit = BASE_FIT_STATE,
 }: SessionPageProps) {
   const titleId = useId();
   const marksId = useId();
@@ -166,9 +176,15 @@ export function SessionPage({
       .catch(() => undefined);
   };
 
+  // このページで MAKA の評価を入れたときの、当てはめの版。これより新しい当てはめになったら、「合わせ直しました」を出す
+  // （最初の読み込みで、すでに入れてある評価を取り込んだだけの替わり方では、出さない）。最初の 1 回の入力のときだけ決める
+  const [editedAt, setEditedAt] = useState<number | null>(null);
+  const refit = editedAt !== null && fit.revision > editedAt;
+
   const changeMaka = (row: HandRow | null, grade: Grade | undefined) => {
     const current = row === null ? table?.hanchan.maka : row.maka;
     if (grade === (current ?? undefined)) return;
+    setEditedAt((at) => at ?? fit.revision);
     void undo
       .run(
         makaCommand(api, onChanged, {
@@ -319,6 +335,8 @@ export function SessionPage({
                 onMaka={changeMaka}
                 chips={chips}
                 onJumpToMark={jumpToMark}
+                fit={fit}
+                refit={refit}
               />
             </section>
           ) : readingReport ? (

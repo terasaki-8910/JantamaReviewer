@@ -8,6 +8,10 @@
  * - ✕の帯: C+ から E まで
  * 例: ✕と付けたのに AI 基準が S・A の帯、または〇と付けたのに AI 基準が C 以下の帯。△は、どの帯とも 1 つ以内なので、印は付かない。
  *
+ * 週の集計の「一致」と「ずれ」（U-30）も、同じ帯で決める（別の規則は作らない）:
+ * - ずれ = 自分の帯の評価から AI 基準の帯の評価を引いた値（〇を 3・△を 2・✕を 1 として。-2 から 2。0 は同じ帯）
+ * - 一致 = ずれが 0（同じ帯）。印を付ける「食い違い」は、ずれの大きさが 2 以上
+ *
  * この規則は暫定（既定。利用者に確かめてもらう前）。区切りを変えるときは、この 1 つのファイルだけを直す。
  */
 import { GRADES, type Grade } from './grade';
@@ -45,4 +49,24 @@ export function markBand(mark: HandMark): HandBand {
 export function disagreesWithGrade(mark: HandMark | null, grade: Grade | null): boolean {
   if (mark === null || grade === null) return false;
   return Math.abs(markBand(mark) - gradeBand(grade)) >= FLAG_BAND_GAP;
+}
+
+/** 帯の評価の点（〇 = 3、△ = 2、✕ = 1）。 */
+function bandValue(band: HandBand): number {
+  return 3 - band;
+}
+
+/**
+ * 自分の評価から AI 基準の評価を引いた差（段階。-2 から 2。負は、AI より低く付けた）。
+ * 自己評価が無い・段階が無い局は、比べられないので null。
+ */
+export function markOffsetFromGrade(mark: HandMark | null, grade: Grade | null): number | null {
+  if (mark === null || grade === null) return null;
+  return bandValue(markBand(mark)) - bandValue(gradeBand(grade));
+}
+
+/** 自己評価と AI 基準が同じ帯か（週の集計の「一致」）。比べられない局は null。 */
+export function agreesWithGrade(mark: HandMark | null, grade: Grade | null): boolean | null {
+  const offset = markOffsetFromGrade(mark, grade);
+  return offset === null ? null : offset === 0;
 }

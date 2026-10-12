@@ -22,6 +22,7 @@ import {
   fx5Ocr,
   fx5Session,
 } from '../../tests/import-fixtures';
+import { withoutImagesAndFitLine } from '../../tests/fit-line';
 import { installTauriMock } from '../../tests/tauri-mock';
 import { api } from '../api/tauri';
 import type { Links, OcrCache, Rating, SessionRecord } from '../api/types';
@@ -931,7 +932,7 @@ describe('U-1・F3 この画面に AI の答えは出さない（答えを書く
   const refs = listDecisionRefs(report);
   const refByKey = new Map(refs.map((r) => [r.key, r] as const));
 
-  const withoutImageUrls = (html: string) => html.replace(/ src="[^"]*"/g, '');
+  const withoutImageUrls = withoutImagesAndFitLine;
 
   /** 判断 1 つについて、AI の第 1 位の行動の名前（`expected`）。 */
   function aiPickOf(key: string): string {
@@ -1159,7 +1160,7 @@ describe('F9・E-27・U-13 離れている（読み直したあとの FX-4 の�
   it('この画面に AI の答えは出ない: 1 行にも札にも、確率・順位・AI の第 1 位は無い（U-1）', async () => {
     farSetup();
     await tableReady();
-    const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '');
+    const html = withoutImagesAndFitLine(document.body.innerHTML);
     expect(html).not.toMatch(/data-ai/i);
     expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
     expect(lineOf(6)?.textContent).not.toMatch(/AI|確率|順位/);
@@ -1301,7 +1302,7 @@ describe('F11・E-27・U-23 前の作り方で読んだ半荘の読み直し', (
     await tableReady();
     await screen.findByRole('status');
     const check = () => {
-      const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '');
+      const html = withoutImagesAndFitLine(document.body.innerHTML);
       expect(html).not.toMatch(/data-ai/i);
       expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
     };
@@ -1454,7 +1455,7 @@ describe('U-24 局だけ分かった迷いと、崩れた読み取りの迷い�
     const { user } = setupFx5();
     await tableReady();
     await user.click(within(card(5)).getByRole('button', { name: '迷い5の判断を選ぶ' }));
-    const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '');
+    const html = withoutImagesAndFitLine(document.body.innerHTML);
     expect(html).not.toMatch(/data-ai/i);
     expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
   });

@@ -2253,6 +2253,8 @@ const STUDY_COMMANDS: &[&str] = &[
     "get_daily_set",
     "save_daily_set",
     "count_solved",
+    "list_weeks",
+    "set_week",
 ];
 const STUDY_API_NAMES: &[&str] = &[
     "recordAnswer",
@@ -2261,6 +2263,8 @@ const STUDY_API_NAMES: &[&str] = &[
     "getDailySet",
     "saveDailySet",
     "countSolved",
+    "listWeeks",
+    "setWeek",
 ];
 
 #[test]

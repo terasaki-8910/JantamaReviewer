@@ -25,6 +25,7 @@ import type {
   NewAnswer,
   SolvedCount,
   StoredProblemRef,
+  WeekRecord,
 } from './types';
 
 /** 記録の状態が変わったときのイベント名（Rust の `EVENT_STATE_CHANGED`）。 */
@@ -206,6 +207,15 @@ export const api = {
     invoke<StoredProblemRef[]>('save_daily_set', { date, items }),
   /** 半荘ごとの、答えた問題の数（半荘を消す確認の「解いた問題 N問」に使う）。 */
   countSolved: (sessionIds: string[]) => invoke<SolvedCount[]>('count_solved', { sessionIds }),
+
+  // ---- 週の集計の、手で入れる数（U-30。保存先の study.sqlite。検討画面だけが呼ぶ） ----
+  /** すべての週の、手で入れた成績と来週の重点（週の古い順）。 */
+  listWeeks: () => invoke<WeekRecord[]>('list_weeks'),
+  /**
+   * 1 週ぶんの成績と重点を置き換える（値は Rust 側で確かめる。重点は行の前後の空白と空の行を除いて保存する）。
+   * 保存した記録を返す。成績も重点も空にしたときは、記録を消して null。
+   */
+  setWeek: (record: WeekRecord) => invoke<WeekRecord | null>('set_week', { record }),
 };
 
 export function onStateChanged(handler: (state: AppState) => void): Promise<UnlistenFn> {

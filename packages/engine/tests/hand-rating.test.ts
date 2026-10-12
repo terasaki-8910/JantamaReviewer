@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { GRADES } from '../src/grade';
 import { summarizeHanchan } from '../src/hanchan-summary';
-import { FLAG_BAND_GAP, disagreesWithGrade, gradeBand, markBand } from '../src/hand-rating';
+import { FLAG_BAND_GAP, agreesWithGrade, disagreesWithGrade, gradeBand, markBand, markOffsetFromGrade } from '../src/hand-rating';
 import type { HandMark } from '../src/outcome';
 import { parseReportText } from '../src/report';
 import { FX4_ID, loadReportText } from './helpers/fixtures';
@@ -73,5 +73,38 @@ describe('F10 自己評価と AI 基準の食い違い（暫定の規則）', ()
     expect(flagged).toEqual(['東2局', '東3局', '東3局1本場']);
     // 局ごとの段階（既定の当てはめ）。
     expect(kyokus.map((k) => k.grade)).toEqual(['S+', 'S-', 'A', 'S', 'S-']);
+  });
+});
+
+describe('U-30 週の集計の「一致」と「ずれ」は、同じ帯の規則から決まる（別の規則を作らない）', () => {
+  it('ずれは、自分の評価（〇3・△2・✕1）から AI 基準の帯の評価を引いた値。AI より低く付けると負', () => {
+    expect(markOffsetFromGrade('bad', 'S')).toBe(-2);
+    expect(markOffsetFromGrade('bad', 'B')).toBe(-1);
+    expect(markOffsetFromGrade('fair', 'A')).toBe(-1);
+    expect(markOffsetFromGrade('good', 'A')).toBe(0);
+    expect(markOffsetFromGrade('fair', 'B-')).toBe(0);
+    expect(markOffsetFromGrade('bad', 'E')).toBe(0);
+    expect(markOffsetFromGrade('good', 'B+')).toBe(1);
+    expect(markOffsetFromGrade('good', 'C+')).toBe(2);
+    expect(markOffsetFromGrade('fair', 'D')).toBe(1);
+  });
+
+  it('自己評価か段階が無い局は、比べない（ずれも一致も null）', () => {
+    expect(markOffsetFromGrade(null, 'S')).toBeNull();
+    expect(markOffsetFromGrade('good', null)).toBeNull();
+    expect(agreesWithGrade(null, 'S')).toBeNull();
+    expect(agreesWithGrade('good', null)).toBeNull();
+  });
+
+  it('すべての組み合わせで: 一致 = ずれが 0 = 同じ帯。印（disagreesWithGrade）= ずれの大きさが帯の差の基準以上', () => {
+    for (const mark of MARKS) {
+      for (const grade of GRADES) {
+        const offset = markOffsetFromGrade(mark, grade) as number;
+        expect(offset, `${mark} ${grade}`).toBe(gradeBand(grade) - markBand(mark));
+        expect(agreesWithGrade(mark, grade), `${mark} ${grade}`).toBe(markBand(mark) === gradeBand(grade));
+        expect(disagreesWithGrade(mark, grade), `${mark} ${grade}`).toBe(Math.abs(offset) >= FLAG_BAND_GAP);
+        expect(Math.abs(offset)).toBeLessThanOrEqual(2);
+      }
+    }
   });
 });

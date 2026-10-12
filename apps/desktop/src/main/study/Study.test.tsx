@@ -98,10 +98,11 @@ describe('U-15 サイドバーの今日の出題・解き直し', () => {
     expect(sideCount(/^今日の出題/)).toBeNull();
     await loaded('5');
     expect(sideCount(/^解き直し/)).toBe('0');
-    // ログは押せる（数は無い）。週の集計は、まだ押せない
+    // ログ・週の集計は押せる（数は無い）
     expect(sideButton(/^ログ/)).not.toHaveAttribute('aria-disabled');
     expect(sideButton(/^ログ/).querySelector('.count')).toBeNull();
-    expect(sideButton(/^週の集計/)).toHaveAttribute('aria-disabled', 'true');
+    expect(sideButton(/^週の集計/)).not.toHaveAttribute('aria-disabled');
+    expect(sideButton(/^週の集計/).querySelector('.count')).toBeNull();
   });
 
   it('今日の組は、読み込みが終わったとき、その日のうちに 1 回だけ保存する（開き直しても同じ）', async () => {

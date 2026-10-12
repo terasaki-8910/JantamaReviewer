@@ -5,11 +5,24 @@
  *   （一覧の行を出すたびに、半荘を再生しないため）
  * - 結果の読み込みは、1 つずつ順番に行い、1 つ終えるたびに画面へ譲る（一覧が多くても、画面が固まらない）。新しい半荘から
  * - 半荘ごとに覚える。一覧が変わったとき（`sync`）に、無くなった半荘・結果の場所が変わった半荘は忘れ、新しく結果ができた半荘だけを読む。
- *   結果は、取り込んだあとは書き換わらない。段階の当てはめが変わったとき（MAKA の評価が増えたとき）は、`invalidate` で作り直す
+ *   結果は、取り込んだあとは書き換わらない
+ * - 段階は、段階の当てはめ（点数 → 段階）で決める。当てはめは、取り込んだ半荘の MAKA の評価から合わせ直す（F10、U-31）:
+ *   一覧が変わるたび・まとめを読み終えるたびに、MAKA の評価の入力を調べ、前と変わっていれば当てはめ直して、覚えている
+ *   すべてのまとめの段階を付け直す（結果は読み直さない。Rating は変わらない）。これからできるまとめも、いまの当てはめで作る。
+ *   当てはめの状態は `getFit`（`revision` は、替わるたびに増える）
  */
-import { parseReportText, summarizeHanchan, type HanchanSummary } from '@jantama/engine';
+import {
+  baseMakaFit,
+  fitMaka,
+  parseReportText,
+  regradeSummary,
+  summarizeHanchan,
+  type GradeModel,
+  type HanchanSummary,
+} from '@jantama/engine';
 
-import type { SessionRecord } from '../api/types';
+import type { MakaGrades, SessionRecord } from '../api/types';
+import { fitInputOf, fitSignature, initialFitState, type FitSource, type MakaFitState } from './makaFit';
 
 export type SummaryState =
   | { status: 'loading' }
@@ -28,15 +41,15 @@ function messageOf(error: unknown): string {
   return String(error);
 }
 
-/** 結果の JSON の文字から、半荘のまとめを作る。読めなければ、その理由。 */
-export function summarizeReportText(text: unknown): SummaryState {
+/** 結果の JSON の文字から、半荘のまとめを作る。読めなければ、その理由。`gradeModel` は段階の当てはめ（既定は、基礎の 67 局のもの）。 */
+export function summarizeReportText(text: unknown, gradeModel?: GradeModel): SummaryState {
   if (typeof text !== 'string' || text === '') {
     return { status: 'unavailable', reason: '取り込んだ結果を読み出せませんでした' };
   }
   try {
     const parsed = parseReportText(text);
     if (!parsed.ok) return { status: 'unavailable', reason: parsed.error.message };
-    return { status: 'ready', summary: summarizeHanchan(parsed.value) };
+    return { status: 'ready', summary: summarizeHanchan(parsed.value, gradeModel === undefined ? {} : { gradeModel }) };
   } catch (error) {
     return { status: 'unavailable', reason: messageOf(error) };
   }
@@ -55,7 +68,8 @@ interface Entry {
   state: SummaryState;
 }
 
-type SessionRef = Pick<SessionRecord, 'id' | 'report_path'>;
+/** `maka` は、局ごとの MAKA の評価の当てはめに使う（渡さなければ、入っていない半荘として扱う）。 */
+type SessionRef = Pick<SessionRecord, 'id' | 'report_path'> & { maka?: MakaGrades };
 
 const keyOf = (session: SessionRef) => `${session.id}\n${session.report_path ?? ''}`;
 
@@ -67,6 +81,12 @@ export class SummaryStore {
   private pumping = false;
   private tokens = 0;
   private readonly listeners = new Set<() => void>();
+  /** 半荘の名前 → 保存してある MAKA の局ごとの評価（最後に `sync` で受け取ったもの）。 */
+  private makas = new Map<string, MakaGrades['kyokus']>();
+  private fitState: MakaFitState = initialFitState();
+  /** いまの当てはめの入力の印（`fitSignature`）。入力が空なら空。 */
+  private fitKey = '';
+  private model: GradeModel = baseMakaFit().model;
 
   constructor(
     private readonly load: ReportLoader,
@@ -75,6 +95,9 @@ export class SummaryStore {
 
   /** いまのまとめ（変わるたびに、新しい値になる）。 */
   getSnapshot = (): SummaryMap => this.snapshot;
+
+  /** いまの当てはめ（MAKA の評価の局数・見込み）。替わるたびに、新しい値になる。 */
+  getFit = (): MakaFitState => this.fitState;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -103,8 +126,36 @@ export class SummaryStore {
       }
     }
     this.wanted = wanted;
+    this.makas = new Map(sessions.map((session) => [session.id, session.maka?.kyokus ?? {}] as const));
+    if (this.refit()) changed = true;
     if (changed) this.publish();
     void this.pump();
+  }
+
+  /**
+   * MAKA の評価の入力が、前の当てはめのときと変わっていれば、当てはめ直して、覚えているまとめの段階を付け直す。
+   * 入力は、まとめを読み終えた半荘のうち、MAKA の評価を入れた半荘だけ。変わったら true（呼ぶ側が、`publish` する）。
+   */
+  private refit(): boolean {
+    const sources: FitSource[] = [];
+    for (const [id, entry] of this.entries) {
+      const maka = this.makas.get(id);
+      if (entry.state.status !== 'ready' || maka === undefined || Object.keys(maka).length === 0) continue;
+      sources.push({ sessionId: id, summary: entry.state.summary, maka });
+    }
+    const input = fitInputOf(sources);
+    const key = fitSignature(input);
+    if (key === this.fitKey) return false;
+    this.fitKey = key;
+    const fit = input.users.length === 0 ? baseMakaFit() : fitMaka(input.users, input.sessions);
+    this.fitState = { fit, revision: this.fitState.revision + 1 };
+    this.model = fit.model;
+    for (const entry of this.entries.values()) {
+      if (entry.state.status === 'ready') {
+        entry.state = { status: 'ready', summary: regradeSummary(entry.state.summary, this.model) };
+      }
+    }
+    return true;
   }
 
   /** 作り直す（`id` を渡せば、その半荘だけ）。覚えていたまとめは捨てて、もう一度読む。 */
@@ -140,13 +191,14 @@ export class SummaryStore {
         const { token } = entry;
         let result: SummaryState;
         try {
-          result = summarizeReportText(await this.load(id));
+          result = summarizeReportText(await this.load(id), this.model);
         } catch (error) {
           result = { status: 'unavailable', reason: messageOf(error) };
         }
         const current = this.entries.get(id);
         if (current === undefined || current.token !== token) continue;
         current.state = result;
+        this.refit();
         this.publish();
         await this.pause();
       }

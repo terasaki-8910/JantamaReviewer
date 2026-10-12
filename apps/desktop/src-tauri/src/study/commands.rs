@@ -10,7 +10,7 @@ use std::sync::{Mutex, PoisonError};
 use serde::Serialize;
 use tauri::{State, WebviewWindow};
 
-use super::{AnswerNotes, AnswerRow, NewAnswer, ProblemRef, StudyDb, StudyError};
+use super::{AnswerNotes, AnswerRow, NewAnswer, ProblemRef, StudyDb, StudyError, WeekRecord};
 use crate::commands::SharedCore;
 use crate::widget_window::MAIN_LABEL;
 
@@ -133,6 +133,29 @@ pub async fn save_daily_set(
     study.with(&data_dir(&core), |db| db.save_daily_set(&date, &items))
 }
 
+/// すべての週の記録（手で入れた成績と来週の重点。週の古い順。U-30）。
+#[tauri::command]
+pub async fn list_weeks(
+    window: WebviewWindow,
+    core: State<'_, SharedCore>,
+    study: State<'_, SharedStudy>,
+) -> Result<Vec<WeekRecord>, String> {
+    ensure_main(&window)?;
+    study.with(&data_dir(&core), |db| db.list_weeks())
+}
+
+/// 1 週ぶんの成績と重点を置き換える。保存した記録を返す（成績も重点も空にしたときは、記録を消して `null`）。
+#[tauri::command]
+pub async fn set_week(
+    window: WebviewWindow,
+    core: State<'_, SharedCore>,
+    study: State<'_, SharedStudy>,
+    record: WeekRecord,
+) -> Result<Option<WeekRecord>, String> {
+    ensure_main(&window)?;
+    study.with(&data_dir(&core), |db| db.set_week(record))
+}
+
 /// 半荘ごとの、答えた問題の数。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SolvedCount {
@@ -202,6 +225,46 @@ mod tests {
         );
         assert!(study_path(&second).is_file());
         assert_eq!(study.with(&first, |db| db.list_answers()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn the_weeks_follow_the_same_connection_and_data_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let first = tmp.path().join("first");
+        let second = tmp.path().join("second");
+        let study = SharedStudy::new();
+        let record = WeekRecord {
+            week: "2026-10-05".to_string(),
+            stats: crate::study::WeekStats {
+                rank4: Some(20.4),
+                ..Default::default()
+            },
+            focus: "重点".to_string(),
+        };
+        let saved = study
+            .with(&first, |db| db.set_week(record.clone()))
+            .unwrap();
+        assert_eq!(saved, Some(record.clone()));
+        assert_eq!(
+            study.with(&first, |db| db.list_weeks()).unwrap(),
+            vec![record]
+        );
+        // 保存先が変わると、新しい保存先の（空の）記録を見る
+        assert_eq!(
+            study.with(&second, |db| db.list_weeks()).unwrap(),
+            Vec::new()
+        );
+        // 正しくない値は、理由の文で返る
+        let error = study
+            .with(&first, |db| {
+                db.set_week(WeekRecord {
+                    week: "2026-10-06".to_string(),
+                    stats: Default::default(),
+                    focus: String::new(),
+                })
+            })
+            .unwrap_err();
+        assert!(error.contains("月曜"), "{error}");
     }
 
     #[test]

@@ -111,3 +111,16 @@ export function summarizeHanchan<T extends ScreenReading = ScreenReading>(
     marks: options.marks ? linkMarks(report, options.marks) : [],
   };
 }
+
+/**
+ * まとめの段階を、別の当てはめで付け直す（Rating は変わらないので、結果を読み直さない）。
+ * MAKA の評価が増えて当てはめ直したとき、取り込んだ半荘すべての段階（局ごと・半荘全体）を、これで替える（F10）。
+ */
+export function regradeSummary<T extends ScreenReading>(summary: HanchanSummary<T>, model: GradeModel): HanchanSummary<T> {
+  const gradeOf = (rating: number | null): Grade | null => (rating === null ? null : predictGrade(model, rating * 100));
+  return {
+    ...summary,
+    grade: gradeOf(summary.rating),
+    kyokus: summary.kyokus.map((k) => ({ ...k, grade: gradeOf(k.rating) })),
+  };
+}

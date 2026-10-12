@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_GRADE_MODEL } from '../src/default-grade-model';
 import { fitGradeModel, gradeIndexOf, predictGrade } from '../src/grade';
-import { roomDispOf, roomLabel, roomLabelOf, summarizeHanchan } from '../src/hanchan-summary';
+import { regradeSummary, roomDispOf, roomLabel, roomLabelOf, summarizeHanchan } from '../src/hanchan-summary';
 import { linkMarks } from '../src/mark-link';
 import { summarizeKyokus } from '../src/outcome';
 import { formatRating, gameRating, handRatings } from '../src/rating';
@@ -176,5 +176,32 @@ describe('判断の無い半荘', () => {
     expect(s.grade).toBeNull();
     expect(s.kyokus.map((k) => [k.rating, k.ratingText, k.grade])).toEqual(Array.from({ length: 5 }, () => [null, null, null]));
     expect(s.decisionCount).toBe(0);
+  });
+});
+
+describe('U-31 当てはめ直した段階を、まとめに付け直す（regradeSummary）', () => {
+  it('Rating はそのままで、段階だけが、渡した当てはめのものになる（半荘全体も局ごとも）', () => {
+    const report = load(FX4_ID);
+    const summary = summarizeHanchan(report);
+    // 全部の点数が C- の当てはめ（1 つの記録だけ）
+    const low = fitGradeModel([{ game: 'x', score: 90, grade: 'C-' }]);
+    const regraded = regradeSummary(summary, low);
+    expect(regraded.rating).toBe(summary.rating);
+    expect(regraded.kyokus.map((k) => k.rating)).toEqual(summary.kyokus.map((k) => k.rating));
+    expect(regraded.grade).toBe('C-');
+    expect(regraded.kyokus.map((k) => k.grade)).toEqual(['C-', 'C-', 'C-', 'C-', 'C-']);
+    // 元のまとめは書き換えない。既定の当てはめに戻せば、最初のまとめと同じ段階になる
+    expect(summary.grade).toBe('S-');
+    const back = regradeSummary(regraded, DEFAULT_GRADE_MODEL);
+    expect(back.grade).toBe(summary.grade);
+    expect(back.kyokus.map((k) => k.grade)).toEqual(summary.kyokus.map((k) => k.grade));
+  });
+
+  it('判断の無い局・半荘は、段階が null のまま', () => {
+    const report = structuredClone(load(FX4_ID));
+    for (const k of report.review.kyokus) k.entries = [];
+    const regraded = regradeSummary(summarizeHanchan(report), DEFAULT_GRADE_MODEL);
+    expect(regraded.grade).toBeNull();
+    expect(regraded.kyokus.every((k) => k.grade === null)).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeSessionStore, REPORT_TEXTS, local } from '../../tests/fake-sessions';
 import { FX5_ID, FX5_STARTED, FX5_USER_CHOICES, fx4Ocr, fx4Session, fx5Ocr, fx5Session } from '../../tests/import-fixtures';
+import { withoutImagesAndFitLine } from '../../tests/fit-line';
 import { installTauriMock } from '../../tests/tauri-mock';
 import type { Memos, SessionRecord } from '../api/types';
 import { MARK_CHIPS_HINT } from './HandTable';
@@ -418,7 +419,7 @@ describe('U-28 迷いのカードのメモ', () => {
   it('メモの欄には、AI の候補・確率・順位は出ない（答えるまで隠す）', async () => {
     setup({ session: fx5Imported({ memos: { marks: { '2': { candidates: '3m', reason: 'x' } }, extras: [] } }), report: 'fx5' });
     await tableReady();
-    const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '');
+    const html = withoutImagesAndFitLine(document.body.innerHTML);
     expect(html).not.toMatch(/data-ai/i);
     expect(html).not.toMatch(/\d\s*[%％]|確率|順位|probab|\bprob\b|q_value/i);
   });
@@ -845,7 +846,7 @@ describe('U-28 取り込んだあとの位置だけのメモ（FX-5。迷いマ�
     await userEvent.setup().click(button);
     expect(pickerMenuItems().map((item) => item.textContent)).toEqual(['東2局 4巡目 · 打白', '東2局 4巡目 · 鳴かない判断']);
     // AI の候補・確率・順位は出ない
-    expect(document.body.innerHTML.replace(/ src="[^"]*"/g, '')).not.toMatch(/\d\s*[%％]|確率|順位|probab|q_value/i);
+    expect(withoutImagesAndFitLine(document.body.innerHTML)).not.toMatch(/\d\s*[%％]|確率|順位|probab|q_value/i);
     expect(calls(store)).toEqual([]);
     expect(store.session(FX5_ID).memos.extras[0]).not.toHaveProperty('decision');
   });
