@@ -135,7 +135,8 @@ function Notes({ block, dora }: { block: YakuBlock; dora: Dora }) {
 function Row({ block, merged, dora }: { block: YakuBlock; merged: boolean; dora: Dora }) {
   const { text } = block;
   const danger = text.warning !== null && text.warning.level === 'danger' ? text.warning : null;
-  const kind = block.tags.includes('自分') ? 'you' : block.tags.includes('AI') ? 'top' : block.tags.includes('実戦') ? 'act' : 'other';
+  // まとめた行は、どの行動のものでもないので、名札の色を付けない
+  const kind = merged ? 'other' : block.tags.includes('自分') ? 'you' : block.tags.includes('AI') ? 'top' : block.tags.includes('実戦') ? 'act' : 'other';
   const chip = block.state === 'open-partial' ? '役無しの待ちあり' : '役無し';
   const settledEmpty = text.settled.length === 0 && danger === null;
   return (
