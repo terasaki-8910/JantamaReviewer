@@ -57,9 +57,17 @@ export interface AppProps {
  * 見た画面の履歴（← → と Alt+← / Alt+→）と、操作の取り消し（Ctrl+Z・Ctrl+Y。半荘の削除が最初の利用者）は、ここで受ける。
  */
 export function App({ solvedProblems = solvedProblemCount }: AppProps = {}) {
+  // 記録を置き換えたとき（設定の「読み込む」。D-2）は、画面のデータも、取り消しの履歴も、すべて読み直す。`key` を変えて、
+  // シェルごと作り直す（読み込んだあとの設定のページを開いて、「読み込みました…」を出す）。履歴の取り消しは、置き換える前の記録を指すので、持ち越さない。
+  const [boot, setBoot] = useState<{ epoch: number; notice: string | null }>({ epoch: 0, notice: null });
   return (
-    <UndoProvider>
-      <Shell solvedProblems={solvedProblems} />
+    <UndoProvider key={boot.epoch}>
+      <Shell
+        solvedProblems={solvedProblems}
+        recordsNotice={boot.notice}
+        startOnSettings={boot.epoch > 0}
+        onRecordsReplaced={(notice) => setBoot((current) => ({ epoch: current.epoch + 1, notice }))}
+      />
     </UndoProvider>
   );
 }
@@ -82,9 +90,20 @@ function failureText(event: Extract<UndoEvent, { type: 'failed' }>): string {
   }
 }
 
-function Shell({ solvedProblems }: Required<AppProps>) {
+interface ShellProps extends Required<AppProps> {
+  /** 記録を読み込んだあとの、設定のページに出す知らせ。 */
+  recordsNotice: string | null;
+  /** 記録を読み込んだあと（シェルを作り直したとき）は、設定のページから始める。 */
+  startOnSettings: boolean;
+  /** 設定の「読み込む」で記録を置き換えたとき。 */
+  onRecordsReplaced: (notice: string) => void;
+}
+
+function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplaced }: ShellProps) {
   // どの画面を見ているか・見てきた画面の履歴は、メモリの中だけで持つ（URL のパスや履歴は使わない）。
-  const [nav, dispatch] = useReducer(historyReducer, undefined, () => startHistory());
+  const [nav, dispatch] = useReducer(historyReducer, undefined, () =>
+    startOnSettings ? startHistory({ kind: 'settings' }) : startHistory(),
+  );
   const view = currentView(nav);
   const [theme, setTheme] = useState<ThemeChoice>(effectiveTheme);
   const now = useToday();
@@ -94,6 +113,11 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const search = useSearchOverlay();
   // 検討ログの絞り込みと「答えを出す」。問題を開いて戻っても残るよう、画面の外で持つ
   const log = useLogState();
+  // 設定の「記録の読み込み」の確認を開いているか（開いている間は、裏の画面を操作できなくする）
+  const [recordsModal, setRecordsModal] = useState(false);
+  // 読み込んだあとの知らせは、読み込んだあとの設定のページに 1 度だけ出す（ほかの画面へ移ったら、忘れる）
+  const [notice, setNotice] = useState(recordsNotice);
+  if (notice !== null && view.kind !== 'settings') setNotice(null);
 
   // 半荘の一覧。読めるたびに、いま見ている半荘が残っているかを確かめる（何も選んでいなければ、いちばん新しい半荘にする）。
   const { sessions, error: loadError, reload } = useSessions((list) =>
@@ -393,7 +417,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   // ---- 描く ----
 
   // サイドバーの出す・しまう・引き出し（U-32）。検索・削除の確認・画像の大きな表示が開いている間は、Esc と Tab をそちらに任せる
-  const sidebar = useSidebar({ suspended: pending !== null || viewer !== null || search.open });
+  const sidebar = useSidebar({ suspended: pending !== null || viewer !== null || search.open || recordsModal });
   // 引き出しの項目（取り込み・今日の出題・解き直し・設定・半荘）を選んだら、引き出しを閉じて、左上のボタンへキーボードの位置を戻す
   const choose = <Args extends unknown[]>(action: (...args: Args) => void) => (...args: Args) => {
     action(...args);
@@ -423,7 +447,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
         className="app"
         data-sb={sidebar.shown ? 'shown' : 'hidden'}
         data-drawer={sidebar.drawerOpen ? 'open' : 'closed'}
-        inert={pending !== null || viewer !== null || search.open}
+        inert={pending !== null || viewer !== null || search.open || recordsModal}
       >
         <Sidebar
           view={view}
@@ -467,7 +491,13 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           {flow.offer && view.kind !== 'import' && (
             <ImportOffer link={flow.offer} onAccept={acceptImportOffer} onDismiss={flow.dismissOffer} />
           )}
-          {view.kind === 'settings' && <SettingsPage />}
+          {view.kind === 'settings' && (
+            <SettingsPage
+              onRecordsModal={setRecordsModal}
+              onRecordsReplaced={onRecordsReplaced}
+              recordsNotice={notice}
+            />
+          )}
           {view.kind === 'import' && <ImportPage flow={flow} onOpenSession={openSession} />}
           {view.kind === 'today' && <TodayPage onOpen={openProblem} />}
           {view.kind === 'review' && <ReviewPage />}

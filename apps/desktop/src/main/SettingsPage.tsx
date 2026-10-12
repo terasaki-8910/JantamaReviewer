@@ -10,6 +10,7 @@ import {
 } from '../api/tauri';
 import type { HelperStatus, InputStatus, Orientation, Settings } from '../api/types';
 import { describeTrigger, formatClock } from './format';
+import { RecordsBlock } from './RecordsBlock';
 
 const ORIENTATION_CHOICES: ReadonlyArray<{ value: Orientation; label: string }> = [
   { value: 'vertical', label: '縦長' },
@@ -42,13 +43,22 @@ function helperStateText(helper: HelperStatus): string {
   }
 }
 
+export interface SettingsPageProps {
+  /** 「記録の読み込み」の確認を開いている間は true（呼ぶ側が、裏の画面を `inert` にする）。 */
+  onRecordsModal?: (open: boolean) => void;
+  /** 記録を置き換えたあとに呼ぶ（呼ぶ側が、画面のデータを読み直す。知らせの文は、読み直したあとの設定ページにも出す）。 */
+  onRecordsReplaced?: (message: string) => void;
+  /** 読み直したあとに、最初から出しておく「読み込みました…」の知らせ。 */
+  recordsNotice?: string | null;
+}
+
 /**
  * 設定ページ。変えたらその場で反映して保存する（保存ボタンは無い）。
  * 使えない値（リポジトリの中の保存先）は、理由を出して元のままにする。
  * 迷いマークのボタンは、「ボタンを登録」で、次に押したマウスのボタンかキーをそのまま覚える（W-10）。
  * 押した入力は、本体の側（補助プログラムか本体のフック）が拾うので、ここでは待機の表示と結果だけを持つ。
  */
-export function SettingsPage() {
+export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice = null }: SettingsPageProps = {}) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [input, setInput] = useState<InputStatus | null>(null);
   const [startupNote, setStartupNote] = useState<string | null>(null);
@@ -347,6 +357,12 @@ export function SettingsPage() {
               </p>
             )}
           </div>
+
+          <RecordsBlock
+            onModalChange={onRecordsModal}
+            onReplaced={onRecordsReplaced}
+            initialNotice={recordsNotice}
+          />
 
           <div className="setting field">
             <label htmlFor="capture-keywords">雀魂の窓を探す語（1行に1つ）</label>

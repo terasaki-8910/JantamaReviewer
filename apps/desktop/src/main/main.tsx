@@ -12,6 +12,7 @@ import '../styles/replay.css';
 import '../styles/search.css';
 import '../styles/log.css';
 import '../styles/week.css';
+import '../styles/export.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

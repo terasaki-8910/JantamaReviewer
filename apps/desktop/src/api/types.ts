@@ -398,3 +398,30 @@ export interface WeekRecord {
   /** 来週の重点（1 から 3 行。空なら書いていない）。 */
   focus: string;
 }
+
+/** 書き出すとしたら何がどれだけ入るか（Rust の `RecordsOverview`。設定の「記録の書き出し」の大きさに使う）。 */
+export interface RecordsOverview {
+  /** 半荘の数（消した半荘は数えない）。 */
+  sessions: number;
+  answers: number;
+  /** 書き出したときのファイルの大きさ（バイト）。 */
+  bytes: number;
+}
+
+/** 書き出したファイルの報告（Rust の `ExportReport`）。 */
+export interface RecordsExported {
+  path: string;
+  sessions: number;
+  answers: number;
+  bytes: number;
+}
+
+/**
+ * 記録のファイルの中身の数（Rust の `ImportPreview`。確かめただけの結果と、読み込んだ結果の報告で同じ形）。
+ * `held` は、ファイルの半荘のうち、この保存先に半荘のフォルダが無いものの数（その記録は、フォルダが現れるまで取っておく）。
+ */
+export interface RecordsPreview {
+  sessions: number;
+  answers: number;
+  held: number;
+}
