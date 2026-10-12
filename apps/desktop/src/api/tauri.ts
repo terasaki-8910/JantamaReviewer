@@ -18,6 +18,9 @@ import type {
   Orientation,
   PageKeyEvent,
   Rating,
+  RecordsExported,
+  RecordsOverview,
+  RecordsPreview,
   SelfRatingValue,
   SessionOcr,
   SessionRecord,
@@ -216,6 +219,19 @@ export const api = {
    * 保存した記録を返す。成績も重点も空にしたときは、記録を消して null。
    */
   setWeek: (record: WeekRecord) => invoke<WeekRecord | null>('set_week', { record }),
+
+  // ---- 記録の書き出しと読み込み（D-2、R11-14。検討画面だけが呼ぶ）。パスは、ファイルを選ぶダイアログが返したもの ----
+  /** いま書き出すとしたら、何がどれだけ入るか（半荘の数・答えの数・大きさ）。何も書かない。 */
+  recordsOverview: () => invoke<RecordsOverview>('records_overview'),
+  /** 記録を 1 つの JSON のファイルに書き出す。 */
+  exportRecords: (path: string) => invoke<RecordsExported>('export_records', { path }),
+  /**
+   * 読み込む前に、ファイルを全部確かめて、半荘と答えの数（と、この保存先に半荘のフォルダが無い半荘の数）を返す。
+   * 確かめられなければ、理由を投げる。何も書き換えない。
+   */
+  inspectRecordsFile: (path: string) => invoke<RecordsPreview>('inspect_records_file', { path }),
+  /** いまの記録を、ファイルの内容に置き換える（元には戻せない）。途中で失敗したら、元の記録のまま、理由を投げる。 */
+  importRecords: (path: string) => invoke<RecordsPreview>('import_records', { path }),
 };
 
 export function onStateChanged(handler: (state: AppState) => void): Promise<UnlistenFn> {

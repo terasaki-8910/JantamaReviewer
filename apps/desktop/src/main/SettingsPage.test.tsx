@@ -19,7 +19,7 @@ vi.mock('@tauri-apps/api/core', () => ({
   convertFileSrc: (path: string) => path,
 }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
-vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), save: vi.fn() }));
 
 const KEYCAP_X1 = 'マウスの戻るボタン（XButton1）';
 
@@ -82,6 +82,15 @@ describe('設定ページ', () => {
     expect(screen.getByRole('textbox', { name: /雀魂の窓を探す語/ })).toHaveValue(
       '雀魂\nMahjong Soul',
     );
+  });
+
+  it('D-2 「記録の書き出し」の欄が、データの保存先のすぐ下にある（見本 export-a と同じ並び）', async () => {
+    await renderPage();
+    const group = screen.getByRole('group', { name: '記録の書き出し' });
+    const dataDir = screen.getByText(baseSettings.data_dir).closest('.setting');
+    expect(dataDir?.nextElementSibling).toBe(group);
+    expect(within(group).getByRole('button', { name: '書き出す' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: '読み込む' })).toBeInTheDocument();
   });
 
   it('ウィジェットの形を選ぶと、その場で保存する', async () => {

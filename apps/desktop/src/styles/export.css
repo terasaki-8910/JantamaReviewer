@@ -1,0 +1,88 @@
+/*
+  export.css: 設定の「記録の書き出し」の欄（D-2、R11-14）。承認済みの見本（round11-samples/export.css）の写し。
+  設定のページ（app.css の .settings・.setting）に足す。色は、すべて tokens.css のトークンから。
+*/
+.ex-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.ex-dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.ex-row {
+  display: grid;
+  grid-template-columns: 7.2em minmax(0, 1fr);
+  gap: var(--s3);
+  align-items: baseline;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.ex-row dt {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.ex-row dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: auto-phrase;
+}
+
+.ex-not {
+  max-width: 62ch;
+  word-break: auto-phrase;
+  text-wrap: pretty;
+}
+
+.ex-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  margin: var(--s1) 0 0;
+  padding: var(--s2) var(--s3);
+  background: var(--accent-fill);
+  border: 1px solid var(--accent);
+  border-radius: var(--r2);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.ex-msg:focus {
+  outline: none;
+}
+
+.ex-ic {
+  display: grid;
+  flex: none;
+  place-items: center;
+  height: 1.6em;
+  color: var(--accent);
+}
+
+.ex-ic .ic {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.6;
+}
+
+.ex-file {
+  display: inline-block;
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+/* 確認の「保存先に無い半荘が…」の 1 文は、文節の途中で折り返さない */
+.ex-held {
+  word-break: auto-phrase;
+  text-wrap: pretty;
+}

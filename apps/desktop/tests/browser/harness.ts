@@ -157,6 +157,26 @@ export interface ImportScenario {
   ocr?: unknown;
 }
 
+/** 設定の「記録の書き出し」（D-2）の流れに答えるための、偽物の答え。 */
+export interface RecordsScenario {
+  /** `records_overview` の答え。無ければ、半荘 0・答え 0・2 KB。 */
+  overview?: { sessions: number; answers: number; bytes: number };
+  /** 保存のダイアログ（`plugin:dialog|save`）が返すパス。無ければ、やめた（null）。 */
+  savePath?: string;
+  /** ファイルを選ぶダイアログ（`plugin:dialog|open`）が返すパス。無ければ、やめた（null）。 */
+  openPath?: string;
+  /** `export_records` が失敗する理由。 */
+  exportError?: string;
+  /** `inspect_records_file` の答え（読み込む前の確認の数）。無ければ、半荘 12・答え 84・取っておく 0。 */
+  inspect?: { sessions: number; answers: number; held: number };
+  /** `inspect_records_file` が失敗する理由（ファイルが正しくない）。 */
+  inspectError?: string;
+  /** `import_records` の答え。無ければ、`inspect` と同じ。 */
+  imported?: { sessions: number; answers: number; held: number };
+  /** `import_records` が失敗する理由。 */
+  importError?: string;
+}
+
 export interface Scenario {
   label: 'main' | 'widget';
   state: unknown;
@@ -182,6 +202,8 @@ export interface Scenario {
   weeks?: unknown[];
   /** 日付（YYYY-MM-DD）→ 保存してある今日の組（`get_daily_set`。`save_daily_set` は、その日の組が無いときだけ保存する）。 */
   dailySets?: Record<string, unknown[]>;
+  /** 記録の書き出し・読み込み（D-2）への答え。無ければ、ダイアログはやめた扱い。 */
+  records?: RecordsScenario;
   /**
    * 前の作り方で読んだ半荘の読み直し（F11、E-27）への答え。無ければ、読み直しは要らない（`needs_ocr_reread` は false）。
    * 写しの決まりの名前が `currentGeometry` と違う半荘だけ、要る。読み直しは、写しを `fresh` に置き換えて true を返す
@@ -210,6 +232,7 @@ export function tauriMockScript(scenario: Scenario): string {
   var reports = scenario.reports || {};
   var failDelete = scenario.failDelete || null;
   var failRestore = scenario.failRestore || null;
+  var records = scenario.records || {};
   // 答えの記録（study.sqlite）の偽物。Rust 側と同じ決まり: 答えには番号が付き、今日の組は、その日に 1 回だけ保存される
   var answers = JSON.parse(JSON.stringify(scenario.answers || []));
   var nextAnswerId = answers.reduce(function (max, a) { return Math.max(max, a.id); }, 0) + 1;
@@ -319,6 +342,22 @@ export function tauriMockScript(scenario: Scenario): string {
           answers.forEach(function (a) { if (a.session_id === id) keys[a.decision_key] = true; });
           return { session_id: id, solved: Object.keys(keys).length };
         });
+      case 'plugin:dialog|save': return records.savePath === undefined ? null : records.savePath;
+      case 'plugin:dialog|open': return records.openPath === undefined ? null : records.openPath;
+      case 'records_overview': return records.overview || { sessions: 0, answers: 0, bytes: 2048 };
+      case 'export_records': {
+        if (records.exportError) throw records.exportError;
+        var shown = records.overview || { sessions: 0, answers: 0, bytes: 2048 };
+        return { path: args.path, sessions: shown.sessions, answers: shown.answers, bytes: shown.bytes };
+      }
+      case 'inspect_records_file': {
+        if (records.inspectError) throw records.inspectError;
+        return records.inspect || { sessions: 12, answers: 84, held: 0 };
+      }
+      case 'import_records': {
+        if (records.importError) throw records.importError;
+        return records.imported || records.inspect || { sessions: 12, answers: 84, held: 0 };
+      }
       case 'needs_ocr_reread': {
         if (!scenario.reread) return false;
         var stale = sessions.filter(function (s) { return s.id === args.sessionId; })[0];

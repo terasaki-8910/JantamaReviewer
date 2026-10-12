@@ -12,7 +12,7 @@
 //!
 //! 保存先は Git のリポジトリの外に限る（D-1）。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::{self, OpenOptions};
@@ -53,6 +53,8 @@ pub const SELF_RATINGS_FILE: &str = "self-ratings.json";
 pub const MAKA_FILE: &str = "maka.json";
 /// 終局直後メモ（迷いマークごとの「候補」と「理由」・迷いマークの無い迷いのメモ）のファイル名（半荘のフォルダの中。F4）。
 pub const MEMOS_FILE: &str = "memos.json";
+/// 読み込んだ記録のうち、この保存先にまだフォルダの無い半荘の分を、フォルダが現れるまで取っておくファイル名（保存先の直下。D-2）。
+pub const PENDING_FILE: &str = "pending-records.json";
 /// メモの「候補」の長さの上限（文字数）。「3m・6p」のような短い文。
 pub const MAX_MEMO_CANDIDATES_CHARS: usize = 40;
 /// メモの「理由」の長さの上限（文字数）。1 行。出題の理由の欄（80 文字）と同じ。
@@ -448,6 +450,159 @@ pub struct Memos {
     #[serde(default)]
     pub extras: Vec<ExtraMemo>,
 }
+
+fn links_empty(links: &Links) -> bool {
+    links.marks.is_empty() && links.ratings.is_empty() && links.ratings_version.is_none()
+}
+
+fn self_ratings_empty(ratings: &SelfRatings) -> bool {
+    ratings.kyokus.is_empty()
+}
+
+fn maka_empty(maka: &Maka) -> bool {
+    maka.kyokus.is_empty() && maka.hanchan.is_none()
+}
+
+fn memos_empty(memos: &Memos) -> bool {
+    memos.marks.is_empty() && memos.extras.is_empty()
+}
+
+/// 半荘 1 つの、書き出し・読み込み（D-2）の対象の記録: 結びつけ・局の自己評価の付け直し・MAKA の評価・メモ
+/// （それぞれ、半荘のフォルダの `links.json`・`self-ratings.json`・`maka.json`・`memos.json` の中身）。
+/// 空の種類は書き出さず、読み込むときは、無い種類を空として読む。
+/// ウィジェットの記録（`events.jsonl`）・取り込んだ結果（`report.json`）・文字認識の写し（`ocr.json`）・画像は含まない。
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct SessionRecords {
+    #[serde(default, skip_serializing_if = "links_empty")]
+    pub links: Links,
+    #[serde(default, skip_serializing_if = "self_ratings_empty")]
+    pub self_ratings: SelfRatings,
+    #[serde(default, skip_serializing_if = "maka_empty")]
+    pub maka: Maka,
+    #[serde(default, skip_serializing_if = "memos_empty")]
+    pub memos: Memos,
+}
+
+/// 結びつけ・メモの鍵（迷いマーク・評価の番号を、10 進の文字列にしたもの）の形か。ストアが書く形（先頭に 0 を付けない）だけを通す。
+fn is_record_key(key: &str) -> bool {
+    key.parse::<u64>().is_ok_and(|n| n.to_string() == key)
+}
+
+impl SessionRecords {
+    /// どの種類にも、中身が無いか。
+    pub fn is_empty(&self) -> bool {
+        links_empty(&self.links)
+            && self_ratings_empty(&self.self_ratings)
+            && maka_empty(&self.maka)
+            && memos_empty(&self.memos)
+    }
+
+    /// 半荘のフォルダに置くファイルの名前と中身（JSON）。空の種類は `None`（ファイルを置かない）。
+    pub fn files(&self) -> Result<[(&'static str, Option<String>); 4], StoreError> {
+        fn text<T: Serialize>(value: &T, empty: bool) -> Result<Option<String>, StoreError> {
+            if empty {
+                Ok(None)
+            } else {
+                Ok(Some(serde_json::to_string_pretty(value)?))
+            }
+        }
+        Ok([
+            (LINKS_FILE, text(&self.links, links_empty(&self.links))?),
+            (
+                SELF_RATINGS_FILE,
+                text(&self.self_ratings, self_ratings_empty(&self.self_ratings))?,
+            ),
+            (MAKA_FILE, text(&self.maka, maka_empty(&self.maka))?),
+            (MEMOS_FILE, text(&self.memos, memos_empty(&self.memos))?),
+        ])
+    }
+
+    /// 値を、ストアが保存するときと同じ決まりで確かめて、保存する形（メモの前後の空白を除き、空のメモを持たない形）にする。
+    /// 迷いマーク・評価の番号が、その半荘に（いま）あるかは見ない（取り消した迷いマークの結びつけも、そのまま残っているため。
+    /// 半荘のフォルダがまだ無い読み込みでは、確かめようもない）。
+    pub fn checked(self) -> Result<SessionRecords, StoreError> {
+        for (key, value) in &self.links.marks {
+            if !is_record_key(key) {
+                return Err(StoreError::InvalidLink(format!(
+                    "迷いマークの番号の形ではありません: {key:?}"
+                )));
+            }
+            check_link_value(value, false)?;
+        }
+        for (key, value) in &self.links.ratings {
+            if !is_record_key(key) {
+                return Err(StoreError::InvalidLink(format!(
+                    "評価の番号の形ではありません: {key:?}"
+                )));
+            }
+            check_link_value(value, true)?;
+        }
+        for key in self.self_ratings.kyokus.keys() {
+            check_kyoku_key(key)?;
+        }
+        for (key, grade) in &self.maka.kyokus {
+            check_kyoku_key(key)?;
+            check_maka_grade(grade)?;
+        }
+        if let Some(grade) = &self.maka.hanchan {
+            check_maka_grade(grade)?;
+        }
+        let mut marks = BTreeMap::new();
+        for (key, text) in &self.memos.marks {
+            if !is_record_key(key) {
+                return Err(StoreError::InvalidMemo(format!(
+                    "迷いマークの番号の形ではありません: {key:?}"
+                )));
+            }
+            let text = checked_memo_text(&text.candidates, &text.reason)?;
+            if !text.is_empty() {
+                marks.insert(key.clone(), text);
+            }
+        }
+        if self.memos.extras.len() > MAX_EXTRA_MEMOS {
+            return Err(StoreError::InvalidMemo(format!(
+                "迷いマークの無い迷いのメモは、{MAX_EXTRA_MEMOS} 件までです"
+            )));
+        }
+        let mut extras: Vec<ExtraMemo> = Vec::with_capacity(self.memos.extras.len());
+        for extra in &self.memos.extras {
+            check_extra_memo_id(&extra.id)?;
+            if extras.iter().any(|other| other.id == extra.id) {
+                return Err(StoreError::InvalidMemo(format!(
+                    "同じ名前のメモが重なっています: {}",
+                    extra.id
+                )));
+            }
+            check_extra_memo_place(extra.decision.as_deref(), extra.position)?;
+            let text = checked_memo_text(&extra.candidates, &extra.reason)?;
+            extras.push(ExtraMemo {
+                id: extra.id.clone(),
+                decision: extra.decision.clone(),
+                position: extra.position,
+                candidates: text.candidates,
+                reason: text.reason,
+            });
+        }
+        Ok(SessionRecords {
+            links: self.links,
+            self_ratings: self.self_ratings,
+            maka: self.maka,
+            memos: Memos { marks, extras },
+        })
+    }
+}
+
+/// 読み込んだ記録のうち、この保存先にまだフォルダの無い半荘の分（`pending-records.json`）。半荘のフォルダが現れたとき、付ける（D-2）。
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct PendingRecords {
+    #[serde(default)]
+    pub version: u32,
+    #[serde(default)]
+    pub sessions: BTreeMap<String, SessionRecords>,
+}
+
+/// 取っておく記録のファイルの、いまの版。
+pub const PENDING_VERSION: u32 = 1;
 
 /// 半荘 1 つ分の一覧用の情報。記録（迷いマークか評価）も結果も無い半荘は、一覧に入れない（W-14）。
 /// 結果だけの半荘（記録の無いまま取り込んだもの）は入れる。
@@ -910,7 +1065,152 @@ impl Store {
 
     /// 保存先にある半荘を、新しい順に返す。記録（迷いマークか評価）も結果も無い半荘は入れない（W-14）。
     /// 昔に作られた空のフォルダも消さずに、一覧に出さないだけ。結果だけの半荘（記録の無いまま取り込んだもの）は入れる。
+    ///
+    /// 一覧を作る前に、読み込んだ記録のうち、半荘のフォルダが現れるのを待っていたもの（`pending-records.json`）を、そのフォルダに付ける
+    /// （D-2。フォルダを写したあと、次に一覧を読んだとき）。付けられなくても、一覧は返す。
     pub fn list_sessions(&self) -> Result<Vec<SessionRecord>, StoreError> {
+        if let Err(e) = self.apply_pending_records() {
+            eprintln!("取っておいた記録を半荘に付けられませんでした: {e}");
+        }
+        self.scan_sessions()
+    }
+
+    /// 書き出す記録: 一覧に出る半荘（`list_sessions` と同じ決まり）ごとの、結びつけ・自己評価・MAKA の評価・メモ。
+    /// 消した半荘（`trash/`）は入らない。何も書き換えない（取っておいた記録も付けない）。
+    pub fn session_records(&self) -> Result<BTreeMap<String, SessionRecords>, StoreError> {
+        Ok(self
+            .scan_sessions()?
+            .into_iter()
+            .map(|session| {
+                (
+                    session.id,
+                    SessionRecords {
+                        links: session.links,
+                        self_ratings: session.self_ratings,
+                        maka: session.maka,
+                        memos: session.memos,
+                    },
+                )
+            })
+            .collect())
+    }
+
+    /// `games/` の下にある、半荘のフォルダの名前（名前の形が正しいもの。一覧に出るかは問わない）。
+    pub fn local_session_ids(&self) -> Result<BTreeSet<String>, StoreError> {
+        let mut ids = BTreeSet::new();
+        let entries = match fs::read_dir(self.root.join(GAMES_DIR)) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(ids),
+            Err(e) => return Err(e.into()),
+        };
+        for entry in entries {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            if let Some(name) = entry.file_name().to_str() {
+                if valid_session_id(name) {
+                    ids.insert(name.to_string());
+                }
+            }
+        }
+        Ok(ids)
+    }
+
+    /// 消した半荘の置き場（`trash/`）にある半荘の名前。置き場が無い・読めないときは空。
+    pub fn trashed_session_ids(&self) -> BTreeSet<String> {
+        let Ok(entries) = fs::read_dir(self.root.join(TRASH_DIR)) else {
+            return BTreeSet::new();
+        };
+        entries
+            .flatten()
+            .filter(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
+            .filter_map(|entry| entry.file_name().to_str().map(str::to_string))
+            .filter(|name| valid_session_id(name))
+            .collect()
+    }
+
+    /// 半荘のフォルダの場所（あるかは確かめない。名前の形が正しいときだけ）。
+    pub fn session_folder(&self, id: &str) -> Option<PathBuf> {
+        valid_session_id(id).then(|| self.root.join(GAMES_DIR).join(id))
+    }
+
+    /// 取っておいた記録のファイルの場所。
+    pub fn pending_path(&self) -> PathBuf {
+        self.root.join(PENDING_FILE)
+    }
+
+    /// 取っておいた記録（まだ半荘のフォルダが無い半荘の分）。無い・読めないときは空。
+    pub fn pending_records(&self) -> BTreeMap<String, SessionRecords> {
+        read_json_file::<PendingRecords>(&self.pending_path())
+            .map(|pending| pending.sessions)
+            .unwrap_or_default()
+    }
+
+    /// 取っておいた記録のうち、半荘のフォルダ（`events.jsonl` か `report.json` のあるもの）が現れた半荘の分を、そのフォルダに付ける。
+    /// 付けた半荘の記録は、フォルダの中の同じ種類のファイルを置き換える（読み込んだファイルの内容が、いまの記録）。
+    /// 付けたら取っておく記録から外し、無くなればファイルも消す。値が正しくない分は、付けられないので捨てる。
+    /// ファイルを書けなかった分は、取っておく。付けた半荘の数を返す。
+    pub fn apply_pending_records(&self) -> Result<usize, StoreError> {
+        let path = self.pending_path();
+        if !path.is_file() {
+            return Ok(0);
+        }
+        let Some(mut pending) = read_json_file::<PendingRecords>(&path) else {
+            return Ok(0);
+        };
+        let mut applied = 0;
+        let mut changed = false;
+        let mut first_error: Option<StoreError> = None;
+        let ids: Vec<String> = pending.sessions.keys().cloned().collect();
+        for id in ids {
+            let Some(dir) = self.session_folder(&id) else {
+                continue;
+            };
+            if !dir.is_dir()
+                || !(dir.join(EVENTS_FILE).is_file() || dir.join(REPORT_FILE).is_file())
+            {
+                continue;
+            }
+            let Some(records) = pending.sessions.get(&id).cloned() else {
+                continue;
+            };
+            let checked = match records.checked() {
+                Ok(checked) => checked,
+                Err(e) => {
+                    eprintln!("取っておいた記録の値が正しくないので、捨てます: {id}: {e}");
+                    pending.sessions.remove(&id);
+                    changed = true;
+                    continue;
+                }
+            };
+            match write_session_records(&dir, &checked) {
+                Ok(()) => {
+                    pending.sessions.remove(&id);
+                    applied += 1;
+                    changed = true;
+                }
+                Err(e) => {
+                    first_error.get_or_insert(e);
+                }
+            }
+        }
+        if changed {
+            if pending.sessions.is_empty() {
+                fs::remove_file(&path)?;
+            } else {
+                let text = serde_json::to_string_pretty(&pending)?;
+                write_atomic(&path, text.as_bytes())?;
+            }
+        }
+        match first_error {
+            Some(e) => Err(e),
+            None => Ok(applied),
+        }
+    }
+
+    /// 半荘の一覧（取っておいた記録を付けない読み方）。
+    fn scan_sessions(&self) -> Result<Vec<SessionRecord>, StoreError> {
         let games = self.root.join(GAMES_DIR);
         let entries = match fs::read_dir(&games) {
             Ok(entries) => entries,
@@ -1465,6 +1765,21 @@ fn move_all(
     Ok(())
 }
 
+/// 半荘のフォルダの記録のファイル（結びつけ・自己評価・MAKA・メモ）を、`records` の内容にそろえる（空の種類のファイルは消す）。
+fn write_session_records(dir: &Path, records: &SessionRecords) -> Result<(), StoreError> {
+    for (file, text) in records.files()? {
+        match text {
+            Some(text) => write_atomic(&dir.join(file), text.as_bytes())?,
+            None => match fs::remove_file(dir.join(file)) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.into()),
+            },
+        }
+    }
+    Ok(())
+}
+
 fn write_links(dir: &Path, links: &Links) -> Result<(), StoreError> {
     let text = serde_json::to_string_pretty(links)?;
     write_atomic(&dir.join(LINKS_FILE), text.as_bytes())?;
@@ -1472,7 +1787,7 @@ fn write_links(dir: &Path, links: &Links) -> Result<(), StoreError> {
 }
 
 /// 半荘の名前として正しい形か（英数字と `-` だけ。区切り・`..` を通さない）。
-fn valid_session_id(id: &str) -> bool {
+pub fn valid_session_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
@@ -1655,7 +1970,7 @@ fn read_json_file<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
 }
 
 /// 別の名前で書いてから置き換える（途中で止まっても、半端なファイルが残らない）。
-fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut temp = path.as_os_str().to_owned();
     temp.push(".tmp");
     let temp = PathBuf::from(temp);

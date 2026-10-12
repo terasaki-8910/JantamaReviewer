@@ -2255,6 +2255,10 @@ const STUDY_COMMANDS: &[&str] = &[
     "count_solved",
     "list_weeks",
     "set_week",
+    "records_overview",
+    "export_records",
+    "inspect_records_file",
+    "import_records",
 ];
 const STUDY_API_NAMES: &[&str] = &[
     "recordAnswer",
@@ -2265,6 +2269,10 @@ const STUDY_API_NAMES: &[&str] = &[
     "countSolved",
     "listWeeks",
     "setWeek",
+    "recordsOverview",
+    "exportRecords",
+    "inspectRecordsFile",
+    "importRecords",
 ];
 
 #[test]
