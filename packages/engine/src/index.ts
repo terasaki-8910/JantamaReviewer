@@ -115,3 +115,4 @@ export * from './two-shanten-follow';
 export * from './ukeire-remaining';
 export * from './yaku';
 export * from './yaku-near';
+export * from './yaku-view';

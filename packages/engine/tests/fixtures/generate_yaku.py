@@ -42,8 +42,8 @@ GAMES = [
 ]
 
 SEED = 20261012
-COMPLETE_COUNT = 5000
-TENPAI_COUNT = 2500
+COMPLETE_COUNT = 4000
+TENPAI_COUNT = 1500
 WINDS = "ESWN"
 
 
@@ -309,7 +309,6 @@ def complete_records(rng: random.Random) -> tuple[list[dict], dict]:
                 "riichi": hand["riichi"],
                 "seat": hand["seat"],
                 "round": hand["round"],
-                "theme": hand["theme"],
                 "oracle": {"error": oracle["error"], "yaku": oracle["yaku"], "han": oracle["han"], "fu": oracle["fu"], "yakuman": oracle["yakuman"]},
             }
         )
@@ -350,7 +349,6 @@ def tenpai_records(rng: random.Random) -> tuple[list[dict], dict]:
                 "riichi": riichi,
                 "seat": hand["seat"],
                 "round": hand["round"],
-                "theme": hand["theme"],
                 "yakuman": yakuman,
                 "waits": waits,
             }

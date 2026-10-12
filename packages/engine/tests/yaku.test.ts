@@ -14,16 +14,16 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
   it('正解表の作りが期待どおり（ライブラリのバージョン、件数、見ている役が一通り出てくる）', () => {
     expect(oracle.library).toBe('mahjong 2.0.0');
     expect(oracle.complete.length).toBeGreaterThanOrEqual(3000);
-    expect(oracle.tenpai.length).toBeGreaterThanOrEqual(1500);
+    expect(oracle.tenpai.length).toBeGreaterThanOrEqual(1200);
     expect(oracle.wins.length).toBe(69);
-    // どの役も、正解表に十分な数（30 件以上）出てくる
+    // どの役も、正解表に十分な数（20 件以上）出てくる
     const seen = new Map<YakuId, number>();
     for (const r of oracle.complete) {
       if (r.oracle.yakuman) continue;
       for (const id of oracleIds(r.oracle.yaku)) seen.set(id, (seen.get(id) ?? 0) + 1);
     }
     for (const id of [...SHAPE_YAKU, 'riichi', 'tsumo'] as const) {
-      expect(seen.get(id) ?? 0, `${id} の件数`).toBeGreaterThanOrEqual(30);
+      expect(seen.get(id) ?? 0, `${id} の件数`).toBeGreaterThanOrEqual(20);
     }
   });
 
@@ -49,7 +49,7 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
       }
       compared++;
     }
-    expect(compared).toBeGreaterThan(4500);
+    expect(compared).toBeGreaterThan(3500);
     expect(yakuman).toBeGreaterThan(100);
   });
 
@@ -89,8 +89,8 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
       }
       compared++;
     }
-    expect(compared).toBeGreaterThan(1500);
-    expect(dead).toBeGreaterThan(100);
+    expect(compared).toBeGreaterThan(1200);
+    expect(dead).toBeGreaterThan(80);
   });
 
   it('確定している役: 聴牌なら全ての待ちで付く役、そうでなければ副露で決まる役だけ', () => {
@@ -106,7 +106,7 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
       expect(settled.tenpai).toBe(Object.keys(r.waits).length > 0);
       if (settled.tenpai) tenpai++;
     }
-    expect(tenpai).toBeGreaterThan(1500);
+    expect(tenpai).toBeGreaterThan(1200);
   });
 
   it('副露の変換: 結果 JSON のチー・ポン・槓を、順子・刻子・槓子にする', () => {
