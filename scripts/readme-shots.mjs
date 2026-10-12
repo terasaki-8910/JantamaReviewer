@@ -18,7 +18,7 @@
  * 3. 出題: 今日の出題・出題（答える前・答え合わせのあと・受け入れ枚数の小窓・2 向聴からの先）。画面の操作で答える。
  * 4. 履歴: 画面の操作で、昔の問題にも答える。答えの日付と解き直しの期限は、保存先の study.sqlite（一時フォルダの中）を、
  *    アプリを止めたあとに書き換えて、数週間ぶんの履歴にする（問題は、半荘より前の日には答えない）。
- * 5. 履歴の画面: 解き直し・検討ログ・週の集計・検索・半荘を通して見る画面・設定。
+ * 5. 履歴の画面: 解き直し・検討ログ・週の集計・検索・半荘を通して見る画面（鳴きの場面に答えて、欄「役」も撮る）・設定。
  *
  * 安全のための決まりは、readme-lib.mjs の説明を参照（本物のデータに触れない・自分で起動したプロセスだけを止める・
  * 記録の命令は本体に通さない・クリップボードは触らない）。設定ページの写真だけは、本物の状態ではなく、表示を差し替える。
@@ -443,6 +443,20 @@ async function screensPhase() {
   }
   await sleep(500);
   await shotMain('replay.png', {});
+
+  // 役の欄（F13）: 鳴きの場面（ポン・スルーのボタンがある迷い）に戻って答え、答え合わせのあとの欄「役」だけを撮る（panel の幅、2 倍の細かさ）
+  for (let i = 0; i < 5; i += 1) {
+    if (await main.evalJs(`!!document.querySelector('.q-choices [role=radio]')`)) break;
+    await main.click(`document.querySelector('#j-doubt-prev')`, '前の迷いへ');
+    await sleep(500);
+  }
+  await A.answerQuiz({ pick: 0, reason: '役牌なので、鳴いて手を進める' });
+  await main.fit(1280, 900, 2);
+  await sleep(300);
+  const yakuBox = await main.rectOf(`document.querySelector('[data-ai="yaku-box"]')`);
+  const answerPanel = await main.rectOf(`document.querySelector('.answer')`);
+  await shot('quiz-yaku.png', { x: answerPanel.x, y: Math.max(0, Math.floor(yakuBox.y - 16)), width: answerPanel.width, height: Math.ceil(yakuBox.height + 32) });
+  await main.viewport(1280, 900, 1);
 
   // 設定（表示だけ差し替える。ファイルの上の説明を参照）
   await main.evalJs(`window.__jrStub.settings = true`);

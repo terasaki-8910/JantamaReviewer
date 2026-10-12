@@ -8,6 +8,7 @@ import '../styles/app.css';
 import '../styles/sessions.css';
 import '../styles/hanchan.css';
 import '../styles/quiz.css';
+import '../styles/yaku.css';
 import '../styles/replay.css';
 import '../styles/search.css';
 import '../styles/log.css';

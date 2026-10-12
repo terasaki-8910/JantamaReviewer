@@ -105,6 +105,9 @@ importers:
 
   packages/engine:
     devDependencies:
+      '@kobalab/majiang-core':
+        specifier: ^1.4.1
+        version: 1.4.1
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
@@ -361,6 +364,9 @@ packages:
 
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
+
+  '@kobalab/majiang-core@1.4.1':
+    resolution: {integrity: sha512-60jLSDCpSEy6gZK+uBoH7JRc1epzJWSzfh94LiZllLmPW8UJ+f9A8m74c8d9mMv+LVbnxKkg8TC86sKNqaD6VQ==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -2509,6 +2515,8 @@ snapshots:
       keyv: 5.6.0
 
   '@keyv/serialize@1.1.1': {}
+
+  '@kobalab/majiang-core@1.4.1': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:

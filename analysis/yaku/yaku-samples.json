@@ -1,0 +1,2068 @@
+{
+ "note": "役の表示の調査の試作（packages/engine/src/yaku*.ts）が、実戦の判断から計算した値。画面には未実装。",
+ "generator": "packages/engine/tests/yaku-samples.test.ts",
+ "samples": [
+  {
+   "id": "s1",
+   "point": "打牌の比べ方。打4p（実戦）と打7p（AI）は、近い役が同じ（役牌 東・断幺九）。打東だと東が1枚に減り、断幺九が先に来る",
+   "game": "FX-4（10月9日・あなたの半荘）",
+   "gameId": "5b821c8a048ff791",
+   "kyokuLabel": "東2局1本場",
+   "junme": 8,
+   "kind": "discard",
+   "round": "東",
+   "seat": "北",
+   "dora": [
+    "3p"
+   ],
+   "hand": [
+    "2m",
+    "3m",
+    "4m",
+    "6m",
+    "7m",
+    "4p",
+    "6p",
+    "7p",
+    "7p",
+    "8s",
+    "8s",
+    "E",
+    "E"
+   ],
+   "drawn": "8p",
+   "melds": [],
+   "called": null,
+   "choices": [
+    {
+     "kind": "dahai",
+     "label": "打4p",
+     "tile": "4p",
+     "tags": [
+      "実戦"
+     ],
+     "afterHand": [
+      "2m",
+      "3m",
+      "4m",
+      "6m",
+      "7m",
+      "6p",
+      "7p",
+      "7p",
+      "8p",
+      "8s",
+      "8s",
+      "E",
+      "E"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "yakuhai-round",
+       "name": "役牌 東（場風）",
+       "han": 1,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "tiles": [
+          "E",
+          "E"
+         ]
+        },
+        {
+         "text": "が2枚。あと1枚（ポンかツモ）で付く"
+        }
+       ]
+      },
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 3,
+       "extra": 1,
+       "parts": [
+        {
+         "tiles": [
+          "E",
+          "E"
+         ]
+        },
+        {
+         "text": "を切ると、ほかは全部2〜8"
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "dahai",
+     "label": "打7p",
+     "tile": "7p",
+     "tags": [
+      "AI"
+     ],
+     "afterHand": [
+      "2m",
+      "3m",
+      "4m",
+      "6m",
+      "7m",
+      "4p",
+      "6p",
+      "7p",
+      "8p",
+      "8s",
+      "8s",
+      "E",
+      "E"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "yakuhai-round",
+       "name": "役牌 東（場風）",
+       "han": 1,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "tiles": [
+          "E",
+          "E"
+         ]
+        },
+        {
+         "text": "が2枚。あと1枚（ポンかツモ）で付く"
+        }
+       ]
+      },
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 3,
+       "extra": 1,
+       "parts": [
+        {
+         "tiles": [
+          "E",
+          "E"
+         ]
+        },
+        {
+         "text": "を切ると、ほかは全部2〜8"
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "dahai",
+     "label": "打東",
+     "tile": "E",
+     "tags": [],
+     "afterHand": [
+      "2m",
+      "3m",
+      "4m",
+      "6m",
+      "7m",
+      "4p",
+      "6p",
+      "7p",
+      "7p",
+      "8p",
+      "8s",
+      "8s",
+      "E"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 2,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 3,
+       "extra": 0,
+       "parts": [
+        {
+         "tiles": [
+          "E"
+         ]
+        },
+        {
+         "text": "を切ると、ほかは全部2〜8"
+        }
+       ]
+      },
+      {
+       "id": "yakuhai-round",
+       "name": "役牌 東（場風）",
+       "han": 1,
+       "draws": 3,
+       "extra": 0,
+       "parts": [
+        {
+         "tiles": [
+          "E"
+         ]
+        },
+        {
+         "text": "が1枚。あと2枚そろえると付く"
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "point": "鳴きの比べ方。東をポンすると、役牌 東（場風）が確定して、切れば聴牌。スルーなら門前のままで、東東が近い役",
+   "game": "FX-4（10月9日・あなたの半荘）",
+   "gameId": "5b821c8a048ff791",
+   "kyokuLabel": "東2局1本場",
+   "junme": 8,
+   "kind": "call",
+   "round": "東",
+   "seat": "北",
+   "dora": [
+    "3p"
+   ],
+   "hand": [
+    "2m",
+    "3m",
+    "4m",
+    "6m",
+    "7m",
+    "6p",
+    "7p",
+    "7p",
+    "8p",
+    "8s",
+    "8s",
+    "E",
+    "E"
+   ],
+   "drawn": null,
+   "melds": [],
+   "called": "E",
+   "choices": [
+    {
+     "kind": "pon",
+     "label": "東をポン",
+     "tile": null,
+     "tags": [
+      "実戦",
+      "AI"
+     ],
+     "afterHand": [
+      "2m",
+      "3m",
+      "4m",
+      "6m",
+      "7m",
+      "6p",
+      "7p",
+      "7p",
+      "8p",
+      "8s",
+      "8s"
+     ],
+     "afterMelds": [
+      {
+       "type": "tri",
+       "first": 27,
+       "open": true
+      }
+     ],
+     "discardFirst": true,
+     "shanten": 0,
+     "tenpai": false,
+     "waits": [],
+     "closed": false,
+     "riichi": false,
+     "state": "open-ok",
+     "dama": null,
+     "settled": [
+      {
+       "id": "yakuhai-round",
+       "name": "役牌 東（場風）",
+       "han": 1
+      }
+     ],
+     "partial": [],
+     "near": [],
+     "warning": null,
+     "closedNote": null,
+     "openNote": "門前を崩す: 立直・門前清自摸和・平和・一盃口が付かなくなる",
+     "afterDiscard": [
+      {
+       "tile": "7p",
+       "waits": [
+        {
+         "tile": "5m",
+         "dead": false
+        },
+        {
+         "tile": "8m",
+         "dead": false
+        }
+       ],
+       "settled": [
+        "yakuhai-round"
+       ]
+      }
+     ]
+    },
+    {
+     "kind": "pass",
+     "label": "スルー",
+     "tile": null,
+     "tags": [],
+     "afterHand": [
+      "2m",
+      "3m",
+      "4m",
+      "6m",
+      "7m",
+      "6p",
+      "7p",
+      "7p",
+      "8p",
+      "8s",
+      "8s",
+      "E",
+      "E"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "yakuhai-round",
+       "name": "役牌 東（場風）",
+       "han": 1,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "tiles": [
+          "E",
+          "E"
+         ]
+        },
+        {
+         "text": "が2枚。あと1枚（ポンかツモ）で付く"
+        }
+       ]
+      },
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 3,
+       "extra": 1,
+       "parts": [
+        {
+         "tiles": [
+          "E",
+          "E"
+         ]
+        },
+        {
+         "text": "を切ると、ほかは全部2〜8"
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "point": "役無しの警告。チー（5s 7s）は、切れば聴牌だが、待ちはどれも役が付かない。スルーなら門前のまま（立直・門前清自摸和が使える）。チー（7s 8s）は、役がまだ確定していない",
+   "game": "FX-4（10月9日・あなたの半荘）",
+   "gameId": "5b821c8a048ff791",
+   "kyokuLabel": "東3局1本場",
+   "junme": 11,
+   "kind": "call",
+   "round": "東",
+   "seat": "西",
+   "dora": [
+    "9s"
+   ],
+   "hand": [
+    "5mr",
+    "6m",
+    "7m",
+    "3p",
+    "4p",
+    "6p",
+    "6p",
+    "1s",
+    "5s",
+    "7s",
+    "7s",
+    "8s",
+    "9s"
+   ],
+   "drawn": null,
+   "melds": [],
+   "called": "6s",
+   "choices": [
+    {
+     "kind": "pass",
+     "label": "スルー",
+     "tile": null,
+     "tags": [
+      "実戦",
+      "AI"
+     ],
+     "afterHand": [
+      "5m",
+      "6m",
+      "7m",
+      "3p",
+      "4p",
+      "6p",
+      "6p",
+      "1s",
+      "5s",
+      "7s",
+      "7s",
+      "8s",
+      "9s"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 3,
+       "extra": 1,
+       "parts": [
+        {
+         "tiles": [
+          "1s",
+          "9s"
+         ]
+        },
+        {
+         "text": "を切ると、ほかは全部2〜8"
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "chi",
+     "label": "6sをチー（5s 7s）",
+     "tile": null,
+     "tags": [],
+     "afterHand": [
+      "5m",
+      "6m",
+      "7m",
+      "3p",
+      "4p",
+      "6p",
+      "6p",
+      "1s",
+      "7s",
+      "8s",
+      "9s"
+     ],
+     "afterMelds": [
+      {
+       "type": "seq",
+       "first": 22,
+       "open": true
+      }
+     ],
+     "discardFirst": true,
+     "shanten": 0,
+     "tenpai": false,
+     "waits": [],
+     "closed": false,
+     "riichi": false,
+     "state": "open-dead",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 2,
+       "extra": 1,
+       "parts": [
+        {
+         "tiles": [
+          "1s",
+          "9s"
+         ]
+        },
+        {
+         "text": "を切ると、ほかは全部2〜8"
+        }
+       ]
+      }
+     ],
+     "warning": {
+      "level": "danger",
+      "parts": [
+       {
+        "text": "役無し聴牌にしかならない。待ち "
+       },
+       {
+        "tiles": [
+         "2p",
+         "5p"
+        ]
+       },
+       {
+        "text": " のどれでも、役が付かないので和了れない"
+       }
+      ]
+     },
+     "closedNote": null,
+     "openNote": "門前を崩す: 立直・門前清自摸和・平和・一盃口が付かなくなる",
+     "afterDiscard": [
+      {
+       "tile": "1s",
+       "waits": [
+        {
+         "tile": "2p",
+         "dead": true
+        },
+        {
+         "tile": "5p",
+         "dead": true
+        }
+       ],
+       "settled": []
+      }
+     ]
+    },
+    {
+     "kind": "chi",
+     "label": "6sをチー（7s 8s）",
+     "tile": null,
+     "tags": [],
+     "afterHand": [
+      "5m",
+      "6m",
+      "7m",
+      "3p",
+      "4p",
+      "6p",
+      "6p",
+      "1s",
+      "5s",
+      "7s",
+      "9s"
+     ],
+     "afterMelds": [
+      {
+       "type": "seq",
+       "first": 23,
+       "open": true
+      }
+     ],
+     "discardFirst": true,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": false,
+     "riichi": false,
+     "state": "open-seeking",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "tiles": [
+          "1s",
+          "9s"
+         ]
+        },
+        {
+         "text": "を切ると、ほかは全部2〜8"
+        }
+       ]
+      }
+     ],
+     "warning": {
+      "level": "info",
+      "parts": [
+       {
+        "text": "副露した手の役は、まだ確定していない（近い役を保てば付く）"
+       }
+      ]
+     },
+     "closedNote": null,
+     "openNote": "門前を崩す: 立直・門前清自摸和・平和・一盃口が付かなくなる",
+     "afterDiscard": []
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "point": "役無しの警告。チー（2m 3m）は、切れば聴牌だが、どの切り方でも待ちに役が付かない。スルーなら、断幺九の形（全部2〜8）が残る",
+   "game": "FX-5（10月11日・あなたの半荘）",
+   "gameId": "20261011-153540",
+   "kyokuLabel": "南2局",
+   "junme": 5,
+   "kind": "call",
+   "round": "南",
+   "seat": "北",
+   "dora": [
+    "1s"
+   ],
+   "hand": [
+    "2m",
+    "3m",
+    "5mr",
+    "5m",
+    "6m",
+    "6m",
+    "7m",
+    "8m",
+    "6p",
+    "7p",
+    "8p",
+    "3s",
+    "4s"
+   ],
+   "drawn": null,
+   "melds": [],
+   "called": "1m",
+   "choices": [
+    {
+     "kind": "pass",
+     "label": "スルー",
+     "tile": null,
+     "tags": [
+      "実戦",
+      "AI"
+     ],
+     "afterHand": [
+      "2m",
+      "3m",
+      "5m",
+      "5m",
+      "6m",
+      "6m",
+      "7m",
+      "8m",
+      "6p",
+      "7p",
+      "8p",
+      "3s",
+      "4s"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "text": "いまの手は全部2〜8"
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "chi",
+     "label": "1mをチー（2m 3m）",
+     "tile": null,
+     "tags": [],
+     "afterHand": [
+      "5m",
+      "5m",
+      "6m",
+      "6m",
+      "7m",
+      "8m",
+      "6p",
+      "7p",
+      "8p",
+      "3s",
+      "4s"
+     ],
+     "afterMelds": [
+      {
+       "type": "seq",
+       "first": 0,
+       "open": true
+      }
+     ],
+     "discardFirst": true,
+     "shanten": 0,
+     "tenpai": false,
+     "waits": [],
+     "closed": false,
+     "riichi": false,
+     "state": "open-dead",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [],
+     "warning": {
+      "level": "danger",
+      "parts": [
+       {
+        "text": "役無し聴牌にしかならない。待ち "
+       },
+       {
+        "tiles": [
+         "2s",
+         "5s"
+        ]
+       },
+       {
+        "text": " のどれでも、役が付かないので和了れない"
+       }
+      ]
+     },
+     "closedNote": null,
+     "openNote": "門前を崩す: 立直・門前清自摸和・平和・一盃口が付かなくなる",
+     "afterDiscard": [
+      {
+       "tile": "6m",
+       "waits": [
+        {
+         "tile": "2s",
+         "dead": true
+        },
+        {
+         "tile": "5s",
+         "dead": true
+        }
+       ],
+       "settled": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s5",
+   "point": "南場・南家のダブ南。スルーなら 役牌 南（2枚）が近い役。チー（2s 3s）は、切れば聴牌だが、待ち（5s）に役が付かない",
+   "game": "FX-5（10月11日・あなたの半荘）",
+   "gameId": "20261011-153540",
+   "kyokuLabel": "南4局",
+   "junme": 2,
+   "kind": "call",
+   "round": "南",
+   "seat": "南",
+   "dora": [
+    "3p"
+   ],
+   "hand": [
+    "1p",
+    "2p",
+    "3p",
+    "2s",
+    "3s",
+    "4s",
+    "6s",
+    "6s",
+    "7s",
+    "8s",
+    "S",
+    "S",
+    "F"
+   ],
+   "drawn": null,
+   "melds": [],
+   "called": "4s",
+   "choices": [
+    {
+     "kind": "pass",
+     "label": "スルー",
+     "tile": null,
+     "tags": [
+      "実戦",
+      "AI"
+     ],
+     "afterHand": [
+      "1p",
+      "2p",
+      "3p",
+      "2s",
+      "3s",
+      "4s",
+      "6s",
+      "6s",
+      "7s",
+      "8s",
+      "S",
+      "S",
+      "F"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "yakuhai-seat",
+       "name": "役牌 南（場風・自風）",
+       "han": 2,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "tiles": [
+          "S",
+          "S"
+         ]
+        },
+        {
+         "text": "が2枚。あと1枚（ポンかツモ）で付く"
+        }
+       ]
+      },
+      {
+       "id": "yakuhai-hatsu",
+       "name": "役牌 發",
+       "han": 1,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "tiles": [
+          "F"
+         ]
+        },
+        {
+         "text": "が1枚。あと2枚そろえると付く"
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "chi",
+     "label": "4sをチー（2s 3s）",
+     "tile": null,
+     "tags": [],
+     "afterHand": [
+      "1p",
+      "2p",
+      "3p",
+      "4s",
+      "6s",
+      "6s",
+      "7s",
+      "8s",
+      "S",
+      "S",
+      "F"
+     ],
+     "afterMelds": [
+      {
+       "type": "seq",
+       "first": 19,
+       "open": true
+      }
+     ],
+     "discardFirst": true,
+     "shanten": 0,
+     "tenpai": false,
+     "waits": [],
+     "closed": false,
+     "riichi": false,
+     "state": "open-dead",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "yakuhai-seat",
+       "name": "役牌 南（場風・自風）",
+       "han": 2,
+       "draws": 2,
+       "extra": 1,
+       "parts": [
+        {
+         "tiles": [
+          "S",
+          "S"
+         ]
+        },
+        {
+         "text": "が2枚。あと1枚（ポンかツモ）で付く"
+        }
+       ]
+      },
+      {
+       "id": "yakuhai-hatsu",
+       "name": "役牌 發",
+       "han": 1,
+       "draws": 2,
+       "extra": 1,
+       "parts": [
+        {
+         "tiles": [
+          "F"
+         ]
+        },
+        {
+         "text": "が1枚。あと2枚そろえると付く"
+        }
+       ]
+      }
+     ],
+     "warning": {
+      "level": "danger",
+      "parts": [
+       {
+        "text": "役無し聴牌にしかならない。待ち "
+       },
+       {
+        "tiles": [
+         "5s"
+        ]
+       },
+       {
+        "text": " のどれでも、役が付かないので和了れない"
+       }
+      ]
+     },
+     "closedNote": null,
+     "openNote": "門前を崩す: 立直・門前清自摸和・平和・一盃口が付かなくなる",
+     "afterDiscard": [
+      {
+       "tile": "F",
+       "waits": [
+        {
+         "tile": "5s",
+         "dead": true
+        }
+       ],
+       "settled": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s6",
+   "point": "近い役: 一気通貫。足りない牌を指定して出す（あと 8s 9s）。役牌 白（暗槓）は確定している役",
+   "game": "FX-5（10月11日・あなたの半荘）",
+   "gameId": "20261011-153540",
+   "kyokuLabel": "東1局",
+   "junme": 8,
+   "kind": "discard",
+   "round": "東",
+   "seat": "東",
+   "dora": [
+    "S",
+    "9s"
+   ],
+   "hand": [
+    "6m",
+    "1p",
+    "1p",
+    "4p",
+    "1s",
+    "2s",
+    "3s",
+    "4s",
+    "5sr",
+    "7s"
+   ],
+   "drawn": "6s",
+   "melds": [
+    {
+     "type": "ankan",
+     "tiles": [
+      "P",
+      "P",
+      "P",
+      "P"
+     ]
+    }
+   ],
+   "called": null,
+   "choices": [
+    {
+     "kind": "dahai",
+     "label": "打4p",
+     "tile": "4p",
+     "tags": [
+      "実戦",
+      "AI"
+     ],
+     "afterHand": [
+      "6m",
+      "1p",
+      "1p",
+      "1s",
+      "2s",
+      "3s",
+      "4s",
+      "5s",
+      "6s",
+      "7s"
+     ],
+     "afterMelds": [
+      {
+       "type": "kan",
+       "first": 31,
+       "open": false
+      }
+     ],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [
+      {
+       "id": "yakuhai-haku",
+       "name": "役牌 白",
+       "han": 1
+      }
+     ],
+     "partial": [],
+     "near": [
+      {
+       "id": "ittsu",
+       "name": "一気通貫",
+       "han": 2,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "text": "索子の123・456・789。あと "
+        },
+        {
+         "tiles": [
+          "8s",
+          "9s"
+         ]
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "dahai",
+     "label": "打6m",
+     "tile": "6m",
+     "tags": [],
+     "afterHand": [
+      "1p",
+      "1p",
+      "4p",
+      "1s",
+      "2s",
+      "3s",
+      "4s",
+      "5s",
+      "6s",
+      "7s"
+     ],
+     "afterMelds": [
+      {
+       "type": "kan",
+       "first": 31,
+       "open": false
+      }
+     ],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [
+      {
+       "id": "yakuhai-haku",
+       "name": "役牌 白",
+       "han": 1
+      }
+     ],
+     "partial": [],
+     "near": [
+      {
+       "id": "ittsu",
+       "name": "一気通貫",
+       "han": 2,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "text": "索子の123・456・789。あと "
+        },
+        {
+         "tiles": [
+          "8s",
+          "9s"
+         ]
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "dahai",
+     "label": "打1p",
+     "tile": "1p",
+     "tags": [],
+     "afterHand": [
+      "6m",
+      "1p",
+      "4p",
+      "1s",
+      "2s",
+      "3s",
+      "4s",
+      "5s",
+      "6s",
+      "7s"
+     ],
+     "afterMelds": [
+      {
+       "type": "kan",
+       "first": 31,
+       "open": false
+      }
+     ],
+     "discardFirst": false,
+     "shanten": 2,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [
+      {
+       "id": "yakuhai-haku",
+       "name": "役牌 白",
+       "han": 1
+      }
+     ],
+     "partial": [],
+     "near": [
+      {
+       "id": "ittsu",
+       "name": "一気通貫",
+       "han": 2,
+       "draws": 3,
+       "extra": 0,
+       "parts": [
+        {
+         "text": "索子の123・456・789。あと "
+        },
+        {
+         "tiles": [
+          "8s",
+          "9s"
+         ]
+        }
+       ]
+      }
+     ],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    }
+   ]
+  },
+  {
+   "id": "s7",
+   "point": "聴牌の手の確定している役: 一盃口・混一色（どの待ちでも付く）。役牌 南は、待ちが南のときだけ付く（一部の待ち）",
+   "game": "FX-5（10月11日・あなたの半荘）",
+   "gameId": "20261011-153540",
+   "kyokuLabel": "南4局",
+   "junme": 10,
+   "kind": "discard",
+   "round": "南",
+   "seat": "南",
+   "dora": [
+    "3p"
+   ],
+   "hand": [
+    "1s",
+    "2s",
+    "3s",
+    "4s",
+    "6s",
+    "6s",
+    "7s",
+    "7s",
+    "8s",
+    "8s",
+    "9s",
+    "S",
+    "S"
+   ],
+   "drawn": "9s",
+   "melds": [],
+   "called": null,
+   "choices": [
+    {
+     "kind": "dahai",
+     "label": "打1s",
+     "tile": "1s",
+     "tags": [
+      "実戦",
+      "AI"
+     ],
+     "afterHand": [
+      "2s",
+      "3s",
+      "4s",
+      "6s",
+      "6s",
+      "7s",
+      "7s",
+      "8s",
+      "8s",
+      "9s",
+      "9s",
+      "S",
+      "S"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 0,
+     "tenpai": true,
+     "waits": [
+      {
+       "tile": "6s",
+       "dead": false
+      },
+      {
+       "tile": "9s",
+       "dead": false
+      },
+      {
+       "tile": "S",
+       "dead": false
+      }
+     ],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": "ok",
+     "settled": [
+      {
+       "id": "iipeikou",
+       "name": "一盃口",
+       "han": 1
+      },
+      {
+       "id": "honitsu",
+       "name": "混一色",
+       "han": 3
+      }
+     ],
+     "partial": [
+      {
+       "id": "yakuhai-seat",
+       "name": "役牌 南（場風・自風）",
+       "parts": [
+        {
+         "text": "待ち "
+        },
+        {
+         "tiles": [
+          "S"
+         ]
+        },
+        {
+         "text": " のとき"
+        }
+       ]
+      }
+     ],
+     "near": [],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "dahai",
+     "label": "打4s",
+     "tile": "4s",
+     "tags": [],
+     "afterHand": [
+      "1s",
+      "2s",
+      "3s",
+      "6s",
+      "6s",
+      "7s",
+      "7s",
+      "8s",
+      "8s",
+      "9s",
+      "9s",
+      "S",
+      "S"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 0,
+     "tenpai": true,
+     "waits": [
+      {
+       "tile": "6s",
+       "dead": false
+      },
+      {
+       "tile": "9s",
+       "dead": false
+      },
+      {
+       "tile": "S",
+       "dead": false
+      }
+     ],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": "ok",
+     "settled": [
+      {
+       "id": "iipeikou",
+       "name": "一盃口",
+       "han": 1
+      },
+      {
+       "id": "honitsu",
+       "name": "混一色",
+       "han": 3
+      }
+     ],
+     "partial": [
+      {
+       "id": "yakuhai-seat",
+       "name": "役牌 南（場風・自風）",
+       "parts": [
+        {
+         "text": "待ち "
+        },
+        {
+         "tiles": [
+          "S"
+         ]
+        },
+        {
+         "text": " のとき"
+        }
+       ]
+      }
+     ],
+     "near": [],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "dahai",
+     "label": "打9s",
+     "tile": "9s",
+     "tags": [],
+     "afterHand": [
+      "1s",
+      "2s",
+      "3s",
+      "4s",
+      "6s",
+      "6s",
+      "7s",
+      "7s",
+      "8s",
+      "8s",
+      "9s",
+      "S",
+      "S"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 0,
+     "tenpai": true,
+     "waits": [
+      {
+       "tile": "5s",
+       "dead": false
+      }
+     ],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": "ok",
+     "settled": [
+      {
+       "id": "ittsu",
+       "name": "一気通貫",
+       "han": 2
+      },
+      {
+       "id": "honitsu",
+       "name": "混一色",
+       "han": 3
+      }
+     ],
+     "partial": [],
+     "near": [],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    }
+   ]
+  },
+  {
+   "id": "s8",
+   "point": "副露した手が聴牌: 確定している役は断幺九。打5m・打8m（1向聴）は、役がまだ確定していない（全部2〜8のまま）",
+   "game": "FX-5（10月11日・あなたの半荘）",
+   "gameId": "20261011-153540",
+   "kyokuLabel": "南2局",
+   "junme": 10,
+   "kind": "discard",
+   "round": "南",
+   "seat": "北",
+   "dora": [
+    "1s"
+   ],
+   "hand": [
+    "5mr",
+    "5m",
+    "6m",
+    "6m",
+    "7m",
+    "8m",
+    "6p",
+    "7p",
+    "8p",
+    "3s",
+    "4s"
+   ],
+   "drawn": null,
+   "melds": [
+    {
+     "type": "pon",
+     "tiles": [
+      "7m",
+      "7m",
+      "7m"
+     ]
+    }
+   ],
+   "called": null,
+   "choices": [
+    {
+     "kind": "dahai",
+     "label": "打6m",
+     "tile": "6m",
+     "tags": [
+      "実戦",
+      "AI"
+     ],
+     "afterHand": [
+      "5m",
+      "5m",
+      "6m",
+      "7m",
+      "8m",
+      "6p",
+      "7p",
+      "8p",
+      "3s",
+      "4s"
+     ],
+     "afterMelds": [
+      {
+       "type": "tri",
+       "first": 6,
+       "open": true
+      }
+     ],
+     "discardFirst": false,
+     "shanten": 0,
+     "tenpai": true,
+     "waits": [
+      {
+       "tile": "2s",
+       "dead": false
+      },
+      {
+       "tile": "5s",
+       "dead": false
+      }
+     ],
+     "closed": false,
+     "riichi": false,
+     "state": "open-ok",
+     "dama": null,
+     "settled": [
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1
+      }
+     ],
+     "partial": [],
+     "near": [],
+     "warning": null,
+     "closedNote": null,
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "dahai",
+     "label": "打5m",
+     "tile": "5m",
+     "tags": [],
+     "afterHand": [
+      "5m",
+      "6m",
+      "6m",
+      "7m",
+      "8m",
+      "6p",
+      "7p",
+      "8p",
+      "3s",
+      "4s"
+     ],
+     "afterMelds": [
+      {
+       "type": "tri",
+       "first": 6,
+       "open": true
+      }
+     ],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": false,
+     "riichi": false,
+     "state": "open-seeking",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "text": "いまの手は全部2〜8"
+        }
+       ]
+      }
+     ],
+     "warning": {
+      "level": "info",
+      "parts": [
+       {
+        "text": "副露した手の役は、まだ確定していない（近い役を保てば付く）"
+       }
+      ]
+     },
+     "closedNote": null,
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "dahai",
+     "label": "打8m",
+     "tile": "8m",
+     "tags": [],
+     "afterHand": [
+      "5m",
+      "5m",
+      "6m",
+      "6m",
+      "7m",
+      "6p",
+      "7p",
+      "8p",
+      "3s",
+      "4s"
+     ],
+     "afterMelds": [
+      {
+       "type": "tri",
+       "first": 6,
+       "open": true
+      }
+     ],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": false,
+     "riichi": false,
+     "state": "open-seeking",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [
+      {
+       "id": "tanyao",
+       "name": "断幺九",
+       "han": 1,
+       "draws": 2,
+       "extra": 0,
+       "parts": [
+        {
+         "text": "いまの手は全部2〜8"
+        }
+       ]
+      }
+     ],
+     "warning": {
+      "level": "info",
+      "parts": [
+       {
+        "text": "副露した手の役は、まだ確定していない（近い役を保てば付く）"
+       }
+      ]
+     },
+     "closedNote": null,
+     "openNote": null,
+     "afterDiscard": []
+    }
+   ]
+  },
+  {
+   "id": "s9",
+   "point": "役無しの警告。北（この局は自風でも場風でもない）をポンすると、切れば聴牌だが、待ちに役が付かない。スルーは門前のまま",
+   "game": "FX-1（f9da87cb。参考）",
+   "gameId": "f9da87cbcd7af5e9",
+   "kyokuLabel": "東1局",
+   "junme": 5,
+   "kind": "call",
+   "round": "東",
+   "seat": "南",
+   "dora": [
+    "4p"
+   ],
+   "hand": [
+    "5p",
+    "5p",
+    "8p",
+    "9p",
+    "9p",
+    "9p",
+    "2s",
+    "2s",
+    "5sr",
+    "6s",
+    "7s",
+    "N",
+    "N"
+   ],
+   "drawn": null,
+   "melds": [],
+   "called": "N",
+   "choices": [
+    {
+     "kind": "pass",
+     "label": "スルー",
+     "tile": null,
+     "tags": [
+      "実戦",
+      "AI"
+     ],
+     "afterHand": [
+      "5p",
+      "5p",
+      "8p",
+      "9p",
+      "9p",
+      "9p",
+      "2s",
+      "2s",
+      "5s",
+      "6s",
+      "7s",
+      "N",
+      "N"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 1,
+     "tenpai": false,
+     "waits": [],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [],
+     "warning": null,
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "pon",
+     "label": "北をポン",
+     "tile": null,
+     "tags": [],
+     "afterHand": [
+      "5p",
+      "5p",
+      "8p",
+      "9p",
+      "9p",
+      "9p",
+      "2s",
+      "2s",
+      "5s",
+      "6s",
+      "7s"
+     ],
+     "afterMelds": [
+      {
+       "type": "tri",
+       "first": 30,
+       "open": true
+      }
+     ],
+     "discardFirst": true,
+     "shanten": 0,
+     "tenpai": false,
+     "waits": [],
+     "closed": false,
+     "riichi": false,
+     "state": "open-dead",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [],
+     "warning": {
+      "level": "danger",
+      "parts": [
+       {
+        "text": "役無し聴牌にしかならない。待ち "
+       },
+       {
+        "tiles": [
+         "5p",
+         "2s"
+        ]
+       },
+       {
+        "text": " のどれでも、役が付かないので和了れない"
+       }
+      ]
+     },
+     "closedNote": null,
+     "openNote": "門前を崩す: 立直・門前清自摸和・平和・一盃口が付かなくなる",
+     "afterDiscard": [
+      {
+       "tile": "8p",
+       "waits": [
+        {
+         "tile": "5p",
+         "dead": true
+        },
+        {
+         "tile": "2s",
+         "dead": true
+        }
+       ],
+       "settled": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "s10",
+   "point": "門前の聴牌で、ダマだと役が無く、ロンできない待ち（立直か自摸が要る）。チー（3s 4s）は、役無し聴牌にしかならない",
+   "game": "FX-1（f7388969。参考）",
+   "gameId": "f738896995c33fed",
+   "kyokuLabel": "東3局2本場",
+   "junme": 7,
+   "kind": "call",
+   "round": "東",
+   "seat": "南",
+   "dora": [
+    "5pr"
+   ],
+   "hand": [
+    "5m",
+    "6m",
+    "7m",
+    "8m",
+    "8m",
+    "1p",
+    "3p",
+    "7p",
+    "8p",
+    "9p",
+    "3s",
+    "4s",
+    "5s"
+   ],
+   "drawn": null,
+   "melds": [],
+   "called": "2s",
+   "choices": [
+    {
+     "kind": "pass",
+     "label": "スルー",
+     "tile": null,
+     "tags": [
+      "実戦",
+      "AI"
+     ],
+     "afterHand": [
+      "5m",
+      "6m",
+      "7m",
+      "8m",
+      "8m",
+      "1p",
+      "3p",
+      "7p",
+      "8p",
+      "9p",
+      "3s",
+      "4s",
+      "5s"
+     ],
+     "afterMelds": [],
+     "discardFirst": false,
+     "shanten": 0,
+     "tenpai": true,
+     "waits": [
+      {
+       "tile": "2p",
+       "dead": true
+      }
+     ],
+     "closed": true,
+     "riichi": false,
+     "state": "closed",
+     "dama": "dead",
+     "settled": [],
+     "partial": [],
+     "near": [],
+     "warning": {
+      "level": "info",
+      "parts": [
+       {
+        "text": "ダマ（立直なし）だと、役が無く、ロンできない。立直か自摸が要る"
+       }
+      ]
+     },
+     "closedNote": "門前: 立直・門前清自摸和が使える",
+     "openNote": null,
+     "afterDiscard": []
+    },
+    {
+     "kind": "chi",
+     "label": "2sをチー（3s 4s）",
+     "tile": null,
+     "tags": [],
+     "afterHand": [
+      "5m",
+      "6m",
+      "7m",
+      "8m",
+      "8m",
+      "1p",
+      "3p",
+      "7p",
+      "8p",
+      "9p",
+      "5s"
+     ],
+     "afterMelds": [
+      {
+       "type": "seq",
+       "first": 19,
+       "open": true
+      }
+     ],
+     "discardFirst": true,
+     "shanten": 0,
+     "tenpai": false,
+     "waits": [],
+     "closed": false,
+     "riichi": false,
+     "state": "open-dead",
+     "dama": null,
+     "settled": [],
+     "partial": [],
+     "near": [],
+     "warning": {
+      "level": "danger",
+      "parts": [
+       {
+        "text": "役無し聴牌にしかならない。待ち "
+       },
+       {
+        "tiles": [
+         "2p"
+        ]
+       },
+       {
+        "text": " のどれでも、役が付かないので和了れない"
+       }
+      ]
+     },
+     "closedNote": null,
+     "openNote": "門前を崩す: 立直・門前清自摸和・平和・一盃口が付かなくなる",
+     "afterDiscard": [
+      {
+       "tile": "5s",
+       "waits": [
+        {
+         "tile": "2p",
+         "dead": true
+        }
+       ],
+       "settled": []
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

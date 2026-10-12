@@ -25,6 +25,9 @@
  * - クリップボードの牌譜リンク（E-15）: `detectPaipuLink(text)` は `PaipuLink | null`。同じ牌譜 ID を一度だけ知らせるのは
  *   `detectNewPaipuLink(text, announced)`（純粋な関数）か `new PaipuLinkAnnouncer(ids).announce(text)`
  *
+ * - 役の調査（R10-6・R12-14。画面には使わない試作）: `evaluateWin`（和了形の役・符。HandCalculator と同じ選び方）、`settledYaku`（聴牌の手の「確定している役」）、
+ *   `nearYaku`（役ごとに、あと何枚引けばその役の付く和了形になるか）。analysis/yaku/README.md
+ *
  * 取り込みのあとの結びつけ（F9〜F11。スクショの中央から読んだ局・残りの牌の数・点数を使う）。
  * スクショ 1 枚の読み取りは `ScreenReading` で渡す（`center`＝読み取り済み、`lines`＝文字認識の行、`retries`＝1回目で読めないときに
  * 順に試す読み直しの行。どれも無ければ読めない扱い）:
@@ -110,3 +113,6 @@ export * from './timeline-link';
 export * from './tiles';
 export * from './two-shanten-follow';
 export * from './ukeire-remaining';
+export * from './yaku';
+export * from './yaku-near';
+export * from './yaku-view';

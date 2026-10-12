@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * 実ブラウザで、今日の出題・出題・解き直し（受け入れ枚数の小窓・ドラを目立たせる）を検査する（U-1・U-4・U-5・U-6・U-18・U-19・N-8）。
+ * 実ブラウザで、今日の出題・出題・解き直し（受け入れ枚数の小窓・役の欄・ドラを目立たせる）を検査する（U-1・U-4・U-5・U-6・U-18・U-19・U-33・N-8）。
  *
  * - U-4: 幅 390・768・1280px で、各状態（今日の出題・出題の答える前／あと・小窓・2 向聴からの先・鳴き・解き直し）に横スクロールが出ない。
  *   卓は、自分の列の中に収まる
@@ -8,6 +8,8 @@
  *   止まり場所が 1 つで、矢印キーで動く）
  * - U-18: 小窓は、行のそばに出て、行に重ならない。幅 390px では画面の下から出て、幅いっぱい。Esc・外の押下で閉じ、押した行へ戻る
  * - U-19: ドラ表示牌が指す牌の面が黄色（描いた色を読む）。牌の図柄と黄色のコントラストは 3:1 以上
+ * - U-33: 役の欄は、答え合わせのあとの受け入れ枚数の欄の下に出て、幅 390・768・1280px で欄の中身がはみ出さない。警告（札「役無し」・太字の文）は、
+ *   色以外（濃い枠・字の太さ）でも見分けられる。説明のアイコンは、Tab で受け入れ枚数のあと・差の原因の前に届く。axe の重大は、上の状態の検査に含まれる
  * - U-1: 答える前の DOM に AI の情報は無い。牌の画像はすべて読み込めて、引きずれない（N-8）。外へ通信しない
  * jsdom の試験（src/main/study）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
@@ -67,18 +69,21 @@ function sessions() {
   ];
 }
 
-/** FX-4 の大きな不一致の先頭 3 問を、期限が今日以前の答えとして保存済みにする（解き直しの 3 問）。 */
-function dueAnswers(): unknown[] {
+/** FX-4 の大きな不一致の先頭 3 問（`keys` を渡したときは、その判断）を、期限が今日以前の答えとして保存済みにする（解き直しの問題）。 */
+function dueAnswers(keys?: readonly string[]): unknown[] {
   const imported = importReportText(REPORT_TEXTS.fx4);
   if (!imported.ok) throw new Error('FX-4 を読めません');
-  const problems = listProblems(
-    [{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game: imported.value, markKeys: [] }],
-    { threshold: 0.05 },
-  );
-  return problems.slice(0, 3).map((problem, index) => ({
+  const problems =
+    keys ??
+    listProblems([{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game: imported.value, markKeys: [] }], {
+      threshold: 0.05,
+    })
+      .slice(0, 3)
+      .map((problem) => problem.key);
+  return problems.map((key, index) => ({
     id: index + 1,
     session_id: FX4_ID,
-    decision_key: problem.key,
+    decision_key: key,
     mode: 'quiz',
     shown_at: 1,
     answered_at: 2 + index,
@@ -95,8 +100,8 @@ function dueAnswers(): unknown[] {
   }));
 }
 
-function scenario(overrides: Partial<Scenario> & { dora?: boolean; due?: boolean } = {}): Scenario {
-  const { dora = false, due = false, ...rest } = overrides;
+function scenario(overrides: Partial<Scenario> & { dora?: boolean; due?: boolean; dueKeys?: readonly string[] } = {}): Scenario {
+  const { dora = false, due = false, dueKeys, ...rest } = overrides;
   return {
     label: 'main',
     state: baseState,
@@ -105,7 +110,7 @@ function scenario(overrides: Partial<Scenario> & { dora?: boolean; due?: boolean
     sessions: sessions(),
     reports: { [FX4_ID]: REPORT_TEXTS.fx4, [FX1A_ID]: REPORT_TEXTS.fx1a },
     thumb: TINY_PNG,
-    answers: due ? dueAnswers() : [],
+    answers: dueKeys !== undefined ? dueAnswers(dueKeys) : due ? dueAnswers() : [],
     ...rest,
   };
 }
@@ -210,9 +215,21 @@ async function openUkeire(page: Page, n = 0): Promise<Locator> {
 
 interface StateDef {
   name: string;
-  scenario?: Partial<Scenario> & { dora?: boolean; due?: boolean };
+  scenario?: Partial<Scenario> & { dora?: boolean; due?: boolean; dueKeys?: readonly string[] };
   run: (page: Page) => Promise<void>;
 }
+
+/** 答えを選んで（`pick`）、理由を書いて、答え合わせまで進める。 */
+async function answerWith(page: Page, pick: () => Promise<void>): Promise<void> {
+  await pick();
+  await page.getByLabel('理由（1行）').fill('役を見て選んだ');
+  await page.getByRole('button', { name: '答え合わせ' }).click();
+  await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).waitFor();
+}
+
+/** 役の欄の見本の場面（FX-4）。東2局1本場 8巡目の打牌（実戦 4p・AI 7p）と、東3局1本場 11巡目のチー（5s 7s は役無し聴牌）。 */
+const YAKU_DISCARD_KEY = 'k1h1e9';
+const YAKU_CHI_KEY = 'k2h1e15';
 
 /** 検査する状態。FX-4 の今日の組は、迷い 1〜5（1 行目: 打牌・1 向聴、3 行目: 打牌・2 向聴、4 行目: 鳴き）。 */
 const STATES: StateDef[] = [
@@ -265,6 +282,30 @@ const STATES: StateDef[] = [
     run: async (page) => {
       await openRow(page, 3);
       await answerCurrent(page);
+    },
+  },
+  {
+    name: '解き直し（役の欄: 打牌・行動が 3 行に分かれる・答え合わせのあと）',
+    scenario: { dueKeys: [YAKU_DISCARD_KEY] },
+    run: async (page) => {
+      await openReview(page);
+      await answerWith(page, () => page.getByRole('button', { name: '東を切る' }).first().click());
+    },
+  },
+  {
+    name: '解き直し（役の欄: チー・役無しの警告・答え合わせのあと）',
+    scenario: { dueKeys: [YAKU_CHI_KEY] },
+    run: async (page) => {
+      await openReview(page);
+      await answerWith(page, () => page.locator('[data-option="chi:5s+7s"]').click());
+    },
+  },
+  {
+    name: '解き直し（役の欄: 1 つにまとまる・答え合わせのあと）',
+    scenario: { dueKeys: [YAKU_DISCARD_KEY] },
+    run: async (page) => {
+      await openReview(page);
+      await answerWith(page, () => page.getByRole('button', { name: '四筒を切る' }).first().click());
     },
   },
 ];
@@ -710,6 +751,162 @@ describe('U-25: 説明のアイコン（受け入れ枚数の「行を押すと�
           expect(await page.getByRole('tooltip').count()).toBe(0);
           expect(await icon.evaluate((el) => el === document.activeElement)).toBe(true);
           expect(problems).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      }
+    });
+  }
+});
+
+describe('U-33: 役の欄（答え合わせのあと。受け入れ枚数の欄の下）', () => {
+  // 出題（打牌・鳴き）と、役の欄の見本の場面（3 行に分かれる・チーの警告・1 つにまとまる）
+  const YAKU_STATES = [10, 11, 12, 2, 6].map((index) => STATES[index] as StateDef);
+
+  it('答える前の DOM に、役の欄も役の文字も無い。答え合わせのあとにだけ出る（打牌・鳴き・解き直し）', { timeout: 90_000 }, async () => {
+    for (const index of [1, 5, 7]) {
+      const state = STATES[index] as StateDef;
+      const { context, page } = await openState(state);
+      try {
+        const before = await page.evaluate(() => ({
+          box: document.querySelectorAll('[data-ai="yaku-box"], .yk').length,
+          text: /確定している役|近い役|役無し/.test(document.body.textContent ?? ''),
+        }));
+        expect(before, state.name).toEqual({ box: 0, text: false });
+        await answerCurrent(page);
+        expect(await page.locator('[data-ai="yaku-box"]').count(), state.name).toBe(1);
+        expect(await page.getByRole('heading', { level: 2, name: '役', exact: true }).count(), state.name).toBe(1);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 受け入れ枚数の欄の下に出て、欄の中身が欄からも画面からもはみ出さない。牌の画像は読み込めている`, { timeout: 120_000 }, async () => {
+      for (const state of YAKU_STATES) {
+        const { context, page, problems } = await openState(state, { width });
+        try {
+          const found = await page.evaluate(() => {
+            const box = document.querySelector<HTMLElement>('[data-ai="yaku-box"]');
+            if (box === null) return null;
+            const area = box.getBoundingClientRect();
+            const outside: string[] = [];
+            for (const el of Array.from(box.querySelectorAll<HTMLElement>('*'))) {
+              if (el.closest('.infotip') !== null) continue;
+              const r = el.getBoundingClientRect();
+              if (r.width === 0 && r.height === 0) continue;
+              if (r.right > area.right + 1 || r.left < area.left - 1) outside.push(`${el.className}:${(el.textContent ?? '').slice(0, 12)}`);
+            }
+            const ukeire = document.querySelector('[data-ai="ukeire-box"]');
+            return {
+              rows: box.querySelectorAll('li.yk-row').length,
+              scroll: box.scrollWidth,
+              client: box.clientWidth,
+              docScroll: document.documentElement.scrollWidth,
+              docClient: document.documentElement.clientWidth,
+              outside,
+              afterUkeire: ukeire === null ? null : (ukeire.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+              brokenImages: Array.from(box.querySelectorAll('img')).filter((img) => !(img.complete && img.naturalWidth > 0)).length,
+              images: box.querySelectorAll('img').length,
+            };
+          });
+          expect(found, `${state.name} @${width}`).not.toBeNull();
+          expect(found!.rows, `${state.name} @${width}`).toBeGreaterThanOrEqual(1);
+          expect(found!.scroll, `${state.name} @${width}`).toBeLessThanOrEqual(found!.client);
+          expect(found!.docScroll, `${state.name} @${width}`).toBeLessThanOrEqual(found!.docClient);
+          expect(found!.outside, `${state.name} @${width}`).toEqual([]);
+          expect(found!.brokenImages, `${state.name} @${width}`).toBe(0);
+          if (state.name.includes('役の欄')) expect(found!.images, `${state.name} @${width}`).toBeGreaterThan(0);
+          // 打牌の判断には受け入れ枚数の欄があり、その下に役の欄が続く
+          if (found!.afterUkeire !== null) expect(found!.afterUkeire, state.name).toBe(true);
+          expect(problems).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      }
+    });
+  }
+
+  for (const scheme of SCHEMES) {
+    it(`警告（札「役無し」・太字の文）は、色以外（濃い枠・字の太さ）でも見分けられる。近い役の札とも違う（${scheme}）`, { timeout: 60_000 }, async () => {
+      const { context, page } = await openState(STATES[11] as StateDef, { scheme });
+      try {
+        const style = await page.evaluate(() => {
+          const read = (el: Element) => {
+            const s = getComputedStyle(el);
+            return { weight: Number(s.fontWeight), border: parseFloat(s.borderTopWidth), borderColor: s.borderTopColor, color: s.color };
+          };
+          const chip = document.querySelector('.yk .q-tag.none');
+          const strong = document.querySelector('.yk .yk-d.strong');
+          const plain = document.querySelector('.yk .q-tag:not(.none):not(.sure):not(.partial)');
+          const normalText = document.querySelector('.yk .yk-d:not(.strong)');
+          return {
+            chip: chip === null ? null : { ...read(chip), text: chip.textContent },
+            strong: strong === null ? null : read(strong),
+            plain: plain === null ? null : read(plain),
+            normalText: normalText === null ? null : read(normalText),
+          };
+        });
+        expect(style.chip?.text).toBe('役無し');
+        expect(style.chip!.weight).toBeGreaterThanOrEqual(700);
+        expect(style.chip!.border).toBeGreaterThanOrEqual(1);
+        // 近い役の札（薄い枠・細い字）と、枠の色も字の太さも違う。枠は、字と同じ濃さ
+        expect(style.plain!.weight).toBeLessThan(700);
+        expect(style.chip!.borderColor).not.toBe(style.plain!.borderColor);
+        expect(style.chip!.borderColor).toBe(style.chip!.color);
+        // 説明の文も太字（ほかの説明の文は細い字）
+        expect(style.strong!.weight).toBeGreaterThanOrEqual(700);
+        expect(style.normalText!.weight).toBeLessThan(700);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  it('Tab の順番: 受け入れ枚数の行 → 天鳳牌理 → 役の説明のアイコン → 差の原因。欄の中の止まり場所は、説明のアイコンだけ', { timeout: 60_000 }, async () => {
+    const { context, page } = await openState(STATES[10] as StateDef);
+    try {
+      await page.locator('.uk-open').last().focus();
+      const step = async () => {
+        await page.keyboard.press('Tab');
+        return page.evaluate(() => {
+          const el = document.activeElement as HTMLElement | null;
+          const label = el instanceof HTMLInputElement ? (el.labels?.[0]?.textContent ?? '') : (el?.getAttribute('aria-label') ?? el?.textContent ?? '');
+          return label.trim().slice(0, 20);
+        });
+      };
+      expect(await step()).toContain('天鳳牌理で見る');
+      expect(await step()).toBe('役の欄の説明');
+      expect(await step()).toContain('受け入れ枚数');
+      expect(await page.locator('[data-ai="yaku-box"] :is(button, a, input, select, textarea, [tabindex]:not([tabindex="-1"]))').count()).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 説明のアイコンは、乗せると、窓の中に、欄にかからずに出る。axe の重大な違反が 0 件（ライト・ダーク）`, { timeout: 120_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const { context, page } = await openState(STATES[10] as StateDef, { width, scheme });
+        try {
+          const icon = page.locator('[data-ai="yaku-box"] .sec-head').getByRole('button', { name: '役の欄の説明' });
+          expect(await page.locator('[data-ai="yaku-box"]').innerText()).not.toContain('どう和了っても付く役です');
+          await icon.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+          await icon.hover();
+          await page.getByRole('tooltip').waitFor();
+          const m = await measureInfoTip(page, '.yk');
+          expect(m, `${width} ${scheme}`).not.toBeNull();
+          expect(m!.text).toContain('確定している役は、その行動のあとの手が、どう和了っても付く役です');
+          expect(m!.tip.left).toBeGreaterThanOrEqual(7);
+          expect(m!.tip.right).toBeLessThanOrEqual(m!.innerWidth - 7);
+          expect(m!.tip.top).toBeGreaterThanOrEqual(0);
+          expect(m!.tip.bottom).toBeLessThanOrEqual(m!.innerHeight);
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          expect(boxesOverlap(m!.tip, m!.icon)).toBe(false);
+          expect(seriousViolations(await runAxe(page)), `${width} ${scheme}`).toEqual([]);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
         } finally {
           await context.close();
         }

@@ -157,3 +157,46 @@ describe('U-3 答え合わせの内容（打牌以外の判断）', () => {
     expect(model.ukeire).toBeNull();
   });
 });
+
+describe('F13 答え合わせの内容: 役の欄（U-33）', () => {
+  it('打牌の判断: 自分・実戦・AI の行動が並ぶ。受け入れ枚数の行と同じ打牌・同じ印。中身が全部同じなら merged', () => {
+    // FX-4 東2局1本場 8巡目: 実戦は打4p、AI は打7p
+    const decision = decisionOf(fx4, 'k1h1e9');
+    const same = buildReveal(decision, dahai('4p'));
+    expect(same.yaku?.blocks.map((b) => [b.tile, b.tags])).toEqual([
+      ['4p', ['自分', '実戦']],
+      ['7p', ['AI']],
+    ]);
+    expect(same.yaku?.merged).toBe(true);
+    const other = buildReveal(decision, dahai('E'));
+    expect(other.yaku?.blocks.map((b) => b.tile)).toEqual(['E', '4p', '7p']);
+    expect(other.yaku?.merged).toBe(false);
+    // 受け入れ枚数の行と、同じ打牌（最大の打牌を除く）が並ぶ
+    const ukeireTiles = (other.ukeire?.rows ?? []).filter((r) => !(r.tags.length === 1 && r.tags[0] === '最大')).map((r) => r.tile);
+    expect([...ukeireTiles].sort()).toEqual(['4p', '7p', 'E'].sort());
+  });
+
+  it('鳴きの判断: 答えのボタンの並びで行動が並ぶ（受け入れ枚数・牌理は無いが、役の欄は出る）', () => {
+    const call = fx4.decisions.find((d) => d.kind === 'call' && d.kyokuLabel === '東2局1本場' && d.junme === 8);
+    if (call === undefined) throw new Error('鳴きの判断が無い');
+    const model = buildReveal(call, { type: 'option', id: 'pass' });
+    expect(model.ukeire).toBeNull();
+    expect(model.yaku?.blocks.map((b) => [b.option?.id, b.tags])).toEqual([
+      ['pon', ['実戦', 'AI']],
+      ['pass', ['自分']],
+    ]);
+    expect(model.yaku?.blocks[0]?.text.settled.map((l) => l.name)).toEqual(['役牌 東（場風）']);
+  });
+
+  it('リーチの判断: リーチ・しないを並べる', () => {
+    const riichi = decisionOf(fx1e, 'k2h4e5');
+    const model = buildReveal(riichi, { type: 'option', id: 'pass' });
+    expect(model.yaku?.blocks.map((b) => b.option?.id).sort()).toEqual(['pass', 'reach']);
+  });
+
+  it('カン・和了の判断には、役の欄が無い（null）', () => {
+    const none = [...fx4.decisions, ...fx1a.decisions, ...fx1e.decisions].find((d) => d.kind === 'kan' || d.kind === 'win');
+    if (none === undefined) return;
+    expect(buildReveal(none, { type: 'option', id: 'pass' }).yaku).toBeNull();
+  });
+});

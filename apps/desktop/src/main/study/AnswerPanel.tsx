@@ -30,6 +30,7 @@ import { formatProbability, type RevealModel } from './reveal';
 import { Tile } from './Tile';
 import { tileName } from './tiles';
 import { UkeireSection } from './UkeireSection';
+import { YakuSection } from './YakuSection';
 import { useAnswerNotes } from './useAnswerNotes';
 import type { QuizAnswer } from './useQuizAnswer';
 
@@ -416,6 +417,7 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
       {memoShown !== undefined && <MemoShown memos={memoShown} />}
       <Evaluation model={model} discard={discard} dora={dora} />
       {model.ukeire !== null && <UkeireSection box={model.ukeire} dora={dora} />}
+      {model.yaku !== null && <YakuSection box={model.yaku} dora={dora} />}
       <form className="q-sec learn" noValidate data-ai="learn" onSubmit={(event) => event.preventDefault()}>
         <fieldset className="pills-set">
           <legend className="lbl">
