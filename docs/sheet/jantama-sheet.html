@@ -124,6 +124,7 @@
   .opt:has(input:checked) { background: var(--accent-fill); border-color: var(--accent); }
   .opt:has(input:checked) .dot { border-color: var(--accent); }
   .opt:has(input:checked) .dot::after { background: var(--accent); }
+  .opt:has(input[type=checkbox]) .dot, .opt:has(input[type=checkbox]) .dot::after { border-radius: 4px; }
   .opt:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
   .opt .title { font-size: 15.5px; line-height: 1.6; font-weight: 700; }
   .opt .note { font-size: 14px; color: var(--muted); line-height: 1.7; padding-left: 32px; }
@@ -229,11 +230,11 @@
 
 <div class="wrap">
   <header>
-    <div class="eyebrow">JantamaReviewer · 確認シート 13回目 · 2026-10-12</div>
+    <div class="eyebrow">JantamaReviewer · 確認シート 14回目 · 2026-10-12</div>
     <h1>雀魂の検討システム 確認シート</h1>
-    <p class="lead">v1 の仕上がりの確認です。12回目の答えで、画面の言葉を「聴牌」「向聴」にそろえ、README の写真を撮り直して、動く GIF を足しました。これで v1 の画面と README がそろいました。どれも main に入れ、本体も作り直してあります（10月12日 17:19）。あわせて、12回目の補足で出た「〇△✕ の帯」と「Mac と同期」を聞きます。</p>
+    <p class="lead">v1 のあとの調べの結果です。近い役（実際の局面で計算した見本）、kobalab/Majiang と MahjongRepository/mahjong から使える機能の提案、Mac 版の見積もり、同期の試しの途中結果。どれも調べの段階で、アプリにはまだ入れていません（main に入ったのは帯の変更だけです。本体 18:51）。</p>
     <div class="meta">
-      <span>質問 6 と自由記入 1</span>
+      <span>質問 12 と自由記入 1</span>
       <span class="muted">選ぶと自動で保存されます</span>
       <span class="status" id="status" role="status">保存の準備中…</span>
     </div>
@@ -241,18 +242,18 @@
 
   <section aria-labelledby="h-recv">
     <div class="sec-head">
-      <h2 id="h-recv">12回目の答えをこう反映しました</h2>
+      <h2 id="h-recv">13回目の答えとチャットの依頼をこう反映しました</h2>
       <p class="muted">答えの原文は、そのまま決定記録に写しました。</p>
     </div>
     <div class="table-wrap">
       <table class="grid">
         <thead><tr><th>答え</th><th>反映したこと</th></tr></thead>
         <tbody>
-          <tr><td class="src-col">R12-1〜R12-8、R12-11〜R12-13 この形でよい</td><td>受け入れとして決定記録に入れました。</td></tr>
-          <tr><td class="src-col">R12-6 の補足「Aが×は納得…Bをとることがほぼない」</td><td>帯を変えるかを R13-3 で聞きます。決まるまでは、いまの帯のままです。</td></tr>
-          <tr><td class="src-col">R12-9 「聴牌」にそろえる、向聴にも</td><td>画面の「テンパイ」を「聴牌」に、「1シャンテン」「2シャンテン以上」「2シャンテンからの先」を「1向聴」「2向聴以上」「2向聴からの先」にそろえました。仕様書と受け入れ基準の言葉も直しました（R13-2）。</td></tr>
-          <tr><td class="src-col">R12-14 Mac でも使いたい、サーバーの DB で同期</td><td>チャットで選択肢を答えました。範囲と方法を R13-4・R13-5 で聞きます。</td></tr>
-          <tr><td class="src-col">R12-14 v1 のあと近い役の調べ</td><td>v1 がそろったので、調べを始めています。実際の局面で計算した見本を、次のシートで見せます。</td></tr>
+          <tr><td class="src-col">R13-1 v1 の完成・R13-2 聴牌と向聴</td><td>v1 の完成として記録しました（2026-10-12）。</td></tr>
+          <tr><td class="src-col">R13-3 案の帯</td><td>〇＝S、△＝A、✕＝B 以下にして main に入れました。局の評価の表の旗、週の集計の一致率とずれがこの帯になります。10月9日の半荘では、一致が 0/5 から 1/5 になりました。</td></tr>
+          <tr><td class="src-col">R13-4 ウィジェットも Mac で</td><td>見積もりを作りました（R14-5〜R14-8）。</td></tr>
+          <tr><td class="src-col">R13-5 Turso と ThinkBook を試す</td><td>試しの道具を作り、この PC の上で同じ仕組みのサーバーを動かして試しました（R14-9〜R14-11）。Turso Cloud と ThinkBook での試しは、準備待ちです（下の「このあと」）。</td></tr>
+          <tr><td class="src-col">チャット: Majiang と mahjong から使う・提案する</td><td>どちらも MIT なので使えます。近い役の調べで比べ、2つのリポジトリの機能を調べて提案にしました（R14-1〜R14-4）。</td></tr>
         </tbody>
       </table>
     </div>
@@ -260,15 +261,16 @@
 
   <section aria-labelledby="h-built">
     <div class="sec-head">
-      <h2 id="h-built">できたもの</h2>
-      <p class="muted">受け入れは R13-1・R13-2 です。</p>
+      <h2 id="h-built">調べで確かめたこと</h2>
+      <p class="muted">調べの報告は、ブランチの analysis/ の下にあります（main には入れていません）。</p>
     </div>
     <div class="table-wrap"><table class="grid">
-      <thead><tr><th>もの</th><th>状態</th></tr></thead>
+      <thead><tr><th>調べ</th><th>確かめたこと</th></tr></thead>
       <tbody>
-        <tr><td class="src-col">「聴牌」「向聴」</td><td>main に入れました。答えの記録には局面の種類の言葉を保存していない（毎回、牌譜から数え直す）ので、前の答えもそのまま数えられます。</td></tr>
-        <tr><td class="src-col">README</td><td>main に入れました。v1 の機能ごとに節を作り、写真26枚と GIF 5本（ウィジェット・取り込み・出題・通して見る・週の集計）を載せました。「作っているもの」は「これから」（役の表示）にしました。</td></tr>
-        <tr><td class="src-col">写真と GIF を撮る道具</td><td>main に入れました（<code>scripts/readme-shots.mjs</code>・<code>scripts/readme-gifs.mjs</code>）。試し用の保存先だけを使い、アプリ自身の画面だけを撮ります。</td></tr>
+        <tr><td class="src-col">近い役（feature/yaku-research）</td><td>役と符の判定を作り、Python の mahjong と照らしました。和了形4000、聴牌1500手（待ち2366）、実戦の和了69で、食い違いは0です。majiang-core とも、全部で一致しました。比べる行動1つあたり平均0.19ミリ秒で計算できます。</td></tr>
+        <tr><td class="src-col">機能の調べ（feature/survey）</td><td>10個のリポジトリを読みました。このアプリの向聴数と受け入れ枚数は、majiang-core の試験データ（4万件と8万件）とずれ0でした。実戦の和了69件の点数を majiang-core で計算し直すと、全件一致しました。雀魂は「切り上げ満貫なし」でした。</td></tr>
+        <tr><td class="src-col">Mac 版（feature/mac-research）</td><td>作れる見込みです。変更は約5,700〜7,800行で、書き出し機能の1.4〜1.9倍です。この Windows の PC でも、Mac 向けにコンパイルできるかまでは確かめられることが分かりました（tauri などの部品は全部通過）。動かしたときの挙動と許可は、Mac でしか確かめられません。</td></tr>
+        <tr><td class="src-col">同期の試し（feature/sync-spike）</td><td>Turso の同期は、手元の DB で読み書きし、あとで送り合う形で、オフラインの間も書けます。同じ行を2台で直すと、あとから送ったほうが残ります。いまの記録の連番（1, 2, 3…）のままだと、2台で同じ番号ができて片方の答えが消えます。ThinkBook の候補だったサーバー（sqld）は、この同期に対応していませんでした。</td></tr>
       </tbody>
     </table></div>
   </section>
@@ -283,21 +285,27 @@
 
   <section aria-labelledby="h-decided">
     <div class="sec-head">
-      <h2 id="h-decided">聞かずに決めたこと（13回目）</h2>
+      <h2 id="h-decided">聞かずに決めたこと（14回目）</h2>
       <p class="muted">違うと思うものがあれば、番号を最後の自由記入に書いてください。</p>
     </div>
     <ol class="decided">
-      <li>検索で古い言葉（「テンパイ」「シャンテン」）を、新しい言葉の別名として受け付けない（言葉をそろえるため）。</li>
-      <li>コードのコメントと試験の文も「聴牌」「向聴」にそろえた（画面のソースに古い言葉が無いことを試験で確かめるため）。</li>
-      <li>README の GIF のウィジェットは、記録の命令をアプリの手前で偽の応答に差し替えて動かした。本物の画面やスクショは撮っていない。</li>
-      <li>README の写真と GIF を撮る道具は、これまでどおり、撮る間だけ検討画面の窓を開く（1回の起動で1分ほど）。あなたが雀魂を打っている間は動かさない。</li>
-      <li>近い役は、v1 のあとの最初の仕事として調べる（実際の局面で計算できるか、どの役を出すか、言い方）。作るかどうかは、見本を見てから決めてもらう。</li>
+      <li>役の名前は漢字にする（「聴牌」「向聴」にそろえたのと同じ。例: 断幺九・混一色・一気通貫）。</li>
+      <li>近い役に出すのは、役牌・断幺九・混一色（清一色を含む）・一気通貫・三色同順の5つ。あなたの7半荘の和了69件で、鳴いた和了36件はすべて役牌・断幺九・混一色のどれかだった。対々和・七対子などは出る数が少ないので、最初は出さない。</li>
+      <li>近い役は「あと3枚以内、いちばん早い和了より1枚遠回りまで」で、1つの行動に2行まで。</li>
+      <li>役無しの警告は、鳴いた手では強く、門前でダマだと役が無い待ちは薄い注にする。立直は役の行に出さず、「門前: 立直・門前清自摸和が使える」「門前を崩す: 立直・門前清自摸和・平和・一盃口が付かなくなる」の薄い1行にする。</li>
+      <li>比べる行動の中身が全部同じときは、1つにまとめて出す（見本の場面の約6割）。</li>
+      <li>役の判定は自前のコードにし、majiang-core は試験の2つ目の正解に使う（どちらも全部一致したので、替えても正しさは上がらない）。</li>
+      <li>打点を出すときも、裏ドラと一発の期待値は足さない（出さないことを画面に書く）。雀魂は切り上げ満貫なしで計算する（実戦の和了69件で確かめた）。</li>
+      <li>ほかのリポジトリのコードを使うときは、MIT の表示を THIRD_PARTY_NOTICES.md と README に置く。電脳麻将の牌の画像と音は、MIT の対象外なので使わない。</li>
+      <li>Mac 版でも、雀魂の規約の線は同じ（撮影は押したときだけ、読み取りは対局のあと）。連続で画面を取る仕組みや、ほかのアプリを操作する仕組みは、使わないことを試験で確かめる一覧に足す。</li>
+      <li>同期するなら、記録の番号を端末をまたいで一意の id にする。試しで、いまの連番のままでは片方の答えが消えることを確かめた。</li>
+      <li>ThinkBook に置くサーバーは、sqld ではなく Turso の同期に対応した tursodb にする（置く前に、チャットで内容を確かめる）。</li>
     </ol>
   </section>
 
   <section aria-labelledby="h-next">
     <div class="sec-head"><h2 id="h-next">このあと</h2></div>
-    <p class="lead">答えをもらったら、決定記録・仕様書・受け入れ基準に入れます。帯を変える答えなら、旗・一致率・ずれを新しい帯に直します。並行して近い役の調べを進め、実際の局面で計算した見本を次のシートで見せます。Mac と同期は、R13-4・R13-5 の答えに合わせて見積もりと試作を用意します。</p>
+    <p class="lead">答えをもらったら、決定記録・仕様書・受け入れ基準に入れ、作ることになったものを作ります。R14-2 で選んだ提案は見本を作り、次のシートで見せます。同期の試しは、Turso のトークンを DB 用のものに作り直してもらうことと、ThinkBook に鍵で入れるようにしてもらうことが要ります（チャットで頼みます）。両方の数字がそろったら、Turso と ThinkBook のどちらにするかを聞きます。</p>
   </section>
 
   <details class="doc">
@@ -488,6 +496,7 @@
 <li>画面では、自分の〇△✕、AI 基準の段階、MAKA の評価（入力があれば）を並べ、食い違った局に印を付ける。</li>
 <li>局ごとに、結果（自分の和了・放銃・流局・他家のツモ・他家どうしのロン）、点の増減、自己評価、AI基準を並べる。</li>
 <li>自己評価とAI基準が食い違う局に印を付ける。和了できなかった局を低く付けているかどうかを、週の集計で数える。</li>
+<li>食い違いは、AI 基準の段階を 〇△✕ の3つの帯（〇＝S+〜S-、△＝A+〜A-、✕＝B+〜E）に分けて比べ、帯が2つ離れたときに印を付ける（✕ と付けて S の帯、〇 と付けて B 以下の帯）。週の集計の一致（同じ帯）とずれ（〇3・△2・✕1 として自分 − AI 基準）も同じ帯で決める（R13-3。実際に出る段階は S と A がほとんどで、B 以下は少ないため）。</li>
 </ul>
 <h5>F12 半荘を通して見る（R9-11、R10-3、R10-4）</h5>
 <ul>
@@ -699,64 +708,101 @@
 <script>
 (function () {
   'use strict';
-  var ROUND = 'round13';
+  var ROUND = 'round14';
 
   function shotsHTML(list) {
     return '<div class="sample"><div class="shots crop-none">' + list.map(function (s) {
-      var src = s[0].indexOf('/') >= 0 ? s[0] : 'samples/round13/' + s[0];
+      var src = s[0].indexOf('/') >= 0 ? s[0] : 'samples/round14/' + s[0];
       return '<figure class="shot"><button type="button" data-zoom="' + src + '" aria-label="' + s[1] + 'を拡大"><img src="' + src + '" alt="' + s[1] + '" loading="lazy"></button><figcaption>' + s[1] + '</figcaption></figure>';
     }).join('') + '</div></div>';
   }
 
   var Q = [
-    { id: 'r1', no: 'R13-1', title: 'v1 の仕上がり（README と動く GIF。R11-3）',
+    { id: 'r1', no: 'R14-1', title: '近い役（確定している役・近い役・役無しの警告）を作るか',
       blockSample: function () {
-        return shotsHTML([['quiz-answer.gif', '出題で答える（GIF）'], ['widget-record.gif', 'ウィジェットで迷いと 〇△✕ を記録する（GIF。記録は偽の応答で、本物のスクショは撮っていない）'], ['import-flow.gif', '検討結果の取り込み（GIF）'], ['replay-keys.gif', '半荘を通して見る画面をキーで進める（GIF）'], ['week-page.gif', '週の集計（GIF）'], ['hanchan-table.png', '局の評価の表と MAKA の見込み'], ['narrow-drawer.png', '細い窓の引き出し'], ['records-export.png', '記録の書き出し']]);
+        return shotsHTML([['yk-1.png', '10月9日 東2局1本場 8巡目の打牌（11回目の見本と同じ場面。試作の計算結果）'], ['yk-2.png', '同じ局の東のポンと、東3局1本場のチー（役無しの警告）'], ['yk-3.png', '10月11日 南2局・南4局のチー'], ['yk-4.png', '一気通貫が近い打牌と、聴牌で確定している役（一盃口・混一色）'], ['yk-5.png', 'そのほかの場面'], ['yk-dark.png', 'ダーク'], ['yk-390.png', '幅390px']]);
       },
-      context: '<p>README（リポジトリのいちばん上の README.md）を、v1 の機能ごとの節に書き直しました。写真は26枚、GIF は5本で、どれも試し用の保存先で撮りました。雀魂の画面は、プレイヤー名をぼかした迷いマークの6枚だけです。保存先のパスは <code>C:\\Users\\user\\...</code> に置き換えています。</p><p>本体を使ってみて気になったところも、補足に書いてください。</p>',
+      context: '<p>見本は、あなたの実戦の局面で試作のエンジンが計算した結果です（手で作った例ではありません）。画面の形は11回目の見本のままで、答え合わせの受け入れ枚数の下に置く案です。</p><ul><li>確定している役: 行動のあとの手が、どう和了っても必ず付く役。聴牌なら待ちごとに数え、全部の待ちで付く役。一部の待ちだけで付く役は分けて出す。</li><li>近い役: あと3枚以内で、いちばん早い和了より1枚遠回りまでで付く役。役牌・三色同順・一気通貫は足りない牌を、断幺九・混一色は切る牌を書く。</li><li>役無しの警告: 鳴いた手で役が無いとき。聴牌してもどの待ちでも役が無いときは「和了れない」と強く出す。</li></ul><p>細かい決まり（出す役、行数、言い方）は「聞かずに決めたこと」の 1〜6 に書きました。作るときの大きさは、確認シート1回のあとの1回分（約700〜800行）の見込みです。通して見る画面にも同じ欄が出ます。</p>',
       opts: [
-        { v: 'ok', t: 'これで v1 の完成でよい', rec: true },
-        { v: 'fix', t: '直すところがある（補足に書く）' }
+        { v: 'build', t: 'この形で作る', rec: true, note: '見本のとおりに、出題・解き直し・通して見る画面の答え合わせに入れる。' },
+        { v: 'fix', t: '直してから作る（補足に書く）' },
+        { v: 'no', t: '作らない' }
       ] },
-    { id: 'r2', no: 'R13-2', title: '「聴牌」「向聴」（R12-9）',
-      blockSample: function () {
-        return shotsHTML([['today-list.png', '今日の出題（打牌 · 1向聴 など）'], ['quiz-reveal.png', '答え合わせ'], ['quiz-follow.png', '2向聴からの先'], ['week-top.png', '週の集計']]);
-      },
-      context: '<p>画面の言葉を「聴牌」「1向聴」「2向聴以上」「2向聴からの先」「向聴数で差がついた」にそろえました。画面のソースに「テンパイ」「シャンテン」が無いことを、試験で確かめています。検索は画面の言葉で探すので、古い言葉の「テンパイ」「シャンテン」では見つからなくなりました。</p>',
+    { id: 'r2', no: 'R14-2', title: '2つのリポジトリから作る機能（見本を作るもの）', multi: true,
+      context: '<p>kobalab/Majiang（とその部品 majiang-core・majiang-ai・majiang-ui）と MahjongRepository/mahjong にあって、このアプリに無い機能の提案です。どれも対局のあとに取り込んだ記録だけを使い、答える前には出しません。選んだものは、実際の局面で見本を作って次のシートで見せ、作るかはそこで決めてもらいます。いまの答え合わせは「打点・形・守備は見ていません」と書いてあり、1〜3 はその3つに当たります。</p>',
       opts: [
-        { v: 'ok', t: 'この形でよい', rec: true },
-        { v: 'fix', t: '直すところがある（補足に書く）' }
+        { v: 'p1', t: '1 待ちごとの役と打点（ダマとリーチの比較）', note: '聴牌の局面の答え合わせで、待ち牌ごとに役・飜・符・点数をダマとリーチで並べる。差の原因の「打点」に当たる。中くらい。majiang-core の和了計算を使う。', rec: true },
+        { v: 'p2', t: '2 待ちの形（両面・嵌張・辺張・双碰・単騎・多面張）', note: '聴牌の打牌ごとに待ちの形の名前と枚数を並べる。差の原因の「形の質」に当たる。小さい。1 と同じ計算から作る。', rec: true },
+        { v: 'p3', t: '3 危険度の目安（現物・スジ・壁・字牌）', note: '他家のリーチがある場面の答え合わせで、候補の打牌ごとに分類を1語で出す。差の原因の「守備」に当たる。AI の確率ではなく、形式的な目安だと画面に書く。中くらい。', rec: true },
+        { v: 'p4', t: '4 局の結果の手（和了の役と点数、放銃した相手の手）', note: '局の評価の表の行に、その局の和了の役・点数と、放銃した局の相手の手牌・待ちを出す。いまは点の増減しか分からない。小〜中。' },
+        { v: 'p5', t: '5 他家の手牌と待ちを、答えたあとで開く', note: '通して見る画面と答え合わせのあとで「全員の手牌を開く」を切り替える。既定は閉じる。小さい。' },
+        { v: 'p6', t: '6 取り込んだ半荘からの成績の集計', note: '週の集計の成績の横に、取り込んだ半荘から数えた和了率・放銃率などを参考に出す（手入力は残す）。雀魂の成績とは数が合わない。R14-4 も見てください。' },
+        { v: 'p7', t: '7 向聴数の推移', note: '局ごとに巡目ごとの向聴数を小さな線で出し、迷いと大きな不一致の位置に印を付ける。小さい。' },
+        { v: 'p8', t: '8 符の内訳', note: '「30符 = 副底20 + 門前ロン10」のように符の内訳を出す。Python の mahjong を移植する必要がある。中くらい。' }
       ] },
-    { id: 'r3', no: 'R13-3', title: '〇△✕ と AI 基準の帯（R12-6 の補足）',
-      context: '<p>局の評価の表の旗（結果が悪かった局を低く付けていないか）と、週の集計の一致率・ずれは、AI 基準の段階を 〇△✕ の3つの帯に分けて比べています。いまの帯は 〇＝S+〜A-、△＝B+〜B-、✕＝C+ 以下です。帯が2つ離れると旗が付きます。</p><p>補足のとおり、B はほとんど出ません。あなたが MAKA で評価した67局では、S が40局（60%）、A が17局（25%）、B が4局（6%）、C 以下が6局（9%）でした。手元の7半荘（81局）の AI 基準でも、S が50局、A が22局、B が8局、C 以下が1局です。そのため、いまの帯ではほとんどの局が「〇の帯」に入り、A の局に ✕ を付けると必ず旗が付きます。</p><p>案は 〇＝S+〜S-、△＝A+〜A-、✕＝B+ 以下です。案では、A の局の ✕ には旗が付かなくなります。代わりに、B 以下の局の 〇 に旗が付きます。あなたの2半荘で比べると次のとおりです（AI 基準は、MAKA の評価67局で合わせた既定の当てはめ）。旗は 10月9日が3つ、10月11日が2つで、どちらの帯でも変わりません。一致は、10月9日が 0/5 から 1/5 に、10月11日が 3/9 から 4/9 になります。</p><div class=\"table-wrap\" tabindex=\"0\" role=\"region\" aria-label=\"2半荘の帯の比べ\"><table class=\"grid\" style=\"white-space:nowrap\">\n<thead><tr><th>半荘</th><th>局</th><th>AI 基準</th><th>自分</th><th>いまの帯</th><th>案の帯</th></tr></thead>\n<tbody>\n<tr><td>10月9日</td><td>東1局</td><td>S+</td><td>△</td><td>低く −1</td><td>低く −1</td></tr>\n<tr><td></td><td>東2局</td><td>S-</td><td>✕</td><td>旗</td><td>旗</td></tr>\n<tr><td></td><td>東2局1本場</td><td>A</td><td>△</td><td>低く −1</td><td>一致</td></tr>\n<tr><td></td><td>東3局</td><td>S</td><td>✕</td><td>旗</td><td>旗</td></tr>\n<tr><td></td><td>東3局1本場</td><td>S-</td><td>✕</td><td>旗</td><td>旗</td></tr>\n<tr><td>10月11日</td><td>東1局</td><td>S-</td><td>△</td><td>低く −1</td><td>低く −1</td></tr>\n<tr><td></td><td>東2局</td><td>S</td><td>△</td><td>低く −1</td><td>低く −1</td></tr>\n<tr><td></td><td>東3局1本場</td><td>A</td><td>〇</td><td>一致</td><td>高く +1</td></tr>\n<tr><td></td><td>東4局</td><td>S+</td><td>✕</td><td>旗</td><td>旗</td></tr>\n<tr><td></td><td>東4局1本場</td><td>S+</td><td>〇</td><td>一致</td><td>一致</td></tr>\n<tr><td></td><td>南1局2本場</td><td>A</td><td>△</td><td>低く −1</td><td>一致</td></tr>\n<tr><td></td><td>南2局</td><td>S-</td><td>✕</td><td>旗</td><td>旗</td></tr>\n<tr><td></td><td>南3局</td><td>S</td><td>〇</td><td>一致</td><td>一致</td></tr>\n<tr><td></td><td>南4局</td><td>A</td><td>△</td><td>低く −1</td><td>一致</td></tr>\n</tbody></table></div>',
+    { id: 'r3', no: 'R14-3', title: 'majiang-core の使い方（R14-2 で 1・2・4 を選んだとき）',
+      context: '<p>役の判定は自前のコードで足りる（Python と majiang-core の両方と全件一致）ので、近い役には使いません。打点（1）・待ちの形（2）・局の結果の手（4）を作るときに、majiang-core の和了計算（点数まで出る）を使います。いまのエンジンには「外の部品を読み込まない」決まりがあるので、どちらの案でもこの決まりに例外を1つ足します。</p>',
       opts: [
-        { v: 'shift', t: '案の帯にする（〇＝S、△＝A、✕＝B 以下）', rec: true, note: '実際に出る段階の分かれ方に合う。旗・一致率・ずれの全部がこの帯になる。' },
-        { v: 'keep', t: 'いまの帯のまま（〇＝S+〜A-）' }
+        { v: 'npm', t: 'npm のパッケージとして入れる（版を固定し、1つのファイルの中だけで使う）', rec: true, note: '作者の直しを取り込める。型の宣言（約50行）と牌の表記の変換（約60行）を足す。' },
+        { v: 'copy', t: '必要なファイルだけを写す（著作権表示を残す）', note: 'エンジンの外の部品に頼らない。直しは手で取り込む。' }
       ] },
-    { id: 'r4', no: 'R13-4', title: 'Mac で使う範囲（R12-14）',
-      context: '<p>本体は2つの部分に分かれます。対局中のウィジェットは、Windows 専用の仕組みの上で動いています（キーとマウスの割り込み、管理者の補助プログラム、Windows の文字認識、窓の撮影）。Mac で動かすには、この部分を Mac の仕組みで作り直し、画面収録とアクセシビリティの許可も扱う必要があります。検討の画面（半荘・出題・解き直し・ログ・週の集計・設定）は、Mac でも比較的そのまま動かせます。</p><p>どれを選んでも、すぐには作りません。範囲が決まったら、見積もりと試作をシートで見せます。</p>',
+    { id: 'r4', no: 'R14-4', title: '取り込んだ半荘からの成績の集計（提案6）と仕様書の線引き',
+      context: '<p>仕様書の5章は「成績の自動取得」を v1 で作らないと決めています。提案6は、雀魂の成績の画面や外のサイトから取るのではなく、取り込んだ半荘の記録から数えるだけです。この線引きを決めてください（R14-2 で6を選ばなくても、答えは記録に残します）。</p>',
       opts: [
-        { v: 'review', t: '検討の画面だけ Mac でも使う（迷いの記録は Windows で）', rec: true, note: '作り直しが少ない。Mac では、Windows で記録した半荘を見て、出題を解く。同期が要る（R13-5）。' },
-        { v: 'all', t: 'ウィジェットも含めて Mac で使う（雀魂を Mac で打つ）', note: 'ウィジェット・入力・撮影・文字認識を Mac 用に作る。いちばん大きい。' },
-        { v: 'none', t: '当面は Windows だけ（同期だけ考える）' },
-        { v: 'later', t: '当面はどちらもやらない' }
+        { v: 'inside', t: '取り込んだ記録から数えるのは、作ってよい（線の内側）', rec: true, note: '雀魂の成績の画面や外のサイトからは取らない、という線はそのまま。' },
+        { v: 'outside', t: '数えるのも作らない（線の外側）' }
       ] },
-    { id: 'r5', no: 'R13-5', title: '同期の方法（R12-14）',
-      context: '<p>同期したいのは、記録（答え・解き直しの予定・結びつけ・〇△✕・MAKA・メモ・週の成績・設定）と、半荘ごとの結果やスクショのファイルです。記録だけなら小さく（試し用の保存先の2半荘で約 4 KB）、スクショと結果のファイルのほうがずっと大きくなります。R13-4 の答えにかかわらず選べます。</p><ul><li>同期フォルダ: 保存先を OneDrive などに置く。作る作業はほとんど無い。2台で同時に開くと、SQLite のファイルが壊れるおそれがある。</li><li>Turso: SQLite と互換の DB の SaaS。手元の DB で読み書きし、push・pull で同期する。いまの作りに近い。ただ、オフラインでの書き込みはまだ public beta。</li><li>Supabase と PowerSync: Postgres と同期の仕組み。Tauri 用の SDK がある。表と同期の規則を別に持つので、部品が増える。</li><li>ThinkBook に自分で置く: Tailscale の中だけで開けば、インターネットに出さずに済む。サーバーの手入れは自分で行う。</li></ul><p>スクショのような大きなファイルは、どの方法でも DB には入れず、ファイルとして別に同期する形になります。</p>',
+    { id: 'r5', no: 'R14-5', title: 'Mac 版の最初の一歩（R13-4）',
+      context: '<p>見積もりは6段階です（行数は変更と追加の合計の見込み）。</p><ol start="0"><li>Mac での確かめ（あなたの Mac で30〜40分。ボタンの番号、窓の一覧、撮影、文字認識の試し）</li><li>Windows だけで共通化する（約1,000〜1,300行。Mac は要らない。Windows の動きは変えない）</li><li>Mac で検討の画面だけ動かす（約900〜1,200行。Mac での確認14項目）</li><li>Mac のウィジェットの入力と撮影（約2,000〜2,600行。確認34項目。いちばん不確か）</li><li>Mac の文字認識（約1,500〜2,200行。確認9項目と Mac の画面写真約10枚）</li><li>梱包と署名（約300〜500行。確認8項目）</li></ol><p>Mac でのやり取りは、合わせて11〜16回の見込みです。段階1が終われば、この PC の検査で Mac 向けのコンパイルも確かめられるようになります。段階ごとに、続けるかを聞きます。</p>',
       opts: [
-        { v: 'spike', t: 'まず Turso と ThinkBook（Tailscale）を小さく試して比べる', rec: true, note: '同じ記録で、2台の間の同期・オフライン・パスワードの扱いを試し、結果をシートで見せる。' },
-        { v: 'folder', t: '同期フォルダでよい（作る作業なし）' },
-        { v: 'supabase', t: 'Supabase と PowerSync で作る' },
-        { v: 'later', t: '当面は同期しない（書き出しで運ぶ）' }
+        { v: 'phase1', t: '段階1（Windows での共通化）を始める。段階0は手が空いたときに Mac で', rec: true },
+        { v: 'phase0', t: '先に段階0（Mac での確かめ）の手順をもらい、結果を見てから決める' },
+        { v: 'hold', t: '当面は進めない' }
       ] },
-    { id: 'r6', no: 'R13-6', title: '作ったあとの進め方',
-      context: '<p>このシートで「直す」になったものと、帯を変える場合の直しを作ったあとの進め方です。近い役の調べの結果は、作る前に見本としてシートで見せます。</p>',
+    { id: 'r6', no: 'R14-6', title: 'あなたの Mac と打ち方', free: true,
+      context: '<p>分かる範囲で書いてください。見積もりは macOS 14 以降を下限にしています（撮影の新しい仕組みのため）。</p><ul><li>Mac の機種・macOS の版・チップ（Apple Silicon か Intel か）。Tailscale には macbook-air が2台見えています。</li><li>Mac での雀魂の打ち方: ブラウザ（どれ）か Steam 版か。窓で打つか全画面か。</li><li>迷いマークのボタン: マウスの横ボタンなら、マウスの機種と、使っているドライバ（Logi Options+ など）。ドライバがボタンを別の操作に変えると、アプリに届かないことがあります。</li></ul>' },
+    { id: 'r7', no: 'R14-7', title: 'Mac 版の署名',
+      context: '<p>Mac では、アプリに「アクセシビリティ（ボタンを拾う）」と「画面収録（撮影）」の許可が要ります。署名が作り直すたびに変わると、この許可が毎回消えます。</p>',
+      opts: [
+        { v: 'selfsigned', t: '自分で作った証明書で署名する', rec: true, note: '無料。作り直しても許可が残る。自分の Mac で使うだけなら足りる。' },
+        { v: 'adhoc', t: '署名しない（ad-hoc）', note: 'いちばん手軽だが、作り直すたびに許可を付け直す。' },
+        { v: 'developer', t: 'Apple Developer ID で署名する', note: '年99ドル。人に配るときに要る。' }
+      ] },
+    { id: 'r8', no: 'R14-8', title: '画面収録の許可の「月1回の聞き直し」への備え',
+      context: '<p>macOS 15 以降は、画面収録の許可を月1回ほど聞き直す表示が出ることがあります。迷いマークを押したときに出ると、対局中に表示が重なります。macOS 26 でも出るかは、まだ確かめられていません。</p>',
+      opts: [
+        { v: 'button', t: '設定に「撮影の確認」ボタンを置き、対局の前に押してもらう', rec: true, note: '押したときにアプリ自身の窓を1回撮る。聞き直しが出るなら、対局の前に出る。' },
+        { v: 'warmup', t: 'アプリ自身の窓を定期的に撮って、聞き直しを先に出させる', note: '撮影は押したときだけ、という仕様書2章の書き方を変える必要がある。' },
+        { v: 'none', t: '備えない（出たら、そのとき許可する）' }
+      ] },
+    { id: 'r9', no: 'R14-9', title: '同期の作り方（R13-5）',
+      context: '<p>試しの結果から、3つの作り方を比べました（行数は見込み）。</p><ul><li>A: いまの SQLite を Turso の DB に置き換える（約6,000〜8,000行）。まだ版が1.0になっていない DB が、記録のただ1つの置き場所になる。</li><li>B: いまの SQLite と JSON のファイルを元のまま残し、同期用の DB を別に持って、同期のときに突き合わせる（約3,000〜4,500行、書き出し機能と同じくらい）。同期用の DB が壊れても作り直せる。</li><li>C: 書き出しの JSON を丸ごと送り合う（約800〜1,200行）。2台で同時に直すと、片方の直しが丸ごと消える。</li></ul><p>どれでも、記録の番号を2台で重ならないもの（端末をまたいで一意の id）にする必要があります。2台で同じ行を直したときは、新しく直したほうを残し、消したものは消したままにする決まりにします。</p>',
+      opts: [
+        { v: 'B', t: 'B（いまの記録を残し、同期用の DB を別に持つ）', rec: true },
+        { v: 'C', t: 'C（書き出しの JSON を丸ごと送り合う）' },
+        { v: 'A', t: 'A（SQLite を Turso の DB に置き換える）' }
+      ] },
+    { id: 'r10', no: 'R14-10', title: 'スクショや結果のような大きなファイルの同期',
+      context: '<p>結果のファイル（1半荘140〜570 KB）・スクショ・ウィジェットの記録は大きいので、DB には入れません。Mac でも打つ（R13-4）なら、Windows で打った半荘を Mac で見る、またはその逆があり得ます。</p>',
+      opts: [
+        { v: 'syncthing', t: 'Syncthing で、Tailscale の中だけで保存先のフォルダを同期する', rec: true, note: '秘密の鍵の管理が要らない。2台が同時に起きているときに同期する。' },
+        { v: 'none', t: '大きなファイルは同期しない（記録だけ同期する）' },
+        { v: 'manual', t: '必要なときに手で写す' }
+      ] },
+    { id: 'r11', no: 'R14-11', title: 'ThinkBook が寝ている間の同期',
+      context: '<p>ThinkBook に置く場合、ThinkBook が閉じている・寝ている間は同期できません。アプリはそのまま使え、手元の記録に書き、ThinkBook が起きたときに追いつきます。Turso Cloud なら、いつでも同期できます。最後に Turso と ThinkBook のどちらにするかは、両方の試しの数字を見てから聞きます。</p>',
+      opts: [
+        { v: 'later', t: '寝ている間は待って、起きたときに追いつけばよい', rec: true },
+        { v: 'always', t: 'いつでも同期したい（Turso Cloud を優先して考える）' }
+      ] },
+    { id: 'r12', no: 'R14-12', title: '作ったあとの進め方',
+      context: '<p>R14-1 で作ることになったものと、段階1（R14-5）を作ったあとの進め方です。R14-2 で選んだ提案は、見本を作って次のシートで見せます。</p>',
       opts: [
         { v: 'merge', t: 'これまでどおり、チェックが通れば main に入れ、次のシートで見せる', rec: true },
         { v: 'show', t: 'main に入れる前に見せる' }
       ] },
-    { id: 'r7', no: 'R13-7', title: 'ほかに気になることがあれば', free: true,
-      context: '<p>「聞かずに決めたこと」で違うと思うものの番号、画面への指摘、使ってみて気になったこと、何でも。</p>' }
+    { id: 'r13', no: 'R14-13', title: 'ほかに気になることがあれば', free: true,
+      context: '<p>「聞かずに決めたこと」で違うと思うものの番号、使ってみて気になったこと、何でも。</p>' }
   ];
 
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -769,11 +815,11 @@
         (q.context ? '<div class="context">' + q.context + '</div>' : '') + '</div>';
       if (q.blockSample) html += q.blockSample();
       if (!q.free) {
-        html += '<fieldset><legend>' + q.no + ' の答え</legend><div class="opts' + (q.side ? ' side' : '') + '">';
+        html += '<fieldset><legend>' + q.no + ' の答え' + (q.multi ? '（いくつでも）' : '') + '</legend><div class="opts' + (q.side ? ' side' : '') + '">';
         q.opts.forEach(function (o) {
           var iid = q.id + '-' + o.v;
           html += '<div class="opt"><label class="opt-label" for="' + iid + '">' +
-            '<input type="radio" name="' + q.id + '" value="' + o.v + '" id="' + iid + '">' +
+            '<input type="' + (q.multi ? 'checkbox' : 'radio') + '" name="' + q.id + '" value="' + o.v + '" id="' + iid + '">' +
             '<span class="row"><span class="dot" aria-hidden="true"></span><span class="title">' + esc(o.t) + (o.rec ? '<span class="tag rec">おすすめ</span>' : '') + '</span></span>' +
             (o.note ? '<span class="note">' + esc(o.note) + '</span>' : '') + '</label>' +
             (o.sample ? o.sample() : '') + '</div>';
@@ -815,8 +861,13 @@
       var note = document.getElementById(q.id + '-note').value;
       var choice = null;
       if (!q.free) {
-        var c = document.querySelector('input[name="' + q.id + '"]:checked');
-        choice = c ? c.value : null;
+        if (q.multi) {
+          var cs = Array.prototype.map.call(document.querySelectorAll('input[name="' + q.id + '"]:checked'), function (x) { return x.value; });
+          choice = cs.length ? cs : null;
+        } else {
+          var c = document.querySelector('input[name="' + q.id + '"]:checked');
+          choice = c ? c.value : null;
+        }
       }
       if (!choice && note.trim()) choice = 'other';
       state[q.id] = { choice: choice, note: note };
@@ -828,8 +879,10 @@
       var s = saved && saved[q.id];
       if (!s) return;
       if (s.choice && s.choice !== 'other') {
-        var input = document.getElementById(q.id + '-' + s.choice);
-        if (input) input.checked = true;
+        (Array.isArray(s.choice) ? s.choice : [s.choice]).forEach(function (v) {
+          var input = document.getElementById(q.id + '-' + v);
+          if (input) input.checked = true;
+        });
       }
       if (typeof s.note === 'string') document.getElementById(q.id + '-note').value = s.note;
     });
@@ -838,13 +891,14 @@
 
   function answerText() {
     readForm();
-    var lines = ['【確認シートの回答（JantamaReviewer・12回目）】'];
+    var lines = ['【確認シートの回答（JantamaReviewer・14回目）】'];
     Q.forEach(function (q) {
       var s = state[q.id];
       var c;
       if (q.free) c = s.note.trim() ? '' : '（なし）';
       else if (s.choice === 'other') c = 'その他';
       else if (!s.choice) c = '未回答';
+      else if (Array.isArray(s.choice)) c = s.choice.map(function (v) { var o = q.opts.filter(function (x) { return x.v === v; })[0]; return o ? o.t : v; }).join('・');
       else { var o = q.opts.filter(function (x) { return x.v === s.choice; })[0]; c = o ? o.t : s.choice; }
       lines.push(q.no + ' ' + q.title + '：' + c);
       if (s.note.trim()) lines.push('　補足：' + s.note.trim().replace(/\n/g, ' / '));
