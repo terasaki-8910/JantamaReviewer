@@ -207,7 +207,8 @@ export function yakuViewOf(shape: YakuShape, options: YakuViewOptions = {}): Yak
     total % 3 === 1
       ? settledYaku(shape, riichi)
       : { closed, tenpai: false, waits: [], settled: meldYaku(shape), partial: [], deadWaits: [], yakumanWaits: [] };
-  if (riichi && closed && !settled.settled.some((h) => h.id === 'riichi')) settled.settled = [{ id: 'riichi', han: 1 }, ...settled.settled];
+  // 立直は役の行に出さない（14回目の聞かずに決めたこと 4、SPEC F13）。リーチの行動でも、立直のほかの確定している役だけを出す
+  settled.settled = settled.settled.filter((h) => h.id !== 'riichi');
   // 確定している役・一部の待ちで付く役は、近い役に出さない（同じ役を 2 度出さない）
   const known = new Set<YakuId>([...settled.settled.map((h) => h.id), ...settled.partial.map((p) => p.id)]);
   near.near = near.near.filter((n) => !known.has(n.id));

@@ -296,14 +296,14 @@ describe('欄「役」の中身（yakuBoxOf。F13・U-33）', () => {
     expect(chiBox?.merged).toBe(false);
   });
 
-  it('リーチの判断は、リーチ・しないを並べる。立直は、リーチの行動の確定している役に出る', () => {
+  it('リーチの判断は、リーチ・しないを並べる。立直は、リーチの行動でも役の行に出さない（SPEC F13）', () => {
     const riichi = load(FX1_IDS[1]).decisions.find((d) => d.kind === 'riichi');
     expect(riichi).toBeDefined();
     if (!riichi) return;
     const box = yakuBoxOf(riichi, { type: 'option', id: 'reach' });
     expect(box?.blocks.map((b) => b.option?.id).sort()).toEqual(['pass', 'reach']);
     const reach = box?.blocks.find((b) => b.option?.id === 'reach');
-    expect(reach?.text.settled.map((l) => l.name)).toContain('立直');
+    expect(reach?.text.settled.map((l) => l.name)).not.toContain('立直');
     expect(box?.blocks.find((b) => b.option?.id === 'pass')?.text.settled.map((l) => l.name)).not.toContain('立直');
   });
 
