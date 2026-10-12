@@ -480,7 +480,7 @@ export function EvaluationSection({ weeks, byWeek, summary: s }: WindowProps) {
         title="局の評価"
         hint={{
           label: '一致率とずれの説明',
-          text: '〇を3・△を2・✕を1として、自分の評価から AI 基準の評価を引いた平均です。0 は AI と同じ評価です。',
+          text: '〇を3・△を2・✕を1として、自分の評価から AI 基準の評価を引いた平均です。AI 基準は、S を〇、A を△、B 以下を✕として数えます。0 は AI と同じ評価です。',
         }}
       />
       {s.evaluated === 0 ? (

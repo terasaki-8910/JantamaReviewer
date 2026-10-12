@@ -68,7 +68,7 @@
  *   その記録を置き換える。取り込んだ半荘が基礎のどの半荘かは、局の名前と点数が全部同じかで決める（`matchBaseGame`）。
  *   `baseMakaFit()` は基礎だけの当てはめ。当てはめ直した段階をまとめに反映するのは `regradeSummary(summary, model)`
  * - `disagreesWithGrade(mark, grade)`（F10）: 局の自己評価（〇△✕）と AI 基準の段階が大きく食い違うか（局の表の印）。
- *   帯（〇 = S+〜A-、△ = B+〜B-、✕ = C+〜E）が 2 つ離れたら印。暫定の規則で、直すのはこの 1 つの関数のファイルだけ。
+ *   帯（〇 = S+〜S-、△ = A+〜A-、✕ = B+〜E。R13-3）が 2 つ離れたら印。直すのはこの 1 つの関数のファイルだけ。
  *   週の集計（U-30）の「一致」（`agreesWithGrade`）と「ずれ」（`markOffsetFromGrade`。自分 - AI 基準、-2 から 2）も、同じ帯で決める
  */
 export const ENGINE_PACKAGE = '@jantama/engine' as const;

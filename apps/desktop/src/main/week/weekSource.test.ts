@@ -1,7 +1,7 @@
 /**
  * 週の集計の元の数（ACCEPTANCE の U-30。D-3）の単体試験: 作った答えと、取り込んだ半荘（FX-4・FX-1）から、週ごとの数が手で数えた値になる。
  * - 消した半荘（一覧に無い半荘）の答えは数えない。結果を読めない半荘の答えも数えない
- * - 評価は、局の表の自分の〇△✕と AI 基準（局の表の旗と同じ帯の規則）から。FX-4 は、AI 基準がすべて〇の帯（S+・S-・A・S・S-）
+ * - 評価は、局の表の自分の〇△✕と AI 基準（局の表の旗と同じ帯の規則）から。FX-4 の AI 基準は S+・S-・A・S・S-（A だけが△の帯で、あとは〇の帯）
  */
 import {
   RATING_LINK_VERSION,
@@ -197,23 +197,23 @@ describe('U-30 週の元の数（答え・半荘から）', () => {
     expect(summarizeWeeks([W], withReview).get(W)?.marksAnswered).toBe(1);
   });
 
-  it('評価: 自分の〇△✕と AI 基準がそろった局が、結果つきで入る。FX-4 は 5 局（AI 基準はすべて〇の帯）', () => {
+  it('評価: 自分の〇△✕と AI 基準がそろった局が、結果つきで入る。FX-4 は 5 局（東2局1本場の△と A だけが同じ帯）', () => {
     const { source } = sourceOf(setup, [PREV, W]);
-    // 東1局 △（S+）・東2局 ✕（S-）・東2局1本場 △（A）・東3局 ✕（S）・東3局1本場 ✕（S-）。自分 - AI 基準 = -1・-2・-1・-2・-2
+    // 東1局 △（S+）・東2局 ✕（S-）・東2局1本場 △（A）・東3局 ✕（S）・東3局1本場 ✕（S-）。自分 - AI 基準 = -1・-2・0・-2・-2
     // 結果: 他家のツモ・他家のツモ・自分の和了・放銃・放銃
     expect(source.evaluations.map((e) => [e.week, e.result, e.offset])).toEqual([
       [W, 'others', -1],
       [W, 'others', -2],
-      [W, 'win', -1],
+      [W, 'win', 0],
       [W, 'dealIn', -2],
       [W, 'dealIn', -2],
     ]);
     const week = summarizeWeeks([W], source).get(W);
     expect(week?.evaluated).toBe(5);
-    expect(week?.agreed).toBe(0);
-    expect(week?.agreePercent).toBe(0);
+    expect(week?.agreed).toBe(1);
+    expect(week?.agreePercent).toBe(20);
     expect(week?.results.map((r) => [r.id, r.n, r.mean])).toEqual([
-      ['win', 1, -1],
+      ['win', 1, 0],
       ['dealIn', 2, -2],
       ['draw', 0, null],
       ['others', 2, -1.5],
@@ -227,15 +227,16 @@ describe('U-30 週の元の数（答え・半荘から）', () => {
       self_ratings: { kyokus: { k0h0: 'good', k1h0: 'none', k2h0: 'good' } },
     };
     const { source } = sourceOf({ sessions: [edited, fx1a()], answers: [] }, [W]);
-    // 東1局 〇（S+）= 0、東2局 評価なし、東2局1本場 △（A）= -1、東3局 〇（S）= 0、東3局1本場 ✕（S-）= -2
+    // 東1局 〇（S+）= 0、東2局 評価なし、東2局1本場 △（A）= 0、東3局 〇（S）= 0、東3局1本場 ✕（S-）= -2
     expect(source.evaluations.map((e) => [e.result, e.offset])).toEqual([
       ['others', 0],
-      ['win', -1],
+      ['win', 0],
       ['dealIn', 0],
       ['dealIn', -2],
     ]);
     const week = summarizeWeeks([W], source).get(W);
-    expect([week?.evaluated, week?.agreed, week?.agreePercent]).toEqual([4, 2, 50]);
+    // 東1局・東2局1本場・東3局 が同じ帯で一致、東3局1本場（✕と S-）だけがずれる
+    expect([week?.evaluated, week?.agreed, week?.agreePercent]).toEqual([4, 3, 75]);
   });
 
   it('AI 基準の段階は、渡したまとめの段階（MAKA の評価から合わせ直した当てはめのもの）から決まる', () => {

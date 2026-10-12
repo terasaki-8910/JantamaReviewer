@@ -58,11 +58,13 @@ describe('F10 局の評価の表の行（FX-4）', () => {
     expect(table.rows.every((r) => r.override === undefined && r.widget === r.self)).toBe(true);
   });
 
-  it('〇と付けた局で AI 基準が S・A なら印は付かない。✕と付けて S・A のときだけ付く', () => {
+  it('〇と付けた局は、AI 基準が S でも A でも印は付かない。✕と付けた局は、AI 基準が S のときだけ印が付き、A のときは付かない', () => {
     const all = build(session({ ratings: ['good', 'good', 'good', 'good', 'good'] }));
     expect(all.flaggedCount).toBe(0);
     const bad = build(session({ ratings: ['bad', 'bad', 'bad', 'bad', 'bad'] }));
-    expect(bad.rows.map((r) => r.flagged)).toEqual([true, true, true, true, true]);
+    // AI 基準は S+・S-・A・S・S-。東2局1本場だけが A（△の帯）で、✕とは帯が 1 つしか離れないので印は付かない
+    expect(bad.rows.map((r) => r.flagged)).toEqual([true, true, false, true, true]);
+    expect(bad.flaggedCount).toBe(4);
   });
 
   it('評価の結びつけが保存されていないときは、自動の当てはめ（迷いと評価を押した時刻の順。E-29）を使う', () => {
@@ -126,7 +128,9 @@ describe('F10 局の評価の表の行（FX-4）', () => {
     );
     expect(table.rows[2]?.widget).toBeNull();
     expect(table.rows[2]?.self).toBe('bad');
-    expect(table.rows[2]?.flagged).toBe(true); // 東2局1本場は A
+    // 東2局1本場は A（△の帯）なので、上書きで✕を付けても印は付かない（帯が 1 つ離れ）。S の局に付けた✕（東2局・東3局・東3局1本場）には印が付く
+    expect(table.rows[2]?.flagged).toBe(false);
+    expect(table.rows.map((r) => r.flagged)).toEqual([false, true, false, true, true]);
   });
 
   it('MAKA: 入れた段階を出す。入れていない局・14 段階にない文字は空', () => {
