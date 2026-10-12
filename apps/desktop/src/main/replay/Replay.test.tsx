@@ -1050,6 +1050,10 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     expect(study.rows[0]?.shown_at).toBeGreaterThan(0);
     expect(document.querySelectorAll('[data-ai="candidate"]').length).toBeGreaterThanOrEqual(3);
     expect(document.querySelectorAll('.uk-open').length).toBeGreaterThanOrEqual(2);
+    // 役の欄（U-33）: 出題と同じ部品が、受け入れ枚数の欄の下に出る
+    expect(screen.getByRole('heading', { name: '役' })).toBeInTheDocument();
+    expect(document.querySelector('[data-ai="ukeire-box"] + [data-ai="yaku-box"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-ai="yaku-box"] li.yk-row').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole('button', { name: '次の場面へ' })).toBeInTheDocument();
     // 今日の出題でも、答えたことになる（サイドバーの数が減る）
     await waitFor(() => expect(sideCount(/^今日の出題/)).toBe('4'));
@@ -1089,12 +1093,15 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     press(PERIOD);
     expect(answeringState()).toBe('browse');
     expect(document.querySelector('[data-ai]')).toBeNull();
+    expect(screen.queryByRole('heading', { name: '役' })).toBeNull();
     expect(rest()).toBe('1 / 10 解答済み');
     expect(document.querySelectorAll('.sc-row[data-done="1"]')).toHaveLength(1);
     press(COMMA);
     expect(answeringState()).toBe('revealed');
     expect(screen.getByText('形を崩さない')).toBeInTheDocument();
     expect(document.querySelectorAll('[data-ai="candidate"]').length).toBeGreaterThanOrEqual(3);
+    // 戻ると、役の欄も出る（ほかの手を見ている間は、欄が DOM に無い）
+    expect(screen.getByRole('heading', { name: '役' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '答え合わせ' })).toBeNull();
   });
 

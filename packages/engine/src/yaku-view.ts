@@ -543,6 +543,8 @@ export interface YakuBlock {
   option: AnswerOption | null;
   /** その行動のあとの手が門前か（確定している役の飜に「（副露）」を付けるか）。 */
   closed: boolean;
+  /** 見立ての状態（副露した手の役無しの種類。警告の札の文字を決める）。 */
+  state: YakuState;
   summary: YakuSummary;
   text: YakuText;
   afterDiscard: YakuAfterDiscard[];
@@ -628,6 +630,7 @@ export function yakuBoxOf(decision: Pick<Decision, 'kind' | 'entry' | 'board'>, 
       tile: choice.type === 'dahai' ? choice.tile : null,
       option: choice.type === 'option' ? (buttons.find((o) => o.id === choice.id) ?? null) : null,
       closed: view.closed,
+      state: view.state,
       summary: {
         discardFirst: total % 3 === 2,
         shanten: shantenOfCounts(shape.counts),

@@ -6,6 +6,7 @@
  * - AI の評価の棒: 候補の確率の高い順に、上位 4 つと、自分の答え・実戦の行動（どれにも当たらない自分の答えは、確率 0 で足す）
  * - 受け入れ枚数の行（打牌の判断だけ）: 自分・実戦・AI・最大。同じ打牌の行は 1 つにまとめる（E-22: 手牌だけの枚数と残り）
  * - 一言: 自分の打牌と AI の打牌の、向聴数と受け入れ枚数の比べ方
+ * - 役の欄（F13。R14-1）: 自分・実戦・AI の行動ごとの、確定している役・近い役・役無しの警告（エンジンの `yakuBoxOf`）
  */
 import {
   actualChoice,
@@ -20,12 +21,14 @@ import {
   sameChoice,
   shantenTag,
   topChoice,
+  yakuBoxOf,
   type AnswerOption,
   type Decision,
   type DiscardDetail,
   type QuizChoice,
   type Tile,
   type TwoShantenFollow,
+  type YakuBox,
 } from '@jantama/engine';
 
 export type BarMark = '自分' | '実戦' | 'AI';
@@ -81,6 +84,8 @@ export interface RevealModel {
   /** AI の 1 位の打牌（打牌の判断で、1 位が打牌のとき）。 */
   topTile: Tile | null;
   ukeire: UkeireBox | null;
+  /** 欄「役」の中身。比べる行動が無い判断（カン・和了）は null。 */
+  yaku: YakuBox | null;
 }
 
 /** 確率の書き方: 97.72%、0.01% 未満は <0.01%。 */
@@ -215,9 +220,10 @@ export function buildReveal(decision: Decision, choice: QuizChoice, threshold?: 
       actualTile: decision.entry.actual.type === 'dahai' ? decision.entry.actual.pai : null,
       topTile: topAction?.type === 'dahai' ? topAction.pai : null,
       ukeire: ukeireBox(decision, choice.tile),
+      yaku: yakuBoxOf(decision, choice),
     };
   }
-  return { probability, correct, bars: optionBars(decision, choice), actualTile: null, topTile: null, ukeire: null };
+  return { probability, correct, bars: optionBars(decision, choice), actualTile: null, topTile: null, ukeire: null, yaku: yakuBoxOf(decision, choice) };
 }
 
 /**
