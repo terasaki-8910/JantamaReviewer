@@ -9,20 +9,20 @@ import { FX4_ID, loadReportText } from './helpers/fixtures';
 
 const MARKS: HandMark[] = ['good', 'fair', 'bad'];
 
-describe('F10 自己評価と AI 基準の食い違い（暫定の規則）', () => {
-  it('段階は、S+〜A- が〇の帯、B+〜B- が△の帯、C+〜E が✕の帯', () => {
+describe('F10 自己評価と AI 基準の食い違い（R13-3 の帯）', () => {
+  it('段階は、S+〜S- が〇の帯、A+〜A- が△の帯、B+〜E が✕の帯（R13-3）', () => {
     const bands: Record<string, number> = {};
     for (const grade of GRADES) bands[grade] = gradeBand(grade);
     expect(bands).toEqual({
       'S+': 0,
       S: 0,
       'S-': 0,
-      'A+': 0,
-      A: 0,
-      'A-': 0,
-      'B+': 1,
-      B: 1,
-      'B-': 1,
+      'A+': 1,
+      A: 1,
+      'A-': 1,
+      'B+': 2,
+      B: 2,
+      'B-': 2,
       'C+': 2,
       C: 2,
       'C-': 2,
@@ -35,13 +35,13 @@ describe('F10 自己評価と AI 基準の食い違い（暫定の規則）', ()
     expect(MARKS.map(markBand)).toEqual([0, 1, 2]);
   });
 
-  it('印が付くのは、帯が 2 つ離れたとき: ✕と付けて S・A の帯、または〇と付けて C 以下の帯', () => {
+  it('印が付くのは、帯が 2 つ離れたとき: ✕と付けて S の帯、または〇と付けて B 以下の帯', () => {
     expect(FLAG_BAND_GAP).toBe(2);
-    for (const grade of ['S+', 'S', 'S-', 'A+', 'A', 'A-'] as const) {
+    for (const grade of ['S+', 'S', 'S-'] as const) {
       expect(disagreesWithGrade('bad', grade), `✕ と ${grade}`).toBe(true);
       expect(disagreesWithGrade('good', grade), `〇 と ${grade}`).toBe(false);
     }
-    for (const grade of ['C+', 'C', 'C-', 'D', 'E'] as const) {
+    for (const grade of ['B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'E'] as const) {
       expect(disagreesWithGrade('good', grade), `〇 と ${grade}`).toBe(true);
       expect(disagreesWithGrade('bad', grade), `✕ と ${grade}`).toBe(false);
     }
@@ -51,8 +51,8 @@ describe('F10 自己評価と AI 基準の食い違い（暫定の規則）', ()
     for (const grade of GRADES) expect(disagreesWithGrade('fair', grade), grade).toBe(false);
   });
 
-  it('B の帯は、〇とも✕とも印が付かない', () => {
-    for (const grade of ['B+', 'B', 'B-'] as const) {
+  it('A の帯は、〇とも✕とも印が付かない（12回目の補足「Aが×は納得」）', () => {
+    for (const grade of ['A+', 'A', 'A-'] as const) {
       expect(disagreesWithGrade('good', grade), grade).toBe(false);
       expect(disagreesWithGrade('bad', grade), grade).toBe(false);
     }
@@ -79,14 +79,14 @@ describe('F10 自己評価と AI 基準の食い違い（暫定の規則）', ()
 describe('U-30 週の集計の「一致」と「ずれ」は、同じ帯の規則から決まる（別の規則を作らない）', () => {
   it('ずれは、自分の評価（〇3・△2・✕1）から AI 基準の帯の評価を引いた値。AI より低く付けると負', () => {
     expect(markOffsetFromGrade('bad', 'S')).toBe(-2);
-    expect(markOffsetFromGrade('bad', 'B')).toBe(-1);
-    expect(markOffsetFromGrade('fair', 'A')).toBe(-1);
-    expect(markOffsetFromGrade('good', 'A')).toBe(0);
-    expect(markOffsetFromGrade('fair', 'B-')).toBe(0);
-    expect(markOffsetFromGrade('bad', 'E')).toBe(0);
-    expect(markOffsetFromGrade('good', 'B+')).toBe(1);
-    expect(markOffsetFromGrade('good', 'C+')).toBe(2);
-    expect(markOffsetFromGrade('fair', 'D')).toBe(1);
+    expect(markOffsetFromGrade('bad', 'A')).toBe(-1);
+    expect(markOffsetFromGrade('fair', 'S-')).toBe(-1);
+    expect(markOffsetFromGrade('good', 'S-')).toBe(0);
+    expect(markOffsetFromGrade('fair', 'A-')).toBe(0);
+    expect(markOffsetFromGrade('bad', 'B+')).toBe(0);
+    expect(markOffsetFromGrade('good', 'A+')).toBe(1);
+    expect(markOffsetFromGrade('good', 'B')).toBe(2);
+    expect(markOffsetFromGrade('fair', 'C')).toBe(1);
   });
 
   it('自己評価か段階が無い局は、比べない（ずれも一致も null）', () => {

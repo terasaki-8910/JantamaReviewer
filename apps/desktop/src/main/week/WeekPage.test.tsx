@@ -328,7 +328,7 @@ describe('U-30 局の評価: 一致率と、結果ごとのずれ', () => {
     expect(textOf(evaluation.querySelector('.wk-note'))).toBe('和了できなかった局（放銃・他家の和了）を、AI より平均 1.8 段階低く付けています');
     // 説明の文は、説明のアイコンにある
     expect(within(evaluation).getByRole('button', { name: '一致率とずれの説明' })).toHaveAccessibleDescription(
-      '〇を3・△を2・✕を1として、自分の評価から AI 基準の評価を引いた平均です。0 は AI と同じ評価です。',
+      '〇を3・△を2・✕を1として、自分の評価から AI 基準の評価を引いた平均です。AI 基準は、S を〇、A を△、B 以下を✕として数えます。0 は AI と同じ評価です。',
     );
   });
 
