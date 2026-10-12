@@ -16,6 +16,8 @@ pub enum OcrError {
     Recognize(String),
     /// 文字認識の担当のスレッドを起こせなかった・止まっていた。
     Worker(String),
+    /// この OS の文字認識は、まだ作っていない（macOS 対応の途中）。
+    Unsupported(String),
 }
 
 impl fmt::Display for OcrError {
@@ -36,6 +38,7 @@ impl fmt::Display for OcrError {
             ),
             OcrError::Recognize(reason) => write!(f, "文字認識に失敗しました: {reason}"),
             OcrError::Worker(reason) => write!(f, "文字認識の担当を動かせませんでした: {reason}"),
+            OcrError::Unsupported(reason) => write!(f, "この環境では文字認識を使えません: {reason}"),
         }
     }
 }
@@ -65,6 +68,7 @@ mod tests {
             },
             OcrError::Recognize("x".into()),
             OcrError::Worker("x".into()),
+            OcrError::Unsupported("ほげ".into()),
         ];
         for error in errors {
             let text = error.to_string();

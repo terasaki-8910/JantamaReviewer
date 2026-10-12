@@ -4,29 +4,21 @@
 //! ゲームの画面やデータを機械で読み取らず、ゲームのプロセスにも触れず、通信もしない
 //! （SPEC 2章。`tests/safety.rs` が機械的に確かめる）。
 
-#[cfg(not(windows))]
-compile_error!("JantamaReviewer は Windows 専用です。");
-
 pub mod app_core;
 pub mod appearance;
 pub mod capture;
-#[cfg(windows)]
-pub mod capture_win;
 pub mod clipboard;
 pub mod clock;
 pub mod commands;
 pub mod evaluation;
 pub mod external;
-#[cfg(windows)]
-pub mod helper_link;
-pub mod helper_setup;
 pub mod import;
-#[cfg(windows)]
 pub mod input_effects;
 pub mod input_flow;
 pub mod memo;
 pub mod menu;
 pub mod navigation;
+pub mod platform;
 pub mod ready;
 pub mod recorder;
 pub mod replay_keys;
@@ -37,8 +29,6 @@ pub mod study;
 pub mod trash;
 pub mod webview_data;
 pub mod webview_policy;
-#[cfg(windows)]
-pub mod webview_win;
 pub mod widget_window;
 
 use std::error::Error;
@@ -49,18 +39,15 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{Manager, WindowEvent};
 
 use crate::app_core::Core;
-use crate::capture_win::WindowsCapturer;
 use crate::commands::{
     InputHandle, PositionSaver, SharedCore, SharedShowGate, SoundMenuItems, WidgetMenu,
     SHOW_TIMEOUT,
 };
-use crate::helper_link::HelperWriter;
 use crate::input_effects::TauriEffects;
 use crate::input_flow::{spawn_service, Input, InputState};
-use crate::sound::WindowsSound;
+use crate::platform::Platform;
 use crate::widget_window::{
-    apply_native_style, build_window, main_window_spec, move_window, widget_window_spec,
-    MAIN_LABEL, WIDGET_LABEL,
+    build_window, main_window_spec, move_window, widget_window_spec, MAIN_LABEL, WIDGET_LABEL,
 };
 
 /// 設定フォルダを置き換える環境変数。試しに動かすときに、本物の設定やデータに触れないために使う。
@@ -211,10 +198,12 @@ fn config_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let handle = app.handle().clone();
 
+    // OS ごとの部品（撮影・音・補助プログラム）。OS の違いは platform の中に閉じる。
+    let platform = Platform::native();
     let core = Core::load(
         config_dir(app)?,
-        Arc::new(WindowsCapturer),
-        Arc::new(WindowsSound),
+        Arc::clone(&platform.capturer),
+        Arc::clone(&platform.sound),
     );
     let settings = core.settings().clone();
     if let Some(note) = core.startup_note() {
@@ -230,20 +219,24 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
 
     // 入力の流れ: 本体の中のフック・補助プログラム・ボタンの登録とテスト（W-9、W-10、W-11）。
     // フックを入れられなくても、ウィジェットのボタンだけで動かせる。
-    let helper_writer = HelperWriter::default();
     let (service, _worker) = spawn_service(InputState::new(settings.trigger.to_active()), {
         let handle = handle.clone();
-        let writer = helper_writer.clone();
-        move |feedback| TauriEffects::start(handle, writer, feedback)
+        let helper = Arc::clone(&platform.helper);
+        move |feedback| TauriEffects::start(handle, helper, feedback)
     });
     // 補助プログラムは、パイプを開いてから起動する（起動した補助プログラムが、すぐにつなぎにくる）。
-    match helper_link::spawn_server(service.sender(), helper_writer) {
-        Ok(()) => commands::start_helper_at_launch(&service.sender()),
-        Err(e) => {
-            eprintln!("補助プログラムのパイプを開けませんでした（本体のフックで動かします）: {e}")
+    // 補助プログラムの無い OS では、開かない（入力の流れは、常に本体のフックだけで動く）。
+    if platform.helper.supported() {
+        match platform.helper.serve(service.sender()) {
+            Ok(()) => commands::start_helper_at_launch(&service.sender(), &platform.helper),
+            Err(e) => {
+                eprintln!(
+                    "補助プログラムのパイプを開けませんでした（本体のフックで動かします）: {e}"
+                )
+            }
         }
     }
-    app.manage(InputHandle::new(service));
+    app.manage(InputHandle::new(service, Arc::clone(&platform.helper)));
     app.manage(PositionSaver(Mutex::new(commands::spawn_position_saver(
         handle.clone(),
     ))));
@@ -253,7 +246,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     app.manage(SharedShowGate::new());
     let widget_spec = widget_window_spec(settings.orientation);
     let widget = build_window(app, &widget_spec)?;
-    apply_native_style(&widget, &widget_spec);
+    platform::style_window(&widget, &widget_spec);
     if let Some(position) = commands::initial_widget_position(&widget, settings.widget_position) {
         move_window(&widget, position);
     }
@@ -261,7 +254,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // 検討画面の窓。起動時は隠しておく。
     let main_spec = main_window_spec();
     let main_window = build_window(app, &main_spec)?;
-    apply_native_style(&main_window, &main_spec);
+    platform::style_window(&main_window, &main_spec);
     // 開発と確認用: 引数に --show-main があれば、起動と同時に検討画面を開く（画面が描き終えたら見せる）。
     if std::env::args().any(|arg| arg == SHOW_MAIN_ARG) {
         commands::open_main_window_now(&handle);

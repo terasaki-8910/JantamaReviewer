@@ -7,6 +7,9 @@
 //! - S-2: 雀魂のドメインへの通信、通信の部品（HTTP クライアントなど）。
 //! - S-3: 画像の解析・文字認識のライブラリ（PNG の書き出しは良い）。
 //! - S-4: ウィジェットのコードが、ファイル保存と記録の追記以外の窓口（プラグインなど）を読み込むこと。
+//! - macOS（段階 1 から。`analysis/mac/README.md` 4 章）: 画面を続けて取り続ける・ほかのアプリの要素を読む・入力を送る・
+//!   ほかのプロセスに触れる・外部プロセスで撮影する・デバッグ用の権限を付ける API と部品。静止画 1 枚の撮影・入力のタップ・
+//!   文字認識は、決めた 1 か所だけ。
 //!
 //! 走査の道具そのものも、禁止の一覧のすべてを実際に検出できることをテストする。
 //! 後の機能が通信や文字認識を足すときは、`ALLOWED_*` に理由つきで足す（取り込み F1・F11 が足したのは、
@@ -175,8 +178,15 @@ const VISION_TS: &[&str] = &[
     "tesseract",
 ];
 
-/// S-3: Rust の画像の解析の窓口。
-const VISION_RUST: &[&str] = &["Media_Ocr", "OcrEngine", "Windows.Media.Ocr"];
+/// S-3: Rust の画像の解析の窓口（Windows の文字認識と、macOS の Vision）。文字認識のクレート（`ocr`）の外に置かない。
+const VISION_RUST: &[&str] = &[
+    "Media_Ocr",
+    "OcrEngine",
+    "Windows.Media.Ocr",
+    "VNRecognizeTextRequest",
+    "VNImageRequestHandler",
+    "VNSequenceRequestHandler",
+];
 
 /// 通信してよい場所（ファイル名とその理由）。F1 などが足すときは、必ず理由を書く。
 /// ここに載せたファイルは S-2 の走査（雀魂のドメイン・通信の部品・URL の書き方）から外れる。
@@ -1404,10 +1414,19 @@ fn s3_the_ocr_crate_reads_saved_images_and_does_nothing_else() {
 
 // ---- クリップボード: 文字を読むだけ（F1・E-15） ----
 
+/// クリップボードの文字を読む OS ごとの実装（読み取りの口はここだけ）。
+fn clipboard_reader_source() -> PathBuf {
+    crate_dir()
+        .join("src")
+        .join("platform")
+        .join("win")
+        .join("clipboard.rs")
+}
+
 #[test]
 fn s4_the_clipboard_is_only_read_as_text_and_only_the_import_command_reads_it() {
-    let clipboard = read(&crate_dir().join("src").join("clipboard.rs"));
-    let product = product_part(&clipboard);
+    let reader = read(&clipboard_reader_source());
+    let product = product_part(&reader);
     // 読む口は 1 つ（文字の形式だけ）。書き込み・消去・ほかの形式（画像・ファイルの一覧・HTML など）・監視は使わない。
     assert!(product.contains("get_clipboard_string()"));
     assert!(product.contains("CF_UNICODETEXT"));
@@ -1428,6 +1447,8 @@ fn s4_the_clipboard_is_only_read_as_text_and_only_the_import_command_reads_it() 
     }
     // クリップボードのクレートに触れるのは、このファイルだけ。
     let mut users: Vec<String> = Vec::new();
+    // OS ごとの読み取り（`platform::read_clipboard_string`）を呼ぶのは、鍵を持つ `src/clipboard.rs` だけ。
+    let mut platform_callers: Vec<String> = Vec::new();
     // 文字を読む関数を呼ぶのは、取り込みのコマンドだけ。
     let mut readers: Vec<String> = Vec::new();
     for file in rust_sources() {
@@ -1436,12 +1457,17 @@ fn s4_the_clipboard_is_only_read_as_text_and_only_the_import_command_reads_it() 
         if text.contains("clipboard_win") {
             users.push(name.clone());
         }
+        if product_part(&text).contains("platform::read_clipboard_string(") {
+            platform_callers.push(name.clone());
+        }
         if text.contains("clipboard::read_text") {
             readers.push(name);
         }
     }
     assert_eq!(users.len(), 1, "{users:?}");
-    assert!(users[0].ends_with("src/clipboard.rs"));
+    assert!(users[0].ends_with("src/platform/win/clipboard.rs"));
+    assert_eq!(platform_callers.len(), 1, "{platform_callers:?}");
+    assert!(platform_callers[0].ends_with("src/clipboard.rs"));
     assert_eq!(readers.len(), 1, "{readers:?}");
     assert!(readers[0].ends_with("src/import/commands.rs"));
 }
@@ -1487,14 +1513,19 @@ fn s4_the_clipboard_is_read_one_caller_at_a_time() {
     let lock_at = read_text
         .find("exclusive(")
         .expect("read_text が鍵の中で動かす");
-    for call in ["is_format_avail(", "get_clipboard_string()"] {
-        let at = read_text
-            .find(call)
-            .unwrap_or_else(|| panic!("{call} がある"));
-        assert!(at > lock_at, "{call} が鍵の外にある");
-    }
-    // クリップボードのクレートの読み取りを呼ぶのは、この 1 つの関数だけ。
-    assert_eq!(product.matches("get_clipboard_string()").count(), 1);
+    let call = "crate::platform::read_clipboard_string()";
+    let at = read_text
+        .find(call)
+        .unwrap_or_else(|| panic!("{call} がある"));
+    assert!(at > lock_at, "{call} が鍵の外にある");
+    // OS ごとの読み取りを呼ぶのは、この 1 つの関数だけ。
+    assert_eq!(product.matches("read_clipboard_string()").count(), 1);
+
+    // Windows の読み取りは、クリップボードのクレートの読み取りを 1 回だけ呼ぶ。
+    let reader = read(&clipboard_reader_source());
+    let reader = product_part(&reader);
+    assert_eq!(reader.matches("get_clipboard_string()").count(), 1);
+    assert_eq!(reader.matches("is_format_avail(").count(), 1);
 }
 
 // ---- mjai の窓: 外のページにアプリの権限を与えない（F1・R3-3） ----
@@ -2155,9 +2186,15 @@ fn u9_the_recycle_bin_api_is_called_from_one_place_and_with_the_undo_flag() {
         1,
         "ごみ箱の API を呼ぶファイルが 1 つではない: {users:?}"
     );
-    assert!(users[0].ends_with("src/trash.rs"), "{users:?}");
+    assert!(users[0].ends_with("src/platform/win/trash.rs"), "{users:?}");
 
-    let trash = read(&crate_dir().join("src").join("trash.rs"));
+    let trash = read(
+        &crate_dir()
+            .join("src")
+            .join("platform")
+            .join("win")
+            .join("trash.rs"),
+    );
     let product = product_part(&trash);
     assert_eq!(
         product.matches(&format!("{RECYCLE_API}(&mut op)")).count(),
@@ -2188,13 +2225,30 @@ fn u9_the_recycle_bin_api_is_called_from_one_place_and_with_the_undo_flag() {
 
 #[test]
 fn u9_the_real_recycler_is_made_in_one_function_and_nothing_deletes_folders_in_place() {
-    // 本物のごみ箱の道具を作るのは、置き場を片づける 1 つの関数だけ。ほかは、その関数を呼ぶ。
+    // 本物のごみ箱の道具は、OS ごとの実装の 1 つのファイルの 1 つの関数（`platform::recycler`）だけが作る。
     let makers = product_files_containing("WindowsRecycler");
     assert_eq!(makers.len(), 1, "{makers:?}");
-    assert!(makers[0].ends_with("src/trash.rs"), "{makers:?}");
+    assert!(
+        makers[0].ends_with("src/platform/win/trash.rs"),
+        "{makers:?}"
+    );
+    let windows_trash = read(&PathBuf::from(&makers[0]));
+    assert_eq!(
+        product_part(&windows_trash)
+            .matches("Box::new(WindowsRecycler)")
+            .count(),
+        1,
+        "recycler の 1 か所だけ"
+    );
+    // その関数を呼ぶのは、置き場を片づける 1 つの関数（recycle_pending）だけ。
+    let callers = product_files_containing("platform::recycler(");
+    assert_eq!(callers.len(), 1, "{callers:?}");
+    assert!(callers[0].ends_with("src/trash.rs"), "{callers:?}");
     let trash = read(&crate_dir().join("src").join("trash.rs"));
     assert_eq!(
-        product_part(&trash).matches("&WindowsRecycler").count(),
+        product_part(&trash)
+            .matches("crate::platform::recycler()")
+            .count(),
         1,
         "recycle_pending の 1 か所だけ"
     );
@@ -2369,4 +2423,356 @@ fn d3_every_study_command_refuses_calls_from_other_windows_and_the_widget_never_
     for name in STUDY_COMMANDS {
         assert!(!widget_cap.contains(name), "{name} が widget.json にある");
     }
+}
+
+// ---- macOS: 規約の線引き（macOS 対応の段階 1。analysis/mac/README.md 4 章） ----
+//
+// macOS の部分は、いまは雛形（`src/platform/mac.rs`、`ocr/src/mac.rs`）だけで、macOS の API は 1 つも呼んでいない。
+// 段階 3 以降で作るときに、SPEC 2章の線（対局中に動くのは、押された瞬間の画面 1 枚の保存と記録の追記だけ）を越えさせないため、
+// 禁止の一覧を先に機械の関門にする。語の書き方: `*` で終わるものは前方一致（`AXUIElement*` は `AXUIElementCopyAttributeValue` などにも
+// 当たる）、そうでないものは、その語そのもの（`SCStream` は `SCStreamConfiguration` に当たらない。静止画 1 枚の撮影にも
+// `SCStreamConfiguration` は要るため）。製品のソースの試験の部分（`#[cfg(test)]` 以降）や、`tests/` の結合試験は見ない
+// （入力の送信は、試験だけに許す）。
+
+/// macOS の API のうち、製品のコードで使わないもの（種類ごとの語）。
+const MAC_FORBIDDEN: &[(&str, &[&str])] = &[
+    (
+        "画面を続けて取り続ける・録る",
+        &[
+            "SCStream",
+            "SCStreamOutput*",
+            "SCStreamDelegate*",
+            "SCRecordingOutput*",
+            "SCContentSharingPicker*",
+            "CGDisplayStream*",
+            "AVCaptureScreenInput*",
+            "AVCaptureSession*",
+        ],
+    ),
+    (
+        "撮影の古い道（撮影は、静止画 1 枚の ScreenCaptureKit の 1 か所に閉じる）",
+        &["CGWindowListCreateImage*", "CGDisplayCreateImage*"],
+    ),
+    (
+        "ほかのアプリの画面の要素・文字を読む（許可の確認 AXIsProcessTrusted は使ってよい）",
+        &["AXUIElement*", "AXObserver*"],
+    ),
+    (
+        "入力を送る（試験だけに許す）",
+        &["CGEventPost*", "CGEventTapPostEvent*", "IOHIDPostEvent*"],
+    ),
+    (
+        "ほかのプロセスの読み書き・差し込み",
+        &[
+            "task_for_pid",
+            "mach_vm_*",
+            "vm_read*",
+            "vm_write*",
+            "ptrace",
+            "DYLD_INSERT_LIBRARIES",
+        ],
+    ),
+    (
+        "外部プロセスでの撮影",
+        &["\"screencapture\"", "/usr/sbin/screencapture"],
+    ),
+    ("デバッグ用の権限", &["get-task-allow"]),
+];
+
+/// 署名・権限の設定ファイル（plist・entitlements・JSON・TOML など）に書かない語。配布する作りに、ほかのプロセスから付けられる権限や、
+/// 環境変数での差し込みを許す権限を入れない。
+const MAC_FORBIDDEN_CONFIG: &[&str] = &[
+    "get-task-allow",
+    "com.apple.security.cs.debugger",
+    "com.apple.security.cs.allow-dyld-environment-variables",
+];
+
+/// 決めた 1 か所のソースだけが使ってよい macOS の API（語、使ってよいソース（理由つき））。
+/// 使ってよいソースの一覧は、実際にその語を使っているソースと一致させる（足りなくても、余っていても失敗する）。
+/// 段階 1 では macOS の実装を作っていないので、どれも空。作るときに、そのソースを理由つきで足す。
+const MAC_ONE_PLACE: &[OnePlace] = &[
+    // 静止画 1 枚の撮影（M-3）。呼び出し元は、ボタンが押された瞬間の処理だけにする。
+    OnePlace {
+        kind: "静止画 1 枚の撮影",
+        words: &["SCScreenshotManager*"],
+        allowed: &[],
+    },
+    // ボタンを拾う入力のタップ。必要な種類のイベントだけを見て、内容はディスクに残さない。
+    OnePlace {
+        kind: "入力のタップ",
+        words: &["CGEventTap*"],
+        allowed: &[],
+    },
+];
+
+/// 決めた 1 か所のソースだけが使ってよい macOS の API。
+struct OnePlace {
+    kind: &'static str,
+    /// 語（書き方は上の説明のとおり）。
+    words: &'static [&'static str],
+    /// 使ってよいソース（`src-tauri` からの相対パスの末尾）と、その理由。
+    allowed: &'static [(&'static str, &'static str)],
+}
+
+/// 宣言してよいクレートを 1 つのクレートに限る macOS の部品（クレート名、宣言してよいクレートのフォルダ（`src-tauri` からの相対。本体は `.`）、理由）。
+/// 段階 3・4 で足すときは、宣言する側のクレートと理由を決めてから、使う。
+const MAC_GATED_CRATES: &[(&str, &str, &str)] = &[
+    (
+        "objc2-screen-capture-kit",
+        ".",
+        "M-3: 静止画 1 枚の撮影。撮影のモジュール（本体のクレート）だけが使う。ボタンを拾う部分・補助プログラム・文字認識には入れない",
+    ),
+    (
+        "objc2-vision",
+        "ocr",
+        "S-3: 取り込みのときだけ、保存済みの画像を読む。文字認識のクレートだけが使う",
+    ),
+];
+
+/// 使わない macOS の部品（クレート）。Cargo.toml の依存に宣言しない。
+/// 画面を撮る・入力を送る・ほかのアプリの要素を読む・ほかのプロセスに触れる部品。
+/// （`objc2-core-graphics` などは tao・wry を通して依存の一覧に入るので、一覧（Cargo.lock）ではなく、宣言（Cargo.toml）だけを見る。）
+const MAC_FORBIDDEN_CRATES: &[&str] = &[
+    "screencapturekit",
+    "scrap",
+    "xcap",
+    "enigo",
+    "autopilot",
+    "rdev",
+    "accessibility",
+    "objc2-av-foundation",
+    "mach2",
+    "mach",
+];
+
+/// 語の前後が識別子の文字（英数字と `_`）でないものを探す（`*` で終わる語は前方一致）。見つかった（行番号, 語）を返す。
+fn scan_mac_words(text: &str, words: &[&str]) -> Vec<(usize, String)> {
+    let is_ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut hits = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        for word in words {
+            let (core, prefix) = match word.strip_suffix('*') {
+                Some(core) => (core, true),
+                None => (*word, false),
+            };
+            let mut from = 0;
+            while let Some(found) = line[from..].find(core) {
+                let start = from + found;
+                let end = start + core.len();
+                let before_ok = !core.starts_with(is_ident) || !line[..start].ends_with(is_ident);
+                let after_ok =
+                    prefix || !core.ends_with(is_ident) || !line[end..].starts_with(is_ident);
+                if before_ok && after_ok {
+                    hits.push((index + 1, (*word).to_string()));
+                    break;
+                }
+                from = end;
+            }
+        }
+    }
+    hits
+}
+
+/// macOS の API を調べる Rust のソース: 製品（本体・共有の部品・補助プログラム）と、文字認識のクレート。
+fn mac_scanned_sources() -> Vec<PathBuf> {
+    let mut files = rust_sources();
+    files.extend(ocr_sources());
+    files.sort();
+    files
+}
+
+/// 署名・権限の設定を書くファイル: 本体のクレートの下（Tauri の設定・plist・entitlements など）と、リポジトリの作る・梱包する手順の置き場。
+fn mac_config_files() -> Vec<PathBuf> {
+    let accept = |p: &Path| {
+        has_ext(
+            p,
+            &[
+                "plist",
+                "entitlements",
+                "json",
+                "toml",
+                "xml",
+                "sh",
+                "ps1",
+                "mjs",
+                "yml",
+                "yaml",
+            ],
+        )
+    };
+    let mut files = files_under(&crate_dir(), &accept);
+    files.extend(files_under(&repo_root().join("scripts"), &accept));
+    files.extend(files_under(&repo_root().join(".github"), &accept));
+    files.sort();
+    files
+}
+
+#[test]
+fn the_mac_scanner_detects_every_forbidden_word_and_only_those() {
+    let groups = MAC_FORBIDDEN
+        .iter()
+        .map(|(kind, words)| (*kind, *words))
+        .chain(MAC_ONE_PLACE.iter().map(|place| (place.kind, place.words)));
+    for (kind, words) in groups {
+        for word in words {
+            let core = word.trim_end_matches('*');
+            let sample = if word.ends_with('*') {
+                format!("let x = {core}Example;")
+            } else {
+                format!("let x = {core};")
+            };
+            assert_eq!(
+                scan_mac_words(&sample, &[word]).len(),
+                1,
+                "{kind}: {word} を検出できない"
+            );
+        }
+    }
+    for word in MAC_FORBIDDEN_CONFIG {
+        let sample = format!("<key>com.apple.security.{word}</key>");
+        assert_eq!(scan_mac_words(&sample, &[word]).len(), 1, "{word}");
+    }
+    // 静止画 1 枚の撮影の設定・許可の確認・窓の一覧・クレート名・無関係な名前は、禁止の語に当たらない。
+    let all: Vec<&str> = MAC_FORBIDDEN
+        .iter()
+        .flat_map(|(_, words)| words.iter().copied())
+        .collect();
+    for fine in [
+        "SCStreamConfiguration::new()",
+        "AXIsProcessTrusted()",
+        "CGPreflightScreenCaptureAccess()",
+        "CGWindowListCopyWindowInfo(options, 0)",
+        "use screencapturekit as sck;",
+        "mach_absolute_time()",
+        "SCScreenshotManager::captureImage",
+        "CGEventTapCreate(..)",
+        "VNRecognizeTextRequest::new()",
+        "let postscript = 1; // ptrace_is_not_here",
+    ] {
+        let hits = scan_mac_words(fine, &all);
+        assert!(hits.is_empty(), "{fine}: {hits:?}");
+    }
+    // 前方一致の語（`*` で終わる）は、続きを問わない。
+    assert_eq!(
+        scan_mac_words("x.vm_readable_pages()", &["vm_read*"]).len(),
+        1
+    );
+    // 使わない部品は名前で見つけ、tao・wry を通して入る部品（objc2-core-graphics など）には当たらない。
+    let declared = "[dependencies]
+xcap = \"1\"
+objc2-core-graphics = \"0.3\"
+accessibility-sys = \"0.1\"
+";
+    let names: Vec<String> = forbidden_crates_in_manifest(declared, MAC_FORBIDDEN_CRATES)
+        .into_iter()
+        .map(|(_, name)| name)
+        .collect();
+    assert_eq!(names, vec!["xcap", "accessibility-sys"]);
+    // 識別子の途中の語には当たらない。
+    assert!(scan_mac_words("xSCStream y", &["SCStream"]).is_empty());
+    assert!(scan_mac_words("SCStream_x", &["SCStream"]).is_empty());
+    assert_eq!(scan_mac_words("Retained<SCStream>", &["SCStream"]).len(), 1);
+}
+
+#[test]
+fn mac_no_source_uses_a_forbidden_api() {
+    let files = mac_scanned_sources();
+    assert!(
+        files.len() >= 30,
+        "走査の対象が見つからない: {}",
+        files.len()
+    );
+    let mut violations = Vec::new();
+    for file in &files {
+        let text = read(file);
+        let product = product_part(&text);
+        for (kind, words) in MAC_FORBIDDEN {
+            let hits = scan_mac_words(product, words);
+            if !hits.is_empty() {
+                violations.push(report(&format!("macOS {kind}"), file, &hits));
+            }
+        }
+    }
+    assert_no_violations(violations);
+}
+
+#[test]
+fn mac_signing_and_build_files_grant_no_debug_or_injection_entitlement() {
+    let files = mac_config_files();
+    assert!(
+        files.iter().any(|p| p
+            .to_string_lossy()
+            .replace('\\', "/")
+            .ends_with("tauri.conf.json")),
+        "走査の対象に tauri.conf.json が入っていない"
+    );
+    let mut violations = Vec::new();
+    for file in &files {
+        let hits = scan_mac_words(&read(file), MAC_FORBIDDEN_CONFIG);
+        if !hits.is_empty() {
+            violations.push(report("macOS 権限", file, &hits));
+        }
+    }
+    assert_no_violations(violations);
+}
+
+#[test]
+fn mac_still_screenshots_event_taps_are_used_only_in_their_listed_files() {
+    for OnePlace {
+        kind,
+        words,
+        allowed,
+    } in MAC_ONE_PLACE
+    {
+        for (file, reason) in *allowed {
+            assert!(!reason.is_empty(), "{kind}: {file} の理由が空");
+        }
+        let mut users: Vec<String> = Vec::new();
+        for file in mac_scanned_sources() {
+            let text = read(&file);
+            if !scan_mac_words(product_part(&text), words).is_empty() {
+                users.push(file.to_string_lossy().replace('\\', "/"));
+            }
+        }
+        assert_eq!(
+            users.len(),
+            allowed.len(),
+            "{kind}: 使っているソースと一覧が合わない: {users:?}"
+        );
+        for user in &users {
+            assert!(
+                allowed.iter().any(|(file, _)| user.ends_with(file)),
+                "{kind}: 許していない場所が使っている: {user}"
+            );
+        }
+    }
+}
+
+#[test]
+fn mac_manifests_declare_no_screen_input_or_process_crate_and_gated_crates_stay_in_their_crate() {
+    let mut crates = crate_dirs().to_vec();
+    crates.push(ocr_dir());
+    let mut violations = Vec::new();
+    for dir in &crates {
+        let toml_path = dir.join("Cargo.toml");
+        let toml = read(&toml_path);
+        for (line, name) in forbidden_crates_in_manifest(&toml, MAC_FORBIDDEN_CRATES) {
+            violations.push(format!(
+                "[macOS 部品] {}:{line}: 使わない部品 {name}",
+                toml_path.display()
+            ));
+        }
+        for (name, allowed_dir, reason) in MAC_GATED_CRATES {
+            assert!(!reason.is_empty(), "{name} の理由が空");
+            let allowed = crate_dir().join(allowed_dir);
+            let declared = !forbidden_crates_in_manifest(&toml, &[name]).is_empty();
+            if declared && dir.canonicalize().ok() != allowed.canonicalize().ok() {
+                violations.push(format!(
+                    "[macOS 部品] {}: {name} を宣言してよいのは {allowed_dir} だけ（{reason}）",
+                    toml_path.display()
+                ));
+            }
+        }
+    }
+    assert_no_violations(violations);
 }

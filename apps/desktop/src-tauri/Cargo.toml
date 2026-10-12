@@ -43,14 +43,14 @@ jantama-ocr = { path = "ocr" }
 # 結果 JSON の取得（GET の 1 種類だけ）。src/import/report_fetch.rs の 1 か所からだけ使う（S-2）。
 # TLS は Windows の SChannel（native-tls）。同梱の証明書の一覧を持たず、OS の信頼する証明書を使う。
 ureq = { version = "3", default-features = false, features = ["native-tls"] }
-# クリップボードの文字を読む（文字だけ。画像やファイルは読まない）。src/clipboard.rs の 1 か所からだけ使う。
-clipboard-win = "5"
 # 答え・解き直しの予定・今日の出題を置く SQLite（D-3。保存先の study.sqlite）。SQLite 本体は同梱（bundled）で、通信はしない。
 # src/study/ の中だけで使う（検討画面だけが使う。ウィジェット・ボタンを拾う部分・補助プログラムには入れない）。
 rusqlite = { version = "0.40", features = ["bundled"] }
 
 [target.'cfg(windows)'.dependencies]
-# WebView2 の設定を変える（webview_win.rs）。Tauri（wry 0.57）が使う版にそろえる。
+# クリップボードの文字を読む（文字だけ。画像やファイルは読まない）。src/platform/win/clipboard.rs の 1 か所からだけ使う。
+clipboard-win = "5"
+# WebView2 の設定を変える（src/platform/win/webview.rs）。Tauri（wry 0.57）が使う版にそろえる。
 webview2-com = "0.39"
 windows = { version = "0.62", features = [
   "Win32_Foundation",

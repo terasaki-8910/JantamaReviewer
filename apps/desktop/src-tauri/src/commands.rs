@@ -21,8 +21,8 @@ use tauri::{
 use crate::app_core::{AppState, Core, SettingsChange};
 use crate::appearance::{parse_css_color, Rgb};
 use crate::clock::now_ms;
-use crate::helper_setup;
 use crate::input_flow::{page_key_input, HelperOp, Input, InputService, InputStatus};
+use crate::platform::HelperHost;
 use crate::ready::ShowGate;
 use crate::settings::{Orientation, Settings, WidgetPosition};
 use crate::store::{Rating, SessionRecord};
@@ -92,14 +92,17 @@ pub const SHOW_TIMEOUT: Duration = Duration::from_secs(5);
 /// 入力の流れ（本体のフック・補助プログラム・ボタンの登録とテスト）への窓口（W-9、W-10、W-11）。
 pub struct InputHandle {
     pub service: InputService,
+    /// 管理者の補助プログラム（Windows だけ。ほかの OS では、どの操作も失敗を返す）。
+    helper: Arc<dyn HelperHost>,
     /// 補助プログラムの設定・解除・起動が進んでいる間は `true`（重ねて始めない）。
     helper_op_running: Arc<AtomicBool>,
 }
 
 impl InputHandle {
-    pub fn new(service: InputService) -> InputHandle {
+    pub fn new(service: InputService, helper: Arc<dyn HelperHost>) -> InputHandle {
         InputHandle {
             service,
+            helper,
             helper_op_running: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -550,7 +553,7 @@ pub async fn show_widget_menu(
 /// 変わったときは `input-status-changed` で知らせる。
 #[tauri::command]
 pub async fn get_input_status(input: State<'_, InputHandle>) -> Result<InputStatus, String> {
-    refresh_installed(&input.service.sender());
+    refresh_installed(&input.service.sender(), &input.helper);
     Ok(input.service.status())
 }
 
@@ -639,12 +642,13 @@ pub async fn start_helper(input: State<'_, InputHandle>) -> Result<(), String> {
 }
 
 /// 起動の登録（タスク）があるかを、裏で確かめて、入力の流れに知らせる。
-pub fn refresh_installed(tx: &Sender<Input>) {
+pub fn refresh_installed(tx: &Sender<Input>, helper: &Arc<dyn HelperHost>) {
     let tx = tx.clone();
+    let helper = Arc::clone(helper);
     let spawned = thread::Builder::new()
         .name("helper-installed".to_string())
         .spawn(move || {
-            let _ = tx.send(Input::InstalledKnown(helper_setup::query_installed()));
+            let _ = tx.send(Input::InstalledKnown(helper.query_installed()));
         });
     if let Err(e) = spawned {
         eprintln!("補助プログラムの登録を確かめるスレッドを起こせませんでした: {e}");
@@ -653,15 +657,16 @@ pub fn refresh_installed(tx: &Sender<Input>) {
 
 /// 本体の起動のとき、補助プログラムが設定済みなら、確認なしで起動する（W-9）。
 /// パイプを開いてから呼ぶ（補助プログラムが、すぐにつなぎにくるため）。
-pub fn start_helper_at_launch(tx: &Sender<Input>) {
+pub fn start_helper_at_launch(tx: &Sender<Input>, helper: &Arc<dyn HelperHost>) {
     let tx = tx.clone();
+    let helper = Arc::clone(helper);
     let spawned = thread::Builder::new()
         .name("helper-launch".to_string())
         .spawn(move || {
-            let installed = helper_setup::query_installed();
+            let installed = helper.query_installed();
             let _ = tx.send(Input::InstalledKnown(installed));
             if installed {
-                if let Err(e) = helper_setup::run_task() {
+                if let Err(e) = helper.run_task() {
                     eprintln!("{e}");
                 }
             }
@@ -682,8 +687,9 @@ fn run_helper_op(input: &InputHandle, op: HelperOp) {
     let spawned = thread::Builder::new().name("helper-op".to_string()).spawn({
         let tx = tx.clone();
         let running = Arc::clone(&running);
+        let helper = Arc::clone(&input.helper);
         move || {
-            let result = perform_helper_op(op, &tx);
+            let result = perform_helper_op(op, &tx, helper.as_ref());
             let _ = tx.send(Input::HelperOpFinished { result });
             running.store(false, Ordering::SeqCst);
         }
@@ -696,19 +702,25 @@ fn run_helper_op(input: &InputHandle, op: HelperOp) {
     }
 }
 
-fn perform_helper_op(op: HelperOp, tx: &Sender<Input>) -> Result<(), String> {
+fn perform_helper_op(
+    op: HelperOp,
+    tx: &Sender<Input>,
+    helper: &dyn HelperHost,
+) -> Result<(), String> {
     match op {
         HelperOp::Installing => {
-            helper_setup::install()?;
-            let _ = tx.send(Input::InstalledKnown(helper_setup::query_installed()));
+            helper.install()?;
+            let _ = tx.send(Input::InstalledKnown(helper.query_installed()));
             // 設定できたら、そのまま起動する（アプリを開き直さなくてよい）。
-            helper_setup::run_task().map_err(|e| format!("設定はできましたが、{e}"))
+            helper
+                .run_task()
+                .map_err(|e| format!("設定はできましたが、{e}"))
         }
         HelperOp::Removing => {
-            let result = helper_setup::uninstall();
-            let _ = tx.send(Input::InstalledKnown(helper_setup::query_installed()));
+            let result = helper.uninstall();
+            let _ = tx.send(Input::InstalledKnown(helper.query_installed()));
             result
         }
-        HelperOp::Starting => helper_setup::run_task(),
+        HelperOp::Starting => helper.run_task(),
     }
 }

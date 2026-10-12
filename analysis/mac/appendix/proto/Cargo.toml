@@ -1,0 +1,21 @@
+[package]
+name = "mac-proto"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "macOS 版の調べで作った、型検査だけ通した雛形（実機では未実行）。製品のコードではない"
+
+[workspace]
+
+[dependencies]
+# macOS だけで使う。Windows の機械では `cargo check --target aarch64-apple-darwin` で型を確かめる。
+core-graphics = "0.25"
+core-foundation = "0.10"
+objc2 = "0.6"
+block2 = "0.6"
+png = "0.18"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSDictionary", "NSError", "NSString", "NSGeometry", "NSEnumerator", "NSValue"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGImage", "CGDataProvider"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFData", "CFCGTypes"] }
+objc2-screen-capture-kit = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-graphics", "objc2-core-foundation", "SCScreenshotManager", "SCShareableContent", "SCStream"] }
+objc2-vision = { version = "0.3", default-features = false, features = ["std", "block2", "VNRequest", "VNRecognizeTextRequest", "VNObservation", "VNTypes", "VNRequestHandler", "objc2-core-foundation"] }

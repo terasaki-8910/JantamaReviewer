@@ -1,7 +1,7 @@
 //! 迷いマークを記録したときの短く静かな音。
 //!
 //! 音のデータはファイルを同梱せず、起動時に計算で作る（`tick_wav`）。
-//! 鳴らすのは Windows の `PlaySoundW`（メモリ上の WAV を非同期で）。
+//! 鳴らす処理は OS ごとの実装（Windows は `platform/win/sound.rs`。メモリ上の WAV を `PlaySoundW` で非同期に鳴らす）。
 
 /// 音を鳴らす口。テストでは鳴らした回数を数えるだけの偽物に差し替える。
 pub trait Sound: Send + Sync {
@@ -55,41 +55,6 @@ pub fn tick_wav() -> Vec<u8> {
     wav.extend_from_slice(&pcm);
     wav
 }
-
-#[cfg(windows)]
-mod win {
-    use std::sync::OnceLock;
-
-    use windows::core::PCWSTR;
-    use windows::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT};
-
-    use super::{tick_wav, Sound};
-
-    /// `PlaySoundW` は非同期再生の間、メモリを読み続けるので、プロセスの終わりまで生かす。
-    static TICK: OnceLock<Vec<u8>> = OnceLock::new();
-
-    /// Windows で鳴らす。
-    #[derive(Debug, Default, Clone, Copy)]
-    pub struct WindowsSound;
-
-    impl Sound for WindowsSound {
-        fn tick(&self) {
-            let wav = TICK.get_or_init(tick_wav);
-            // 鳴らせなくても記録には影響しないので、結果は見ない。
-            // SAFETY: wav は 'static で、SND_MEMORY の間ずっと有効。
-            unsafe {
-                let _ = PlaySoundW(
-                    PCWSTR(wav.as_ptr().cast()),
-                    None,
-                    SND_MEMORY | SND_ASYNC | SND_NODEFAULT,
-                );
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-pub use win::WindowsSound;
 
 #[cfg(test)]
 mod tests {

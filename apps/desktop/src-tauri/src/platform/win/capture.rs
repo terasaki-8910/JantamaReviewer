@@ -1,4 +1,4 @@
-//! スクリーンショットの Windows 実装。
+//! スクリーンショットの Windows 実装（`ScreenSource`）。窓を選んで撮り、撮れなければ画面に切り替える手順は `capture::ScreenCapturer`。
 //!
 //! 窓の一覧は `EnumWindows`、撮影は画面の長方形を GDI の `BitBlt` で写す。
 //! 画面に出ている最終的な絵（GPU で描いた内容を含む）をそのまま写すので、
@@ -29,32 +29,23 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
 
-use crate::capture::{
-    bgra_to_rgb, encode_png_rgb, select_window, CaptureError, CaptureTarget, Capturer, Rect,
-    Screenshot, WindowInfo,
-};
+use crate::capture::{bgra_to_rgb, encode_png_rgb, CaptureError, Rect, ScreenSource, WindowInfo};
 
-/// 実機のスクリーンショット。
+/// 実機の画面と窓の一覧（Windows）。`ScreenCapturer` に包んで、スクリーンショットの取得元にする。
 #[derive(Debug, Default, Clone, Copy)]
-pub struct WindowsCapturer;
+pub struct WindowsScreen;
 
-impl Capturer for WindowsCapturer {
-    fn capture(&self, keywords: &[String]) -> Result<Screenshot, CaptureError> {
-        let windows = enumerate_windows();
-        if let Some(window) = select_window(&windows, keywords) {
-            if let Ok(png) = capture_region_png(window.rect) {
-                return Ok(Screenshot {
-                    png,
-                    target: CaptureTarget::Window,
-                });
-            }
-            // 窓を写せなかったときは、記録を欠かさないよう全画面に切り替える。
-        }
-        let png = capture_region_png(cursor_monitor_rect())?;
-        Ok(Screenshot {
-            png,
-            target: CaptureTarget::Screen,
-        })
+impl ScreenSource for WindowsScreen {
+    fn windows(&self) -> Vec<WindowInfo> {
+        enumerate_windows()
+    }
+
+    fn capture_rect(&self, rect: Rect) -> Result<Vec<u8>, CaptureError> {
+        capture_region_png(rect)
+    }
+
+    fn cursor_screen(&self) -> Rect {
+        cursor_monitor_rect()
     }
 }
 

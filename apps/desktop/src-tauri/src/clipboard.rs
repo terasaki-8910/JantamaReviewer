@@ -4,7 +4,8 @@
 //! 牌譜リンクがあれば「この半荘を取り込みますか」と出す。牌譜リンクを探すのは画面側（エンジンの `detectPaipuLink`）で、
 //! ここは文字を渡すだけ。
 //!
-//! 読むのは文字だけ（画像・ファイル・そのほかの形式は読まない）。書き込みはしない。
+//! 読むのは文字だけ（画像・ファイル・そのほかの形式は読まない）。書き込みはしない。読み取りは OS ごとの実装
+//! （Windows は `platform/win/clipboard.rs`）で、ここは鍵と、画面に渡してよい形への整えだけを持つ。
 //! 牌譜リンクより明らかに長い文字（文書の丸ごとなど）は、画面に渡さない。
 //!
 //! 読む処理は、アプリの中で 1 つずつにする（`exclusive`）。クリップボードを「開いている」状態は、スレッドごとではなく
@@ -41,18 +42,9 @@ pub fn normalize(text: String) -> Option<String> {
 
 /// クリップボードの文字を読む。文字が無い（画像だけ・空など）ときは `Ok(None)`。
 /// 別のアプリがクリップボードを使っていて開けないときは、短く何度か試してから、エラーにする。
-#[cfg(windows)]
+/// 読み取りそのものは OS ごとの実装（`platform::read_clipboard_string`。文字の形式だけを読む）で、ここは鍵の中で呼ぶ。
 pub fn read_text() -> Result<Option<String>, String> {
-    use clipboard_win::{formats, is_format_avail};
-
-    exclusive(|| {
-        if !is_format_avail(formats::CF_UNICODETEXT) {
-            return Ok(None);
-        }
-        let text = clipboard_win::get_clipboard_string()
-            .map_err(|e| format!("クリップボードを読めませんでした: {e}"))?;
-        Ok(normalize(text))
-    })
+    exclusive(|| Ok(crate::platform::read_clipboard_string()?.and_then(normalize)))
 }
 
 #[cfg(test)]
