@@ -27,6 +27,8 @@ import {
   SHAPE_YAKU,
   type YakuId,
   type YakuMeld,
+  type WinEvaluation,
+  type WinInput,
   type YakuShape,
   evaluateWin,
   hitsOfDecomposition,
@@ -43,6 +45,11 @@ export interface NearOptions {
   maxDraws?: number;
   /** 調べる役（既定は形で決まる役の全部）。 */
   ids?: readonly YakuId[];
+  /**
+   * 和了形に付く役を確かめる関数（既定は yaku.ts の `evaluateWin`）。別の実装（@kobalab/majiang-core の hule など）に差し替えて、
+   * 探索の上に載せられるかを調べるための口。`hits` が付く役（役満のときは空）。
+   */
+  evaluate?: (input: WinInput) => Pick<WinEvaluation, 'hits'>;
 }
 
 /** 近い役 1 つ。 */
@@ -125,6 +132,7 @@ export function nearYaku(shape: YakuShape, options: NearOptions = {}): NearResul
   const extra = options.extra ?? 1;
   const maxDraws = options.maxDraws ?? 4;
   const targetIds = new Set<YakuId>(options.ids ?? SHAPE_YAKU);
+  const evaluate = options.evaluate ?? evaluateWin;
   const counts = shape.counts;
   const total = counts.reduce((a, b) => a + b, 0);
   const sets = 4 - shape.melds.length;
@@ -157,7 +165,7 @@ export function nearYaku(shape: YakuShape, options: NearOptions = {}): NearResul
     const wins: number[] = [];
     for (let k = 0; k < TILE_KIND_COUNT; k++) if ((target[k] as number) > (counts[k] as number)) wins.push(k);
     for (const win of wins) {
-      const ev = evaluateWin({ ...shape, counts: target, winKind: win, tsumo: true, riichi: false });
+      const ev = evaluate({ ...shape, counts: target, winKind: win, tsumo: true, riichi: false });
       for (const id of [...pending]) {
         if (ev.hits.some((h) => h.id === id)) {
           best.set(id, { draws, target: [...target], win });

@@ -26,16 +26,16 @@ interface SampleSpec {
 }
 
 const SAMPLES: SampleSpec[] = [
-  { id: 's1', game: FX4_ID, gameLabel: 'FX-4（10月9日・あなたの半荘）', kyokuLabel: '東2局1本場', entryIndex: 9, point: '打牌の比べ方。実戦（打4p）と AI（打7p）は同じ近い役、打東だと、東が1枚に減り、役牌の見込みが落ちる。断幺九は、東を切っても、東東が残っても、あと1枚の遠回り' },
-  { id: 's2', game: FX4_ID, gameLabel: 'FX-4（10月9日・あなたの半荘）', kyokuLabel: '東2局1本場', entryIndex: 10, point: '鳴きの比べ方。東をポンすると、役牌 東（場風）が確定して聴牌。スルーなら門前のまま' },
-  { id: 's3', game: FX4_ID, gameLabel: 'FX-4（10月9日・あなたの半荘）', kyokuLabel: '東3局1本場', entryIndex: 15, point: '役無しの警告。チー（5s 7s）で聴牌になるが、待ちはどれも役が付かない。スルーなら門前のまま（立直・自摸が使える）' },
-  { id: 's4', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '南2局', entryIndex: 8, point: '役無しの警告。チー（2m 3m）で聴牌になるが、切り方によらず役無し' },
-  { id: 's5', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '南4局', entryIndex: 2, point: '南場・南家のダブ南。スルーなら 役牌 南（2枚）が近い役。チーすると、役牌を捨てる流れになり、役無し聴牌にしかならない' },
-  { id: 's6', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '東1局', entryIndex: 8, point: '近い役: 一気通貫。足りない牌を指定して出す（あと 8s 9s）' },
-  { id: 's7', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '南4局', entryIndex: 11, point: '聴牌の手の確定している役: 混一色・一盃口・一気通貫（待ちが複数でも、どの待ちでも付く役）' },
-  { id: 's8', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '南2局', entryIndex: 15, point: '聴牌の手の確定している役: 断幺九（役牌なしの副露なし手でも、聴牌なら役が見える）' },
-  { id: 's9', game: FX1_IDS[0], gameLabel: 'FX-1（f9da87cb。参考）', kyokuLabel: '東1局', entryIndex: 5, point: '一部の待ちだけ役が付く（副露した手）。付く待ちと付かない待ちが分かれる' },
-  { id: 's10', game: FX1_IDS[1], gameLabel: 'FX-1（f7388969。参考）', kyokuLabel: '東3局2本場', entryIndex: 7, point: '門前の聴牌で、ダマだと役が無く、ロンできない待ち（立直か自摸が要る）' },
+  { id: 's1', game: FX4_ID, gameLabel: 'FX-4（10月9日・あなたの半荘）', kyokuLabel: '東2局1本場', entryIndex: 9, point: '打牌の比べ方。打4p（実戦）と打7p（AI）は、近い役が同じ（役牌 東・断幺九）。打東だと東が1枚に減り、断幺九が先に来る' },
+  { id: 's2', game: FX4_ID, gameLabel: 'FX-4（10月9日・あなたの半荘）', kyokuLabel: '東2局1本場', entryIndex: 10, point: '鳴きの比べ方。東をポンすると、役牌 東（場風）が確定して、切れば聴牌。スルーなら門前のままで、東東が近い役' },
+  { id: 's3', game: FX4_ID, gameLabel: 'FX-4（10月9日・あなたの半荘）', kyokuLabel: '東3局1本場', entryIndex: 15, point: '役無しの警告。チー（5s 7s）は、切れば聴牌だが、待ちはどれも役が付かない。スルーなら門前のまま（立直・門前清自摸和が使える）。チー（7s 8s）は、役がまだ確定していない' },
+  { id: 's4', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '南2局', entryIndex: 8, point: '役無しの警告。チー（2m 3m）は、切れば聴牌だが、どの切り方でも待ちに役が付かない。スルーなら、断幺九の形（全部2〜8）が残る' },
+  { id: 's5', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '南4局', entryIndex: 2, point: '南場・南家のダブ南。スルーなら 役牌 南（2枚）が近い役。チー（2s 3s）は、切れば聴牌だが、待ち（5s）に役が付かない' },
+  { id: 's6', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '東1局', entryIndex: 8, point: '近い役: 一気通貫。足りない牌を指定して出す（あと 8s 9s）。役牌 白（暗槓）は確定している役' },
+  { id: 's7', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '南4局', entryIndex: 11, point: '聴牌の手の確定している役: 一盃口・混一色（どの待ちでも付く）。役牌 南は、待ちが南のときだけ付く（一部の待ち）' },
+  { id: 's8', game: FX5_ID, gameLabel: 'FX-5（10月11日・あなたの半荘）', kyokuLabel: '南2局', entryIndex: 15, point: '副露した手が聴牌: 確定している役は断幺九。打5m・打8m（1向聴）は、役がまだ確定していない（全部2〜8のまま）' },
+  { id: 's9', game: FX1_IDS[0], gameLabel: 'FX-1（f9da87cb。参考）', kyokuLabel: '東1局', entryIndex: 5, point: '役無しの警告。北（この局は自風でも場風でもない）をポンすると、切れば聴牌だが、待ちに役が付かない。スルーは門前のまま' },
+  { id: 's10', game: FX1_IDS[1], gameLabel: 'FX-1（f7388969。参考）', kyokuLabel: '東3局2本場', entryIndex: 7, point: '門前の聴牌で、ダマだと役が無く、ロンできない待ち（立直か自摸が要る）。チー（3s 4s）は、役無し聴牌にしかならない' },
 ];
 
 const WIND_NAMES: Record<string, string> = { E: '東', S: '南', W: '西', N: '北' };
