@@ -11,8 +11,9 @@
 //! その選びは、行から取り出す側（エンジンの `parseCenterText`）が決める（ここには、同じ取り出しの規則を持たない）。
 //!
 //! 画像から行を読む部分は `LineReader` という口にして、準備（どの画像を読むか）と実行（読んで写しに入れる）は、
-//! 偽の読み取りで単体試験できるようにしてある。製品の読み取り `WindowsReader` は、専用のスレッドで動く
-//! Windows の日本語の文字認識で、`spawn_blocking` などの、画面とは別のスレッドから使う。
+//! 偽の読み取りで単体試験できるようにしてある。製品の読み取り `NativeReader` は、専用のスレッドで動く
+//! その OS の文字認識（Windows は日本語の文字認識。macOS はまだ対応していない）で、`spawn_blocking` などの、
+//! 画面とは別のスレッドから使う。
 //!
 //! 読み直し（F11、E-27）: 読み取りの作り方（切り出しの決まり。`GEOMETRY_ID`）を変えたあと、前の作り方で読んだ半荘は、
 //! 半荘の画面を開いたときに 1 回だけ、保存してあるスクショを新しい作り方で読み直す。これも取り込みの一部で、半荘の画面から呼ぶ
@@ -40,23 +41,25 @@ pub trait LineReader {
     fn read(&self, png: &Path) -> Result<ShotReading, OcrError>;
 }
 
-/// 製品の読み取り: 専用のスレッドで動く、Windows の日本語の文字認識（局と残り枚数の水色の文字の位置から、局・残り枚数・自分の点数だけを
+/// 製品の読み取り: 専用のスレッドで動く、その OS の文字認識（Windows は日本語の文字認識。macOS は、まだ対応していないので、
+/// `start` が `OcrError::Unsupported` を返す）。Windows では、局と残り枚数の水色の文字の位置から、局・残り枚数・自分の点数だけを
 /// 切り出して、文字の高さをそろえて拡大して読む。見つからなければ、画面の大きさに対する割合の箱で切り出して 3 倍にして読む。
 /// 読み直し用に、コントラストを上げた画像と 1.5 倍に広げた画像も読む）。
-pub struct WindowsReader {
+pub struct NativeReader {
     worker: OcrWorker,
 }
 
-impl WindowsReader {
-    /// 担当を起こす。日本語の文字認識が使えなければ、`OcrError::JapaneseEngineMissing`。待つので、画面のスレッドからは呼ばない。
-    pub fn start() -> Result<WindowsReader, OcrError> {
-        Ok(WindowsReader {
+impl NativeReader {
+    /// 担当を起こす。日本語の文字認識が使えなければ、`OcrError::JapaneseEngineMissing`（macOS は `OcrError::Unsupported`）。
+    /// 待つので、画面のスレッドからは呼ばない。
+    pub fn start() -> Result<NativeReader, OcrError> {
+        Ok(NativeReader {
             worker: OcrWorker::start()?,
         })
     }
 }
 
-impl LineReader for WindowsReader {
+impl LineReader for NativeReader {
     fn read(&self, png: &Path) -> Result<ShotReading, OcrError> {
         let mut readings = self.worker.read_center_variants(png)?.into_iter();
         // 先頭は、必ず 1 回目の画像（読めなければ、ここまで来ずに失敗している）。
@@ -136,9 +139,12 @@ pub fn plan_session(session_id: &str, shots: Vec<Shot>, existing: Option<OcrCach
     }
 }
 
-/// 続けられない失敗か（日本語の文字認識が使えない・担当が止まった。どの画像でも同じ失敗になる）。
+/// 続けられない失敗か（日本語の文字認識が使えない・この OS では対応していない・担当が止まった。どの画像でも同じ失敗になる）。
 fn is_fatal(error: &OcrError) -> bool {
-    matches!(error, OcrError::JapaneseEngineMissing | OcrError::Worker(_))
+    matches!(
+        error,
+        OcrError::JapaneseEngineMissing | OcrError::Unsupported(_) | OcrError::Worker(_)
+    )
 }
 
 /// 半荘 1 つ分の仕事を進める。画像 1 枚ごとに `on_each` に知らせる。

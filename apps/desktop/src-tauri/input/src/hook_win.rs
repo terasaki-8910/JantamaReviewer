@@ -26,6 +26,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::clock::now_ms;
+pub use crate::hook::HookStatus;
 use crate::keys::Modifiers;
 use crate::logic::{Config, InputCore, Outcome, Report};
 
@@ -122,17 +123,6 @@ pub fn max_proc_micros() -> u64 {
     MAX_PROC_US.load(Ordering::Relaxed)
 }
 
-/// いまのフックの状態。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HookStatus {
-    /// マウスのフックが入っている。
-    pub mouse: bool,
-    /// キーボードのフックが入っている。
-    pub keyboard: bool,
-    /// 要るフックを入れられなかったときの理由。
-    pub error: Option<String>,
-}
-
 /// フックのスレッドへの窓口。
 #[derive(Debug, Clone, Copy)]
 pub struct HookHandle {
@@ -165,11 +155,7 @@ impl HookHandle {
             Ok(status) => status,
             Err(_) => {
                 *ACK.lock().unwrap_or_else(PoisonError::into_inner) = None;
-                HookStatus {
-                    mouse: false,
-                    keyboard: false,
-                    error: Some("フックの入れ直しの返事が来ませんでした".to_string()),
-                }
+                HookStatus::none("フックの入れ直しの返事が来ませんでした")
             }
         }
     }

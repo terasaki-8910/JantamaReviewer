@@ -8,6 +8,7 @@
 //! （画面・ネット・ファイルの部品を持たないことを、tests/safety.rs が確かめる）。
 
 pub mod clock;
+pub mod hook;
 pub mod keys;
 pub mod logic;
 pub mod protocol;

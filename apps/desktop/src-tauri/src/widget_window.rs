@@ -116,7 +116,7 @@ pub fn main_window_spec() -> WindowSpec {
 /// ブラウザの名残を出さないための設定（N-1〜N-12）は、`WebviewFlags` から来る。
 /// - Tauri が出している設定は、窓を作るときに渡す。
 /// - 画面の遷移・新しい窓・ダウンロードの要求は、`navigation.rs` の決まりで扱う（アプリ自身の画面だけを読み込む）。
-/// - WebView2 の残りの設定は、作った直後に書き込んで読み戻す（`webview_win.rs`）。
+/// - WebView の残りの設定は、作った直後に書き込んで読み戻す（`platform::harden_webview`。Windows は `platform/win/webview.rs`）。
 pub fn build_window<R: Runtime, M: Manager<R>>(
     manager: &M,
     spec: &WindowSpec,
@@ -168,51 +168,9 @@ pub fn build_window<R: Runtime, M: Manager<R>>(
         // 下限を外した状態で、もう一度大きさを指定し直す。
         window.set_size(LogicalSize::new(spec.width, spec.height))?;
     }
-    #[cfg(windows)]
-    crate::webview_win::harden(&window, flags);
+    // WebView の残りの設定（N-1〜N-12）は OS ごとの実装で書き込む（Windows は WebView2。`platform/win/webview.rs`）。
+    crate::platform::harden_webview(&window, flags);
     Ok(window)
-}
-
-/// 窓を作ったあとの Windows 固有の仕上げ。
-/// - 有効にならない設定（WS_EX_NOACTIVATE）が窓に付いていなければ付ける（W-4 の保険）。
-/// - 枠なしの窓の角を、Windows 11 の標準の丸みにそろえる（承認済みの見た目の角丸）。
-#[cfg(windows)]
-pub fn apply_native_style<R: Runtime>(window: &WebviewWindow<R>, spec: &WindowSpec) {
-    use std::ffi::c_void;
-    use std::mem::size_of;
-
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Dwm::{
-        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
-        DWM_WINDOW_CORNER_PREFERENCE,
-    };
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_NOACTIVATE,
-    };
-
-    let Ok(raw) = window.hwnd() else {
-        return;
-    };
-    let hwnd = HWND(raw.0);
-    // SAFETY: hwnd は今作った窓のもの。
-    unsafe {
-        if !spec.focusable {
-            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            if style & WS_EX_NOACTIVATE.0 as isize == 0 {
-                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE.0 as isize);
-            }
-        }
-        if !spec.decorations {
-            let preference: DWM_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND;
-            // Windows 10 などで効かなくても、見た目が角張るだけなので結果は見ない。
-            let _ = DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_WINDOW_CORNER_PREFERENCE,
-                &preference as *const DWM_WINDOW_CORNER_PREFERENCE as *const c_void,
-                size_of::<DWM_WINDOW_CORNER_PREFERENCE>() as u32,
-            );
-        }
-    }
 }
 
 /// 画面の領域（物理ピクセル）。

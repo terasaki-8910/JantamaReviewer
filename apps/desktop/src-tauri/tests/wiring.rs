@@ -105,7 +105,7 @@ fn n1_to_n12_build_window_applies_every_option_and_hook() {
         ".on_download(",
         "NewWindowResponse::Deny",
         // WebView2 の残りの設定（N-1、N-2、N-4、N-5、N-10）と、右クリックのメニュー（N-3）。
-        "crate::webview_win::harden(&window, flags)",
+        "crate::platform::harden_webview(&window, flags)",
         // 開発サーバーを許すのは dev のときだけ（N-5）。
         "AppOrigins::for_run(dev,",
     ] {
@@ -255,7 +255,7 @@ fn n1_to_n13_the_mjai_window_gets_every_browser_remnant_setting_and_every_naviga
         ".devtools(options.devtools)",
         "disable_drag_drop_handler",
         // WebView2 の残りの設定（N-1、N-2、N-4、N-5、N-10）と、右クリックのメニュー（N-3）。
-        "crate::webview_win::harden(&window, flags)",
+        "crate::platform::harden_webview(&window, flags)",
         // ページの中でしか止められないもの（N-9、N-10）。
         ".initialization_script(NATIVE_SCRIPT)",
         // 画面の遷移・新しい窓・ダウンロード（N-5、N-6）。E-10 の判定を通す。

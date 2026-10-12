@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use jantama_input::hook::HookStatus;
 use jantama_input::hook_win;
 use jantama_input::logic::{ActiveTrigger, Config};
 use jantama_input::pipe_win::Pipe;
@@ -141,7 +142,7 @@ fn serve(
     pipe: &Pipe,
     tx: &mpsc::Sender<Outgoing>,
     got_config: &AtomicBool,
-    apply: impl Fn(Config) -> hook_win::HookStatus,
+    apply: impl Fn(Config) -> HookStatus,
 ) {
     let mut lines = LineBuffer::new();
     let mut chunk = [0u8; 1024];

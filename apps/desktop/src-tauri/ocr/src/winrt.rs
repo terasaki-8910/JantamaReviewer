@@ -24,6 +24,7 @@ use windows::Storage::{FileAccessMode, StorageFile};
 use crate::error::OcrError;
 use crate::geometry::{center_crop, CropRect, Variant, TIGHT_BLOCK_HEIGHT, TIGHT_PADDING, UPSCALE};
 use crate::locate::locate;
+use crate::reading::{Outcome, Reading};
 use crate::resample::{crop_and_upscale, crop_normalize_and_pad, variant_pixels};
 
 /// 文字認識にかける言語（日本語）。
@@ -38,23 +39,6 @@ enum Region {
     CenterBox,
     /// 切り出さず、画像そのまま（試験の切り出し済みの画像・全体を読みたいとき）。
     Whole,
-}
-
-/// 1 通りの画像を文字認識で読んだ結果。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Reading {
-    /// どの画像で読んだか。
-    pub variant: Variant,
-    /// 認識した行（上から順）。
-    pub lines: Vec<String>,
-}
-
-/// 画像 1 枚の読み取りの結果と、どこを読んだか。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Outcome {
-    /// 水色の文字の位置から決めた切り出し（画面の画素。見つからず、割合の箱や画像そのままで読んだときは `None`）。
-    pub located: Option<CropRect>,
-    pub readings: Vec<Reading>,
 }
 
 enum Request {
