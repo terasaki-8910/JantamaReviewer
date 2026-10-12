@@ -13,8 +13,8 @@ function evaluate(r: OracleWin) {
 describe('役の判定: Python の mahjong ライブラリ（HandCalculator）を正解として', () => {
   it('正解表の作りが期待どおり（ライブラリのバージョン、件数、見ている役が一通り出てくる）', () => {
     expect(oracle.library).toBe('mahjong 2.0.0');
-    expect(oracle.complete.length).toBeGreaterThanOrEqual(3000);
-    expect(oracle.tenpai.length).toBeGreaterThanOrEqual(1200);
+    expect(oracle.complete.length).toBe(4000); // E-33: 和了形 4000
+    expect(oracle.tenpai.length).toBe(1500); // E-33: 聴牌の手 1500
     expect(oracle.wins.length).toBe(69);
     // どの役も、正解表に十分な数（20 件以上）出てくる
     const seen = new Map<YakuId, number>();

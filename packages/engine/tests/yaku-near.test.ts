@@ -69,7 +69,8 @@ function oracleDistances(sample: NearSample): Map<YakuId, number> {
 describe('近い役: 力ずくで数えた正解（Python の mahjong ライブラリ。探し方の違う実装）と一致する', () => {
   it('正解表の作りが期待どおり（ライブラリのバージョン、件数、実戦と乱数の手、役が一通り出てくる）', () => {
     expect(fixture.library).toBe('mahjong 2.0.0');
-    expect(fixture.samples.length).toBeGreaterThanOrEqual(300);
+    expect(fixture.samples.length).toBe(418); // E-34: 418 手（役は SHAPE_YAKU の 22 役）
+    expect(SHAPE_YAKU).toHaveLength(22);
     const sources = new Set(fixture.samples.map((s) => s.source.split(' ')[0]));
     for (const s of ['real-discard', 'real-pass', 'real-chi', 'real-pon', 'synthetic-13', 'synthetic-14']) expect(sources.has(s), s).toBe(true);
     const seen = new Set<YakuId>();

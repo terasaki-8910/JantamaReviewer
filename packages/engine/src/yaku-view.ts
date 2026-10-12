@@ -1,17 +1,18 @@
 /**
- * 出題の答え合わせに出す「確定している役」と「近い役」の組み立てと言い方（役の表示の調査の試作。R10-6・R11-16・R12-14）。画面には使わない。
+ * 出題の答え合わせの欄「役」の中身の組み立てと言い方（F13。R10-6・R11-16・R12-14・R14-1）。
  *
  * 比べる行動（打牌・チー・ポン・スルー・リーチ・しない）ごとに、その行動のあとの手（`yakuShapeOfChoice`）を役の判定の入力にして、
  *   - 確定している役: yaku.ts の `settledYaku`（聴牌なら、全ての待ちで付く役。そうでなければ副露で決まる役）
- *   - 近い役: yaku-near.ts の `nearYaku`（最短の和了より 1 枚までの遠回り、引く枚数 4 枚まで）
- * を求め（`yakuViewOf`）、2〜3 行の言い方にする（`describeYakuView`）。
+ *   - 近い役: yaku-near.ts の `nearYaku`（最短の和了より 1 枚までの遠回り、引く枚数 3 枚まで。`NEAR_POLICY`）
+ * を求め（`yakuViewOf`）、行の言い方にする（`describeYakuView`）。欄の全体は `yakuBoxOf`（自分・実戦・AI の行動を並べ、中身が全部同じなら 1 つにまとめる）。
  *
- * 言い方の決まり: 画面の言葉は聴牌・向聴（R12-9）。役の名前は雀魂の表示（漢字）。牌は、数牌が 5m のような表記、字牌は漢字。
+ * 言い方の決まり: 画面の言葉は聴牌・向聴（R12-9）。役の名前は雀魂の表示（漢字。R14-1）。牌は、数牌が 5m のような表記、字牌は漢字。
  * 門前の手の立直・門前清自摸和は、いつでも付けられるので役の欄には出さず、一言（`closedNote`）だけにする。ドラは役ではない。
+ * 役の判定は自前（HandCalculator と同じ選び方）。正しさは、Python の mahjong と kobalab の majiang-core（試験だけで使う）の 2 つの正解表と照らす。
  */
 import type { Decision } from './decision';
 import { tileLabel } from './decision-ref';
-import { type QuizChoice, answerOptions } from './quiz-choice';
+import { type AnswerOption, type QuizChoice, actualChoice, answerOptions, sameChoice, topChoice } from './quiz-choice';
 import { shantenOfCounts } from './shanten';
 import type { BoardState } from './replay';
 import type { Wind } from './report-types';
@@ -139,10 +140,10 @@ export interface YakuView {
   afterDiscard: AfterDiscard[];
 }
 
-/** 近い役の決まり（既定）。引く枚数 3 枚まで、最短の和了より 1 枚までの遠回り（README の定義）。 */
+/** 近い役の決まり。引く枚数 3 枚まで、最短の和了より 1 枚までの遠回り（R14-1。SPEC の F13）。 */
 export const NEAR_POLICY = { extra: 1, maxDraws: 3 } as const;
 
-/** 表示に出す近い役の数の上限（1 行に 1 つ。近い順。README の案）。 */
+/** 1 つの行動に出す近い役の行の数の上限（1 行に 1 つ。近い順。R14-1）。 */
 export const MAX_NEAR_LINES = 2;
 
 export interface YakuViewOptions {
@@ -155,9 +156,9 @@ export interface YakuViewOptions {
 }
 
 /**
- * 表示に出す近い役（既定。README の案）。実戦の和了 69 件で多かった役のうち、手の作り方で狙える役: 役牌・断幺九・混一色（清一色を含む）・
- * 一気通貫・三色同順。対々和・七対子・小三元・三暗刻・混全帯幺九・三色同刻も `nearYaku` では求められるが、実戦に出る数が少ないので、
- * 最初の版では出さない。平和・一盃口は、聴牌のとき確定している役としてだけ出る（狙って作る役ではないため）。
+ * 近い役に出す役（R14-1）。実戦の和了 69 件で多かった役のうち、手の作り方で狙える役: 役牌・断幺九・混一色（清一色を含む）・
+ * 一気通貫・三色同順。対々和・七対子・小三元・三暗刻・混全帯幺九・三色同刻も `nearYaku` では求められるが、実戦に出る数が少ないので出さない。
+ * 平和・一盃口は、聴牌のとき確定している役としてだけ出る（狙って作る役ではないため）。
  */
 export const SHOWN_NEAR: readonly YakuId[] = ['yakuhai-haku', 'yakuhai-hatsu', 'yakuhai-chun', 'yakuhai-seat', 'yakuhai-round', 'tanyao', 'sanshoku', 'ittsu', 'honitsu', 'chinitsu'];
 
@@ -185,7 +186,7 @@ function yakuhaiKind(id: YakuId, shape: Pick<YakuShape, 'seatWind' | 'roundWind'
   return id === 'yakuhai-haku' ? 31 : id === 'yakuhai-hatsu' ? 32 : id === 'yakuhai-chun' ? 33 : windKind(id === 'yakuhai-seat' ? shape.seatWind : shape.roundWind);
 }
 
-/** 近い役として出す上限の「指定の牌の枚数」。役牌は 1 枚以上持っているとき、三色同順・一気通貫は足りない牌が 2 枚までのとき。 */
+/** 近い役として出す上限の「指定の牌の枚数」（R14-1）。役牌は 1 枚以上持っているとき、三色同順・一気通貫は足りない牌が 2 枚までのとき。 */
 export const MAX_FORCED_NEED = 2;
 
 /** 表示に出す近い役か。 */
@@ -505,4 +506,142 @@ export function yakuTextOfChoice(decision: Pick<Decision, 'kind' | 'entry' | 'bo
 /** 牌の種類の並びを、牌の呼び名にする（サンプルの JSON 用）。 */
 export function kindsLabel(kinds: readonly number[]): string {
   return kinds.map((k) => tileLabel(kindToTile(k))).join(' ');
+}
+
+// ---- 答え合わせの欄 ----
+
+/** 欄「役」の行動につく印。印の無い行動（鳴きの判断の、ほかのボタン）は `tags` が空。 */
+export type YakuMark = '自分' | '実戦' | 'AI';
+
+/** 欄に並べる行動の数の上限（鳴きの判断。自分・実戦・AI の行動は、数に関わらず必ず入れる）。 */
+export const MAX_COMPARED_ACTIONS = 4;
+
+/** 行動の手の見出し（向聴数・待ち）。 */
+export interface YakuSummary {
+  /** 切る前の手（鳴いた直後・リーチ・しない）。向聴数は、切ったあとの最小。 */
+  discardFirst: boolean;
+  /** 向聴数（0 以下は聴牌）。 */
+  shanten: number;
+  /** 聴牌（切る前でない）のときの待ちと、役が付かない待ち。 */
+  waits: { tile: Tile; dead: boolean }[];
+}
+
+/** 切る前の手（鳴いた直後など）で、切れば聴牌になる切り方 1 つ。 */
+export interface YakuAfterDiscard {
+  tile: Tile;
+  waits: { tile: Tile; dead: boolean }[];
+}
+
+/** 欄の中の行動 1 つ。 */
+export interface YakuBlock {
+  /** 画面の鍵。dahai:4p・option:pon。 */
+  key: string;
+  tags: YakuMark[];
+  /** 打牌のとき、切る牌。 */
+  tile: Tile | null;
+  /** 打牌以外のとき、答えのボタン（チー・ポン・スルー・リーチ・しない）。 */
+  option: AnswerOption | null;
+  /** その行動のあとの手が門前か（確定している役の飜に「（副露）」を付けるか）。 */
+  closed: boolean;
+  summary: YakuSummary;
+  text: YakuText;
+  afterDiscard: YakuAfterDiscard[];
+}
+
+/** 欄「役」の中身。 */
+export interface YakuBox {
+  blocks: YakuBlock[];
+  /** 行動が 2 つ以上あって、中身（確定・一部の待ち・近い役・警告・注）が全部同じ。画面では 1 つにまとめる（`blocks` の先頭を出す）。 */
+  merged: boolean;
+}
+
+function choiceKey(choice: QuizChoice): string {
+  return choice.type === 'dahai' ? `dahai:${choice.tile}` : `option:${choice.id}`;
+}
+
+function markedWaits(waits: readonly number[], dead: readonly number[]): { tile: Tile; dead: boolean }[] {
+  return waits.map((kind) => ({ tile: kindToTile(kind), dead: dead.includes(kind) }));
+}
+
+/** 画面に出る中身だけの鍵（行動の違いや、引く枚数など、見えない値は入れない）。 */
+function contentKey(block: YakuBlock): string {
+  const { text } = block;
+  return JSON.stringify([
+    text.settled.map((l) => [l.name, l.han]),
+    text.partial.map((l) => [l.name, l.parts]),
+    text.near.map((l) => [l.name, l.parts]),
+    text.warning,
+    text.closedNote,
+    text.openNote,
+    block.closed,
+    block.afterDiscard,
+  ]);
+}
+
+/**
+ * 比べる行動: 自分の答え・実戦・AI の 1 位（同じ行動は 1 つ。印は重ねる）。打牌以外の判断（鳴き・リーチ）は、ほかの答えのボタンも
+ * `MAX_COMPARED_ACTIONS` まで足し、ボタンの並びに揃える。カン・和了の判断は、行動で役が変わらないので、空にする（欄を出さない）。
+ */
+export function comparedActions(decision: Pick<Decision, 'kind' | 'entry' | 'board'>, mine: QuizChoice): { choice: QuizChoice; tags: YakuMark[] }[] {
+  if (decision.kind === 'kan' || decision.kind === 'win') return [];
+  const picked: { choice: QuizChoice; tags: YakuMark[] }[] = [];
+  const add = (choice: QuizChoice | null, tag: YakuMark | null): void => {
+    if (choice === null) return;
+    const found = picked.find((p) => sameChoice(p.choice, choice));
+    if (found === undefined) picked.push({ choice, tags: tag === null ? [] : [tag] });
+    else if (tag !== null && !found.tags.includes(tag)) found.tags.push(tag);
+  };
+  add(mine, '自分');
+  add(actualChoice(decision), '実戦');
+  add(topChoice(decision), 'AI');
+  if (decision.kind === 'discard') return picked;
+  // 打牌以外: ボタンの並びで。印の付いた行動は必ず入れ、残りの枠に、ほかのボタンを前から足す
+  const options = answerOptions(decision);
+  const rest = Math.max(0, MAX_COMPARED_ACTIONS - picked.length);
+  let added = 0;
+  for (const option of options) {
+    const choice: QuizChoice = { type: 'option', id: option.id };
+    if (picked.some((p) => sameChoice(p.choice, choice))) continue;
+    if (added >= rest) break;
+    add(choice, null);
+    added++;
+  }
+  const order = new Map(options.map((o, index) => [o.id, index]));
+  return picked.sort((a, b) => (order.get(a.choice.type === 'option' ? a.choice.id : '') ?? 0) - (order.get(b.choice.type === 'option' ? b.choice.id : '') ?? 0));
+}
+
+/**
+ * 答え合わせの欄「役」（F13）の中身。比べる行動（`comparedActions`）ごとに、行動のあとの手の確定している役・近い役・警告を並べる。
+ * 手を作れない行動（カン・和了）は飛ばす。並べる行動が 1 つも無ければ null。
+ */
+export function yakuBoxOf(decision: Pick<Decision, 'kind' | 'entry' | 'board'>, mine: QuizChoice, options: YakuViewOptions = {}): YakuBox | null {
+  const buttons = answerOptions(decision);
+  const blocks: YakuBlock[] = [];
+  for (const { choice, tags } of comparedActions(decision, mine)) {
+    const made = yakuTextOfChoice(decision, choice, options);
+    if (made === null) continue;
+    const { view, text, shape } = made;
+    const total = shape.counts.reduce((a, b) => a + b, 0);
+    blocks.push({
+      key: choiceKey(choice),
+      tags,
+      tile: choice.type === 'dahai' ? choice.tile : null,
+      option: choice.type === 'option' ? (buttons.find((o) => o.id === choice.id) ?? null) : null,
+      closed: view.closed,
+      summary: {
+        discardFirst: total % 3 === 2,
+        shanten: shantenOfCounts(shape.counts),
+        waits: markedWaits(
+          view.settled.waits.map((w) => w.kind),
+          view.settled.deadWaits,
+        ),
+      },
+      text,
+      afterDiscard: view.afterDiscard.map((a) => ({ tile: kindToTile(a.kind), waits: markedWaits(a.waits, a.dead) })),
+    });
+  }
+  if (blocks.length === 0) return null;
+  const first = blocks[0] as YakuBlock;
+  const merged = blocks.length >= 2 && blocks.every((b) => contentKey(b) === contentKey(first));
+  return { blocks, merged };
 }
