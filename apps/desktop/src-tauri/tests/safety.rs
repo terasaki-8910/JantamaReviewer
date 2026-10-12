@@ -2490,12 +2490,29 @@ const MAC_FORBIDDEN_CONFIG: &[&str] = &[
 /// 決めた 1 か所のソースだけが使ってよい macOS の API（語、使ってよいソース（理由つき））。
 /// 使ってよいソースの一覧は、実際にその語を使っているソースと一致させる（足りなくても、余っていても失敗する）。
 /// 段階 1 では macOS の実装を作っていないので、どれも空。作るときに、そのソースを理由つきで足す。
-const MAC_ONE_PLACE: &[(&str, &[&str], &[(&str, &str)])] = &[
+const MAC_ONE_PLACE: &[OnePlace] = &[
     // 静止画 1 枚の撮影（M-3）。呼び出し元は、ボタンが押された瞬間の処理だけにする。
-    ("静止画 1 枚の撮影", &["SCScreenshotManager*"], &[]),
+    OnePlace {
+        kind: "静止画 1 枚の撮影",
+        words: &["SCScreenshotManager*"],
+        allowed: &[],
+    },
     // ボタンを拾う入力のタップ。必要な種類のイベントだけを見て、内容はディスクに残さない。
-    ("入力のタップ", &["CGEventTap*"], &[]),
+    OnePlace {
+        kind: "入力のタップ",
+        words: &["CGEventTap*"],
+        allowed: &[],
+    },
 ];
+
+/// 決めた 1 か所のソースだけが使ってよい macOS の API。
+struct OnePlace {
+    kind: &'static str,
+    /// 語（書き方は上の説明のとおり）。
+    words: &'static [&'static str],
+    /// 使ってよいソース（`src-tauri` からの相対パスの末尾）と、その理由。
+    allowed: &'static [(&'static str, &'static str)],
+}
 
 /// 宣言してよいクレートを 1 つのクレートに限る macOS の部品（クレート名、宣言してよいクレートのフォルダ（`src-tauri` からの相対。本体は `.`）、理由）。
 /// 段階 3・4 で足すときは、宣言する側のクレートと理由を決めてから、使う。
@@ -2595,7 +2612,7 @@ fn the_mac_scanner_detects_every_forbidden_word_and_only_those() {
     let groups = MAC_FORBIDDEN
         .iter()
         .map(|(kind, words)| (*kind, *words))
-        .chain(MAC_ONE_PLACE.iter().map(|(kind, words, _)| (*kind, *words)));
+        .chain(MAC_ONE_PLACE.iter().map(|place| (place.kind, place.words)));
     for (kind, words) in groups {
         for word in words {
             let core = word.trim_end_matches('*');
@@ -2701,7 +2718,12 @@ fn mac_signing_and_build_files_grant_no_debug_or_injection_entitlement() {
 
 #[test]
 fn mac_still_screenshots_event_taps_are_used_only_in_their_listed_files() {
-    for (kind, words, allowed) in MAC_ONE_PLACE {
+    for OnePlace {
+        kind,
+        words,
+        allowed,
+    } in MAC_ONE_PLACE
+    {
         for (file, reason) in *allowed {
             assert!(!reason.is_empty(), "{kind}: {file} の理由が空");
         }

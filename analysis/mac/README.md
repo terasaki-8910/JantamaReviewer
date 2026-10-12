@@ -343,7 +343,7 @@ Mac で自動の試験を動かしてもらう段階: 2（`pnpm test`）、3（`
 ## 9. このフォルダの中身
 
 - `README.md` この文書。
-- `appendix/cross-check.md` と `appendix/cross-check/` この機械での macOS 向けの型検査の結果と道具（`check-mac.ps1`・`zigcc.cmd`・`zigar.cmd`）。
+- `appendix/cross-check.md` この機械での macOS 向けの型検査の結果。道具（`check-mac.ps1`・`zigcc.cmd`・`zigar.cmd`）は、段階 1 で `scripts/` へ移した（`pnpm check:mac`）。
 - `appendix/proto/` 型検査だけ通した確かめ用の雛形（Rust）。実機では未実行。
 - `appendix/mac-steps.md` 段階 0 の手順と、あとの段階の手順案。
 - `appendix/mac-checks.md` Mac での確認項目 65 の一覧。

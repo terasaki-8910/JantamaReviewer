@@ -1,7 +1,7 @@
 # Windows の機械で macOS 向けの型検査をする（2026-10-12 に試した結果）
 
 Mac は無いので、`cargo check --target aarch64-apple-darwin` をこの機械（Windows 11）で動かせるかを試した。
-道具は `cross-check/` に置いた（`zigcc.cmd`・`zigar.cmd`・`check-mac.ps1`）。製品のコードは変えていない。
+道具は最初 `cross-check/` に置いた（`zigcc.cmd`・`zigar.cmd`・`check-mac.ps1`）。段階 1（R14-5）で `scripts/check-mac.ps1` と `scripts/check-mac/`（`pnpm check:mac`。`pnpm lint` にも入っている）へ移した。この文書の結果は、試した時点（段階 1 の前）のもの。
 
 ## 環境
 
@@ -48,10 +48,10 @@ src/import/commands.rs 42    clipboard::read_text（Windows のときだけ）
 ## 使い方
 
 ```
-powershell -File analysis/mac/appendix/cross-check/check-mac.ps1                          # 全クレート（cargo check --all-targets）
-powershell -File analysis/mac/appendix/cross-check/check-mac.ps1 -Package jantama-input
-powershell -File analysis/mac/appendix/cross-check/check-mac.ps1 -Tool clippy             # -D warnings つき
+pnpm check:mac                                                            # 全クレートの clippy（-D warnings。pnpm lint にも入っている）
+powershell -NoProfile -File scripts/check-mac.ps1 -Tool check             # 型検査だけ
+powershell -NoProfile -File scripts/check-mac.ps1 -Package jantama-input
 ```
 
-`-TargetDir` で成果物の置き場を変えられる（既定は `apps/desktop/src-tauri/target`、git の対象外）。段階 1 のあとは、
-このスクリプトを `scripts/` に移して `pnpm lint` に足し、機械の関門にする案。
+`-TargetDir` で成果物の置き場を変えられる（既定は `apps/desktop/src-tauri/target`、git の対象外）。段階 1 で、
+このスクリプトを `scripts/` に移して `pnpm lint` に足し、機械の関門にした。
