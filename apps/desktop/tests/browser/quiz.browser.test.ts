@@ -2,7 +2,7 @@
 /**
  * 実ブラウザで、今日の出題・出題・解き直し（受け入れ枚数の小窓・ドラを目立たせる）を検査する（U-1・U-4・U-5・U-6・U-18・U-19・N-8）。
  *
- * - U-4: 幅 390・768・1280px で、各状態（今日の出題・出題の答える前／あと・小窓・2 シャンテンからの先・鳴き・解き直し）に横スクロールが出ない。
+ * - U-4: 幅 390・768・1280px で、各状態（今日の出題・出題の答える前／あと・小窓・2 向聴からの先・鳴き・解き直し）に横スクロールが出ない。
  *   卓は、自分の列の中に収まる
  * - U-5・U-6: axe の重大な違反が 0 件（色のコントラストを含む）。ライトとダーク。Tab ですべての操作に届く（手牌・答えのボタンは、
  *   止まり場所が 1 つで、矢印キーで動く）
@@ -214,7 +214,7 @@ interface StateDef {
   run: (page: Page) => Promise<void>;
 }
 
-/** 検査する状態。FX-4 の今日の組は、迷い 1〜5（1 行目: 打牌・1 シャンテン、3 行目: 打牌・2 シャンテン、4 行目: 鳴き）。 */
+/** 検査する状態。FX-4 の今日の組は、迷い 1〜5（1 行目: 打牌・1 向聴、3 行目: 打牌・2 向聴、4 行目: 鳴き）。 */
 const STATES: StateDef[] = [
   { name: '今日の出題の一覧', run: openToday },
   { name: '出題（打牌・答える前）', run: (page) => openRow(page, 1) },
@@ -234,12 +234,12 @@ const STATES: StateDef[] = [
     },
   },
   {
-    name: '出題（2 シャンテンからの先）',
+    name: '出題（2 向聴からの先）',
     run: async (page) => {
       await openRow(page, 3);
       await answerCurrent(page);
       await openUkeire(page, 0);
-      await page.getByRole('tab', { name: '2シャンテンからの先' }).click();
+      await page.getByRole('tab', { name: '2向聴からの先' }).click();
     },
   },
   { name: '出題（鳴き・答える前）', run: (page) => openRow(page, 4) },
@@ -324,7 +324,7 @@ describe('U-4・U-5・U-6: 各状態の、幅・アクセシビリティ・テ�
 
 describe('U-5: Tab ですべての操作に届く', () => {
   const ROVING = '.hand .tile-btn, [role="radio"], [role="tab"]';
-  for (const state of STATES.filter((s) => !s.name.includes('小窓') && !s.name.includes('2 シャンテン'))) {
+  for (const state of STATES.filter((s) => !s.name.includes('小窓') && !s.name.includes('2 向聴'))) {
     it(`${state.name}: 手牌・答えのボタンは止まり場所が 1 つ。残りはすべて、Tab で届く`, { timeout: 60_000 }, async () => {
       const { context, page } = await openState(state);
       try {
@@ -440,7 +440,7 @@ describe('U-18: 受け入れ枚数の小窓', () => {
     }
   });
 
-  it('幅 390px: 画面の下から出て、幅いっぱい。横スクロールは出ない。2 シャンテンからの先の表も、はみ出さない', { timeout: 60_000 }, async () => {
+  it('幅 390px: 画面の下から出て、幅いっぱい。横スクロールは出ない。2 向聴からの先の表も、はみ出さない', { timeout: 60_000 }, async () => {
     const { context, page } = await openState(STATES[4] as StateDef, { width: 390 });
     try {
       const info = await page.evaluate(() => {
@@ -514,7 +514,7 @@ describe('U-18: 受け入れ枚数の小窓', () => {
       });
       expect(row.text).toMatch(/^\d+枚 残り\d+$/);
       expect(row.remFont).toBeLessThan(row.nFont);
-      expect(await page.locator('#ukpop .up-sum').textContent()).toMatch(/^\d+シャンテン・受け入れ \d+枚（\d+種類）・残り \d+枚$|^テンパイ・受け入れ \d+枚（\d+種類）・残り \d+枚$/);
+      expect(await page.locator('#ukpop .up-sum').textContent()).toMatch(/^\d+向聴・受け入れ \d+枚（\d+種類）・残り \d+枚$|^聴牌・受け入れ \d+枚（\d+種類）・残り \d+枚$/);
     } finally {
       await context.close();
     }

@@ -53,10 +53,10 @@ export const KIND_CHOICES: ReadonlyArray<{ id: DecisionKind; label: string }> = 
   ['discard', 'call', 'riichi', 'win', 'kan'] as const
 ).map((id) => ({ id, label: KIND_NAME[id] }));
 
-/** 局面の選択肢。場面のシャンテン数（2・1・聴牌）と、判断のタグ（鳴き・押し引き・序盤）。 */
+/** 局面の選択肢。場面の向聴数（2・1・聴牌）と、判断のタグ（鳴き・押し引き・序盤）。 */
 export const PHASE_CHOICES = [
-  '2シャンテン以上',
-  '1シャンテン',
+  '2向聴以上',
+  '1向聴',
   '聴牌',
   '鳴き',
   '押し引き',
@@ -147,7 +147,7 @@ export interface LogRow {
   where: string;
   kind: DecisionKind;
   kindName: string;
-  /** 種類のあとに並べる印: シャンテン数（聴牌）・押し引き・序盤。鳴きは、種類に出るので入れない。 */
+  /** 種類のあとに並べる印: 向聴数（聴牌）・押し引き・序盤。鳴きは、種類に出るので入れない。 */
   tags: readonly string[];
   /** 絞り込みの「局面」に当たるもの。 */
   phases: readonly LogPhase[];
@@ -184,16 +184,16 @@ export interface LogInput {
 
 const CAUSE_LABEL: ReadonlyMap<string, string> = new Map(CAUSE_CHOICES.map((c) => [c.id, c.label]));
 
-/** 局面。シャンテン数は場面の手で数えたもの（`Decision.shanten`）、鳴き・押し引き・序盤は判断のタグ。週の集計の「局面の種類」も、これで数える。 */
+/** 局面。向聴数は場面の手で数えたもの（`Decision.shanten`）、鳴き・押し引き・序盤は判断のタグ。週の集計の「局面の種類」も、これで数える。 */
 export function phasesOf(shanten: number, tags: readonly string[]): LogPhase[] {
-  const phases: LogPhase[] = [shanten >= 2 ? '2シャンテン以上' : shanten === 1 ? '1シャンテン' : '聴牌'];
+  const phases: LogPhase[] = [shanten >= 2 ? '2向聴以上' : shanten === 1 ? '1向聴' : '聴牌'];
   if (tags.includes(TAG_CALL)) phases.push('鳴き');
   if (tags.includes(TAG_PUSH_PULL)) phases.push('押し引き');
   if (tags.includes(TAG_EARLY)) phases.push('序盤');
   return phases;
 }
 
-/** 画面に出す印: シャンテン数（テンパイは聴牌）・押し引き・序盤。 */
+/** 画面に出す印: 向聴数（0 以下は聴牌）・押し引き・序盤。 */
 function tagsOf(shanten: number, tags: readonly string[]): string[] {
   const shape = shanten <= 0 ? '聴牌' : shantenTag(shanten);
   return [shape, ...tags.filter((tag) => tag === TAG_PUSH_PULL || tag === TAG_EARLY)];

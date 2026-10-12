@@ -285,7 +285,7 @@ export function PhaseSection({ summary: s }: Pick<WindowProps, 'summary'>) {
       <SectionHead
         id={id}
         title="局面の種類"
-        hint={s.answers === 0 ? null : { label: '局面の種類の説明', text: '種類は重なります（1シャンテンの序盤の問題は、両方に数えます）。' }}
+        hint={s.answers === 0 ? null : { label: '局面の種類の説明', text: '種類は重なります（1向聴の序盤の問題は、両方に数えます）。' }}
       />
       {s.answers === 0 ? (
         <p className="wk-empty">この週は、答えた問題がありません。</p>

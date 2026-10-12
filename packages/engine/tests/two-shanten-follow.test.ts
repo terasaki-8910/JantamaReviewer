@@ -46,11 +46,11 @@ function afterDiscard(game: ImportedGame, key: string, discard: string): string[
   return tiles.filter((_, i) => i !== at);
 }
 
-describe('E-23 2シャンテンからの先: 1シャンテンに進む牌ごとに、そのあと受け入れが最大になる打牌と枚数', () => {
+describe('E-23 2向聴からの先: 1向聴に進む牌ごとに、そのあと受け入れが最大になる打牌と枚数', () => {
   const f9da = load('f9da87cbcd7af5e9');
   const fx4 = load(FX4_ID);
 
-  it('E-23 f9da87cbcd7af5e9 の東4局13巡目 打3m: 1シャンテンに進む牌 48枚（14種類）・平均 19.3・最大 33', () => {
+  it('E-23 f9da87cbcd7af5e9 の東4局13巡目 打3m: 1向聴に進む牌 48枚（14種類）・平均 19.3・最大 33', () => {
     const worst = listDisagreements(f9da.decisions).items[0]?.decision;
     expect(worst?.kyokuLabel).toBe('東4局');
     expect(worst?.junme).toBe(13);
@@ -74,7 +74,7 @@ describe('E-23 2シャンテンからの先: 1シャンテンに進む牌ごと�
     expect(follow.max).toBe(43);
   });
 
-  it('E-23 正解表は Python の mahjong ライブラリで素朴に数えたもの。2 つの場面の 2 シャンテンの打牌すべてで、行（引く牌・枚数・切る牌・受け入れ）・平均・最大が一致する', () => {
+  it('E-23 正解表は Python の mahjong ライブラリで素朴に数えたもの。2 つの場面の 2 向聴の打牌すべてで、行（引く牌・枚数・切る牌・受け入れ）・平均・最大が一致する', () => {
     expect(fixture.library).toMatch(/^mahjong /);
     expect(fixture.positions).toHaveLength(2);
     let options = 0;
@@ -97,7 +97,7 @@ describe('E-23 2シャンテンからの先: 1シャンテンに進む牌ごと�
     expect(options).toBeGreaterThanOrEqual(15);
   });
 
-  it('E-23 場面の打牌のうち、2 シャンテンになるものだけが正解表にあり、1 シャンテン以下・3 シャンテン以上の打牌には返さない', () => {
+  it('E-23 場面の打牌のうち、2 向聴になるものだけが正解表にあり、1 向聴以下・3 向聴以上の打牌には返さない', () => {
     for (const position of fixture.positions) {
       const game = position.report === FX4_ID ? fx4 : f9da;
       const decision = findDecisionByKey(game, position.key);
@@ -111,12 +111,12 @@ describe('E-23 2シャンテンからの先: 1シャンテンに進む牌ごと�
         const rest = afterDiscard(game, position.key, option.tile);
         const follow = followAfterTwoShanten(rest);
         if (option.shanten === 2) expect(follow).not.toBeNull();
-        else expect(follow, `打${option.tile}（${option.shanten}シャンテン）`).toBeNull();
+        else expect(follow, `打${option.tile}（${option.shanten}向聴）`).toBeNull();
       }
     }
   });
 
-  it('E-23 作った手で: 引く牌の枚数の合計は、2 シャンテンの手の受け入れ枚数と同じ。平均は、枚数で重みを付けたもの', () => {
+  it('E-23 作った手で: 引く牌の枚数の合計は、2 向聴の手の受け入れ枚数と同じ。平均は、枚数で重みを付けたもの', () => {
     const tiles = parseTenhouNotation('123456m1357p139s');
     expect(shanten(tiles)).toBe(2);
     const follow = followAfterTwoShanten(tiles);
@@ -126,7 +126,7 @@ describe('E-23 2シャンテンからの先: 1シャンテンに進む牌ごと�
     expect(follow.rows.reduce((sum, r) => sum + r.count * r.ukeire, 0) / follow.total).toBeCloseTo(follow.average, 12);
     expect(follow.max).toBe(Math.max(...follow.rows.map((r) => r.ukeire)));
     expect(follow.kinds).toBe(follow.rows.length);
-    // 1 シャンテンと 3 シャンテンの手には返さない
+    // 1 向聴と 3 向聴の手には返さない
     expect(followAfterTwoShanten(parseTenhouNotation('123456789m13p57s'))).toBeNull();
     expect(followAfterTwoShanten(parseTenhouNotation('1357m1357p1357s1z'))).toBeNull();
   });

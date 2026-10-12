@@ -126,7 +126,7 @@ describe('U-15 サイドバーの今日の出題・解き直し', () => {
 });
 
 describe('U-15 今日の出題の一覧', () => {
-  it('今日の問題 5 つ（局・巡目・迷いの印・種類・シャンテン数・どの半荘か）と、解いた数と、出題を始めるボタン', async () => {
+  it('今日の問題 5 つ（局・巡目・迷いの印・種類・向聴数・どの半荘か）と、解いた数と、出題を始めるボタン', async () => {
     const { user } = setup();
     await loaded();
     await openToday(user);
@@ -137,11 +137,11 @@ describe('U-15 今日の出題の一覧', () => {
     // FX-4 の迷い 1〜5（推定で結びついたもの）。局・巡目の順は、迷いの順
     const texts = rows.map((row) => row.textContent);
     expect(texts).toEqual([
-      expect.stringMatching(/^1東1局 4巡目迷い1打牌 · 1シャンテン · 10月9日 19:09 の半荘$/),
-      expect.stringMatching(/^2東2局 11巡目迷い2打牌 · 1シャンテン · 10月9日 19:09 の半荘$/),
-      expect.stringMatching(/^3東2局1本場 6巡目迷い3打牌 · 2シャンテン · 10月9日 19:09 の半荘$/),
-      expect.stringMatching(/^4東2局1本場 8巡目迷い4鳴き · 1シャンテン · 10月9日 19:09 の半荘$/),
-      expect.stringMatching(/^5東3局1本場 6巡目迷い5打牌 · 2シャンテン · 10月9日 19:09 の半荘$/),
+      expect.stringMatching(/^1東1局 4巡目迷い1打牌 · 1向聴 · 10月9日 19:09 の半荘$/),
+      expect.stringMatching(/^2東2局 11巡目迷い2打牌 · 1向聴 · 10月9日 19:09 の半荘$/),
+      expect.stringMatching(/^3東2局1本場 6巡目迷い3打牌 · 2向聴 · 10月9日 19:09 の半荘$/),
+      expect.stringMatching(/^4東2局1本場 8巡目迷い4鳴き · 1向聴 · 10月9日 19:09 の半荘$/),
+      expect.stringMatching(/^5東3局1本場 6巡目迷い5打牌 · 2向聴 · 10月9日 19:09 の半荘$/),
     ]);
     // 解答済みの印も、次の印も、まだ無い
     expect(rows.some((row) => row.className.includes('done') || row.className.includes('next'))).toBe(false);
@@ -198,7 +198,7 @@ describe('U-16 出題と答え合わせ（今日の出題を順に解く）', ()
     expect(await screen.findByRole('heading', { level: 1, name: '東1局 4巡目' })).toBeInTheDocument();
     expect(document.querySelector('.progress')?.textContent).toBe('1 / 5');
     const chips = [...document.querySelectorAll('.q-chips .q-chip')].map((chip) => chip.textContent);
-    expect(chips).toEqual(['1シャンテン', '実戦：打5p', '迷い1']);
+    expect(chips).toEqual(['1向聴', '実戦：打5p', '迷い1']);
     // サイドバーは、今日の出題に印
     expect(sideButton(/^今日の出題/)).toHaveAttribute('aria-current', 'page');
   });

@@ -119,7 +119,7 @@ export function sceneTags(scene: Pick<ReplayScene, 'doubts' | 'mismatch'>): Arra
   return tags;
 }
 
-/** 場面の一覧の行の 2 行目。例: 打牌 · 1シャンテン。 */
+/** 場面の一覧の行の 2 行目。例: 打牌 · 1向聴。 */
 export function sceneSubText(decision: Pick<Decision, 'kind' | 'shanten'>, kindName: string): string {
   return `${kindName} · ${shantenTag(decision.shanten)}`;
 }

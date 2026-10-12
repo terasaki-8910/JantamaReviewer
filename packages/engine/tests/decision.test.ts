@@ -30,7 +30,7 @@ const reach: ActionEvent = { type: 'reach', actor: 0 };
 const hora: ActionEvent = { type: 'hora', actor: 0, target: 0 };
 const ankan: ActionEvent = { type: 'ankan', actor: 0, consumed: ['7s', '7s', '7s', '7s'] };
 
-/** 既定の手牌は 13 枚の 2 シャンテン（2 面子 + 搭子 3 つ）。シャンテン数のタグは、盤面の手牌で決まる（E-21）。 */
+/** 既定の手牌は 13 枚の 2 向聴（2 面子 + 搭子 3 つ）。向聴数のタグは、盤面の手牌で決まる（E-21）。 */
 const TWO_SHANTEN_13 = '123456m1357p139s';
 
 function board(riichi: RiichiState[], playerId: 0 | 1 | 2 | 3 = 0, hand: string = TWO_SHANTEN_13, drawn: string | null = null) {
@@ -80,32 +80,32 @@ describe('E-8 判断の種類（候補の行動から決める）', () => {
   });
 });
 
-describe('E-8 タグ: シャンテン数（その場面の手で数える。E-21）', () => {
+describe('E-8 タグ: 向聴数（その場面の手で数える。E-21）', () => {
   const none4: RiichiState[] = ['none', 'none', 'none', 'none'];
 
-  it('E-8 手牌が 2 シャンテンなら 2シャンテン（13枚は、そのまま数える）', () => {
-    expect(shantenTag(2)).toBe('2シャンテン');
-    expect(classifyTags({ junme: 10 }, 'call', board(none4))).toEqual(['2シャンテン', TAG_CALL]);
-    expect(classifyTags({ junme: 10 }, 'discard', board(none4, 0, '123456m1357p139s', null))).toEqual(['2シャンテン']);
+  it('E-8 手牌が 2 向聴なら 2向聴（13枚は、そのまま数える）', () => {
+    expect(shantenTag(2)).toBe('2向聴');
+    expect(classifyTags({ junme: 10 }, 'call', board(none4))).toEqual(['2向聴', TAG_CALL]);
+    expect(classifyTags({ junme: 10 }, 'discard', board(none4, 0, '123456m1357p139s', null))).toEqual(['2向聴']);
   });
 
-  it('E-8 14枚の手牌（ツモ牌つき）は、切る牌ごとのシャンテン数の最小。ツモで進めば、ツモる前より 1 小さい', () => {
-    // ツモる前は 2 シャンテン。2p を引くと 123p ができて、9s を切れば 1 シャンテン
-    expect(classifyTags({ junme: 10 }, 'discard', board(none4, 0, '123456m1357p139s', '2p'))).toEqual(['1シャンテン']);
-    // 進まないツモ（東を引いて、東を切れば 2 シャンテンのまま）
-    expect(classifyTags({ junme: 10 }, 'discard', board(none4, 0, '123456m1357p139s', '1z'))).toEqual(['2シャンテン']);
+  it('E-8 14枚の手牌（ツモ牌つき）は、切る牌ごとの向聴数の最小。ツモで進めば、ツモる前より 1 小さい', () => {
+    // ツモる前は 2 向聴。2p を引くと 123p ができて、9s を切れば 1 向聴
+    expect(classifyTags({ junme: 10 }, 'discard', board(none4, 0, '123456m1357p139s', '2p'))).toEqual(['1向聴']);
+    // 進まないツモ（東を引いて、東を切れば 2 向聴のまま）
+    expect(classifyTags({ junme: 10 }, 'discard', board(none4, 0, '123456m1357p139s', '1z'))).toEqual(['2向聴']);
     // 13 枚と 14 枚で、同じ手牌の数え方の違いが、そのまま sceneShanten に出る
     expect(sceneShanten(board(none4, 0, '123456m1357p139s', '2p'))).toBe(1);
     expect(sceneShanten(board(none4, 0, '123456m1357p139s', null))).toBe(2);
   });
 
-  it('E-8 1 シャンテンは 1シャンテン、0 以下はテンパイ', () => {
-    expect(shantenTag(1)).toBe('1シャンテン');
-    expect(shantenTag(0)).toBe('テンパイ');
-    expect(shantenTag(-1)).toBe('テンパイ');
-    expect(shantenTag(6)).toBe('6シャンテン');
-    expect(classifyTags({ junme: 9 }, 'call', board(none4, 0, '123456789m13p57s'))[0]).toBe('1シャンテン');
-    expect(classifyTags({ junme: 9 }, 'call', board(none4, 0, '123456789m1155p'))[0]).toBe('テンパイ');
+  it('E-8 1 向聴は 1向聴、0 以下は聴牌', () => {
+    expect(shantenTag(1)).toBe('1向聴');
+    expect(shantenTag(0)).toBe('聴牌');
+    expect(shantenTag(-1)).toBe('聴牌');
+    expect(shantenTag(6)).toBe('6向聴');
+    expect(classifyTags({ junme: 9 }, 'call', board(none4, 0, '123456789m13p57s'))[0]).toBe('1向聴');
+    expect(classifyTags({ junme: 9 }, 'call', board(none4, 0, '123456789m1155p'))[0]).toBe('聴牌');
   });
 });
 
@@ -150,9 +150,9 @@ describe('E-8 タグ: 序盤（6巡目まで）', () => {
     expect(classifyTags({ junme: 17 }, 'discard', noRiichi)).not.toContain(TAG_EARLY);
   });
 
-  it('E-8 タグの並びは、シャンテン数・鳴き・押し引き・序盤の順', () => {
+  it('E-8 タグの並びは、向聴数・鳴き・押し引き・序盤の順', () => {
     expect(classifyTags({ junme: 4 }, 'call', board(['none', 'none', 'accepted', 'none']))).toEqual([
-      '2シャンテン',
+      '2向聴',
       TAG_CALL,
       TAG_PUSH_PULL,
       TAG_EARLY,
@@ -162,7 +162,7 @@ describe('E-8 タグ: 序盤（6巡目まで）', () => {
 
 /**
  * 種類・タグの件数は、analysis/maka-fit/features.py の kind() と同じ規則を Python で独立に数えた値。
- * シャンテン数のタグは、場面の手で数える（E-21）ので、Python の mahjong ライブラリで数えた表
+ * 向聴数のタグは、場面の手で数える（E-21）ので、Python の mahjong ライブラリで数えた表
  * （fixtures/scene-shanten.json。generate_scene_shanten.py）と比べる。
  */
 const EXPECTED: Record<
@@ -231,7 +231,7 @@ describe('E-8 FX-1 の各判断に種類とタグが付く', () => {
       let pushPull = 0;
       for (const [index, d] of game.decisions.entries()) {
         kinds[d.kind]++;
-        // シャンテン数のタグ（と d.shanten）は、場面の手で数えた正解表と、全判断で一致する
+        // 向聴数のタグ（と d.shanten）は、場面の手で数えた正解表と、全判断で一致する
         expect(d.shanten, `${id} ${d.kyokuLabel} ${d.junme}巡目`).toBe(scene.scene[index]);
         expect(d.tags[0]).toBe(shantenTag(scene.scene[index] as number));
         shanten[String(d.shanten)] = (shanten[String(d.shanten)] ?? 0) + 1;
@@ -251,7 +251,7 @@ describe('E-8 FX-1 の各判断に種類とタグが付く', () => {
     });
   }
 
-  it('E-8 全964判断のすべてに種類が付き、シャンテン数のタグが先頭にある', () => {
+  it('E-8 全964判断のすべてに種類が付き、向聴数のタグが先頭にある', () => {
     let total = 0;
     for (const game of games.values()) {
       for (const d of game.decisions) {

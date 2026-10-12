@@ -42,7 +42,7 @@ describe('E-3 FX-3 の正解表（Python の mahjong ライブラリで作成）
     expect(fx3.library).toMatch(/^mahjong /);
   });
 
-  it('E-3 全件で、シャンテン数が正解表と一致する', () => {
+  it('E-3 全件で、向聴数が正解表と一致する', () => {
     const mismatches = fx3.hands
       .map((h) => ({ h, actual: shanten(parseTenhouNotation(h.tiles)) }))
       .filter(({ h, actual }) => actual !== h.shanten)
@@ -64,7 +64,7 @@ describe('E-3 FX-3 の正解表（Python の mahjong ライブラリで作成）
     }
   });
 
-  it('E-3 3n+2 枚の手牌は、切る牌ごとのシャンテン数・受け入れ枚数・受け入れの牌が正解表と一致する', () => {
+  it('E-3 3n+2 枚の手牌は、切る牌ごとの向聴数・受け入れ枚数・受け入れの牌が正解表と一致する', () => {
     const hands = fx3.hands.filter((h) => h.count % 3 === 2);
     expect(hands.length).toBeGreaterThan(100);
     let checkedDiscards = 0;
@@ -82,7 +82,7 @@ describe('E-3 FX-3 の正解表（Python の mahjong ライブラリで作成）
     expect(checkedDiscards).toBeGreaterThan(1000);
   });
 
-  it('E-3 受け入れ基準の例: 56m46688p1145888s は 打4p 38枚、打5m・6m・4s・5s 34枚、打6p・8p 28枚、打1s 24枚、打8s 15枚（いずれも2シャンテン）', () => {
+  it('E-3 受け入れ基準の例: 56m46688p1145888s は 打4p 38枚、打5m・6m・4s・5s 34枚、打6p・8p 28枚、打1s 24枚、打8s 15枚（いずれも2向聴）', () => {
     const options = discardOptions(parseTenhouNotation('56m46688p1145888s'));
     const byTile = Object.fromEntries(options.map((o) => [o.tile, o]));
     const expected: Record<string, number> = {
@@ -108,7 +108,7 @@ describe('E-3 FX-3 の正解表（Python の mahjong ライブラリで作成）
 });
 
 describe('E-3 七対子と国士無双と手牌の形', () => {
-  it('E-3 七対子: 6対子+単騎は聴牌、4対子+3枚の孤立牌は2シャンテン', () => {
+  it('E-3 七対子: 6対子+単騎は聴牌、4対子+3枚の孤立牌は2向聴', () => {
     expect(shanten(parseTenhouNotation('1122m3344p5566s7z'))).toBe(0);
     expect(ukeire(parseTenhouNotation('1122m3344p5566s7z')).total).toBe(3);
     expect(shanten(parseTenhouNotation('1122m3344p579s123z'))).toBe(2);

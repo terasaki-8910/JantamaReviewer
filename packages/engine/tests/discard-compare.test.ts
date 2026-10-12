@@ -50,7 +50,7 @@ describe('F6 打牌の受け入れ枚数の比較（E-3 の計算を判断につ
     expect(checked).toBeGreaterThan(700);
   });
 
-  it('F6 最大の受け入れ枚数は、切った後のシャンテン数が最小の候補の中の最大。どの候補より多いか少ないかを比べられる', () => {
+  it('F6 最大の受け入れ枚数は、切った後の向聴数が最小の候補の中の最大。どの候補より多いか少ないかを比べられる', () => {
     const d = gameOf('f9da87cbcd7af5e9').decisions[0];
     expect(d).toBeDefined();
     if (!d) return;

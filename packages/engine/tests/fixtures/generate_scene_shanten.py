@@ -1,12 +1,12 @@
-"""E-21（場面のシャンテン数）の正解表を作る。
+"""E-21（場面の向聴数）の正解表を作る。
 
-独立した実装として Python の `mahjong` ライブラリのシャンテン計算を使い、FX-1 の5半荘と FX-4 の、結果 JSON の全判断
-（`review.kyokus[*].entries[*]`）について、場面のシャンテン数を数える。TypeScript 側の実装（packages/engine/src/scene-shanten.ts）や
+独立した実装として Python の `mahjong` ライブラリの向聴計算を使い、FX-1 の5半荘と FX-4 の、結果 JSON の全判断
+（`review.kyokus[*].entries[*]`）について、場面の向聴数を数える。TypeScript 側の実装（packages/engine/src/scene-shanten.ts）や
 牌譜の再生には依存しない。手牌は、結果 JSON の各判断に記録された手牌（`state.tehai`。ツモ牌を含む）をそのまま使う。
 
-場面のシャンテン数の決まり（ACCEPTANCE E-21）:
-- 手牌が 3n+2 枚（打牌の判断。ツモったあとの手）: 切る牌（種類）ごとのシャンテン数の最小
-- 手牌が 3n+1 枚（鳴きの判断。鳴く前の手）: そのままのシャンテン数
+場面の向聴数の決まり（ACCEPTANCE E-21）:
+- 手牌が 3n+2 枚（打牌の判断。ツモったあとの手）: 切る牌（種類）ごとの向聴数の最小
+- 手牌が 3n+1 枚（鳴きの判断。鳴く前の手）: そのままの向聴数
 記録の `shanten` は、ツモる前の手のものなので使わない（比べるために、記録の値も出力に添える）。
 
 実行（このフォルダで）:
@@ -97,7 +97,7 @@ def main() -> None:
         print(report_id, len(scene), "decisions", "scene shanten", reports[report_id]["histogram"])
 
     document = {
-        "description": "E-21: 判断ごとの場面のシャンテン数の正解表（Python の mahjong ライブラリで作成）",
+        "description": "E-21: 判断ごとの場面の向聴数の正解表（Python の mahjong ライブラリで作成）",
         "generator": "generate_scene_shanten.py",
         "library": "mahjong " + version("mahjong"),
         "reports": reports,

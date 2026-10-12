@@ -199,13 +199,13 @@ describe('U-22: 開いた状態', () => {
     });
   });
 
-  it('問題の行: 局と巡目・種類・シャンテン数・どの半荘か・解答の状態。迷いの問題には迷いの番号', () => {
+  it('問題の行: 局と巡目・種類・向聴数・どの半荘か・解答の状態。迷いの問題には迷いの番号', () => {
     setup();
     const problemRows = options().slice(GAME_LIMIT);
     // 新しい順の先頭は、いちばん新しい半荘（g1）の問題。確率の低い順
     const first = problemRows[0] as HTMLElement;
     expect(optionText(first)).toMatch(
-      /^問題 東\d局(\d本場)? \d+巡目 (迷い\d )?(打牌|鳴き|リーチ|和了|カン) · (\d+シャンテン|テンパイ) · 10月9日 19:09 の半荘 未解答$/,
+      /^問題 東\d局(\d本場)? \d+巡目 (迷い\d )?(打牌|鳴き|リーチ|和了|カン) · (\d+向聴|聴牌) · 10月9日 19:09 の半荘 未解答$/,
     );
     expect(problemRows.every((row) => /(未解答|解答済み)$/.test(optionText(row)))).toBe(true);
     // 迷いの問題には「迷い N」（今日の出題の行と同じ言い方）。大きな不一致の問題には付かない
@@ -517,7 +517,7 @@ describe('U-22: 絞り込み（種類・段階・期間・迷いあり・未解�
     await user.click(input());
     await user.keyboard('受け入れ');
     const row = options()[0] as HTMLElement;
-    expect(optionText(row)).toBe('問題 東4局 13巡目 打牌 · 1シャンテン · 10月9日 17:12 の半荘 · 原則: 受け入れを数えてから切る 解答済み');
+    expect(optionText(row)).toBe('問題 東4局 13巡目 打牌 · 1向聴 · 10月9日 17:12 の半荘 · 原則: 受け入れを数えてから切る 解答済み');
     expect([...row.querySelectorAll('mark.hit')].map((m) => m.textContent)).toEqual(['受け入れ']);
   });
 

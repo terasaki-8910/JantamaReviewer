@@ -1,5 +1,5 @@
 {
-  "description": "FX-3: 手牌ごとのシャンテン数と受け入れ枚数の正解表（Python の mahjong ライブラリで作成）",
+  "description": "FX-3: 手牌ごとの向聴数と受け入れ枚数の正解表（Python の mahjong ライブラリで作成）",
   "generator": "generate_fx3.py",
   "library": "mahjong 2.0.0",
   "seed": 20261009,

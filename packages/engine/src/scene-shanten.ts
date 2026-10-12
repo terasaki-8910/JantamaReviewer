@@ -1,9 +1,9 @@
 /**
- * 場面のシャンテン数（E-21、SPEC F3）。
+ * 場面の向聴数（E-21、SPEC F3）。
  *
- * 局面の種類（「2シャンテン」など）に使う数は、その場面の手で数える（天鳳牌理と同じ数え方）:
+ * 局面の種類（「2向聴」など）に使う数は、その場面の手で数える（天鳳牌理と同じ数え方）:
  * - 打牌の判断（打牌・リーチ・自分の手番のカン・ツモ和了。手牌が 3n+2 枚）: ツモったあとの手から、切る牌ごとの
- *   シャンテン数の最小（いちばん進む打牌のあとの数）。結果 JSON の `shanten` は、ツモる前の手のものなので、
+ *   向聴数の最小（いちばん進む打牌のあとの数）。結果 JSON の `shanten` は、ツモる前の手のものなので、
  *   ツモで進む場面（2 → 1 など）では、ここで数えた値のほうが 1 小さい
  * - 鳴きの判断（チー・ポン・大明槓・ロンと、そのスルー。手牌が 3n+1 枚）: 鳴く前の手（そのまま）の数
  *
@@ -14,7 +14,7 @@ import type { BoardState } from './replay';
 import { shantenOfCounts } from './shanten';
 import { type Tile, TILE_KIND_COUNT, countTiles } from './tiles';
 
-/** 手牌が 3n+2 枚のときの、切る牌ごとのシャンテン数の最小。種類ごとの枚数（長さ 34）を渡す。 */
+/** 手牌が 3n+2 枚のときの、切る牌ごとの向聴数の最小。種類ごとの枚数（長さ 34）を渡す。 */
 function minDiscardShantenOfCounts(counts: number[]): number {
   let best = Number.POSITIVE_INFINITY;
   for (let kind = 0; kind < TILE_KIND_COUNT; kind++) {
@@ -28,8 +28,8 @@ function minDiscardShantenOfCounts(counts: number[]): number {
 }
 
 /**
- * 手牌（ツモ牌を含む）から、場面のシャンテン数を求める。3n+2 枚なら切る牌ごとの最小、3n+1 枚ならそのままの数。
- * 0 はテンパイ。枚数が 3n+1・3n+2 枚（1〜14枚）でなければ RangeError。
+ * 手牌（ツモ牌を含む）から、場面の向聴数を求める。3n+2 枚なら切る牌ごとの最小、3n+1 枚ならそのままの数。
+ * 0 は聴牌。枚数が 3n+1・3n+2 枚（1〜14枚）でなければ RangeError。
  */
 export function sceneShantenOfTiles(tiles: readonly Tile[]): number {
   const counts = countTiles(tiles);
@@ -38,7 +38,7 @@ export function sceneShantenOfTiles(tiles: readonly Tile[]): number {
   return shantenOfCounts(counts);
 }
 
-/** 盤面（判断の時点）の場面のシャンテン数。ツモ牌があれば手牌に含めて数える。 */
+/** 盤面（判断の時点）の場面の向聴数。ツモ牌があれば手牌に含めて数える。 */
 export function sceneShanten(board: Pick<BoardState, 'hand' | 'drawn'>): number {
   const tiles = board.drawn === null ? board.hand : [...board.hand, board.drawn];
   return sceneShantenOfTiles(tiles);

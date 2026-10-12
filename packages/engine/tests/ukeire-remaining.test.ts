@@ -52,7 +52,7 @@ describe('E-22 受け入れの残り: FX-4 の迷いと大きな不一致の 10 
   });
 
   for (const scene of fixture.scenes) {
-    it(`E-22 ${scene.key}（${scene.reasons.join('・')}）: 切る牌ごとの、シャンテン数・手牌だけの枚数・残り・受け入れ牌ごとの枚数が一致する`, () => {
+    it(`E-22 ${scene.key}（${scene.reasons.join('・')}）: 切る牌ごとの、向聴数・手牌だけの枚数・残り・受け入れ牌ごとの枚数が一致する`, () => {
       const decision = findDecisionByKey(game, scene.key);
       expect(decision, scene.key).toBeDefined();
       if (!decision) return;

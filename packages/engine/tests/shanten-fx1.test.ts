@@ -4,12 +4,12 @@ import { importReportText } from '../src/import';
 import { shanten } from '../src/shanten';
 import { FX1_IDS, loadReportText } from './helpers/fixtures';
 
-// 受け入れ基準（E-3）の正解表（FX-3）とは別に、実戦の手牌でもシャンテン数の実装を確かめる。
-// 記録の shanten（Mortal が判断のときに持っていたシャンテン数）は、ツモ牌を除いた閉じた手牌のシャンテン数。
+// 受け入れ基準（E-3）の正解表（FX-3）とは別に、実戦の手牌でも向聴数の実装を確かめる。
+// 記録の shanten（Mortal が判断のときに持っていた向聴数）は、ツモ牌を除いた閉じた手牌の向聴数。
 // 副露のある手（閉じた牌が 10・11・7・8・5 枚）も含めて、964判断すべてで一致する。
-describe('E-3 FX-1 の実戦の手牌のシャンテン数', () => {
+describe('E-3 FX-1 の実戦の手牌の向聴数', () => {
   for (const id of FX1_IDS) {
-    it(`E-3 ${id}: ツモ牌を除いた閉じた手牌のシャンテン数が、全判断で記録の shanten と一致する`, () => {
+    it(`E-3 ${id}: ツモ牌を除いた閉じた手牌の向聴数が、全判断で記録の shanten と一致する`, () => {
       const result = importReportText(loadReportText(id));
       expect(result.ok).toBe(true);
       if (!result.ok) return;

@@ -82,9 +82,9 @@ describe('U-22: 検索の元になる値', () => {
     expect(MODEL.games.find((g) => g.id === 'g3')?.memo).toBeNull();
   });
 
-  it('問題の行の元: 局と巡目・種類・シャンテン数・どの半荘か。迷いの問題には迷いの番号', () => {
+  it('問題の行の元: 局と巡目・種類・向聴数・どの半荘か。迷いの問題には迷いの番号', () => {
     const first = MODEL.problems.find((p) => p.sessionId === 'g2' && p.title === '東4局 13巡目');
-    expect(first).toMatchObject({ kindName: '打牌', shanten: '1シャンテン', where: '10月9日 17:12 の半荘', answered: false });
+    expect(first).toMatchObject({ kindName: '打牌', shanten: '1向聴', where: '10月9日 17:12 の半荘', answered: false });
     expect(first?.markNumber).toBeNull();
     const marked = MODEL.problems.filter((p) => p.sessionId === 'g1' && p.markNumber !== null);
     expect(marked.map((p) => p.markNumber).sort()).toEqual([1, 2, 3]);
@@ -182,10 +182,10 @@ describe('U-22: 問題の検索（局・巡目・種類・その半荘の日付�
     expect(problemsOf({ query: '4巡目' }).every((p) => /(^|\D)4巡目/.test(p.title))).toBe(true);
   });
 
-  it('種類とシャンテン数', () => {
+  it('種類と向聴数', () => {
     expect(problemsOf({ query: '打牌' }).every((p) => p.kindName === '打牌')).toBe(true);
-    expect(problemsOf({ query: '2シャンテン' }).every((p) => p.shanten === '2シャンテン')).toBe(true);
-    expect(problemsOf({ query: '2シャンテン' }).length).toBeGreaterThan(0);
+    expect(problemsOf({ query: '2向聴' }).every((p) => p.shanten === '2向聴')).toBe(true);
+    expect(problemsOf({ query: '2向聴' }).length).toBeGreaterThan(0);
     expect(problemsOf({ query: 'リーチ' }).length).toBeGreaterThan(0);
     expect(problemsOf({ query: 'リーチ' }).every((p) => p.kindName === 'リーチ')).toBe(true);
   });

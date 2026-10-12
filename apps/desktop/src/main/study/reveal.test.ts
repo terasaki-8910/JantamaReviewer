@@ -84,7 +84,7 @@ describe('U-3 答え合わせの内容（打牌の判断）', () => {
     }
     // 棒の長さの基準は、行の中の最大
     expect(box.maxCount).toBe(Math.max(...box.rows.map((row) => row.detail.ukeire)));
-    // 実戦の 3m は 2 シャンテンになる打牌（枚数で比べられない）
+    // 実戦の 3m は 2 向聴になる打牌（枚数で比べられない）
     expect(box.rows.find((row) => row.tile === '3m')?.worse).toBe(true);
     expect(box.anyWorse).toBe(true);
     expect(box.minShanten).toBe(1);
@@ -93,16 +93,16 @@ describe('U-3 答え合わせの内容（打牌の判断）', () => {
     expect(box.tiles).toHaveLength(14);
   });
 
-  it('一言: 自分の打牌と AI の打牌の、シャンテン数と受け入れ枚数の比べ方', () => {
+  it('一言: 自分の打牌と AI の打牌の、向聴数と受け入れ枚数の比べ方', () => {
     expect(model.ukeire?.takeaway).toBe('AIの打牌のほうが受け入れが少ない → 形の質・打点・守備のどれかで差がついた');
     expect(buildReveal(decision, dahai('7s')).ukeire?.takeaway).toBe('AIと同じ打牌です');
     expect(buildReveal(decision, dahai('3m')).ukeire?.takeaway).toBe(
-      '自分の打牌は2シャンテン、AIの打牌は1シャンテン → シャンテン数で差がついた',
+      '自分の打牌は2向聴、AIの打牌は1向聴 → 向聴数で差がついた',
     );
   });
 });
 
-describe('E-23 2シャンテンからの先（画面が出す値）', () => {
+describe('E-23 2向聴からの先（画面が出す値）', () => {
   it('f9da 東4局13巡目 打3m: 48枚・14種類・平均 19.3・最大 33', () => {
     const decision = decisionOf(fx1a, 'k3h0e15');
     const box = buildReveal(decision, dahai('3m')).ukeire;
@@ -124,7 +124,7 @@ describe('E-23 2シャンテンからの先（画面が出す値）', () => {
     expect(follow?.max).toBe(43);
   });
 
-  it('切ったあとが 2 シャンテンでない打牌は、先を数えない（null）。手牌に無い牌も null', () => {
+  it('切ったあとが 2 向聴でない打牌は、先を数えない（null）。手牌に無い牌も null', () => {
     const decision = decisionOf(fx1a, 'k3h0e15');
     const box = buildReveal(decision, dahai('7s')).ukeire;
     expect(followOf(box?.tiles ?? [], '7s')).toBeNull();

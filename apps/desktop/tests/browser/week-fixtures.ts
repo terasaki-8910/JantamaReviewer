@@ -100,7 +100,7 @@ function weekRecords(): unknown[] {
   return [
     { week: '2026-09-14', stats: { rank4: 24.1, deal: 13.0, avg: 2.55, win: 20.9, call: 33.8, riichi: 18.1 }, focus: '' },
     { week: '2026-09-21', stats: { rank4: 22.8, deal: 12.4, avg: 2.5, win: 21.2, call: 32.9, riichi: 18.9 }, focus: '' },
-    { week: '2026-09-28', stats: { rank4: 21.5, deal: 12.0, avg: 2.46, win: 21.8, call: 32.0, riichi: 19.4 }, focus: '押し引きは、リーチの現物から探す。\n2シャンテンは、受け入れを広く取る。' },
+    { week: '2026-09-28', stats: { rank4: 21.5, deal: 12.0, avg: 2.46, win: 21.8, call: 32.0, riichi: 19.4 }, focus: '押し引きは、リーチの現物から探す。\n2向聴は、受け入れを広く取る。' },
   ];
 }
 

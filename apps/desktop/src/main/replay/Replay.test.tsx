@@ -194,7 +194,7 @@ describe('U-21 入口: 半荘のページの「この半荘を通して見る」
     expect(screen.queryByRole('button', { name: 'この局面を解く（迷い6）' })).toBeNull();
     await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
     expect(await screen.findByRole('heading', { level: 1, name: '東2局1本場 6巡目' })).toBeInTheDocument();
-    expect(chips()).toEqual(['2シャンテン', '実戦：打南', '迷い3']);
+    expect(chips()).toEqual(['2向聴', '実戦：打南', '迷い3']);
     expect(pos()).toBe('手 30 / 48');
     // 答える前の画面（答えの欄が出ている）
     expect(answeringState()).toBe('answering');
@@ -207,7 +207,7 @@ describe('U-21 入口: 半荘のページの「この半荘を通して見る」
     expect(screen.getAllByRole('button', { name: /^この局面を解く/ })).toHaveLength(6);
     await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い6）' }));
     expect(await screen.findByRole('heading', { level: 1, name: '東3局1本場 11巡目' })).toBeInTheDocument();
-    expect(chips()).toEqual(['1シャンテン', '実戦：打3m', '迷い6']);
+    expect(chips()).toEqual(['1向聴', '実戦：打3m', '迷い6']);
     expect(pos()).toBe(posAt(stepOf('k2h1e14')));
   });
 
@@ -860,7 +860,7 @@ describe('U-21 キーの説明と割り当ての変更（アイコンを押す�
 });
 
 describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
-  it('場面の一覧: 10 か所（迷い 6・不一致 5。迷い 2 は不一致でもある）。局・巡目・種類・シャンテン数・未解答と、札。0 / 10 解答済み', async () => {
+  it('場面の一覧: 10 か所（迷い 6・不一致 5。迷い 2 は不一致でもある）。局・巡目・種類・向聴数・未解答と、札。0 / 10 解答済み', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
@@ -879,8 +879,8 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
       '東3局1本場 11巡目',
       '東3局1本場 12巡目',
     ]);
-    expect(rows[0]?.querySelector('.sc-sub')?.textContent).toBe('打牌 · 1シャンテン · 未解答');
-    expect(rows[5]?.querySelector('.sc-sub')?.textContent).toBe('鳴き · 1シャンテン · 未解答');
+    expect(rows[0]?.querySelector('.sc-sub')?.textContent).toBe('打牌 · 1向聴 · 未解答');
+    expect(rows[5]?.querySelector('.sc-sub')?.textContent).toBe('鳴き · 1向聴 · 未解答');
     expect(rows.map((row) => [...row.querySelectorAll('.tag')].map((tag) => tag.textContent))).toEqual([
       ['迷い1'],
       ['迷い2', '大きな不一致'],
@@ -910,7 +910,7 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
     // 場面を押すと、その場面へ飛ぶ。答えの欄が出る
     await user.click(rows[3] as HTMLElement);
     expect(title()).toBe('東2局1本場 6巡目');
-    expect(chips()).toEqual(['2シャンテン', '実戦：打南', '迷い3']);
+    expect(chips()).toEqual(['2向聴', '実戦：打南', '迷い3']);
     expect(document.querySelector('.scenes')).toBeNull();
   });
 
@@ -928,7 +928,7 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
     await user.click(document.querySelector('.pin[data-key="k1h0e12"]') as HTMLElement);
     expect(title()).toBe('東2局 11巡目');
     expect([...document.querySelectorAll('.pin[aria-current="true"]')].map((pin) => pin.className)).toHaveLength(2);
-    expect(chips()).toEqual(['1シャンテン', '実戦：打8p', '迷い2', '大きな不一致']);
+    expect(chips()).toEqual(['1向聴', '実戦：打8p', '迷い2', '大きな不一致']);
     await user.click(document.querySelector('.pin[data-key="k2h1e14"]') as HTMLElement);
     expect(title()).toBe('東3局1本場 11巡目');
     expect(document.querySelectorAll('.pin[aria-current="true"]')).toHaveLength(1);

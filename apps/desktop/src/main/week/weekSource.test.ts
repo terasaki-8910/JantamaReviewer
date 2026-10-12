@@ -141,7 +141,7 @@ describe('U-30 週の元の数（答え・半荘から）', () => {
     expect(weeks.get(W)?.causeCounts.other).toBe(0);
   });
 
-  it('局面の種類は、検討ログと同じ（場面のシャンテン数と、鳴き・押し引き・序盤のタグ）', () => {
+  it('局面の種類は、検討ログと同じ（場面の向聴数と、鳴き・押し引き・序盤のタグ）', () => {
     const { source } = sourceOf(setup, [PREV, W]);
     expect(source.answers[0]?.phases).toEqual(phasesOf(A.shanten, A.tags));
     expect(source.answers[2]?.phases).toEqual(phasesOf(C.shanten, C.tags));

@@ -4,6 +4,7 @@
  * - L-2: ソースと画面の文言に絵文字を入れない（eslint が見ない Rust・CSS・HTML・JSON も含む）
  * - L-1: HTML に色の値を直接書かない（CSS は stylelint、TSX は eslint が見る）
  * - U-26: 問題の状態の言葉は「解答済み」「未解答」にそろえる（「回答済み」「未回答」を、画面の文言にも、ソースの書き込みにも残さない）
+ * - R12-9: 麻雀の言葉は「聴牌」「向聴」にそろえる（「テンパイ」「シャンテン」を、画面の文言にも、ソースのコメントにも残さない）
  * - docs/recipes/tauri-desktop-app.md の注意点（アプリのフォルダのロックファイルと packageManager、
  *   bundle.icon の明示）
  * - 画面の CSP が外部の通信を許していないこと（S-2 の補強）
@@ -120,6 +121,47 @@ describe('U-26: 問題の状態の言葉は「解答済み」「未解答」', (
   it('今日の出題の一覧は、答えた問題に「解答済み」と出す（問題の状態の言葉の元の場所）', () => {
     const source = readFileSync(join(ROOT, 'apps', 'desktop', 'src', 'main', 'study', 'TodayPage.tsx'), 'utf8');
     expect(source).toMatch(/^\s*解答済み$/m);
+  });
+});
+
+/**
+ * R12-9: 「聴牌」「向聴」にそろえる。旧い言い方（カタカナ）は、製品のソースのどこにも残さない（画面の文言・コメント・CSS）。
+ * 例外は、旧い言い方で保存した値を読み替える表のためのもの。保存している値（答え・今日の出題・書き出しの JSON・メモ・設定）には、
+ * 局面の種類や向聴数の言葉を入れていない（答えは判断の鍵と原因の ID、局面の種類は、そのつど牌譜から数え直す）ので、読み替える表は無く、
+ * 例外も空。読み替える表を足すときは、そのファイルの相対パスをここに書く。
+ */
+const OLD_TERMS = /テンパイ|シャンテン/g;
+const OLD_TERMS_ALLOWED_FILES: ReadonlySet<string> = new Set<string>([]);
+
+describe('R12-9: 「聴牌」「向聴」にそろえる', () => {
+  it('どの製品のソースにも「テンパイ」「シャンテン」が無い（例外の表のファイルを除く）', () => {
+    const found: string[] = [];
+    for (const file of productSourceFiles()) {
+      const rel = relative(ROOT, file).split(sep).join('/');
+      if (OLD_TERMS_ALLOWED_FILES.has(rel)) continue;
+      const text = readFileSync(file, 'utf8');
+      for (const match of text.matchAll(OLD_TERMS)) {
+        const line = text.slice(0, match.index).split('\n').length;
+        found.push(`${rel}:${line} ${match[0]}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it('例外の表のファイルは、実在する（消したファイルを例外に残さない）', () => {
+    for (const rel of OLD_TERMS_ALLOWED_FILES) expect(existsSync(join(ROOT, rel)), rel).toBe(true);
+  });
+
+  it('検出の正規表現が、旧い言い方を実際に見つける（空振りしていない）', () => {
+    expect('2シャンテン'.match(OLD_TERMS)).toHaveLength(1);
+    expect('テンパイ・1シャンテン'.match(OLD_TERMS)).toHaveLength(2);
+    expect('聴牌・2向聴以上'.match(OLD_TERMS)).toBeNull();
+  });
+
+  it('向聴数の言い方の元の場所（エンジンの shantenTag）が、新しい言い方で出す', () => {
+    const source = readFileSync(join(ROOT, 'packages', 'engine', 'src', 'decision.ts'), 'utf8');
+    expect(source).toContain("'聴牌'");
+    expect(source).toContain('${shanten}向聴');
   });
 });
 

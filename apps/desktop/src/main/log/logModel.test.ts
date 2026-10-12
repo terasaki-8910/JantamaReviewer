@@ -181,8 +181,8 @@ describe('U-29 行（問題ごとの、いちばん新しい答え）', () => {
     expect(row.title).toBe('東3局1本場 11巡目');
     expect(row.where).toBe('10月9日 19:09 の半荘');
     expect(row.kindName).toBe('打牌');
-    expect(row.tags).toEqual(['1シャンテン']);
-    expect(row.phases).toEqual(['1シャンテン']);
+    expect(row.tags).toEqual(['1向聴']);
+    expect(row.phases).toEqual(['1向聴']);
     expect(row.markNumber).toBe(1);
     expect(row.correct).toBe(false);
     expect(row.causeLabels).toEqual(['守備', '受け入れ枚数']);
@@ -197,7 +197,7 @@ describe('U-29 行（問題ごとの、いちばん新しい答え）', () => {
     expect(row.top).toBe(top === null ? '' : choiceText(decision, top));
   });
 
-  it('局面と印: 2シャンテン以上・1シャンテン・聴牌は場面のシャンテン数から。鳴き・押し引き・序盤は判断のタグから（鳴きは種類に出るので、印には入れない）', () => {
+  it('局面と印: 2向聴以上・1向聴・聴牌は場面の向聴数から。鳴き・押し引き・序盤は判断のタグから（鳴きは種類に出るので、印には入れない）', () => {
     const rows = build(
       [...fx4.decisions, ...fx1a.decisions].map((decision, i) =>
         answerFor(fx4.decisions.includes(decision) ? FX4_ID : FX1A_ID, decision, { id: i + 1 }),
@@ -207,18 +207,18 @@ describe('U-29 行（問題ごとの、いちばん新しい答え）', () => {
     for (const row of rows) {
       const decision = (locate(row.sessionId, row.key) as Located).decision;
       expect(row.phases[0]).toBe(
-        decision.shanten >= 2 ? '2シャンテン以上' : decision.shanten === 1 ? '1シャンテン' : '聴牌',
+        decision.shanten >= 2 ? '2向聴以上' : decision.shanten === 1 ? '1向聴' : '聴牌',
       );
       expect(row.phases.includes('鳴き')).toBe(decision.tags.includes('鳴き'));
       expect(row.phases.includes('押し引き')).toBe(decision.tags.includes('押し引き'));
       expect(row.phases.includes('序盤')).toBe(decision.tags.includes('序盤'));
       expect(row.tags).not.toContain('鳴き');
-      expect(row.tags[0]).toBe(decision.shanten <= 0 ? '聴牌' : `${decision.shanten}シャンテン`);
+      expect(row.tags[0]).toBe(decision.shanten <= 0 ? '聴牌' : `${decision.shanten}向聴`);
       expect(row.kind === 'call').toBe(row.phases.includes('鳴き'));
     }
     // 実際に、どの局面も出てくる（絞り込みの試験が空振りしない）
     const seen = new Set(rows.flatMap((row) => row.phases));
-    for (const phase of ['2シャンテン以上', '1シャンテン', '聴牌', '鳴き', '押し引き', '序盤']) expect(seen.has(phase as never), phase).toBe(true);
+    for (const phase of ['2向聴以上', '1向聴', '聴牌', '鳴き', '押し引き', '序盤']) expect(seen.has(phase as never), phase).toBe(true);
   });
 
   it('MAKA と食い違い: MAKA の打牌を入れていて、Mortal の1位と違うときだけ（同じ・入れていないは数えない）', () => {

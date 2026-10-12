@@ -5,7 +5,7 @@
  * 組み立てるのは、エンジンの計算をつなぎ、画面に出す順に並べるだけ:
  * - AI の評価の棒: 候補の確率の高い順に、上位 4 つと、自分の答え・実戦の行動（どれにも当たらない自分の答えは、確率 0 で足す）
  * - 受け入れ枚数の行（打牌の判断だけ）: 自分・実戦・AI・最大。同じ打牌の行は 1 つにまとめる（E-22: 手牌だけの枚数と残り）
- * - 一言: 自分の打牌と AI の打牌の、シャンテン数と受け入れ枚数の比べ方
+ * - 一言: 自分の打牌と AI の打牌の、向聴数と受け入れ枚数の比べ方
  */
 import {
   actualChoice,
@@ -49,7 +49,7 @@ export interface UkeireRow {
   tile: Tile;
   detail: DiscardDetail;
   color: 'you' | 'top' | 'act' | 'max';
-  /** いちばん進む打牌よりシャンテン数が多い（枚数で比べられない）。 */
+  /** いちばん進む打牌より向聴数が多い（枚数で比べられない）。 */
   worse: boolean;
 }
 
@@ -57,14 +57,14 @@ export interface UkeireBox {
   rows: UkeireRow[];
   /** 棒の長さをそろえる、行の受け入れ枚数の最大。 */
   maxCount: number;
-  /** いちばん進む打牌のシャンテン数。 */
+  /** いちばん進む打牌の向聴数。 */
   minShanten: number;
   anyWorse: boolean;
   /** 自分の打牌と AI の打牌の比べ方の一言。AI の 1 位が打牌でないときは空。 */
   takeaway: string;
   /** 天鳳牌理のリンク（ツモ牌を含む手牌）。 */
   pairiUrl: string;
-  /** 判断の手牌（ツモ牌を含む）。2 シャンテンからの先の計算に使う。 */
+  /** 判断の手牌（ツモ牌を含む）。2 向聴からの先の計算に使う。 */
   tiles: Tile[];
   /** 切る牌の種類ごとの結果（行の中の牌の結果を引く）。 */
   details: DiscardDetail[];
@@ -101,10 +101,10 @@ function takeawayOf(mine: DiscardDetail, ai: DiscardDetail | undefined, same: bo
   if (ai === undefined) return '';
   if (same) return 'AIと同じ打牌です';
   if (mine.shanten > ai.shanten) {
-    return `自分の打牌は${shantenTag(mine.shanten)}、AIの打牌は${shantenTag(ai.shanten)} → シャンテン数で差がついた`;
+    return `自分の打牌は${shantenTag(mine.shanten)}、AIの打牌は${shantenTag(ai.shanten)} → 向聴数で差がついた`;
   }
   if (mine.shanten < ai.shanten) {
-    return '自分の打牌のほうがシャンテン数が少ない → 受け入れ枚数ではなく、守備・打点・形の質で差がついた';
+    return '自分の打牌のほうが向聴数が少ない → 受け入れ枚数ではなく、守備・打点・形の質で差がついた';
   }
   if (ai.ukeire < mine.ukeire) return 'AIの打牌のほうが受け入れが少ない → 形の質・打点・守備のどれかで差がついた';
   if (ai.ukeire === mine.ukeire) return '受け入れ枚数は同じ → 形の質・打点・守備のどれかで差がついた';
@@ -221,7 +221,7 @@ export function buildReveal(decision: Decision, choice: QuizChoice, threshold?: 
 }
 
 /**
- * 2 シャンテンからの先（E-23）。行を開いたときに初めて数える。切ったあとが 2 シャンテンでなければ null。
+ * 2 向聴からの先（E-23）。行を開いたときに初めて数える。切ったあとが 2 向聴でなければ null。
  * `tiles` は判断の手牌（ツモ牌を含む）、`discard` は切る牌。
  */
 export function followOf(tiles: readonly Tile[], discard: Tile): TwoShantenFollow | null {
