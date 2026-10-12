@@ -1,0 +1,812 @@
+/*
+  week.css: 週の集計（F8、U-30、R11-12）。承認済みの見本（11回目の week.css）を移したもの。ここでは色を書かない。すべて tokens.css のトークンから。
+  図の方針（dataviz の手順）:
+  - 形を先に決める: 1 つの数は数の札、割合は横棒、推移は小さな折れ線を原因ごとに並べる、ずれは中央の線のまわりの点
+  - 色は accent 1 色だけ（原因ごとに小さな図に名前が付くので、原因ごとの色は付けない）。点のずれは赤・緑を使わず、墨（--ink）
+  - 線は 2px、点は 8px 以上（2px の面の輪つき）、棒は細く、格子は細い実線。文字は文字のトークン（図の色にしない）
+  - どの図にも、マウスを乗せる（キーボードの矢印でも）と出る吹き出しと、「表で見る」の表がある
+*/
+
+/* stylelint-disable no-descending-specificity -- 局面の種類の表（.wk-tbl）と「表で見る」の表（.wk-table）は、同じ th・td に別々の見た目を付ける 2 つの表。承認済みの見本の並びのまま使う */
+
+.wk-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s4);
+  margin: 0 0 var(--s5);
+}
+
+.wk-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.wk-switch .icon-btn {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.wk-switch .icon-btn:disabled {
+  color: var(--muted);
+  opacity: 0.45;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.wk-range {
+  min-width: 14.5em;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.wk-sec {
+  display: grid;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.wk-sec + .wk-sec {
+  margin-top: var(--s6);
+}
+
+.wk-sec > .sec-title {
+  margin: 0;
+}
+
+.wk-note {
+  max-width: 62ch;
+  margin: 0;
+  word-break: auto-phrase;
+  text-wrap: pretty;
+}
+
+.wk-fig {
+  display: grid;
+  gap: var(--s3);
+  margin: 0;
+  min-width: 0;
+}
+
+.wk-figh {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.wk-cap {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.wk-cap .quiet {
+  display: inline;
+  margin-left: var(--s2);
+  font-weight: 400;
+}
+
+.wk-tv {
+  flex: none;
+}
+
+/* 数の札 */
+.wk-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5em, 1fr));
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wk-tile {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+}
+
+.wk-tile .k {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.wk-tile .v {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0;
+  font-variant-numeric: proportional-nums;
+}
+
+.wk-tile .v small {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.wk-tile .s {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* 差の原因: 横棒（原因の名前・棒・割合と局面の数）。棒は 1 色。0〜100% の細い溝つき */
+.wk-bars {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: 640px;
+}
+
+.wk-bar {
+  display: grid;
+  grid-template-columns: 7.2em minmax(0, 1fr) 9.4em;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 28px;
+  border-radius: var(--r1);
+}
+
+.wk-bar .nm {
+  font-size: 13.5px;
+}
+
+.wk-bar .val {
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.wk-bar .val b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.wk-track {
+  position: relative;
+  display: block;
+  height: 12px;
+  background: var(--line);
+  border-radius: 0 4px 4px 0;
+}
+
+.wk-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  width: calc(var(--p, 0) * 1%);
+  min-width: 2px;
+  background: var(--accent-bar);
+  border-radius: 0 4px 4px 0;
+}
+
+[data-tip]:hover .wk-fill,
+[data-tip][data-active="true"] .wk-fill {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+/* 小さな折れ線（原因ごと・8 週。縦軸はどれも同じ 0〜60%） */
+.wk-multi {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17em, 1fr));
+  gap: var(--s5) var(--s5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wk-small {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wk-smallh {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.wk-smallh .nm {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wk-smallh .wk-now {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.wk-smallh .wk-now b {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* 折れ線の面: 左に縦軸の目盛り、中に図、下に最初と最後の週 */
+.lc {
+  display: grid;
+  grid-template-columns: 2.7em minmax(0, 1fr);
+  gap: 3px 6px;
+}
+
+.lc-y {
+  position: relative;
+  height: var(--h, 76px);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.lc-y span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.lc-plot {
+  position: relative;
+  height: var(--h, 76px);
+  border-radius: var(--r1);
+  touch-action: pan-y;
+}
+
+.lc-plot:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.lc-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.lc-svg .g {
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.lc-svg .g0 {
+  stroke: var(--line-strong);
+}
+
+.lc-svg .ln {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.lc-svg .ar {
+  fill: var(--accent-fill);
+  stroke: none;
+}
+
+.lc-x {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+.lc-spark {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.lc-spark .lc-x {
+  grid-column: 1;
+}
+
+.lc-spark .lc-svg .ln {
+  stroke: var(--muted);
+}
+
+.lc-spark .lc-svg .ar {
+  display: none;
+}
+
+.lc .band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-fill);
+  border-radius: var(--r1);
+  pointer-events: none;
+}
+
+.lc .cross {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--ink);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lc .dot,
+.dp .dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+  pointer-events: none;
+}
+
+.lc .dot.hov {
+  opacity: 0;
+  background: var(--ink);
+}
+
+.lc[data-hov] .dot.hov {
+  opacity: 1;
+}
+
+.lc[data-hov] .cross {
+  opacity: 0.45;
+}
+
+/* 吹き出し（マウスを乗せる・矢印キーで選ぶと出る）。値が先、名前があと */
+.wk-tip {
+  position: fixed;
+  z-index: 90;
+  display: grid;
+  gap: 2px;
+  max-width: 16em;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  box-shadow: 0 6px 16px var(--menu-shadow);
+  font-size: 12.5px;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.wk-tip[hidden] {
+  display: none;
+}
+
+.wk-tip .wk-tip-v {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.wk-tip .wk-tip-l {
+  color: var(--muted);
+}
+
+/* 表で見る */
+.wk-tablewrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.wk-table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.wk-table th,
+.wk-table td {
+  height: 32px;
+  padding: 0 var(--s3);
+  border-top: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.wk-table thead th {
+  height: 30px;
+  border-top: 0;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.wk-table th:first-child,
+.wk-table td:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+
+.wk-table td {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-table tbody th {
+  font-weight: 400;
+}
+
+.wk-table tr.cur th,
+.wk-table tr.cur td {
+  font-weight: 700;
+}
+
+/* 局面の種類の表 */
+.wk-tbl {
+  width: 100%;
+  max-width: 640px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.wk-tbl th,
+.wk-tbl td {
+  height: 38px;
+  padding: 0 var(--s2);
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.wk-tbl thead th {
+  height: 30px;
+  border-top: 0;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wk-tbl tbody th {
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.wk-tbl th:first-child,
+.wk-tbl td:first-child {
+  padding-left: 0;
+}
+
+.wk-tbl th:last-child,
+.wk-tbl td:last-child {
+  padding-right: 0;
+}
+
+.wk-tbl .num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wk-tbl .rate {
+  width: 46%;
+  min-width: 9em;
+}
+
+.wk-rate {
+  display: grid;
+  grid-template-columns: minmax(40px, 1fr) 3.4em;
+  align-items: center;
+  gap: var(--s2);
+  border-radius: var(--r1);
+}
+
+.wk-rate .wk-track {
+  height: 8px;
+}
+
+.wk-rate .num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* 局の評価: 一致率の大きな数と、点のずれの図 */
+.wk-eval {
+  display: grid;
+  grid-template-columns: minmax(0, 17em) minmax(0, 1fr);
+  gap: var(--s5) var(--s6);
+  align-items: start;
+}
+
+.wk-big {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wk-big .k {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.wk-big .v {
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: proportional-nums;
+}
+
+.wk-big .v small {
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.wk-big .s {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.wk-big .lc {
+  margin-top: 6px;
+}
+
+/*
+  点の図: 中央（ずれ 0）の線を軸に、左が「AIより低く付けた」、右が「AIより高く付けた」。
+  右の余白（8px）は、右端の目盛り（+2）が、図の外へはみ出さないため（目盛りの文字は、中央を線に合わせるので、幅の半分が右へ出る）
+*/
+.dp {
+  position: relative;
+  display: grid;
+  grid-template-columns: 7.6em minmax(0, 1fr);
+  gap: 0 var(--s3);
+  max-width: 640px;
+  padding-right: 8px;
+}
+
+.dp-row {
+  display: contents;
+}
+
+.dp-lbl {
+  display: grid;
+  align-content: center;
+  min-height: 40px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.dp-lbl .dp-n {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.dp-lane {
+  position: relative;
+  min-height: 40px;
+  border-radius: var(--r1);
+}
+
+.dp-lane::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--line);
+}
+
+.dp-lane .dot {
+  top: 50%;
+  background: var(--ink);
+}
+
+.dp-lane .dp-v {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.dp-grid {
+  position: absolute;
+  inset: 0 8px 40px calc(7.6em + var(--s3));
+  pointer-events: none;
+}
+
+.dp-grid i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.dp-grid i.z {
+  background: var(--line-strong);
+}
+
+.dp-axis {
+  grid-column: 2;
+  position: relative;
+  height: 20px;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.dp-axis span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.dp-dir {
+  grid-column: 2;
+  display: flex;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dp-dir span {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.dp-dir span:first-child {
+  padding-right: 6px;
+  text-align: right;
+}
+
+.dp-dir span:last-child {
+  padding-left: 6px;
+  text-align: left;
+}
+
+/* 成績（手入力）: 6 つの欄と、8 週の小さな線 */
+.wk-rec {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16.5em, 1fr));
+  gap: var(--s4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wk-recc {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+}
+
+.wk-recc label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wk-in {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wk-in .input {
+  width: 6.4em;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.wk-in .unit {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.wk-recc .lc {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 2px;
+}
+
+.wk-recc .lc-y {
+  display: none;
+}
+
+.wk-recc .lc-x {
+  grid-column: 1;
+}
+
+/* 来週の重点 */
+.wk-focus {
+  display: grid;
+  gap: var(--s3);
+  max-width: 640px;
+}
+
+.wk-prev {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--hover);
+  border-left: 3px solid var(--line-strong);
+  border-radius: 0 var(--r2) var(--r2) 0;
+}
+
+.wk-prev .k {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.wk-prev p {
+  margin: 0;
+  font-size: 14px;
+  white-space: pre-line;
+}
+
+.wk-focus textarea.input {
+  min-height: 84px;
+}
+
+.wk-empty {
+  margin: 0;
+  padding: var(--s3) 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+@container main (width < 760px) {
+  .wk-eval {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wk-bar {
+    grid-template-columns: 6.4em minmax(0, 1fr);
+    row-gap: 2px;
+  }
+
+  .wk-bar .val {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .wk-range {
+    min-width: 0;
+    font-size: 14px;
+  }
+
+  .dp {
+    grid-template-columns: 5.4em minmax(0, 1fr);
+  }
+
+  .dp-grid {
+    left: calc(5.4em + var(--s3));
+  }
+
+  .wk-tbl .rate {
+    width: 40%;
+    min-width: 7em;
+  }
+}

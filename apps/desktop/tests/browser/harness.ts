@@ -178,6 +178,8 @@ export interface Scenario {
   importing?: ImportScenario;
   /** 保存してある答え（`list_answers` が返す。`record_answer` で増える。答えの記録 study.sqlite の偽物）。 */
   answers?: unknown[];
+  /** 保存してある週の成績と重点（`list_weeks` が返す。`set_week` で替わる。study.sqlite の weeks 表の偽物。U-30）。 */
+  weeks?: unknown[];
   /** 日付（YYYY-MM-DD）→ 保存してある今日の組（`get_daily_set`。`save_daily_set` は、その日の組が無いときだけ保存する）。 */
   dailySets?: Record<string, unknown[]>;
   /**
@@ -212,6 +214,8 @@ export function tauriMockScript(scenario: Scenario): string {
   var answers = JSON.parse(JSON.stringify(scenario.answers || []));
   var nextAnswerId = answers.reduce(function (max, a) { return Math.max(max, a.id); }, 0) + 1;
   var dailySets = JSON.parse(JSON.stringify(scenario.dailySets || {}));
+  // 週の成績と重点（weeks 表）の偽物。Rust 側と同じ決まり: 重点は空の行を除く。成績も重点も空なら、記録ごと消して null
+  var weeks = JSON.parse(JSON.stringify(scenario.weeks || []));
   window.__jrCalls = [];
   function sortedSessions() {
     return sessions.slice().sort(function (a, b) {
@@ -296,6 +300,17 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'save_daily_set':
         if (dailySets[args.date] === undefined) dailySets[args.date] = args.items;
         return JSON.parse(JSON.stringify(dailySets[args.date]));
+      case 'list_weeks':
+        return JSON.parse(JSON.stringify(weeks.slice().sort(function (a, b) { return a.week < b.week ? -1 : 1; })));
+      case 'set_week': {
+        var rec = JSON.parse(JSON.stringify(args.record));
+        // 改行の文字は、この文字列（テンプレート）の中では書けないので、文字コードで作る。trim が、行末の CR を取る
+        rec.focus = String(rec.focus || '').split(String.fromCharCode(10)).map(function (l) { return l.trim(); }).filter(function (l) { return l !== ''; }).join(String.fromCharCode(10));
+        weeks = weeks.filter(function (w) { return w.week !== rec.week; });
+        if (Object.keys(rec.stats || {}).length === 0 && rec.focus === '') return null;
+        weeks.push(rec);
+        return JSON.parse(JSON.stringify(rec));
+      }
       case 'count_solved':
         return args.sessionIds.map(function (id) {
           var keys = {};

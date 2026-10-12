@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from 'react';
 
 import { api, errorMessage } from '../api/tauri';
-import type { AnswerMode } from '../api/types';
+import type { AnswerMode, SessionRecord } from '../api/types';
 import { applyTheme, effectiveTheme, storeTheme, type ThemeChoice } from '../shared/theme';
 import { reportBackground, signalWindowReady } from '../shared/windowReady';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -25,6 +25,7 @@ import { QuizPage } from './study/QuizPage';
 import { ReviewPage } from './study/ReviewPage';
 import { StudyProvider, useStudyData } from './study/StudyProvider';
 import { TodayPage } from './study/TodayPage';
+import { WeekPage } from './week/WeekPage';
 import { TOAST_MS, Toast, type ToastModel } from './Toast';
 import { UndoProvider, useUndo, useUndoEvents } from './undo/UndoProvider';
 import { useShortcutsBlocked } from './undo/shortcutGuard';
@@ -34,6 +35,9 @@ import { useSessions, useSummariesAndFit, useToday } from './useSessions';
 import { useSidebar } from './useSidebar';
 import { currentView, historyReducer, isViewAvailable, startHistory, stepTarget } from './viewHistory';
 import { quizView, replayView, sessionView, viewSessionId, type View } from './views';
+
+/** 半荘の一覧を読み終える前の、空の一覧（週の集計に渡す。毎回新しい配列を作らない）。 */
+const NO_SESSIONS: readonly SessionRecord[] = [];
 
 /** 取り消したあとの「元に戻しました」の通知の長さ（ミリ秒）。 */
 const UNDONE_TOAST_MS = 3500;
@@ -259,6 +263,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
   const openToday = useCallback(() => push({ kind: 'today' }), [push]);
   const openReview = useCallback(() => push({ kind: 'review' }), [push]);
   const openLog = useCallback(() => push({ kind: 'log' }), [push]);
+  const openWeek = useCallback(() => push({ kind: 'week' }), [push]);
   // ログの行: 保存した答えで開く（答えの種類は、最後の答えのもの）
   const openLogged = useCallback((sessionId: string, key: string, mode: AnswerMode) => push(quizView(sessionId, key, mode)), [push]);
   const openProblem = useCallback((sessionId: string, key: string) => push(quizView(sessionId, key)), [push]);
@@ -437,6 +442,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           onToday={choose(openToday)}
           onReview={choose(openReview)}
           onLog={choose(openLog)}
+          onWeek={choose(openWeek)}
         >
           <SessionList
             ref={listRef}
@@ -466,6 +472,7 @@ function Shell({ solvedProblems }: Required<AppProps>) {
           {view.kind === 'today' && <TodayPage onOpen={openProblem} />}
           {view.kind === 'review' && <ReviewPage />}
           {view.kind === 'log' && <LogPage state={log} onOpen={openLogged} />}
+          {view.kind === 'week' && <WeekPage sessions={sessions ?? NO_SESSIONS} summaries={summaries} />}
           {view.kind === 'replay' && <ReplayPage sessionId={view.sessionId} startKey={view.key} />}
           {view.kind === 'quiz' && (
             <QuizPage

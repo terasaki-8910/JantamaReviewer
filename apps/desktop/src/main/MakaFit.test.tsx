@@ -4,7 +4,7 @@
  * 見込みの計算・当てはめ直し・基礎の記録は、packages/engine（maka-fit.test.ts）と makaFit.test.ts（単体）が確かめる。
  * 実ブラウザでの見え方（横スクロール・axe・Tab・幅 390px）は、tests/browser/hanchan.browser.test.ts が確かめる。
  */
-import { fitMaka, percentOf, predictGrade, type Grade } from '@jantama/engine';
+import { RATING_LINK_VERSION, fitMaka, percentOf, predictGrade, type Grade } from '@jantama/engine';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,9 +34,11 @@ afterEach(() => {
 const ID = '20261009-190953';
 const FX1A_ID = '20261009-171200';
 const LOAD = { timeout: 20_000 };
+/** 取り込みが保存するとおりの結びつけ（当てはめ方の版つき。版が古いと、半荘のページを開いたとき、当てはめ直される）。 */
 const LINKS: Links = {
   marks: {},
   ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': 'k2h0', '11': 'k2h1' },
+  ratings_version: RATING_LINK_VERSION,
 };
 
 /** 取り込み済みの FX-4 の半荘（5 局。基礎には無い半荘）。 */

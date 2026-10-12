@@ -997,3 +997,62 @@ describe('U-25: 説明のアイコン（局の評価の表の迷いの札）', (
     });
   }
 });
+
+describe('U-31 MAKA の当てはめの見込み（実ブラウザ。局の評価の表の下の 1 行）', () => {
+  const START =
+    'MAKA の評価 67局ぶんで合わせた見込み: ぴったり 34%・±1段階以内 66%（1半荘ずつ外して確かめた値。MAKA の評価を入れるたびに合わせ直します）';
+  const fitLine = (page: Page) =>
+    page.evaluate(() => (document.getElementById('fit-line')?.textContent ?? '').replace(/\s+/g, ' ').trim());
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 768, 1280] as const) {
+      it(`幅 ${width}px ${scheme}: 見込みの 1 行は、表の下にあり、窓の幅に収まる。承認済みの文のとおり。入れたあとの「合わせ直しました」も収まる`, async () => {
+        const { context, page, problems } = await open({ width, scheme });
+        try {
+          expect(await fitLine(page)).toBe(START);
+          const geometry = () =>
+            page.evaluate(() => {
+              const line = document.getElementById('fit-line') as HTMLElement;
+              const table = document.querySelector('.tbl-wrap') as HTMLElement;
+              const rect = line.getBoundingClientRect();
+              return {
+                below: rect.top >= table.getBoundingClientRect().bottom - 1,
+                inside: rect.left >= 0 && rect.right <= document.documentElement.clientWidth,
+                scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                icon: line.querySelector('.fit-ic svg') !== null,
+                done: document.querySelector('.fit-done .tag')?.textContent ?? null,
+                doneInside: (() => {
+                  const done = document.querySelector('.fit-done');
+                  return done === null ? true : done.getBoundingClientRect().right <= document.documentElement.clientWidth;
+                })(),
+              };
+            });
+          const before = await geometry();
+          expect(before).toMatchObject({ below: true, inside: true, icon: true, done: null });
+          expect(before.scroll).toBeLessThanOrEqual(0);
+          // 東2局に S+ と入れる: 68局・ぴったり 34%・±1段階以内 65%。「合わせ直しました」が出る
+          await (await reveal(page, page.getByRole('button', { name: '東2局の MAKA を入力' }))).click();
+          await page.getByRole('menuitemradio', { name: 'S+', exact: true }).click();
+          await poll(() => fitLine(page)).toBe(
+            'MAKA の評価 68局ぶんで合わせた見込み: ぴったり 34%・±1段階以内 65%（1半荘ずつ外して確かめた値。MAKA の評価を入れるたびに合わせ直します）',
+          );
+          const after = await geometry();
+          expect(after).toMatchObject({ below: true, inside: true, done: '合わせ直しました', doneInside: true });
+          expect(after.scroll).toBeLessThanOrEqual(0);
+          // 半荘全体の段階も、新しい当てはめ（S- から S）
+          expect(await page.locator('.head-score .grade').textContent()).toBe('S');
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          expect(problems).toEqual([]);
+          // Ctrl+Z で、基礎の 67局に戻る。「合わせ直しました」は出たまま
+          await page.keyboard.press('Control+z');
+          await poll(() => fitLine(page)).toBe(START);
+          expect(await page.locator('.fit-done .tag').count()).toBe(1);
+          expect(await page.locator('.head-score .grade').textContent()).toBe('S-');
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+});

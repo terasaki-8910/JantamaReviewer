@@ -184,8 +184,8 @@ export interface LogInput {
 
 const CAUSE_LABEL: ReadonlyMap<string, string> = new Map(CAUSE_CHOICES.map((c) => [c.id, c.label]));
 
-/** 局面。シャンテン数は場面の手で数えたもの（`Decision.shanten`）、鳴き・押し引き・序盤は判断のタグ。 */
-function phasesOf(shanten: number, tags: readonly string[]): LogPhase[] {
+/** 局面。シャンテン数は場面の手で数えたもの（`Decision.shanten`）、鳴き・押し引き・序盤は判断のタグ。週の集計の「局面の種類」も、これで数える。 */
+export function phasesOf(shanten: number, tags: readonly string[]): LogPhase[] {
   const phases: LogPhase[] = [shanten >= 2 ? '2シャンテン以上' : shanten === 1 ? '1シャンテン' : '聴牌'];
   if (tags.includes(TAG_CALL)) phases.push('鳴き');
   if (tags.includes(TAG_PUSH_PULL)) phases.push('押し引き');

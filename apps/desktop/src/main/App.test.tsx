@@ -33,7 +33,7 @@ function twoSessions() {
 }
 
 describe('検討画面のシェル（U-8）', () => {
-  it('サイドバーの上に、名前と ← →、主な操作「検討結果を取り込む」、行き先（今日の出題・解き直し・ログは押せる。週の集計はまだ押せない）を置く', async () => {
+  it('サイドバーの上に、名前と ← →、主な操作「検討結果を取り込む」、行き先（今日の出題・解き直し・ログ・週の集計。どれも押せる）を置く', async () => {
     const store = twoSessions();
     installTauriMock({ handlers: store.handlers });
     render(<App />);
@@ -48,28 +48,23 @@ describe('検討画面のシェル（U-8）', () => {
     const items = within(nav).getAllByRole('button');
     // 今日の出題が解き直しの上。数（読み込み後）は、行の右に付く
     expect(items.map((b) => b.querySelector('.label')?.textContent)).toEqual(['今日の出題', '解き直し', 'ログ', '週の集計']);
-    for (const item of items.slice(0, 3)) {
+    for (const item of items) {
       expect(item).not.toHaveAttribute('aria-disabled');
       expect(item).toHaveAttribute('title', item.querySelector('.label')?.textContent ?? '');
-    }
-    for (const item of items.slice(3)) {
-      expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).toHaveAttribute('title', 'あとで作ります');
     }
     expect(within(side).getByRole('button', { name: '設定' })).toBeInTheDocument();
     expect(await within(side).findByRole('navigation', { name: '半荘の一覧' })).toBeInTheDocument();
   });
 
-  it('まだ作っていない行き先（週の集計）を押しても、何も起きない（本文もそのまま）', async () => {
+  it('週の集計を押すと、週の集計が開く（選んでいる行き先に aria-current が付く。U-30）', async () => {
     installTauriMock({ handlers: twoSessions().handlers });
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole('heading', { level: 1, name: /10月9日/ });
-    for (const name of ['週の集計']) {
-      await user.click(screen.getByRole('button', { name }));
-      expect(screen.getByRole('heading', { level: 1, name: /10月9日/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name })).not.toHaveAttribute('aria-current');
-    }
+    expect(screen.getByRole('button', { name: '週の集計' })).not.toHaveAttribute('aria-current');
+    await user.click(screen.getByRole('button', { name: '週の集計' }));
+    expect(await screen.findByRole('heading', { level: 1, name: '週の集計' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '週の集計' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('起動すると、いちばん新しい半荘が開く（行に印が付く）。半荘と設定を切り替える。選んでいる行き先に aria-current が付く', async () => {

@@ -19,6 +19,7 @@ import type { AnswerMode } from '../api/types';
  * - `review`: 解き直し（今日が期限の問題を 1 問ずつ。U-17）
  * - `replay`: 半荘を通して見る画面（半荘の名前と、開く判断の鍵。鍵が無ければ、半荘の頭から。F12、U-21）
  * - `log`: 検討ログ（答えた問題を 1 行ずつ。絞り込みと「答えを出す」は、画面の外（シェル）が持つので、ここには入れない。F5、U-29）
+ * - `week`: 週の集計（週は、画面の中だけの状態。ほかの画面へ移って戻ると、今週に戻る。F8、U-30）
  */
 export type View =
   | { kind: 'none' }
@@ -29,6 +30,7 @@ export type View =
   | { kind: 'quiz'; sessionId: string; key: string; mode: AnswerMode }
   | { kind: 'review' }
   | { kind: 'log' }
+  | { kind: 'week' }
   | { kind: 'replay'; sessionId: string; key?: string };
 
 export type ViewKind = View['kind'];
@@ -42,6 +44,7 @@ export const VIEW_KINDS: readonly ViewKind[] = [
   'quiz',
   'review',
   'log',
+  'week',
   'replay',
 ];
 
@@ -85,6 +88,8 @@ export function resolveView(value: unknown): View {
       return { kind: 'review' };
     case 'log':
       return { kind: 'log' };
+    case 'week':
+      return { kind: 'week' };
     case 'replay':
       return typeof record.sessionId === 'string' && record.sessionId !== ''
         ? replayView(record.sessionId, typeof record.key === 'string' && record.key !== '' ? record.key : undefined)

@@ -2,19 +2,16 @@ import { useEffect, useRef, type ReactNode, type Ref } from 'react';
 
 import appIcon from '../../src-tauri/icons/128x128.png';
 import type { ThemeChoice } from '../shared/theme';
-import { Icon, type IconName } from './Icon';
+import { Icon } from './Icon';
 import type { View } from './views';
 
 /**
  * サイドバー（U-8、U-22、U-32、R7-1、R9-9、R10-5、R11-15）。固定幅。640px 未満では隠れ、左上のボタンで、引き出しとして重ねて開く
  * （出す・しまう・開く・閉じるは、useSidebar.ts と App.tsx）。広い窓でも、同じボタンでしまえる。
  * 上から: 見出し（左にサイドバーを閉じるボタンとアプリのアイコン、右に枠の無い検索のアイコンと、そのすぐ右の ← →（見た画面の履歴））・
- * 主な操作「検討結果を取り込む」・行き先（今日の出題・解き直し。数つき。ログ。週の集計はまだ作っていないので、押せない）・
+ * 主な操作「検討結果を取り込む」・行き先（今日の出題・解き直し。数つき。ログ。週の集計）・
  * 半荘の一覧（`children`）・設定とテーマの切り替え。
  */
-
-/** まだ作っていない行き先。押せない（aria-disabled）が、キーボードで止まれて、理由が読める。 */
-const COMING_SOON: ReadonlyArray<{ label: string; icon: IconName }> = [{ label: '週の集計', icon: 'chart' }];
 
 /** 見出しの右の組（検索のアイコンと、見た画面の履歴の ← →）の部品。サイドバーの見出しと、本文の上の帯が、同じものを使う。 */
 export interface HeaderToolsProps {
@@ -169,15 +166,17 @@ interface SidebarProps extends HeaderToolsProps {
   onToday: () => void;
   onReview: () => void;
   onLog: () => void;
+  onWeek: () => void;
   /** 半荘の一覧。 */
   children: ReactNode;
 }
 
 /** この画面が、サイドバーのどの行き先に当たるか。 */
-function destinationOf(view: View): 'today' | 'review' | 'log' | null {
+function destinationOf(view: View): 'today' | 'review' | 'log' | 'week' | null {
   if (view.kind === 'today') return 'today';
   if (view.kind === 'review') return 'review';
   if (view.kind === 'log') return 'log';
+  if (view.kind === 'week') return 'week';
   if (view.kind === 'quiz') return view.mode === 'review' ? 'review' : 'today';
   return null;
 }
@@ -204,6 +203,7 @@ export function Sidebar({
   onToday,
   onReview,
   onLog,
+  onWeek,
   children,
 }: SidebarProps) {
   const here = destinationOf(view);
@@ -295,14 +295,18 @@ export function Sidebar({
                   <span className="label">ログ</span>
                 </button>
               </li>
-              {COMING_SOON.map((item) => (
-                <li key={item.label}>
-                  <button type="button" className="nav-item" aria-disabled="true" title="あとで作ります">
-                    <Icon name={item.icon} />
-                    <span className="label">{item.label}</span>
-                  </button>
-                </li>
-              ))}
+              <li>
+                <button
+                  type="button"
+                  className="nav-item"
+                  aria-current={here === 'week' ? 'page' : undefined}
+                  title="週の集計"
+                  onClick={onWeek}
+                >
+                  <Icon name="chart" />
+                  <span className="label">週の集計</span>
+                </button>
+              </li>
             </ul>
           </nav>
         </div>
