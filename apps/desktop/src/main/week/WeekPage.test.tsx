@@ -59,7 +59,7 @@ const C = discards(fx1aGame)[12] as Decision;
 const D = discards(fx1aGame)[30] as Decision;
 const E = discards(fx1aGame)[45] as Decision;
 
-/** FX-4 の半荘（10/9 19:09）。自分の〇△✕: 東1局 △・東2局 ✕・東2局1本場 △・東3局 ✕・東3局1本場 ✕（AI 基準は、すべて〇の帯）。 */
+/** FX-4 の半荘（10/9 19:09）。自分の〇△✕: 東1局 △・東2局 ✕・東2局1本場 △・東3局 ✕・東3局1本場 ✕（AI 基準は S+・S-・A・S・S-。A だけが△の帯で、あとは〇の帯）。 */
 function fx4(): SessionRecord {
   const base = fx4Session(FX4_ID, local(2026, 10, 9, 19, 9), {
     report_path: `C:\\data\\games\\${FX4_ID}\\report.json`,
@@ -313,17 +313,17 @@ describe('U-30 今週の数・差の原因の割合（局面に対する割合�
 });
 
 describe('U-30 局の評価: 一致率と、結果ごとのずれ', () => {
-  it('自分の〇△✕と AI 基準（すべて〇の帯）を比べた 5 局は、一致 0 局で 0%。結果ごとのずれは 自分の和了 -1.0・放銃 -2.0・流局 —・他家の和了 -1.5', async () => {
+  it('自分の〇△✕と AI 基準を比べた 5 局は、東2局1本場（△と A）だけが同じ帯で、一致 1 局の 20%。結果ごとのずれは 自分の和了 0.0・放銃 -2.0・流局 —・他家の和了 -1.5', async () => {
     const { user } = setup();
     await openWeek(user);
     const evaluation = section('局の評価');
     const agree = figure('agree');
     expect(textOf(agree.querySelector('.wk-big .k'))).toBe('自分の〇△✕が AI 基準と合った割合');
-    expect(textOf(agree.querySelector('.wk-big .v'))).toBe('0%');
-    expect(textOf(agree.querySelector('.wk-big .s'))).toBe('5局のうち 0局が一致');
+    expect(textOf(agree.querySelector('.wk-big .v'))).toBe('20%');
+    expect(textOf(agree.querySelector('.wk-big .s'))).toBe('5局のうち 1局が一致');
     const dots = figure('dots');
     const rows = [...dots.querySelectorAll('.dp-row')].map((r) => textOf(r));
-    expect(rows).toEqual(['自分の和了1局−1.0', '放銃2局−2.0', '流局0局', '他家の和了2局−1.5']);
+    expect(rows).toEqual(['自分の和了1局0.0', '放銃2局−2.0', '流局0局', '他家の和了2局−1.5']);
     expect(textOf(dots.querySelector('.dp-dir'))).toBe('AIより低く付けた ← → AIより高く付けた');
     expect(textOf(evaluation.querySelector('.wk-note'))).toBe('和了できなかった局（放銃・他家の和了）を、AI より平均 1.8 段階低く付けています');
     // 説明の文は、説明のアイコンにある
@@ -332,13 +332,13 @@ describe('U-30 局の評価: 一致率と、結果ごとのずれ', () => {
     );
   });
 
-  it('表で付け直した自分の評価が、一致率に反映される（〇に付け直した局は、AI 基準と同じ帯で、一致）', async () => {
+  it('表で付け直した自分の評価が、一致率に反映される（〇に付け直した局は、AI 基準が S なので同じ帯で、一致）', async () => {
     const edited: SessionRecord = { ...fx4(), self_ratings: { kyokus: { k0h0: 'good', k2h0: 'good' } } };
     const { user } = setup({ sessions: [{ session: edited, report: 'fx4' }, fx1a()] });
     await openWeek(user);
-    // 東1局 〇・東2局 ✕・東2局1本場 △・東3局 〇・東3局1本場 ✕。一致は 東1局・東3局 の 2 局
-    expect(textOf(figure('agree').querySelector('.wk-big .v'))).toBe('40%');
-    expect(textOf(figure('agree').querySelector('.wk-big .s'))).toBe('5局のうち 2局が一致');
+    // 東1局 〇（S+）・東2局 ✕（S-）・東2局1本場 △（A）・東3局 〇（S）・東3局1本場 ✕（S-）。一致は 東1局・東2局1本場・東3局 の 3 局
+    expect(textOf(figure('agree').querySelector('.wk-big .v'))).toBe('60%');
+    expect(textOf(figure('agree').querySelector('.wk-big .s'))).toBe('5局のうち 3局が一致');
   });
 
   it('評価を付けた局が無い週は、「この週は、評価を付けた局がありません。」と一致率の線だけ（先週）', async () => {
@@ -392,12 +392,12 @@ describe('U-30 図の吹き出し（マウス・キーボード）と「表で�
     expect(document.querySelector('.wk-bar[data-active="true"]')).toBeNull();
   });
 
-  it('点の図も 1 つの止まり場所。選ぶと「平均 −1.0 段階」と結果・局数が出る。マウスを乗せても同じ', async () => {
+  it('点の図も 1 つの止まり場所。選ぶと「平均 0.0 段階」と結果・局数が出る。マウスを乗せても同じ', async () => {
     const { user } = setup();
     await openWeek(user);
     const dots = screen.getByRole('group', { name: '結果ごとのずれ（矢印キーで選ぶ）' });
     act(() => dots.focus());
-    expect(tipText()).toBe('平均 −1.0 段階 | 自分の和了・1局');
+    expect(tipText()).toBe('平均 0.0 段階 | 自分の和了・1局');
     await user.keyboard('{ArrowDown}');
     expect(tipText()).toBe('平均 −2.0 段階 | 放銃・2局');
     await user.keyboard('{ArrowDown}');
@@ -442,7 +442,7 @@ describe('U-30 図の吹き出し（マウス・キーボード）と「表で�
         first: ['8/17の週', '—', '—', '—', '—', '—'],
       },
       agree: { caption: '一致率の直近8週', head: ['週', '一致率'], first: ['8/17の週', '—'] },
-      dots: { caption: '局の結果ごとの、自分の評価と AI 基準の差の平均（段階）', head: ['結果', '局数', '差の平均（段階）'], first: ['自分の和了', '1局', '−1.0'] },
+      dots: { caption: '局の結果ごとの、自分の評価と AI 基準の差の平均（段階）', head: ['結果', '局数', '差の平均（段階）'], first: ['自分の和了', '1局', '0.0'] },
       rec: {
         caption: '週ごとの成績（直近8週）',
         head: ['週', '4位率', '放銃率', '平均順位', '和了率', '副露率', '立直率'],

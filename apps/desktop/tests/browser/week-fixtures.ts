@@ -1,7 +1,7 @@
 /**
  * 週の集計の実ブラウザの検査（week.browser.test.ts）が使う、見本のデータ（試験のデータで、画面の部品ではない）。
  * 試験の「いま」は 2026 年 10 月 9 日（金）22:00。今週は 10 月 5 日（月）から。
- * 取り込んだ半荘は FX-4（今週。自分の〇△✕は △・✕・△・✕・✕、AI 基準はすべて〇の帯）と f9da（9 月 2 日）。答えは、直近 10 週に
+ * 取り込んだ半荘は FX-4（今週。自分の〇△✕は △・✕・△・✕・✕、AI 基準は S+・S-・A・S・S-）と f9da（9 月 2 日）。答えは、直近 10 週に
  * 週ごと 3〜7 問。手で入れた成績・重点は、先週・2 週前・3 週前。
  */
 import { actualChoice, keyOfDecision, type Decision, type ImportedGame } from '@jantama/engine';
@@ -35,7 +35,7 @@ const FX1A_ID = folderName(FX1A_AT);
 const fx4 = gameOf('fx4');
 const fx1a = gameOf('fx1a');
 
-/** FX-4 の半荘（今週）。自分の〇△✕: △・✕・△・✕・✕。AI 基準は、すべて〇の帯。 */
+/** FX-4 の半荘（今週）。自分の〇△✕: △・✕・△・✕・✕。AI 基準は S+・S-・A・S・S-（A だけが△の帯で、あとは〇の帯）。 */
 function fx4Imported() {
   const base = fx4Session(FX4_ID, FX4_AT, {
     report_path: `C:\\data\\games\\${FX4_ID}\\report.json`,
