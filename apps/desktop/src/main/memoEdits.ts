@@ -7,14 +7,15 @@
  * メモの文字を打つ欄の中では、欄そのものの取り消しが先に働く（`UndoProvider` は、文字を打つ欄にキーボードの位置があるとき動かない）。
  * 欄の外へ出たとき（と Enter）に、それまでに打った分を 1 つの命令として積む。
  */
-import type { ExtraMemo, MemoEntry } from '../api/types';
+import type { ExtraMemo, ExtraMemoPlace, MemoEntry } from '../api/types';
+import { placeOf } from './memos';
 import type { UndoCommand } from './undo/undoStack';
 
 /** 保存の窓口（`api` の、メモが使う部分）。 */
 export interface MemoApi {
   setMemo(sessionId: string, markId: number, memo: MemoEntry): Promise<void>;
   clearMemo(sessionId: string, markId: number): Promise<void>;
-  setExtraMemo(sessionId: string, id: string, decision: string, memo: MemoEntry): Promise<void>;
+  setExtraMemo(sessionId: string, id: string, place: ExtraMemoPlace, memo: MemoEntry): Promise<void>;
   clearExtraMemo(sessionId: string, id: string): Promise<void>;
 }
 
@@ -57,15 +58,32 @@ export interface ExtraMemoEdit {
   before: ExtraMemo | undefined;
   /** 書いたメモ（消したときは undefined）。 */
   after: ExtraMemo | undefined;
+  /**
+   * 局面を選んで結びつけたときの、選んだ判断の呼び名（通知に出す。例: 東3局 9巡目）。渡すと、「局面を選ぶ」操作の命令になる
+   * （`before` は位置だけのメモ、`after` は判断の鍵を足したメモ）。
+   */
+  link?: string;
 }
 
-/** 迷いマークの無い迷いのメモを、足す・書き直す・消す。 */
+/**
+ * 迷いマークの無い迷いのメモを、足す・書き直す・局面を選んで結びつける・消す。
+ * どの保存も、メモ全体（局面・候補・理由）を書き直す。元の値も、その時点のメモ全体を持つ。
+ */
 export function extraMemoCommand(api: MemoApi, reload: Reload, edit: ExtraMemoEdit): UndoCommand {
   const apply = async (memo: ExtraMemo | undefined): Promise<void> => {
     if (memo === undefined) await api.clearExtraMemo(edit.sessionId, edit.id);
-    else await api.setExtraMemo(edit.sessionId, edit.id, memo.decision, { candidates: memo.candidates, reason: memo.reason });
+    else await api.setExtraMemo(edit.sessionId, edit.id, placeOf(memo), { candidates: memo.candidates, reason: memo.reason });
     await reload();
   };
+  if (edit.link !== undefined) {
+    const done = `追加のメモを${edit.link}の局面に結びつけました`;
+    return {
+      label: '追加のメモの局面を選ぶ',
+      messages: { run: done, undo: '追加のメモの結びつけを元に戻しました', redo: done },
+      execute: () => apply(edit.after),
+      undo: () => apply(edit.before),
+    };
+  }
   const adding = edit.before === undefined;
   const removing = edit.after === undefined;
   const run = adding ? '迷いマークの無い迷いのメモを足しました' : removing ? '追加のメモを消しました' : undefined;

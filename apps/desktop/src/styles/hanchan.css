@@ -992,6 +992,20 @@ body.lb-open {
   gap: 6px;
 }
 
+/* 取り込む前の「迷いマークの無い迷いを足す」の本場・巡目（2 桁が入る幅。設定ページの数の欄より狭い） */
+.where .input.num {
+  width: 3.6em;
+  padding: 0 var(--s2);
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.where .unit {
+  margin-right: var(--s1);
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .marks.extras {
   margin-top: var(--s4);
 }

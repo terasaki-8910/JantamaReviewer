@@ -8,6 +8,7 @@
 use tauri::{AppHandle, State};
 
 use crate::commands::{emit_state, SharedCore};
+use crate::store::MemoPosition;
 
 /// 保存したあとに、記録の一覧が更新されるよう、状態の変化を知らせる。
 fn changed(app: &AppHandle, core: &SharedCore) {
@@ -49,20 +50,31 @@ pub async fn clear_memo(
     Ok(())
 }
 
-/// 迷いマークの無い迷いのメモを書く（同じ名前があれば置き換え、無ければ足す）。`decision` は判断の鍵。
+/// 迷いマークの無い迷いのメモを書く（同じ名前があれば置き換え、無ければ足す）。
+/// 局面は、`decision`（判断の鍵）か `position`（手で選んだ局・本場・巡目）のどちらか、または両方。
+// 引数は、画面からの呼び出しの形そのまま（まとめ直すと、画面側の呼び出しの形も変わるので、ここだけ許す）
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn set_extra_memo(
     app: AppHandle,
     core: State<'_, SharedCore>,
     session_id: String,
     id: String,
-    decision: String,
+    decision: Option<String>,
+    position: Option<MemoPosition>,
     candidates: String,
     reason: String,
 ) -> Result<(), String> {
     core.lock()
         .store()?
-        .set_extra_memo(&session_id, &id, &decision, &candidates, &reason)
+        .set_extra_memo(
+            &session_id,
+            &id,
+            decision.as_deref(),
+            position,
+            &candidates,
+            &reason,
+        )
         .map_err(|e| e.to_string())?;
     changed(&app, &core);
     Ok(())
