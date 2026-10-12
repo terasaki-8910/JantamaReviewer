@@ -10,12 +10,17 @@
 //! - `weeks`: 週ごとの、手で入れる数（成績 6 つ）と来週の重点（版 2。U-30、R11-12）。鍵は、週の月曜の日付（YYYY-MM-DD）。
 //!   書き出し（D-2「週の数」）が使う入口は、`StudyDb::list_weeks`（読む）・`set_week`（1 週を置き換える）・`replace_weeks`（全部を置き換える）
 //!
+//! 記録の書き出し・読み込み（D-2）は `records.rs`。そこが使う入口は、`StudyDb::list_answers`・`list_daily_sets`・`list_weeks`（読む）と、
+//! `replace_all`（答え・今日の出題・週の記録を、1 つの取引で全部置き換える。ファイルの入れ替えを、取引の中に挟める）。
+//!
 //! 表の作りは `PRAGMA user_version` で版を持つ。新しい版のアプリが作ったファイルは、読まずにエラーにする（壊さないため）。
 //! 消した半荘は、アプリを閉じるとき（落ちたときは次の起動のとき）に、答えと予定も消す（`forget_sessions`。`trash.rs` が呼ぶ）。
 //! 消した半荘を置き場に置いている間は、行をそのまま残す（元に戻せば、答えも戻る）。
 
 pub mod commands;
+pub mod records;
 
+use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -177,6 +182,14 @@ pub struct AnswerNotes {
 pub struct ProblemRef {
     pub session_id: String,
     pub decision_key: String,
+}
+
+/// ある日の今日の出題の組（日付と、順番どおりの問題）。書き出しの JSON の「今日の出題」の 1 件も、この形。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DailySetRecord {
+    /// 日付（YYYY-MM-DD。午前 4 時までを前の日として数えた日付）。
+    pub date: String,
+    pub items: Vec<ProblemRef>,
 }
 
 /// 週の成績（手で入れる数。雀魂の成績の画面から）。入れていない項目は `None`。
@@ -660,6 +673,59 @@ impl StudyDb {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    /// すべての日の今日の出題の組（日付の古い順。組の中は順番どおり）。書き出し（D-2）が使う。
+    pub fn list_daily_sets(&self) -> Result<Vec<DailySetRecord>, StudyError> {
+        let mut statement = self.conn.prepare(
+            "SELECT date, session_id, decision_key FROM daily_sets ORDER BY date, position",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                ProblemRef {
+                    session_id: row.get(1)?,
+                    decision_key: row.get(2)?,
+                },
+            ))
+        })?;
+        let mut sets: Vec<DailySetRecord> = Vec::new();
+        for row in rows {
+            let (date, item) = row?;
+            match sets.last_mut() {
+                Some(last) if last.date == date => last.items.push(item),
+                _ => sets.push(DailySetRecord {
+                    date,
+                    items: vec![item],
+                }),
+            }
+        }
+        Ok(sets)
+    }
+
+    /// 答え・今日の出題の組・週の記録を、渡したもの全部に置き換える（書き出したものを読み込むとき。D-2）。
+    /// すべてを確かめてから、1 つの取引で、いまの行をすべて消して書く。答えには、渡した番号をそのまま付ける
+    /// （次に記録する答えの番号も、渡した番号の最大の次になる）。
+    ///
+    /// `before_commit` は、行を書き終えたあと、取引を確定する前に呼ばれる（半荘のフォルダのファイルの入れ替えを、ここに挟む）。
+    /// これがエラーを返したら、取引を取り消して、何も変えない。確定に失敗したときも、何も変わらない（そのときは、呼んだ側が、
+    /// 入れ替えたファイルを戻す）。
+    pub fn replace_all<E>(
+        &mut self,
+        answers: &[AnswerRow],
+        daily_sets: &[DailySetRecord],
+        weeks: &[WeekRecord],
+        before_commit: impl FnOnce() -> Result<(), E>,
+    ) -> Result<(), ReplaceError<E>> {
+        let weeks = check_snapshot(answers, daily_sets, weeks).map_err(ReplaceError::Study)?;
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| ReplaceError::Study(e.into()))?;
+        write_snapshot(&tx, answers, daily_sets, &weeks).map_err(ReplaceError::Study)?;
+        // ここから先の失敗では、取引は確定せずに捨てられる（`Transaction` は、確定しないまま落とすと取り消す）
+        before_commit().map_err(ReplaceError::Hook)?;
+        tx.commit().map_err(|e| ReplaceError::Study(e.into()))
+    }
+
     /// 1 週ぶんを置き換える（値を確かめてから、1 つの取引で書く）。成績が 1 つも無く、重点も空なら、その週の行を消す。
     /// 保存した記録（重点を整えたもの）を返す。消したときは `None`。
     pub fn set_week(&mut self, record: WeekRecord) -> Result<Option<WeekRecord>, StudyError> {
@@ -714,6 +780,129 @@ impl StudyDb {
         tx.commit()?;
         Ok((answers, sets))
     }
+}
+
+/// `replace_all` が失敗した理由: 値が正しくない・ファイルの扱いに失敗した（`Study`）か、確定の前に挟んだ処理が失敗した（`Hook`）。
+#[derive(Debug)]
+pub enum ReplaceError<E> {
+    Study(StudyError),
+    Hook(E),
+}
+
+/// 置き換える中身を確かめる: 答えの番号（1 以上・重ならない）と値、今日の出題の組（日付が重ならない・問題の形）、週の記録。
+/// 週の記録は、保存する形（重点を整えたもの）にして返す。
+fn check_snapshot(
+    answers: &[AnswerRow],
+    daily_sets: &[DailySetRecord],
+    weeks: &[WeekRecord],
+) -> Result<Vec<WeekRecord>, StudyError> {
+    let mut ids = BTreeSet::new();
+    for row in answers {
+        if row.id < 1 {
+            return Err(invalid(format!("答えの番号は 1 以上です: {}", row.id)));
+        }
+        if !ids.insert(row.id) {
+            return Err(invalid(format!("答えの番号が重なっています: {}", row.id)));
+        }
+        validate(&row.answer)?;
+    }
+    let mut dates = BTreeSet::new();
+    for set in daily_sets {
+        if !valid_date(&set.date) {
+            return Err(invalid(format!(
+                "今日の出題の日付の形が違います: {}",
+                set.date
+            )));
+        }
+        if !dates.insert(set.date.as_str()) {
+            return Err(invalid(format!(
+                "同じ日の今日の出題が重なっています: {}",
+                set.date
+            )));
+        }
+        if set.items.is_empty() {
+            return Err(invalid(format!("今日の出題が空です: {}", set.date)));
+        }
+        for item in &set.items {
+            if !valid_session_id(&item.session_id) || !valid_decision_key(&item.decision_key) {
+                return Err(invalid("今日の出題の問題の形が違います"));
+            }
+        }
+    }
+    let mut checked: Vec<WeekRecord> = Vec::with_capacity(weeks.len());
+    for record in weeks {
+        let one = check_week(record)?;
+        if checked.iter().any(|other| other.week == one.week) {
+            return Err(invalid(format!("同じ週が重なっています: {}", one.week)));
+        }
+        checked.push(one);
+    }
+    Ok(checked)
+}
+
+/// いまの答え・今日の出題の組・週の記録をすべて消して、確かめ済みの中身を、取引の中で書く。
+fn write_snapshot(
+    tx: &rusqlite::Transaction<'_>,
+    answers: &[AnswerRow],
+    daily_sets: &[DailySetRecord],
+    weeks: &[WeekRecord],
+) -> Result<(), StudyError> {
+    tx.execute("DELETE FROM answers", [])?;
+    tx.execute("DELETE FROM daily_sets", [])?;
+    tx.execute("DELETE FROM weeks", [])?;
+    // 答えの番号の数え直し（AUTOINCREMENT は、消した番号も覚えている）。書いた最大の番号の次から付く。
+    tx.execute("DELETE FROM sqlite_sequence WHERE name = 'answers'", [])?;
+    {
+        let mut insert = tx.prepare(
+            "INSERT INTO answers (id, session_id, decision_key, mode, shown_at, answered_at, choice, reason,
+               duration_ms, reselect_count, correct, causes, principle, maka_move, interval_days, due_date)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        )?;
+        for row in answers {
+            let answer = &row.answer;
+            let choice =
+                serde_json::to_string(&answer.choice).map_err(|e| invalid(e.to_string()))?;
+            let causes =
+                serde_json::to_string(&answer.causes).map_err(|e| invalid(e.to_string()))?;
+            insert.execute(params![
+                row.id,
+                answer.session_id,
+                answer.decision_key,
+                answer.mode.as_str(),
+                answer.shown_at,
+                answer.answered_at,
+                choice,
+                answer.reason.trim(),
+                answer.duration_ms,
+                answer.reselect_count,
+                i32::from(answer.correct),
+                causes,
+                answer.principle,
+                answer.maka_move,
+                answer.interval_days,
+                answer.due_date,
+            ])?;
+        }
+    }
+    {
+        let mut insert = tx.prepare(
+            "INSERT INTO daily_sets (date, position, session_id, decision_key) VALUES (?1, ?2, ?3, ?4)",
+        )?;
+        for set in daily_sets {
+            for (position, item) in set.items.iter().enumerate() {
+                insert.execute(params![
+                    set.date,
+                    position as i64,
+                    item.session_id,
+                    item.decision_key
+                ])?;
+            }
+        }
+    }
+    for record in weeks {
+        write_week(tx, record)?;
+    }
+    Ok(())
 }
 
 /// 週の記録を、取引の中で書く。中身が空なら、行を消す。行を残した（書いた）なら true。
@@ -1521,5 +1710,162 @@ mod tests {
         assert!(!valid_date("2026-1-09"));
         assert!(!valid_date("2026-00-09"));
         assert!(!valid_date("2026-10-32"));
+    }
+
+    // ---- D-2: 書き出し・読み込みの入口（list_daily_sets・replace_all） ----
+
+    fn day_set(date: &str, items: &[(&str, &str)]) -> DailySetRecord {
+        DailySetRecord {
+            date: date.to_string(),
+            items: items
+                .iter()
+                .map(|(session, key)| ProblemRef {
+                    session_id: session.to_string(),
+                    decision_key: key.to_string(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn d2_the_days_sets_are_listed_by_date_and_in_their_order() {
+        let (_tmp, _dir, mut db) = open();
+        db.save_daily_set(
+            "2026-10-12",
+            &day_set(
+                "",
+                &[("20261009-190953", "k0h0e4"), ("20261009-190953", "k2h1e3")],
+            )
+            .items,
+        )
+        .unwrap();
+        db.save_daily_set(
+            "2026-10-11",
+            &day_set("", &[("20261008-214000", "k1h0e9")]).items,
+        )
+        .unwrap();
+        assert_eq!(
+            db.list_daily_sets().unwrap(),
+            vec![
+                day_set("2026-10-11", &[("20261008-214000", "k1h0e9")]),
+                day_set(
+                    "2026-10-12",
+                    &[("20261009-190953", "k0h0e4"), ("20261009-190953", "k2h1e3")]
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn d2_replacing_everything_keeps_the_given_ids_and_restarts_the_numbering_after_them() {
+        let (_tmp, _dir, mut db) = open();
+        for n in 0..3 {
+            db.record_answer(sample("20261009-190953", "k0h0e1", 1_000 + n))
+                .unwrap();
+        }
+        let mut given = AnswerRow {
+            id: 41,
+            answer: sample("20261009-190953", "k0h0e2", 5_000),
+        };
+        given.answer.causes = vec!["shape".to_string()];
+        let sets = [day_set("2026-10-12", &[("20261009-190953", "k0h0e2")])];
+        let weeks = [week("2026-10-05", stats(20.0, 2.5), "重点")];
+        db.replace_all(std::slice::from_ref(&given), &sets, &weeks, || {
+            Ok::<(), String>(())
+        })
+        .unwrap();
+        assert_eq!(db.list_answers().unwrap(), vec![given]);
+        assert_eq!(db.list_daily_sets().unwrap(), sets.to_vec());
+        assert_eq!(db.list_weeks().unwrap(), weeks.to_vec());
+        // 次の番号は、渡した最大の次（消した番号の続きではない）
+        let next = db
+            .record_answer(sample("20261009-190953", "k0h0e3", 6_000))
+            .unwrap();
+        assert_eq!(next.id, 42);
+        // 空で置き換えると、すべて消え、番号も 1 から
+        db.replace_all(&[], &[], &[], || Ok::<(), String>(()))
+            .unwrap();
+        assert!(db.list_answers().unwrap().is_empty());
+        assert!(db.list_daily_sets().unwrap().is_empty());
+        assert!(db.list_weeks().unwrap().is_empty());
+        let first = db
+            .record_answer(sample("20261009-190953", "k0h0e4", 7_000))
+            .unwrap();
+        assert_eq!(first.id, 1);
+    }
+
+    #[test]
+    fn d2_replacing_is_all_or_nothing_when_a_value_is_refused_or_the_step_before_commit_fails() {
+        let (_tmp, _dir, mut db) = open();
+        db.record_answer(sample("20261009-190953", "k0h0e1", 1_000))
+            .unwrap();
+        db.set_week(week("2026-10-05", stats(20.0, 2.5), "元の重点"))
+            .unwrap();
+        let answers_before = db.list_answers().unwrap();
+        let weeks_before = db.list_weeks().unwrap();
+
+        let good = AnswerRow {
+            id: 7,
+            answer: sample("20261009-190953", "k9h0e9", 9_000),
+        };
+        // 取引を確定する前の処理が失敗したら、書いた行も取り消す
+        let failed = db.replace_all(std::slice::from_ref(&good), &[], &[], || {
+            Err::<(), String>("入れ替えに失敗".to_string())
+        });
+        assert!(matches!(failed, Err(ReplaceError::Hook(ref m)) if m == "入れ替えに失敗"));
+        assert_eq!(db.list_answers().unwrap(), answers_before);
+        assert_eq!(db.list_weeks().unwrap(), weeks_before);
+
+        // 値が 1 つでも正しくなければ、確かめる段階で断る（前処理も呼ばない）
+        let mut bad = good.clone();
+        bad.answer.reason = " ".to_string();
+        let mut duplicate = good.clone();
+        duplicate.id = 7;
+        let not_called = std::cell::Cell::new(false);
+        for (answers, sets, weeks) in [
+            (vec![good.clone(), bad], vec![], vec![]),
+            (vec![good.clone(), duplicate], vec![], vec![]),
+            (
+                vec![AnswerRow {
+                    id: 0,
+                    ..good.clone()
+                }],
+                vec![],
+                vec![],
+            ),
+            (
+                vec![good.clone()],
+                vec![
+                    day_set("2026-10-12", &[]),
+                    day_set("2026-10-13", &[("a", "k0h0e1")]),
+                ],
+                vec![],
+            ),
+            (
+                vec![good.clone()],
+                vec![
+                    day_set("2026-10-12", &[("20261009-190953", "k0h0e1")]),
+                    day_set("2026-10-12", &[("20261009-190953", "k0h0e2")]),
+                ],
+                vec![],
+            ),
+            (
+                vec![good.clone()],
+                vec![],
+                vec![week("2026-10-06", WeekStats::default(), "月曜ではない")],
+            ),
+        ] {
+            let outcome = db.replace_all(&answers, &sets, &weeks, || {
+                not_called.set(true);
+                Ok::<(), String>(())
+            });
+            assert!(
+                matches!(outcome, Err(ReplaceError::Study(_))),
+                "{outcome:?}"
+            );
+        }
+        assert!(!not_called.get());
+        assert_eq!(db.list_answers().unwrap(), answers_before);
+        assert_eq!(db.list_weeks().unwrap(), weeks_before);
     }
 }

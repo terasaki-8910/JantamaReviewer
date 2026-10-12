@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "検討画面に許す操作: イベントの受信と、保存先のフォルダを選ぶダイアログ。",
+  "description": "検討画面に許す操作: イベントの受信と、保存先のフォルダ・記録のファイルを選ぶダイアログ。",
   "windows": ["main"],
-  "permissions": ["core:event:default", "dialog:allow-open"]
+  "permissions": ["core:event:default", "dialog:allow-open", "dialog:allow-save"]
 }

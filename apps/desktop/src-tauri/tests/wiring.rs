@@ -425,3 +425,41 @@ fn every_memo_command_is_registered_and_none_of_them_writes_the_recording() {
         assert!(!source.contains(forbidden), "memo.rs に {forbidden} がある");
     }
 }
+
+#[test]
+fn the_records_commands_are_registered_and_the_records_module_never_touches_the_widget_files() {
+    // 記録の書き出し・読み込み（D-2）の `#[tauri::command]` が、すべて登録されている（登録の忘れを防ぐ）。
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    for name in [
+        "records_overview",
+        "export_records",
+        "inspect_records_file",
+        "import_records",
+    ] {
+        assert!(
+            lib.contains(&format!("study::commands::{name},")),
+            "{name} を generate_handler に登録していない"
+        );
+    }
+    // 書き出しに入れないもの（スクショ・Mortal の結果・ウィジェットの記録・文字認識の写し）の置き場の名前を、一度も使わない。
+    // 読み書きするのは、4 つの記録のファイルと、取っておいた記録のファイルだけ。
+    let source = read(crate_dir().join("src").join("study").join("records.rs"));
+    let product = source.split("#[cfg(test)]").next().unwrap_or("");
+    for forbidden in [
+        "EVENTS_FILE",
+        "REPORT_FILE",
+        "OCR_FILE",
+        "MARKS_DIR",
+        "RATINGS_DIR",
+        "add_mark",
+        "add_rating",
+        "undo(",
+        "append",
+        "OpenOptions",
+    ] {
+        assert!(
+            !product.contains(forbidden),
+            "records.rs に {forbidden} がある"
+        );
+    }
+}

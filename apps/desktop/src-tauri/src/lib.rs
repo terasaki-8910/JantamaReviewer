@@ -133,6 +133,10 @@ pub fn run() {
             study::commands::count_solved,
             study::commands::list_weeks,
             study::commands::set_week,
+            study::commands::records_overview,
+            study::commands::export_records,
+            study::commands::inspect_records_file,
+            study::commands::import_records,
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)

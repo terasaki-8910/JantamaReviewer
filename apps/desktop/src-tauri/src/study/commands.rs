@@ -4,14 +4,18 @@
 //! ウィジェットの窓には、答えの記録に触れる理由が無い）。接続は 1 つだけ、錠（`Mutex`）の後ろに持つ。保存先が変わったら、
 //! 次に呼ばれたときに、新しい保存先のファイルを開き直す。
 
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
 use serde::Serialize;
-use tauri::{State, WebviewWindow};
+use tauri::{AppHandle, State, WebviewWindow};
 
+use super::records::{
+    self, ExportReport, ImportPreview, ImportReport, RecordsError, RecordsOverview,
+};
 use super::{AnswerNotes, AnswerRow, NewAnswer, ProblemRef, StudyDb, StudyError, WeekRecord};
-use crate::commands::SharedCore;
+use crate::commands::{emit_state, set_settings_now, SharedCore};
 use crate::widget_window::MAIN_LABEL;
 
 struct Slot {
@@ -38,10 +42,10 @@ impl SharedStudy {
     }
 
     /// 保存先 `data_dir` の接続で `f` を動かす。まだ開いていない・保存先が変わったときは、開く。
-    pub fn with<R>(
+    pub fn with<R, E: Display>(
         &self,
         data_dir: &Path,
-        f: impl FnOnce(&mut StudyDb) -> Result<R, StudyError>,
+        f: impl FnOnce(&mut StudyDb) -> Result<R, E>,
     ) -> Result<R, String> {
         let mut slot = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         if slot.db.is_none() || slot.dir.as_deref() != Some(data_dir) {
@@ -173,12 +177,105 @@ pub async fn count_solved(
 ) -> Result<Vec<SolvedCount>, String> {
     ensure_main(&window)?;
     study.with(&data_dir(&core), |db| {
-        Ok(db
-            .solved_counts(&session_ids)?
-            .into_iter()
-            .map(|(session_id, solved)| SolvedCount { session_id, solved })
-            .collect())
+        Ok::<_, StudyError>(
+            db.solved_counts(&session_ids)?
+                .into_iter()
+                .map(|(session_id, solved)| SolvedCount { session_id, solved })
+                .collect(),
+        )
     })
+}
+
+/// 記録の書き出しと読み込み（D-2）に使う、設定の写しと保存先。
+fn settings_snapshot(core: &SharedCore) -> crate::settings::Settings {
+    core.lock().settings().clone()
+}
+
+/// 書き出した時刻の文字（ローカル時刻。例: 2026-10-12T14:03:22+09:00）。
+fn exported_at_text() -> String {
+    chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false)
+}
+
+/// いま書き出すとしたら、何がどれだけ入るか（設定のページの「約 0.4 MB」に使う。何も書かない）。
+#[tauri::command]
+pub async fn records_overview(
+    window: WebviewWindow,
+    core: State<'_, SharedCore>,
+    study: State<'_, SharedStudy>,
+) -> Result<RecordsOverview, String> {
+    ensure_main(&window)?;
+    let settings = settings_snapshot(&core);
+    study.with(&settings.data_dir, |db| {
+        records::overview(&settings.data_dir, db, &settings)
+    })
+}
+
+/// 記録を 1 つの JSON のファイルに書き出す。`path` は、保存のダイアログで選んだ場所（試験・試し運転では、直接渡せる）。
+#[tauri::command]
+pub async fn export_records(
+    window: WebviewWindow,
+    core: State<'_, SharedCore>,
+    study: State<'_, SharedStudy>,
+    path: String,
+) -> Result<ExportReport, String> {
+    ensure_main(&window)?;
+    let settings = settings_snapshot(&core);
+    study.with(&settings.data_dir, |db| {
+        records::export_to_path(
+            &settings.data_dir,
+            db,
+            &settings,
+            Path::new(&path),
+            &exported_at_text(),
+        )
+    })
+}
+
+/// 読み込む前に、ファイルを全部確かめて、半荘と答えの数（と、この保存先に半荘のフォルダが無い半荘の数）を返す。何も書き換えない。
+/// 確かめられなければ、理由を返す。
+#[tauri::command]
+pub async fn inspect_records_file(
+    window: WebviewWindow,
+    core: State<'_, SharedCore>,
+    path: String,
+) -> Result<ImportPreview, String> {
+    ensure_main(&window)?;
+    let settings = settings_snapshot(&core);
+    let file = records::read_records_file(Path::new(&path)).map_err(|e| e.import_message())?;
+    records::preview(&settings.data_dir, &file).map_err(|e| e.import_message())
+}
+
+/// 記録のファイルを読み込んで、いまの記録を、その内容に置き換える（元には戻せない）。ファイルは、もう一度全部確かめてから使う。
+/// 途中で失敗したら、元の記録のまま残す（設定も、元に戻す）。置き換えたら、記録の状態の変化と設定の変化を、全部の窓に知らせる。
+#[tauri::command]
+pub async fn import_records(
+    window: WebviewWindow,
+    app: AppHandle,
+    core: State<'_, SharedCore>,
+    study: State<'_, SharedStudy>,
+    path: String,
+) -> Result<ImportReport, String> {
+    ensure_main(&window)?;
+    let before = settings_snapshot(&core);
+    let file = records::read_records_file(Path::new(&path)).map_err(|e| e.import_message())?;
+
+    // 設定を先に替える（保存できなければ、ここで止まり、何も変わっていない）。記録の入れ替えに失敗したら、設定を元に戻す。
+    let merged = file.settings.applied_to(&before);
+    set_settings_now(&app, merged)?;
+    let outcome = study.with(&before.data_dir, |db| {
+        records::import_records(&before.data_dir, db, &file, &mut records::real_rename)
+            .map_err(|e: RecordsError| e.import_message())
+    });
+    let report = match outcome {
+        Ok(report) => report,
+        Err(message) => {
+            let _ = set_settings_now(&app, before);
+            return Err(message);
+        }
+    };
+    let state = core.lock().app_state();
+    emit_state(&app, &state);
+    Ok(report)
 }
 
 #[cfg(test)]
