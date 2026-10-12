@@ -617,3 +617,15 @@ https://github.com/MahjongRepository/mahjong
 - どちらも MIT（kobalab/Majiang・majiang-core・majiang-ai、MahjongRepository/mahjong。GitHub の API で確かめた）。このアプリも MIT なので、著作権表示と許諾表示を残せば使える。GitHub の fork は要らず、npm の `@kobalab/majiang-core` に頼るか、必要なファイルだけを表示つきで写す形になる。Python の mahjong はアプリの中では動かせないので、これまでどおり試験の答え合わせ（正解表を作る道具）に使う。
 - 近い役の調べに、majiang-core の和了判定・役の判定を使う案を足した（自前の実装と比べて勧めを出す）。
 - 2つのリポジトリにあってこのアプリに無い機能の調べを、別に始めた（analysis/survey/）。提案は次のシートで見せ、作るかどうかはそこで決めてもらう。
+
+## 2026-10-12 確認シート14回目（出した内容。回答はまだ）
+
+同じ URL（version 16、answers/round14）。質問 R14-1〜R14-12 と自由記入 R14-13。R14-2 は複数選択（choice が配列）。調べの報告は、それぞれのブランチの analysis/ の下（feature/yaku-research の analysis/yaku、feature/survey の analysis/survey、feature/mac-research の analysis/mac、feature/sync-spike の analysis/sync-spike。どれも main には入れていない）。
+- R14-1: 近い役（確定している役・近い役・役無しの警告）を見本の形で作るか（見本は試作のエンジンがあなたの実戦の局面で計算したもの）
+- R14-2: 2つのリポジトリから作る機能（見本を作るもの。1 待ちごとの役と打点、2 待ちの形、3 危険度の目安、4 局の結果の手、5 他家の手牌を開く、6 取り込んだ半荘からの成績、7 向聴数の推移、8 符の内訳）
+- R14-3: majiang-core を npm で入れるか、写すか
+- R14-4: 取り込んだ半荘からの成績の集計と、仕様書5章の「成績の自動取得」の線引き
+- R14-5〜R14-8: Mac 版の最初の一歩、あなたの Mac と打ち方（自由記入）、署名、画面収録の許可の月1回の聞き直しへの備え
+- R14-9〜R14-11: 同期の作り方（A 置き換え・B 別の同期用 DB・C JSON を丸ごと）、大きなファイル、ThinkBook が寝ている間
+- R14-12: 作ったあとの進め方
+- 聞かずに決めたこと（シートの番号どおり）: 1 役の名前は漢字、2 近い役に出すのは役牌・断幺九・混一色・一気通貫・三色同順、3 あと3枚以内・遠回り1枚まで・2行まで、4 役無しの警告は鳴いた手で強く・ダマは薄く、立直は薄い1行、5 同じ中身はまとめる、6 役の判定は自前で majiang-core は試験の2つ目の正解、7 打点に裏ドラと一発の期待値は足さない・切り上げ満貫なし、8 MIT の表示は THIRD_PARTY_NOTICES.md と README・電脳麻将の牌画像と音は使わない、9 Mac でも規約の線は同じで禁止の仕組みを試験の一覧に足す、10 同期するなら端末をまたいで一意の id、11 ThinkBook のサーバーは tursodb（置く前にチャットで確かめる）。
