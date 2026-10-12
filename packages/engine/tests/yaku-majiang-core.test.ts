@@ -1,11 +1,14 @@
+import Majiang from '@kobalab/majiang-core';
 import { describe, expect, it } from 'vitest';
 
-import { TILE_KIND_COUNT } from '../src/tiles';
-import { evaluateWin, waitsOf } from '../src/yaku';
+import { importReportText } from '../src/import';
+import { shantenOfCounts } from '../src/shanten';
+import { TILE_KIND_COUNT, countTiles, tileKind } from '../src/tiles';
+import { evaluateWin, waitsOf, yakuMeldOf } from '../src/yaku';
 import { nearYaku } from '../src/yaku-near';
 import { SHAPE_YAKU, type YakuId } from '../src/yaku';
-import { loadFixtureJson } from './helpers/fixtures';
-import { majiangEvaluate, majiangWaits } from './helpers/majiang-evaluate';
+import { FX1_IDS, FX4_ID, FX5_ID, loadFixtureJson, loadReportText } from './helpers/fixtures';
+import { majiangEvaluate, majiangHand, majiangWaits } from './helpers/majiang-evaluate';
 import { type OracleWin, type YakuOracleFixture, oracleIds, oracleYakuman, shapeOf } from './helpers/yaku-oracle';
 
 // 役の調査: @kobalab/majiang-core（MIT。電脳麻将の基本ライブラリ）の hule・tingpai を、Python の mahjong ライブラリの正解表と、
@@ -105,6 +108,26 @@ describe('エンジンの自前の実装（yaku.ts）と majiang-core: 和了牌
       }
     }
     expect(compared).toBeGreaterThan(20_000);
+  });
+});
+
+describe('majiang-core の xiangting（向聴数）: エンジンの向聴数と一致する', () => {
+  it('実戦の全判断（7 半荘 1159 件。ツモ牌つきの 14 枚も、鳴きの判断の 13 枚も、副露つきも）で同じ値', () => {
+    let n = 0;
+    for (const id of [...FX1_IDS, FX4_ID, FX5_ID]) {
+      const game = importReportText(loadReportText(id));
+      if (!game.ok) throw new Error(game.error.message);
+      for (const d of game.value.decisions) {
+        const b = d.board;
+        const tiles = b.drawn === null ? [...b.hand] : [...b.hand, b.drawn];
+        const counts = countTiles(tiles);
+        const melds = (b.melds[b.playerId] ?? []).map(yakuMeldOf);
+        const shoupai = Majiang.Shoupai.fromString(majiangHand(counts, melds, b.drawn === null ? null : tileKind(b.drawn)));
+        expect(Majiang.Util.xiangting(shoupai), `${id} ${d.kyokuLabel} ${d.junme}巡目`).toBe(shantenOfCounts(counts));
+        n++;
+      }
+    }
+    expect(n).toBe(1159);
   });
 });
 
