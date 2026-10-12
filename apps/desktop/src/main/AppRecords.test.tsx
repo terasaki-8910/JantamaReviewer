@@ -1,5 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -134,5 +134,18 @@ describe('設定の「読み込む」と、検討画面の読み直し（D-2、R
     await user.click(screen.getByRole('button', { name: '設定' }));
     const again = await screen.findByRole('group', { name: '記録の書き出し' });
     expect(again).not.toHaveTextContent('読み込みました');
+  });
+
+  it('検討画面が前面に戻ったら、半荘の一覧を読み直す（フォルダを写してきた半荘が出る。取っておいた記録は、読むときに付く）', async () => {
+    const { store, mock } = setup();
+    render(<App />);
+    await screen.findByRole('heading', { level: 1, name: /10月9日/ });
+    const list = screen.getByRole('navigation', { name: '半荘の一覧' });
+    expect(within(list).queryByRole('button', { name: /^20:00/ })).toBeNull();
+    const before = mock.count('list_sessions');
+    store.add(seedSession(local(2026, 10, 7, 20, 0), { marks: 1 }));
+    act(() => mock.emit('main-window-focused', null));
+    expect(await within(list).findByRole('button', { name: /^20:00/ })).toBeInTheDocument();
+    expect(mock.count('list_sessions')).toBeGreaterThan(before);
   });
 });

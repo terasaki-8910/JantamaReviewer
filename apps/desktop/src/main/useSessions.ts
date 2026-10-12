@@ -1,13 +1,13 @@
 /**
  * 半荘の一覧を、サイドバーと本文が一緒に使うための部品（U-8）。
- * - `useSessions`: 保存先の半荘（新しい順）を読む。ウィジェットで記録するたび・取り込み・削除のたびに（`state-changed`）読み直す
+ * - `useSessions`: 保存先の半荘（新しい順）を読む。ウィジェットで記録するたび・取り込み・削除のたびに（`state-changed`）、検討画面が前面に戻ったときにも読み直す
  * - `useSessionSummaries`: 結果を取り込んだ半荘の、卓・段階・Rating（`sessionSummaries.ts`）。段階は、MAKA の評価から合わせ直した当てはめで決める。
  *   `useSummariesAndFit` は、同じものと、当てはめの状態（MAKA の評価の局数・見込み。U-31）を一緒に返す
  * - `useToday`: 「本日」「昨日」の見出しの基準。日付が変わったら更新する
  */
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
-import { api, errorMessage, onStateChanged } from '../api/tauri';
+import { api, errorMessage, onMainWindowFocused, onStateChanged } from '../api/tauri';
 import type { SessionRecord } from '../api/types';
 import type { MakaFitState } from './makaFit';
 import { SummaryStore, type SummaryMap } from './sessionSummaries';
@@ -60,15 +60,21 @@ export function useSessions(onLoaded?: (sessions: SessionRecord[]) => void): Ses
 
   useEffect(() => {
     let alive = true;
-    let dispose: (() => void) | null = null;
+    const disposers: Array<() => void> = [];
+    const track = (listening: Promise<() => void>) => {
+      void listening.then((fn) => {
+        if (alive) disposers.push(fn);
+        else fn();
+      });
+    };
     void reload();
-    void onStateChanged(() => void reload()).then((fn) => {
-      if (alive) dispose = fn;
-      else fn();
-    });
+    track(onStateChanged(() => void reload()));
+    // 検討画面が前面に戻ったときも読み直す。半荘のフォルダを写して戻ってきたとき、その半荘が一覧に出て、
+    // 読み込んだ記録のうち取っておいた分（D-2）が付く（付けるのは、保存先を読むとき）
+    track(onMainWindowFocused(() => void reload()));
     return () => {
       alive = false;
-      dispose?.();
+      disposers.forEach((fn) => fn());
     };
   }, [reload]);
 
