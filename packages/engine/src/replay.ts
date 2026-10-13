@@ -67,6 +67,33 @@ export interface BoardState {
   readonly passedAfterRiichi: readonly (readonly Tile[])[];
 }
 
+/**
+ * ある時点の卓の全部。**他家の手牌を含む**ので、答えたあとの画面と、局の終わりの結果の画面（F14）だけが使う
+ * （盤面 `BoardState` には、他家の手牌を入れない）。和了の役・点数を計算し直すための、和了の状況も持つ。
+ */
+export interface TableView {
+  /** いまの盤面（本人の視点）。 */
+  readonly board: BoardState;
+  /** 席ごとの閉じた手牌（ツモ牌を含む。並べ替えない）。 */
+  readonly hands: readonly (readonly Tile[])[];
+  /** 席ごとの、ツモってまだ切っていない牌。 */
+  readonly drawn: readonly (Tile | null)[];
+  /** 席ごとの、ダブル立直か（立直を宣言したときの状況）。 */
+  readonly doubleRiichi: readonly boolean[];
+  /** 席ごとの、一発が残っているか（立直が成立してから、だれも鳴かず、その席が切っていない）。 */
+  readonly ippatsu: readonly boolean[];
+  /** 席ごとの、河に切った枚数。 */
+  readonly discardCount: readonly number[];
+  /** 席ごとの、直前のツモが嶺上牌か。 */
+  readonly rinshan: readonly boolean[];
+  /** 局のどこかで、鳴き・カンがあったか。 */
+  readonly anyCall: boolean;
+  /** 直前の捨て牌（加槓の牌も入る）。 */
+  readonly lastDiscard: { readonly seat: Seat; readonly tile: Tile } | null;
+  /** 直前の event の種類（和了・流局は数えない）。 */
+  readonly lastEventType: MjaiEvent['type'] | null;
+}
+
 /** 牌譜が矛盾していて、再生を進められない。 */
 export class ReplayLogError extends Error {
   constructor(
@@ -96,6 +123,18 @@ export class KyokuReplayer {
   private kyotaku: number;
   /** リーチを宣言して、まだ宣言牌を切っていない席。 */
   private pendingRiichi: Seat | null = null;
+  // ---- 和了の状況（役・点数の計算し直し用。`table()` で外に出す） ----
+  private readonly doubleRiichi: boolean[] = [false, false, false, false];
+  private readonly ippatsu: boolean[] = [false, false, false, false];
+  private readonly discardCount: number[] = [0, 0, 0, 0];
+  private readonly rinshan: boolean[] = [false, false, false, false];
+  private anyCall = false;
+  /** 大明槓・暗槓・加槓をして、まだ嶺上牌をツモっていない席。 */
+  private pendingKan: Seat | null = null;
+  /** 直前の捨て牌（加槓の牌も入る。槍槓のロンの牌）。 */
+  private lastDiscard: { seat: Seat; tile: Tile } | null = null;
+  /** 直前の event の種類（和了・流局は数えない。ダブロンの 2 つ目も、和了の前の event を見られるように）。 */
+  private lastEventType: MjaiEvent['type'] | null = null;
 
   /** 残りのツモ枚数。 */
   tilesLeft = INITIAL_TILES_LEFT;
@@ -152,6 +191,9 @@ export class KyokuReplayer {
         (this.hands[event.actor] as Tile[]).push(event.pai);
         this.drawn[event.actor] = event.pai;
         this.tilesLeft--;
+        this.rinshan[event.actor] = this.pendingKan === event.actor;
+        this.pendingKan = null;
+        this.lastEventType = event.type;
         this.lastActor = event.actor;
         if (event.actor === this.playerId) {
           this.junme++;
@@ -164,6 +206,11 @@ export class KyokuReplayer {
         this.drawn[event.actor] = null;
         const declaring = this.pendingRiichi === event.actor;
         if (declaring) this.pendingRiichi = null;
+        else this.ippatsu[event.actor] = false;
+        this.discardCount[event.actor] = (this.discardCount[event.actor] as number) + 1;
+        this.rinshan[event.actor] = false;
+        this.lastDiscard = { seat: event.actor, tile: event.pai };
+        this.lastEventType = event.type;
         (this.rivers[event.actor] as RiverTile[]).push({
           tile: event.pai,
           tsumogiri: event.tsumogiri,
@@ -191,6 +238,10 @@ export class KyokuReplayer {
           consumed: [...event.consumed],
         });
         this.drawn[event.actor] = null;
+        this.anyCall = true;
+        this.ippatsu.fill(false);
+        if (event.type === 'daiminkan') this.pendingKan = event.actor;
+        this.lastEventType = event.type;
         this.lastActor = event.actor;
         // 巡目はチー・ポンだけ増える（大明槓のあとのツモで増える）
         if (event.actor === this.playerId && event.type !== 'daiminkan') this.junme++;
@@ -200,6 +251,10 @@ export class KyokuReplayer {
         for (const t of event.consumed) this.remove(event.actor, t, eventIndex);
         (this.melds[event.actor] as Fuuro[]).push({ type: 'ankan', consumed: [...event.consumed] });
         this.drawn[event.actor] = null;
+        this.anyCall = true;
+        this.ippatsu.fill(false);
+        this.pendingKan = event.actor;
+        this.lastEventType = event.type;
         this.lastActor = event.actor;
         return;
       }
@@ -220,6 +275,11 @@ export class KyokuReplayer {
           consumed: [...pon.consumed],
         };
         this.drawn[event.actor] = null;
+        this.anyCall = true;
+        this.ippatsu.fill(false);
+        this.pendingKan = event.actor;
+        this.lastDiscard = { seat: event.actor, tile: event.pai };
+        this.lastEventType = event.type;
         this.lastActor = event.actor;
         this.lastTile = event.pai;
         return;
@@ -228,6 +288,8 @@ export class KyokuReplayer {
         this.riichi[event.actor] = 'declared';
         if (!this.riichiOrder.includes(event.actor)) this.riichiOrder.push(event.actor);
         this.pendingRiichi = event.actor;
+        this.doubleRiichi[event.actor] = this.discardCount[event.actor] === 0 && !this.anyCall;
+        this.lastEventType = event.type;
         this.lastActor = event.actor;
         return;
       }
@@ -235,11 +297,14 @@ export class KyokuReplayer {
         this.riichi[event.actor] = 'accepted';
         this.scores[event.actor] = (this.scores[event.actor] as number) - 1000;
         this.kyotaku++;
+        this.ippatsu[event.actor] = true;
+        this.lastEventType = event.type;
         this.lastActor = event.actor;
         return;
       }
       case 'dora': {
         this.doraMarkers.push(event.dora_marker);
+        this.lastEventType = event.type;
         return;
       }
       case 'hora': {
@@ -281,6 +346,22 @@ export class KyokuReplayer {
       riichi: [...this.riichi],
       riichiOrder: [...this.riichiOrder],
       passedAfterRiichi: this.passed.map((list) => [...list]),
+    };
+  }
+
+  /** いまの卓の全部（他家の手牌を含む。以後の event を進めても変わらないコピー）。 */
+  table(): TableView {
+    return {
+      board: this.snapshot(),
+      hands: this.hands.map((hand) => [...hand]),
+      drawn: [...this.drawn],
+      doubleRiichi: [...this.doubleRiichi],
+      ippatsu: [...this.ippatsu],
+      discardCount: [...this.discardCount],
+      rinshan: [...this.rinshan],
+      anyCall: this.anyCall,
+      lastDiscard: this.lastDiscard === null ? null : { ...this.lastDiscard },
+      lastEventType: this.lastEventType,
     };
   }
 }
@@ -326,4 +407,22 @@ export function replayFrames(kyoku: KyokuLog, playerId: Seat): ReplayFrame[] {
     frames.push({ eventIndex: kyoku.startIndex + i, event, board: replayer.snapshot() });
   }
   return frames;
+}
+
+/**
+ * 局の最初の event（`startIndex` の start_kyoku）から、`eventIndex` の event まで進めたときの、卓の全部（他家の手牌を含む）。
+ * `eventIndex` が局の始まり（`startIndex`）なら、配牌の直後。牌譜が矛盾していれば ReplayLogError。
+ */
+export function tableAt(log: readonly MjaiEvent[], startIndex: number, eventIndex: number, playerId: Seat): TableView {
+  const start = log[startIndex];
+  if (start === undefined || start.type !== 'start_kyoku') {
+    throw new ReplayLogError('局の始まり（start_kyoku）ではありません', startIndex);
+  }
+  const replayer = new KyokuReplayer(start, playerId);
+  for (let index = startIndex + 1; index <= eventIndex; index++) {
+    const event = log[index];
+    if (event === undefined) throw new ReplayLogError('牌譜の終わりを越えました', index);
+    replayer.apply(event, index);
+  }
+  return replayer.table();
 }

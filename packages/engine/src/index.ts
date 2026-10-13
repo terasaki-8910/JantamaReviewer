@@ -31,6 +31,11 @@
  * - 守備の目安（F14、E-39。答え合わせのタブ「守備」）: `dangerBoxOf`（他家のリーチがある場面で、切れる牌ごとに、リーチした人ごと
  *   現物・スジ・壁・字牌・無スジの 1 語と補足。形式的な分類で、AI の確率ではない）。他家 1 人 × 牌 1 種類の分類は `classifyAgainst`
  *   （他家の種類ごとに数え方を持つ。いまはリーチだけ。副露した他家は、見本で決めてから足す）。現物は盤面の `riichiOrder`・`passedAfterRiichi`（replay.ts）から
+ * - 他家の手牌（F14、E-40。答え合わせのタブ「他家の手牌」と、通して見る画面の「他家の手牌を開く」）: `openHandsAt`（局と牌譜の位置を渡すと、他家 3 人の閉じた手牌・副露・リーチと、
+ *   聴牌している人の待ち（待ちの形・全員の手牌を開いたときの残り・その人が実際に付けている立直かダマで数えたロンの点）。盤面 `BoardState` には他家の手牌を入れない。
+ *   卓の全部は `tableAt`（replay.ts の `TableView`。和了の状況も持つ）
+ * - 局の結果の手（F14、E-40。局の評価の表の行を開いたとき）: `kyokuResultOf`（牌譜から和了者の手牌・和了牌・和了の状況を組み立てて majiang-core で役・飜・符・点数を計算し直す。
+ *   他家のツモ・ロンも、ダブロンも。計算し直した点の増減は牌譜と一致する。放銃した局は相手の手牌と待ち。流局は 4 人の手牌（荒牌平局は聴牌・ノーテン））
  * - 役の調査（R10-6・R12-14。画面には使わない試作）: `evaluateWin`（和了形の役・符。HandCalculator と同じ選び方）、`settledYaku`（聴牌の手の「確定している役」）、
  *   `nearYaku`（役ごとに、あと何枚引けばその役の付く和了形になるか）。analysis/yaku/README.md
  *
@@ -95,10 +100,12 @@ export * from './import';
 export * from './isotonic';
 export * from './kyoku';
 export * from './kyoku-locate';
+export * from './kyoku-result';
 export * from './maka';
 export * from './maka-fit';
 export * from './maka-fit-base';
 export * from './mark-link';
+export * from './open-hands';
 export * from './outcome';
 export * from './paipu-link';
 export * from './problems';

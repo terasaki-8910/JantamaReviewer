@@ -1600,3 +1600,134 @@ describe('E-31 前の当てはめ方で作った評価の結びつけを、半�
     expect(calls(mock, 'replace_rating_links')).toHaveLength(1);
   });
 });
+
+describe('U-36 局の評価の表の行を開く: 局の結果の手（F14、E-40、R15-6 の A）', () => {
+  const rowOf = (table: HTMLElement, label: string) => within(table).getByRole('rowheader', { name: label }).closest('tr') as HTMLElement;
+  const opener = (table: HTMLElement, label: string) => within(rowOf(table, label)).getByRole('button', { name: label });
+  const detailRows = () => [...document.querySelectorAll<HTMLElement>('tr.hx-exp')];
+  const textOf = (element: Element | null | undefined): string => {
+    const parts: string[] = [];
+    const walk = (node: Node): void => {
+      if (node.nodeType === Node.TEXT_NODE) parts.push(node.textContent ?? '');
+      else if (node instanceof HTMLImageElement) parts.push(` ${node.alt} `);
+      else node.childNodes.forEach(walk);
+    };
+    if (element !== null && element !== undefined) walk(element);
+    return parts.join('').replace(/\s+/g, ' ').trim();
+  };
+
+  it('表の形は、いまのまま（開くまで何も増えない）。局の名前は、押すと開くボタン（aria-expanded が偽）。半荘全体の行には無い。行の見出しの名前は、局の名前のまま', async () => {
+    setup();
+    const table = await tableReady();
+    expect(detailRows()).toHaveLength(0);
+    expect(within(table).getAllByRole('row')).toHaveLength(7);
+    for (const label of ['東1局', '東2局', '東2局1本場', '東3局', '東3局1本場']) {
+      const button = opener(table, label);
+      expect(button).toHaveAttribute('aria-expanded', 'false');
+      expect(button).not.toHaveAttribute('aria-controls');
+      expect(button).toHaveAccessibleDescription('局の名前を押すと、その局の結果の手が、行の下に開きます。');
+    }
+    expect(within(rowOf(table, '半荘全体')).queryByRole('button', { name: '半荘全体' })).toBeNull();
+    expect(screen.queryByText('局の結果の手')).toBeNull();
+  });
+
+  it('放銃した局（東3局）を開くと、相手（対面・親）の手牌・和了牌・役・飜・符・点数・点の増減と、待ちが出る。もう一度押すと閉じる', async () => {
+    const { user } = setup();
+    const table = await tableReady();
+    const button = opener(table, '東3局');
+    await user.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    const [detail] = detailRows() as [HTMLElement];
+    expect(button).toHaveAttribute('aria-controls', detail.id);
+    // 開いた行は、その局の行のすぐ下
+    expect(rowOf(table, '東3局').nextElementSibling).toBe(detail);
+    expect(within(detail).getByRole('heading', { level: 4, name: '局の結果の手' })).toBeInTheDocument();
+    const win = detail.querySelector('.hx-win') as HTMLElement;
+    expect(textOf(win.querySelector('.hx-who'))).toBe('対面（親） 東家が 自分から ロン');
+    // 手牌 13 枚 + 和了牌 1 枚
+    expect(win.querySelectorAll('.oh-tiles:not(.gap) .tile')).toHaveLength(13);
+    expect(win.querySelectorAll('.oh-tiles.gap .tile.win')).toHaveLength(1);
+    expect([...win.querySelectorAll('.hx-yk .q-tag')].map((tag) => tag.textContent)).toEqual(['一盃口 1飜', 'ドラ 3']);
+    expect(textOf(win.querySelector('.hx-pts'))).toBe('12,000 満貫 4飜 50符');
+    expect(textOf(win.querySelector('.hx-bonus'))).toBe('点の増減: 自分 −12,000・下家 0・対面 +12,000・上家 0');
+    // 放銃した局は、相手の手の待ち（和了牌を除いた手の待ち）が出る
+    const waits = textOf(win.querySelector('.hx-waits'));
+    expect(waits).toContain('待ち');
+    expect(waits).toContain('四索 両面・残り1');
+    expect(waits).toContain('七索 両面・残り4');
+    // 符の数にマウスを乗せると、内訳が出る
+    await user.hover(within(win).getByRole('button', { name: /^50符の内訳/ }));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('50符の内訳');
+    await user.keyboard('{Escape}');
+    await user.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(detailRows()).toHaveLength(0);
+  });
+
+  it('自分の和了（東2局1本場）は、和了者が自分。本場の点も出る。放銃していないので、待ちは出さない。他家のツモ（東1局）は、ツモの点（子・親）と、供託も出る', async () => {
+    const { user } = setup();
+    const table = await tableReady();
+    await user.click(opener(table, '東2局1本場'));
+    const own = detailRows()[0]?.querySelector('.hx-win') as HTMLElement;
+    expect(textOf(own.querySelector('.hx-who'))).toBe('自分 北家が 対面から ロン');
+    expect([...own.querySelectorAll('.hx-yk .q-tag')].map((tag) => tag.textContent)).toEqual(['役牌 東（場風） 1飜']);
+    expect(textOf(own.querySelector('.hx-pts'))).toBe('1,000 1飜 30符');
+    expect(textOf(own.querySelector('.hx-bonus'))).toBe('1本場（+300）。 点の増減: 自分 +1,300・下家 0・対面 −1,300・上家 0');
+    expect(own.querySelector('.hx-waits')).toBeNull();
+    // 副露（東のポン）が、手牌の右に出る
+    expect(own.querySelectorAll('.oh-melds .meld')).toHaveLength(1);
+    await user.click(opener(table, '東1局'));
+    const others = detailRows().map((row) => row.querySelector('.hx-win') as HTMLElement);
+    expect(others).toHaveLength(2);
+    const tsumo = others[0] as HTMLElement;
+    expect(textOf(tsumo.querySelector('.hx-who'))).toMatch(/^上家 北家が ツモ$/);
+    expect(textOf(tsumo.querySelector('.hx-pts .n'))).toBe('3,000・6,000');
+    expect(textOf(tsumo.querySelector('.hx-bonus'))).toContain('供託 1本（+1,000）');
+    expect([...tsumo.querySelectorAll('.hx-yk .q-tag')].map((tag) => tag.textContent)).toEqual(
+      expect.arrayContaining(['七対子 2飜', '門前清自摸和 1飜', '立直 1飜', '赤ドラ 1', '裏ドラ 2']),
+    );
+  });
+
+  it('複数の行を、同時に開ける。開いた行は、局の順のまま、それぞれの行の下にある', async () => {
+    const { user } = setup();
+    const table = await tableReady();
+    await user.click(opener(table, '東3局1本場'));
+    await user.click(opener(table, '東1局'));
+    const rows = within(table).getAllByRole('row');
+    const order = rows.map((row) => (row.classList.contains('hx-exp') ? '開' : (row.querySelector('th')?.textContent ?? '')));
+    expect(order.slice(1)).toEqual(['東1局', '開', '東2局', '東2局1本場', '東3局', '東3局1本場', '開', '半荘全体']);
+  });
+
+  it('キーボード: 局の名前のボタンは Tab で届き、Enter・Space で開閉する。開いたあとも、キーボードの位置はそのボタンに残る', async () => {
+    const { user } = setup();
+    const table = await tableReady();
+    const button = opener(table, '東3局');
+    button.focus();
+    await user.keyboard('{Enter}');
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(button).toHaveFocus();
+    await user.keyboard(' ');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(detailRows()).toHaveLength(1);
+    // Tab で、次の操作（その行の「自分」の評価）へ進む。開いた欄は、その行のあとにあるので、順番を乱さない
+    await user.tab();
+    expect(document.activeElement).toBe(within(rowOf(table, '東3局')).getAllByRole('button')[1]);
+  });
+
+  it('流局の局は、「流局です」と、4 人の手牌（荒牌平局なら聴牌・ノーテン）。取り込み前や結果を読めない半荘には、開くボタンが無い', async () => {
+    const { user } = setup({ session: imported(), report: 'fx1a', summary: summaryOf('fx1a') });
+    const table = await tableReady();
+    const label = (await within(table).findAllByRole('rowheader')).map((h) => h.textContent).find((t) => t !== '半荘全体' && textOf(rowOf(table, t as string)).includes('流局')) as string;
+    expect(label).toBeTruthy();
+    await user.click(opener(table, label));
+    const block = document.querySelector('[data-kyoku-result="draw"]') as HTMLElement;
+    expect(block).not.toBeNull();
+    expect(block.querySelector('.hx-none')?.textContent).toMatch(/^(流局です（牌山を取り切りました）。|途中で流局しました。)$/);
+    expect([...block.querySelectorAll('.oh-row')].map((row) => row.querySelector('.oh-hd b')?.textContent)).toEqual(['自分', '下家', '対面', '上家']);
+    if (block.querySelector('.hx-none')?.textContent?.startsWith('流局です')) {
+      for (const row of block.querySelectorAll('.oh-row')) expect(['聴牌', 'ノーテン']).toContain([...row.querySelectorAll('.oh-hd .q-tag')].at(-1)?.textContent);
+    }
+  });
+});

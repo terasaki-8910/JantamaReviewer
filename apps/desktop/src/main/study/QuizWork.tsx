@@ -2,7 +2,7 @@
  * 出題 1 問の作業の面（左に卓・凡例・手牌、右に答えの欄）。出題（`QuizScreen`）と、半荘を通して見る画面の場面（`SceneWork`）が使う。
  * 状態は `useQuizWork` が持つ（呼ぶ側が、いちばん外の `.qz` の `data-state` に、答え合わせのあとかを入れる）。
  */
-import type { BoardState, Decision } from '@jantama/engine';
+import type { BoardState, Decision, ImportedGame } from '@jantama/engine';
 import type { ReactNode } from 'react';
 
 import type { AnswerMode } from '../../api/types';
@@ -29,9 +29,13 @@ export interface QuizWorkProps {
   memoEditor?: ReactNode;
   /** 答え合わせのあとに、自分の答えの下へ出す「終局直後のメモ」。 */
   memoShown?: readonly ShownMemo[];
+  /** 取り込んだ半荘（答え合わせのあと、タブ「他家の手牌」を出す）。 */
+  game?: ImportedGame;
+  /** 答えの欄の上に出す欄（通して見る画面の「他家の手牌を開く」）。 */
+  above?: ReactNode;
 }
 
-export function QuizWork({ work, decision, mode, info, board, past, anyCalled, nextLabel, onNext, memoEditor, memoShown }: QuizWorkProps) {
+export function QuizWork({ work, decision, mode, info, board, past, anyCalled, nextLabel, onNext, memoEditor, memoShown, game, above }: QuizWorkProps) {
   return (
     <div className="work">
       <section className="board-col" aria-label="盤面と手牌" data-view={past ? 'past' : 'now'}>
@@ -63,6 +67,8 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
         onNext={onNext}
         memoEditor={memoEditor}
         memoShown={memoShown}
+        game={game}
+        above={above}
       />
     </div>
   );

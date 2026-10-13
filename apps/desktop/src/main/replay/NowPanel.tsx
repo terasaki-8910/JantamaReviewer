@@ -4,6 +4,7 @@
  * 局の終わりでは、「この局が終わりました」と、結果（和了・放銃・流局）と点の増減を出す。
  */
 import type { ReplayScene, ReplayTimeline, TimelineStep } from '@jantama/engine';
+import type { ReactNode } from 'react';
 
 import { Icon } from '../Icon';
 import { InfoTip } from '../InfoTip';
@@ -16,15 +17,18 @@ interface NowPanelProps {
   scenes: readonly ReplayScene[];
   answered: ReadonlySet<string>;
   go: (g: number) => void;
+  /** 右の欄の上に出す欄（「他家の手牌を開く」を開いているとき）。 */
+  above?: ReactNode;
 }
 
-export function NowPanel({ timeline, step, scenes, answered, go }: NowPanelProps) {
+export function NowPanel({ timeline, step, scenes, answered, go, above }: NowPanelProps) {
   const kyoku = timeline.kyokus[step.kyokuPosition];
   const me = timeline.playerId;
   const end = step.kind === 'end' && kyoku !== undefined ? kyoku.end : null;
   const doneCount = scenes.filter((scene) => answered.has(scene.key)).length;
   return (
     <section className="answer" aria-label="いまの一手と、この半荘の場面">
+      {above}
       <div className="now">
         <p className="now-k">いまの一手</p>
         <p className="now-t" aria-live="polite">

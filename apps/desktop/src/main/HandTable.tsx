@@ -1,4 +1,5 @@
-import { percentOf, type Grade } from '@jantama/engine';
+import { percentOf, type Grade, type MortalReport } from '@jantama/engine';
+import { Fragment, useId, useState, type ReactNode } from 'react';
 
 import type { Rating, SelfRatingValue } from '../api/types';
 import { RATING_GLYPH, RatingShape } from '../shared/RatingShape';
@@ -7,6 +8,7 @@ import type { HandRow, HandTableData } from './handRows';
 import { Icon } from './Icon';
 import type { MakaFitState } from './makaFit';
 import type { MarkChip } from './markChips';
+import { KyokuResult } from './KyokuResult';
 import { MenuSelect } from './MenuSelect';
 
 /**
@@ -17,6 +19,8 @@ import { MenuSelect } from './MenuSelect';
  * - MAKA: 任意。入れていなければ点線の「入力」。押すと、14 段階（と「なし」）のメニュー
  * - 迷い（札が 1 つでもあるときだけ出る列。R11-9、U-27）: その局の迷いを、「迷い1 5巡目 打6s」の札で並べる。札を押すと、その迷いのカードへ移る（`onJumpToMark`）。
  *   選んだ（チェックつき）・推定（枠だけ）・巡目は未定（点線）は、形でも見分けられる。幅が狭いときは、局ごとのかたまりに「迷い」の行が付く
+ * 局の名前（行の頭の矢印つきのボタン）を押すと、その局の結果の手が、行の下に開く（F14、U-36、R15-6 の A。表の形はそのまま。開かないかぎり増えない）。
+ *   和了の局は和了者・手牌・役・符・点数、放銃した局は相手の手牌と待ち、流局は 4 人の手牌（`KyokuResult`）。向聴数の推移の折れ線は、その下に差し込む（`detailBelow`。次の段）
  * 表の下: 旗の説明・当てはまらなかった評価の数・MAKA の当てはめの見込みの 1 行（U-31。入れたあとは「合わせ直しました」）。
  * 付け直す・入れるたびに保存し、取り消せる（`onSelfRating`・`onMaka`）。
  */
@@ -50,14 +54,37 @@ interface HandTableProps {
   fit?: MakaFitState;
   /** MAKA の評価を入れて、当てはめを合わせ直したあとか（「合わせ直しました」を出す）。 */
   refit?: boolean;
+  /** 取り込んだ結果。渡すと、局の名前を押して、局の結果の手を開ける（F14）。 */
+  report?: MortalReport;
+  /** 開いた行の、局の結果の手の下に差し込むもの（向聴数の推移の折れ線。次の段で足す）。 */
+  detailBelow?: (row: HandRow) => ReactNode;
 }
 
-export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fit, refit = false }: HandTableProps) {
+/** 局の名前の説明（行の頭のボタンの読み上げの説明）。 */
+const OPEN_ROW_HINT = '局の名前を押すと、その局の結果の手が、行の下に開きます。';
+
+export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fit, refit = false, report, detailBelow }: HandTableProps) {
   const { rows, hanchan } = table;
   const withChips = chips !== undefined && chips.size > 0;
+  const columns = withChips ? 7 : 6;
+  const hintId = useId();
+  const baseId = useId();
+  // 開いている行（局の添字）。いくつでも開ける
+  const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set());
+  const toggle = (position: number) =>
+    setOpened((current) => {
+      const next = new Set(current);
+      if (!next.delete(position)) next.add(position);
+      return next;
+    });
   return (
     <>
       <div className={withChips ? 'tbl-wrap with-marks' : 'tbl-wrap'}>
+        {report !== undefined && (
+          <p className="sr-only" id={hintId}>
+            {OPEN_ROW_HINT}
+          </p>
+        )}
         <table className="tbl" aria-describedby={withChips ? MARK_CHIPS_HINT_ID : undefined}>
           <caption className="sr-only">局の評価</caption>
           <thead>
@@ -74,27 +101,59 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fi
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.key}>
-                <th scope="row">{row.label}</th>
-                <td>{row.resultText}</td>
-                <td className="num">{row.deltaText}</td>
-                <td data-label="自分">
-                  <SelfCell row={row} onSelfRating={onSelfRating} />
-                </td>
-                <td data-label="AI 基準">
-                  <AiCell grade={row.grade} ratingText={row.ratingText} />
-                </td>
-                <td data-label="MAKA">
-                  <MakaCell label={row.label} value={row.maka} onChange={(grade) => onMaka(row, grade)} />
-                </td>
-                {withChips && (
-                  <td className="marks-cell" data-label="迷い">
-                    <KyokuChips chips={chips.get(row.position) ?? []} onJump={onJumpToMark} />
-                  </td>
-                )}
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const open = report !== undefined && opened.has(row.position);
+              const detailId = `${baseId}-detail-${row.position}`;
+              return (
+                <Fragment key={row.key}>
+                  <tr>
+                    <th scope="row">
+                      {report === undefined ? (
+                        row.label
+                      ) : (
+                        <button
+                          type="button"
+                          className="hx-open"
+                          aria-expanded={open}
+                          aria-controls={open ? detailId : undefined}
+                          aria-describedby={hintId}
+                          onClick={() => toggle(row.position)}
+                        >
+                          <Icon name="chevronRight" className="hx-chev" />
+                          {row.label}
+                        </button>
+                      )}
+                    </th>
+                    <td>{row.resultText}</td>
+                    <td className="num">{row.deltaText}</td>
+                    <td data-label="自分">
+                      <SelfCell row={row} onSelfRating={onSelfRating} />
+                    </td>
+                    <td data-label="AI 基準">
+                      <AiCell grade={row.grade} ratingText={row.ratingText} />
+                    </td>
+                    <td data-label="MAKA">
+                      <MakaCell label={row.label} value={row.maka} onChange={(grade) => onMaka(row, grade)} />
+                    </td>
+                    {withChips && (
+                      <td className="marks-cell" data-label="迷い">
+                        <KyokuChips chips={chips.get(row.position) ?? []} onJump={onJumpToMark} />
+                      </td>
+                    )}
+                  </tr>
+                  {open && (
+                    <tr className="hx-exp" id={detailId}>
+                      <td className="hx-cell" colSpan={columns}>
+                        <div className="hx-grid one">
+                          <KyokuResult report={report} position={row.position} />
+                          {detailBelow?.(row)}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
           <tfoot>
             <tr>

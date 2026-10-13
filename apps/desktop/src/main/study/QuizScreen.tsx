@@ -180,6 +180,7 @@ export function QuizScreen({
         nextLabel={nextLabel}
         onNext={onNext}
         memoShown={memoShown}
+        game={game}
       />
     </div>
   );

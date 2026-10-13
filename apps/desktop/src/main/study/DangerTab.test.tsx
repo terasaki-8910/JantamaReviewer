@@ -83,26 +83,27 @@ describe('U-34 守備のタブは、他家のリーチがある場面だけ出�
   it('他家のリーチが無い場面は、守備のタブを出さない（聴牌の場面なら、待ちと打点のタブだけ。リーチが無く聴牌でもない場面は、タブの並びも無い）', async () => {
     const plain = renderQuiz(NO_RIICHI);
     await reveal(plain.user, () => screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
-    expect(screen.queryByRole('tablist')).toBeNull();
+    // 他家の手牌のタブは、答えたあとのどの場面にも付く（OpenHands.test.tsx）
+    expect(tabNames()).toEqual(['受け入れ・役', '他家の手牌']);
     expect(document.querySelector('[data-ai="danger-box"]')).toBeNull();
     expect(document.body.textContent).not.toContain('守備の目安');
     plain.unmount();
     const tenpai = renderQuiz(TENPAI_NO_RIICHI);
     await reveal(tenpai.user, option('pass'));
-    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点']);
+    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
   });
 
   it('他家のリーチがある場面は、既定のタブ「受け入れ・役」と、守備。聴牌なら、待ちと打点の次に守備（作る順・並べる順は 受け入れ・役、待ちと打点、守備）', async () => {
     const only = renderQuiz(REACH_ONLY);
     await reveal(only.user, tile('九萬'));
-    expect(tabNames()).toEqual(['受け入れ・役', '守備']);
+    expect(tabNames()).toEqual(['受け入れ・役', '守備', '他家の手牌']);
     expect(screen.getByRole('tab', { name: '受け入れ・役', selected: true })).toBeInTheDocument();
     // 中身は、選ぶまで描かない
     expect(document.querySelector('[data-ai="danger-box"]')).toBeNull();
     only.unmount();
     const both = renderQuiz(REACH_AND_TENPAI);
     await reveal(both.user, tile('三萬'));
-    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
   });
 
   it('鳴きの判断（対面のリーチ）でも、リーチの判断（上家のリーチ）でも出る。解き直し（review）でも同じ部品', async () => {
@@ -112,19 +113,19 @@ describe('U-34 守備のタブは、他家のリーチがある場面だけ出�
     call.unmount();
     const riichi = renderQuiz(RIICHI_DECISION);
     await reveal(riichi.user, option('pass'));
-    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
     riichi.unmount();
     const again = renderQuiz({ ...REACH_ONLY, mode: 'review' });
     await reveal(again.user, tile('九萬'));
-    expect(tabNames()).toEqual(['受け入れ・役', '守備']);
+    expect(tabNames()).toEqual(['受け入れ・役', '守備', '他家の手牌']);
   });
 });
 
-describe('U-34 タブのキーボード（守備を含む 3 つ）', () => {
+describe('U-34 タブのキーボード（守備を含む 4 つ）', () => {
   it('→ で守備まで。端では反対の端へ。Home・End。選ぶと守備の欄が出て、キーボードの位置も移る', async () => {
     const { user } = renderQuiz(REACH_AND_TENPAI);
     await reveal(user, tile('三萬'));
-    const [first, second, third] = tabs() as [HTMLElement, HTMLElement, HTMLElement];
+    const [first, second, third, fourth] = tabs() as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
     first.focus();
     await user.keyboard('{ArrowRight}{ArrowRight}');
     expect(third).toHaveAttribute('aria-selected', 'true');
@@ -133,14 +134,16 @@ describe('U-34 タブのキーボード（守備を含む 3 つ）', () => {
     // 守備の欄を選んでいる間、待ちと打点の欄は描かない
     expect(document.querySelector('[data-ai="waits-box"]')).toBeNull();
     await user.keyboard('{ArrowRight}');
+    expect(fourth).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{ArrowRight}');
     expect(first).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{ArrowLeft}');
-    expect(third).toHaveAttribute('aria-selected', 'true');
+    expect(fourth).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{Home}');
     expect(first).toHaveFocus();
     await user.keyboard('{End}');
-    expect(third).toHaveFocus();
-    await user.keyboard('{ArrowLeft}');
+    expect(fourth).toHaveFocus();
+    await user.keyboard('{ArrowLeft}{ArrowLeft}');
     expect(second).toHaveAttribute('aria-selected', 'true');
   });
 

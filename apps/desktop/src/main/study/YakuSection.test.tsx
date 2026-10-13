@@ -77,11 +77,12 @@ describe('U-33 欄「役」は、答え合わせのあとにだけ出る（U-1�
   it('答え合わせのあと: 受け入れ枚数の欄のすぐ下に、見出し「役」と説明のアイコンがある。欄は AI の情報なので data-ai を持つ', async () => {
     const { user } = renderQuiz(DISCARD);
     await reveal(user, tile('四筒'));
-    const review = document.getElementById('review') as HTMLElement;
-    const sections = [...review.querySelectorAll(':scope > .q-sec, :scope > form.q-sec')];
+    // 答えたあとは、いつも「他家の手牌」のタブが付くので、受け入れ枚数の欄と役の欄は、既定のタブの欄の中に並ぶ
+    const panel = within(document.getElementById('review') as HTMLElement).getByRole('tabpanel');
+    const sections = [...panel.querySelectorAll(':scope > .q-sec, :scope > form.q-sec')];
     const titles = sections.map((s) => s.querySelector('h2')?.textContent);
     const at = titles.indexOf('受け入れ枚数');
-    expect(at).toBeGreaterThan(0);
+    expect(at).toBeGreaterThanOrEqual(0);
     expect(titles[at + 1]).toBe('役');
     expect(sections[at + 1]).toBe(yakuBox());
     expect(within(yakuBox()).getByRole('heading', { level: 2, name: '役' })).toBeInTheDocument();

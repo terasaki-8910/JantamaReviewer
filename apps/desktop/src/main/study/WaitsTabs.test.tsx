@@ -9,6 +9,7 @@ import { renderQuiz } from '../../../tests/study-harness';
 // ここでは、タブが出るところ・出ないところ、キーボード（← → Home End）、表の見え方、符の内訳の重なり、答える前に何も出ないことを確かめる。
 // 実ブラウザでの見え方（横スクロール・axe・Tab の順・重なりが窓の中に入る）は、tests/browser/quiz.browser.test.ts が確かめる。
 // 場面は、確認シートの見本と同じ（FX-5 の南4局 10巡目のリーチの判断、東4局 8巡目のポンのあとの打牌）。
+// タブ「他家の手牌」（R15-5。OpenHands.test.tsx）は、答えたあとの、どの場面にも出るので、どの場面でも、いちばん右に付く。
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -69,12 +70,12 @@ describe('U-34 答える前は、どのタブも、待ちも点も出ない（U-
   });
 });
 
-describe('U-34 タブは、その場面に関係があるときだけ出る', () => {
-  it('聴牌にならない場面は、タブを出さず、受け入れ枚数の欄と役の欄が、これまでどおり並ぶ', async () => {
+describe('U-34 タブは、その場面に関係があるときだけ出る（他家の手牌は、答えたあとのどの場面にも）', () => {
+  it('聴牌にならない場面は、待ちと打点のタブを出さない（既定のタブと、他家の手牌だけ）。受け入れ枚数の欄と役の欄は、既定のタブに並ぶ', async () => {
     const { user } = renderQuiz(FAR);
     await reveal(user, () => screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
-    expect(screen.queryByRole('tablist')).toBeNull();
-    expect(screen.getByRole('heading', { name: '受け入れ枚数' })).toBeInTheDocument();
+    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '他家の手牌']);
+    expect(within(panel()).getByRole('heading', { name: '受け入れ枚数' })).toBeInTheDocument();
     expect(document.querySelector('[data-ai="waits-box"]')).toBeNull();
   });
 
@@ -82,7 +83,7 @@ describe('U-34 タブは、その場面に関係があるときだけ出る', ()
     const { user } = renderQuiz(AFTER_PON);
     await reveal(user, tile('三萬'));
     // この場面は、下家のリーチがあるので、守備のタブも出る（DangerTab.test.tsx）
-    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
     expect(screen.getByRole('tab', { name: '受け入れ・役', selected: true })).toBeInTheDocument();
     expect(screen.getByRole('tablist')).toHaveAccessibleName('答え合わせの内容');
     const shown = panel();
@@ -102,18 +103,18 @@ describe('U-34 タブは、その場面に関係があるときだけ出る', ()
   it('リーチの判断の場面でも出る。鳴きの判断（スルーで聴牌のまま）でも出る', async () => {
     const riichi = renderQuiz(RIICHI);
     await reveal(riichi.user, option('pass'));
-    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点']);
+    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
     riichi.unmount();
     const call = renderQuiz(CALL);
     await reveal(call.user, option('pass'));
     // この鳴きの判断は、下家のリーチ中なので、守備のタブも出る
-    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
   });
 
   it('解き直し（review）でも、同じ部品が出る（答えが保存してあるとき、答え合わせのあとの形で開く）', async () => {
     const { user } = renderQuiz({ ...AFTER_PON, mode: 'review' });
     await reveal(user, tile('三萬'));
-    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
   });
 });
 
@@ -135,10 +136,10 @@ describe('U-34 タブのキーボード（WAI-ARIA のタブ）', () => {
     expect(document.getElementById(second.getAttribute('aria-controls') ?? '')).toHaveAttribute('hidden');
   });
 
-  it('→ で次のタブを選んで、キーボードの位置も移す。← で戻る。端では反対の端へ。Home・End で最初・最後（この場面は、守備を足した 3 つ）', async () => {
+  it('→ で次のタブを選んで、キーボードの位置も移す。← で戻る。端では反対の端へ。Home・End で最初・最後（この場面は、守備と他家の手牌を足した 4 つ）', async () => {
     const { user } = renderQuiz(AFTER_PON);
     await reveal(user, tile('三萬'));
-    const [first, second, third] = tabs() as [HTMLElement, HTMLElement, HTMLElement];
+    const [first, second, third, fourth] = tabs() as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
     first.focus();
     await user.keyboard('{ArrowRight}');
     expect(second).toHaveAttribute('aria-selected', 'true');
@@ -150,8 +151,12 @@ describe('U-34 タブのキーボード（WAI-ARIA のタブ）', () => {
     await user.keyboard('{ArrowRight}');
     expect(third).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{ArrowRight}');
+    expect(fourth).toHaveAttribute('aria-selected', 'true');
+    await user.keyboard('{ArrowRight}');
     expect(first).toHaveAttribute('aria-selected', 'true');
     expect(first).toHaveFocus();
+    await user.keyboard('{ArrowLeft}');
+    expect(fourth).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{ArrowLeft}');
     expect(third).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{ArrowLeft}');
@@ -160,8 +165,8 @@ describe('U-34 タブのキーボード（WAI-ARIA のタブ）', () => {
     expect(first).toHaveAttribute('aria-selected', 'true');
     expect(first).toHaveFocus();
     await user.keyboard('{End}');
-    expect(third).toHaveAttribute('aria-selected', 'true');
-    expect(third).toHaveFocus();
+    expect(fourth).toHaveAttribute('aria-selected', 'true');
+    expect(fourth).toHaveFocus();
     // 押して選ぶこともできる
     await user.click(first);
     expect(first).toHaveAttribute('aria-selected', 'true');

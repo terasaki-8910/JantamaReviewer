@@ -294,6 +294,35 @@ const STATES: StateDef[] = [
       await goToKyokuEnd(page, 5);
     },
   },
+  {
+    name: '他家の手牌を開いたところ（局の終わり）',
+    run: async (page) => {
+      await openReplay(page);
+      await goToKyokuEnd(page, 2);
+      await page.getByRole('button', { name: '他家の手牌を開く', exact: true }).click();
+      await page.locator('[data-open-hands="block"]').waitFor();
+    },
+  },
+  {
+    name: '他家の手牌を開いたところ（答えた場面）',
+    run: async (page) => {
+      await openReplay(page);
+      await page.getByRole('button', { name: '他家の手牌を開く', exact: true }).click();
+      await gotoScene(page, 'k1h1e7');
+      await answerCurrent(page);
+      await page.locator('[data-open-hands="block"]').waitFor();
+    },
+  },
+  {
+    name: 'タブ「他家の手牌」（答えた場面）',
+    run: async (page) => {
+      await openReplay(page);
+      await gotoScene(page, 'k1h1e10');
+      await answerCurrent(page);
+      await page.getByRole('tab', { name: '他家の手牌' }).click();
+      await page.locator('[data-ai="open-hands"]').waitFor();
+    },
+  },
 ];
 
 async function openState(state: StateDef, options: Omit<OpenOptions, 'scenario'> = {}): Promise<Opened> {
@@ -401,6 +430,63 @@ describe('U-4: 1280×800 で、操作の段・卓・手牌が、ページをス�
   }
 });
 
+describe('U-4: 盤面（卓・手牌）と、右の答えの欄が、重ならない（1024・1280・1440px。河の長い局・答え合わせのあと）', () => {
+  /** 卓の牌・卓・手牌・凡例の箱が、右の欄（いまの一手・答えの欄）の箱と重なっているものを、名前で返す。 */
+  async function overlaps(page: Page): Promise<string[]> {
+    const m = await page.evaluate(() => {
+      const box = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      };
+      const answer = document.querySelector('section.answer');
+      const board = document.querySelector('.board-col');
+      if (answer === null || board === null) return null;
+      const named: Array<[string, Element]> = [
+        ['卓', document.querySelector('.table') as Element],
+        ['盤面の列', board],
+        ...Array.from(document.querySelectorAll('.table .tile, .hand .tile, .legend li')).map((el, i): [string, Element] => [`牌・凡例 ${i}`, el]),
+      ];
+      return { answer: box(answer), items: named.map(([name, el]) => ({ name, box: box(el) })) };
+    });
+    expect(m).not.toBeNull();
+    const { answer, items } = m as { answer: BoxRect; items: Array<{ name: string; box: BoxRect }> };
+    return items.filter((item) => boxesOverlap(item.box, answer)).map((item) => item.name);
+  }
+
+  for (const width of [1024, 1280, 1440]) {
+    it(`幅 ${width}px: 河の長い局の終わり（f9da の 6・8 局目、FX-4 の東1局）と、答えた場面で、重ならない`, { timeout: 180_000 }, async () => {
+      for (const height of [800, 900]) {
+        const fx4 = await open({ width, height });
+        try {
+          await openReplay(fx4.page);
+          for (const kyoku of [0, 1, 2]) {
+            await goToKyokuEnd(fx4.page, kyoku);
+            expect(await overlaps(fx4.page), `FX-4 ${kyoku} 局目の終わり @${width}x${height}`).toEqual([]);
+          }
+          for (const key of ['k1h0e12', 'k1h1e7']) {
+            await gotoScene(fx4.page, key);
+            expect(await overlaps(fx4.page), `${key}（答える前） @${width}x${height}`).toEqual([]);
+            await answerCurrent(fx4.page);
+            expect(await overlaps(fx4.page), `${key}（答え合わせのあと） @${width}x${height}`).toEqual([]);
+          }
+        } finally {
+          await fx4.context.close();
+        }
+        const long = await open({ width, height });
+        try {
+          await openReplay(long.page, 'f9da');
+          for (const kyoku of [5, 7]) {
+            await goToKyokuEnd(long.page, kyoku);
+            expect(await overlaps(long.page), `f9da ${kyoku} 局目の終わり @${width}x${height}`).toEqual([]);
+          }
+        } finally {
+          await long.context.close();
+        }
+      }
+    });
+  }
+});
+
 describe('U-5: Tab ですべての操作に届く', () => {
   const ROVING = '.hand .tile-btn, [role="radio"], [role="tab"]';
   const REACH = [
@@ -408,6 +494,9 @@ describe('U-5: Tab ですべての操作に届く', () => {
     '局の終わり（結果と点の増減）',
     '迷いの場面（答える前）',
     '迷いの場面（答え合わせのあと）',
+    '他家の手牌を開いたところ（局の終わり）',
+    '他家の手牌を開いたところ（答えた場面）',
+    'タブ「他家の手牌」（答えた場面）',
     '鳴きの場面（答える前）',
     'キーの一覧を開いたところ',
     '不一致も出す（設定が入）',
@@ -465,6 +554,41 @@ describe('U-5: Tab ですべての操作に届く', () => {
       await page.keyboard.press('Enter');
       await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).waitFor();
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('reveal-h');
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('U-35: 他家の手牌を開く（実ブラウザ）', () => {
+  const toggle = (page: Page) => page.locator('#b-openhands');
+  const handsInDom = (page: Page) => page.locator('[data-open-hands], .oh-row, .oh-hand').count();
+
+  it('既定は閉じている。答える場面でない手では押せる。開くと、手を進めても開いたまま。答える場面の答える前は、全 10 場面で、押せず、他家の手牌が DOM にも無い。答えると出る', { timeout: 240_000 }, async () => {
+    const { context, page } = await open();
+    try {
+      await openReplay(page);
+      expect(await handsInDom(page)).toBe(0);
+      expect(await toggle(page).isEnabled()).toBe(true);
+      expect(((await toggle(page).textContent()) ?? '').trim()).toBe('他家の手牌を開く');
+      await toggle(page).click();
+      expect(await page.locator('.oh-row').count()).toBe(3);
+      await page.locator('#b-next').click();
+      await page.locator('#b-next').click();
+      expect(await page.locator('.oh-row').count()).toBe(3);
+      expect(((await toggle(page).textContent()) ?? '').trim()).toBe('他家の手牌を閉じる');
+      // 開いたまま、各場面へ。答える前は、押せず、DOM にも無い
+      for (const key of SCENE_KEYS) {
+        await page.locator(`.pin[data-key="${key}"]`).first().click();
+        await page.locator('.qz[data-state="answering"]').waitFor();
+        expect(await toggle(page).isDisabled(), key).toBe(true);
+        expect(await handsInDom(page), key).toBe(0);
+        expect(await page.locator('[data-ai]').count(), key).toBe(0);
+      }
+      // 答えたあと: 押せて、開いたままなので出る
+      await answerCurrent(page);
+      expect(await toggle(page).isEnabled()).toBe(true);
+      expect(await page.locator('[data-open-hands="block"] .oh-row').count()).toBe(3);
     } finally {
       await context.close();
     }

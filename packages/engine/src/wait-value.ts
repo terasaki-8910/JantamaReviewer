@@ -231,8 +231,8 @@ export function waitPlansOf(decision: Pick<Decision, 'kind' | 'entry' | 'board'>
 
 const WIND_ORDER = ['E', 'S', 'W', 'N'] as const;
 
-/** 待ち牌 1 つの、ロンかツモの 1 行。 */
-function lineOf(value: WinValue, input: WinInput): WaitLine {
+/** 和了の計算結果 1 つを、ロンかツモの 1 行にする（符の内訳つき）。局の結果の手（kyoku-result.ts）も使う。 */
+export function waitLineOf(value: WinValue, input: WinInput): WaitLine {
   let fuBreakdown: FuBreakdown | null = null;
   if (!value.none && value.fu !== null) {
     const made = fuBreakdownOf(input);
@@ -282,7 +282,7 @@ export function waitTableOf(decision: Pick<Decision, 'board'>, plan: WaitPlan): 
     const sideOf = (riichi: boolean) => {
       const ron = coreEvaluateWin(spec(kind, false, riichi));
       const tsumo = coreEvaluateWin(spec(kind, true, riichi));
-      return { ron, tsumo, side: { ron: lineOf(ron, input(kind, false, riichi)), tsumo: lineOf(tsumo, input(kind, true, riichi)) } };
+      return { ron, tsumo, side: { ron: waitLineOf(ron, input(kind, false, riichi)), tsumo: waitLineOf(tsumo, input(kind, true, riichi)) } };
     };
     const dama = sideOf(false);
     const riichi = closed ? sideOf(true) : null;

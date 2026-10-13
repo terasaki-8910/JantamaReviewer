@@ -5,12 +5,14 @@
  * （「その場面に関係があるときだけ」）。足すタブが 1 つも無い場面は、タブの並びを出さず、既定の欄だけを、これまでと同じ形で出す。
  * 答え合わせのあとにだけ描く（AI の行動や他家の手牌を含む。U-1）。呼ぶ側（AnswerPanel の Reveal）が、答える前には呼ばない。
  *
- * これから足すタブ（作る順は R15-8）: 「他家の手牌」（答えたあと）。足すときは、この一覧に 1 つ書き、中身の元（RevealModel の値）を reveal.ts に足す。
+ * 「他家の手牌」（F14、R15-5）は、答えたあとの、どの場面にも出る。中身の元は、判断の盤面ではなく、牌譜（半荘）から、タブを選んだときに組み立てる。
+ * 足すときは、この一覧に 1 つ書き、中身の元（RevealModel の値）を reveal.ts に足す。
  */
-import type { Decision } from '@jantama/engine';
+import type { Decision, ImportedGame } from '@jantama/engine';
 import type { ReactNode } from 'react';
 
 import { DangerPanel } from './DangerPanel';
+import { OpenHandsPanel } from './OpenHands';
 import type { RevealModel } from './reveal';
 import { WaitsPanel } from './WaitsPanel';
 
@@ -19,6 +21,8 @@ export interface RevealTabContext {
   decision: Decision;
   model: RevealModel;
   dora: ReadonlySet<number> | null;
+  /** 取り込んだ半荘（他家の手牌を、牌譜から組み立てる）。渡されない画面は、「他家の手牌」のタブを出さない。 */
+  game?: ImportedGame;
 }
 
 /** 足すタブ 1 つ。 */
@@ -48,6 +52,14 @@ export const REVEAL_TABS: readonly RevealTabEntry[] = [
     // 他家のリーチがある場面（切れる牌がある判断）
     show: ({ model }) => model.danger !== null,
     panel: ({ model, dora }) => (model.danger === null ? null : <DangerPanel box={model.danger} dora={dora} />),
+  },
+  {
+    id: 'open-hands',
+    label: '他家の手牌',
+    // 答えたあとの、どの場面にも出る（他家の手牌が見られる）
+    show: ({ game }) => game !== undefined,
+    panel: ({ game, decision, dora }) =>
+      game === undefined ? null : <OpenHandsPanel game={game} kyokuPosition={decision.kyokuPosition} eventIndex={decision.eventIndex} dora={dora} />,
   },
 ];
 

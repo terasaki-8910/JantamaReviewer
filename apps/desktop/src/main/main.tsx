@@ -11,6 +11,7 @@ import '../styles/quiz.css';
 import '../styles/yaku.css';
 import '../styles/waits.css';
 import '../styles/danger.css';
+import '../styles/open-hands.css';
 import '../styles/replay.css';
 import '../styles/search.css';
 import '../styles/log.css';

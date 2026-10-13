@@ -3,6 +3,7 @@
  * 1 段目: 局の選択（迷いと不一致の数つき）・局の頭・前の巡目・1手戻る・「手 34 / 48」・1手進む・次の巡目・局の終わり・キーの一覧のアイコン
  * 2 段目: 前・次の不一致（あと何か所）・前・次の迷い（あと何か所）
  * 3 段目: 位置の帯
+ * 2 段目の右に、「他家の手牌を開く / 閉じる」（F14、R15-5）。答える場面（迷い・不一致）では、答えるまで押せない（U-35）
  * 押したボタンが端で押せなくなったとき、キーボードの位置が消えないよう、対のボタン（それも押せなければ位置の帯）へ移す。
  */
 import type { ReplayScene, ReplayTimeline } from '@jantama/engine';
@@ -10,6 +11,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 
 import type { ReplayKeys } from '../../api/types';
 import { Icon } from '../Icon';
+import { InfoTip } from '../InfoTip';
 import { MenuSelect } from '../MenuSelect';
 import { KeyHelp } from './KeyHelp';
 import { formatChord, type ReplayAction } from './keys';
@@ -30,7 +32,13 @@ interface ControlBarProps {
   currentKey: string | null;
   go: (g: number) => void;
   onChangeKeys: (next: ReplayKeys) => Promise<string | null>;
+  /** 「他家の手牌を開く」（F14）。`available` は、いまの手で開けるか（答える場面は、答えたあとだけ）。 */
+  openHands: { open: boolean; available: boolean; onToggle: () => void };
 }
+
+/** 「他家の手牌を開く」の説明のアイコンの文。 */
+export const OPEN_HANDS_HINT =
+  '他家 3 人の手牌と待ちを、右の欄に出します。手を進めても開いたままなので、他家の手の進み方を、河と一緒に見られます。迷い・不一致の場面では、答えを出すまで開けません（手牌は画面にも出しません）。';
 
 /** 押したボタンが押せなくなったとき、キーボードの位置を移す先（対のボタン）。 */
 const PAIR: Partial<Record<ReplayAction, ReplayAction>> = {
@@ -46,12 +54,21 @@ const PAIR: Partial<Record<ReplayAction, ReplayAction>> = {
   next_doubt: 'prev_doubt',
 };
 
-export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, currentKey, go, onChangeKeys }: ControlBarProps) {
+export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, currentKey, go, onChangeKeys, openHands }: ControlBarProps) {
   const step = timeline.steps[g];
   const kyoku = step === undefined ? undefined : timeline.kyokus[step.kyokuPosition];
   const buttons = useRef(new Map<ReplayAction, HTMLButtonElement>());
   const pressed = useRef<ReplayAction | null>(null);
   const trackFallback = useRef<HTMLDivElement>(null);
+  const openButton = useRef<HTMLButtonElement>(null);
+  // 「他家の手牌を開く」にキーボードの位置があるまま、答える場面へ進んで押せなくなったとき、位置が消えないよう、位置の帯へ移す
+  const openFocused = useRef(false);
+  const { available: openAvailable } = openHands;
+  useEffect(() => {
+    if (openAvailable || !openFocused.current) return;
+    openFocused.current = false;
+    trackFallback.current?.querySelector<HTMLElement>('.tl-track')?.focus();
+  }, [openAvailable]);
 
   // 押したボタンが端で押せなくなったとき、対のボタン（それも押せなければ位置の帯）へ、キーボードの位置を移す
   useEffect(() => {
@@ -223,6 +240,30 @@ export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, 
       <div className="pb-jumps">
         {jump('mismatch')}
         {jump('doubt')}
+        <div className="pb-open">
+          <button
+            type="button"
+            className="btn sm"
+            id="b-openhands"
+            ref={openButton}
+            data-open={openHands.open && openAvailable ? '1' : undefined}
+            disabled={!openAvailable}
+            aria-describedby="oh-ctl-hint"
+            onFocus={() => {
+              openFocused.current = true;
+            }}
+            onBlur={(event) => {
+              if (!event.currentTarget.disabled) openFocused.current = false;
+            }}
+            onClick={openHands.onToggle}
+          >
+            <Icon name="eye" />
+            <span className="lbl">{openHands.open && openAvailable ? '他家の手牌を閉じる' : '他家の手牌を開く'}</span>
+          </button>
+          <InfoTip label="他家の手牌の開閉の説明" id="oh-ctl-hint">
+            {OPEN_HANDS_HINT}
+          </InfoTip>
+        </div>
       </div>
       <div ref={trackFallback}>
         <Strip timeline={timeline} g={g} scenes={scenes} answered={answered} currentKey={currentKey} go={go} />

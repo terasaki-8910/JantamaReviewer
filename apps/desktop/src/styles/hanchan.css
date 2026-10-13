@@ -1092,3 +1092,147 @@ body.lb-open {
   max-width: 760px;
   margin: var(--s2) 0 0;
 }
+
+/*
+  ================= 局の評価の表の行を開く: 局の結果の手（F14、E-40、U-36。R15-6 の A。提案 4） =================
+  承認済みの 15回目の見本（samples15.css の .hx-*）の部品。表の形はそのまま。開かないかぎり増えない（行の頭に矢印つきのボタンがあるだけ）。
+  行の頭のボタンは、見える大きさは文字と同じ高さにして、押せる範囲だけ上下に広げる（幅 390px で、行ごとに縦が伸びない）。
+  開いた行は、表の全幅の 1 行（幅 600px 未満では、かたまりの下に続く 1 つの欄）。色はトークンだけ。
+*/
+.hx-open {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  min-height: 28px;
+  margin: -4px 0 -4px -4px;
+  padding: 0 6px 0 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+}
+
+.hx-open:hover {
+  background: var(--hover);
+}
+
+.hx-chev {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.hx-open[aria-expanded="true"] .hx-chev {
+  transform: rotate(90deg);
+}
+
+.tbl tr.hx-exp > .hx-cell {
+  height: auto;
+  padding: var(--s3) 0 var(--s4);
+  border-top: 0;
+  text-align: left;
+  white-space: normal;
+}
+
+.hx-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s4) var(--s5);
+  align-items: start;
+  min-width: 0;
+}
+
+.hx-blk {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.hx-blk h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.hx-win {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hx-win + .hx-win {
+  padding-top: var(--s2);
+  border-top: 1px solid var(--line);
+}
+
+.hx-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--s2);
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.hx-who b {
+  font-weight: 700;
+}
+
+.hx-pts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--s3);
+  margin: 0;
+  font-size: 13px;
+}
+
+.hx-pts .n {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hx-yk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 0;
+}
+
+.hx-yk .q-tag {
+  min-height: 20px;
+  padding: 2px 7px;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.hx-bonus {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hx-none {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+@container main (width < 600px) {
+  .tbl tr.hx-exp {
+    display: block;
+    padding: 0 0 var(--s3);
+    border-top: 0;
+  }
+
+  .tbl tr.hx-exp > .hx-cell {
+    display: block;
+    padding: 0;
+  }
+}
