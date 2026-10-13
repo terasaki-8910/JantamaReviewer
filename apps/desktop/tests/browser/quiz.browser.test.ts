@@ -1053,7 +1053,8 @@ describe('U-34: 答え合わせのタブ（待ちと打点・待ちの形・符�
       expect(found).toEqual({ tabs: 0, text: false });
       await answerCurrent(before.page);
       const tabs = before.page.getByRole('tab');
-      expect(await tabs.allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点']);
+      // 「他家の手牌」のタブは、答えたあとの、どの場面にも出る（いちばん右）
+      expect(await tabs.allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
       expect(await before.page.getByRole('tab', { name: '受け入れ・役' }).getAttribute('aria-selected')).toBe('true');
       // 既定のタブの中身は、これまでと同じ（受け入れ枚数の欄と役の欄）で、待ちと打点の中身は描かれていない
       expect(await before.page.locator('[data-ai="ukeire-box"], [data-ai="yaku-box"]').count()).toBe(2);
@@ -1061,12 +1062,12 @@ describe('U-34: 答え合わせのタブ（待ちと打点・待ちの形・符�
     } finally {
       await before.context.close();
     }
-    // 聴牌でない判断（FX-4 の最初の問題）には、タブが出ない
+    // 聴牌でない判断（FX-4 の最初の問題）には、待ちと打点のタブは出ない（既定のタブと、他家の手牌だけ）
     const far = await open({ scenario: scenario({ due: true }) });
     try {
       await openReview(far.page);
       await answerCurrent(far.page);
-      expect(await far.page.getByRole('tablist').count()).toBe(0);
+      expect(await far.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '他家の手牌']);
     } finally {
       await far.context.close();
     }
@@ -1077,18 +1078,23 @@ describe('U-34: 答え合わせのタブ（待ちと打点・待ちの形・符�
     try {
       const first = page.getByRole('tab', { name: '受け入れ・役' });
       const second = page.getByRole('tab', { name: '待ちと打点' });
+      const third = page.getByRole('tab', { name: '他家の手牌' });
       await first.focus();
       await page.keyboard.press('ArrowRight');
       expect(await second.getAttribute('aria-selected')).toBe('true');
       expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('待ちと打点');
-      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, 0]);
+      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, 0, -1]);
       // 通して見る画面のキーにも割り当てられている ← → Home End は、タブが受ける（画面は動かない）
+      await page.keyboard.press('ArrowRight');
+      expect(await third.getAttribute('aria-selected')).toBe('true');
       await page.keyboard.press('ArrowRight');
       expect(await first.getAttribute('aria-selected')).toBe('true');
       await page.keyboard.press('End');
-      expect(await second.getAttribute('aria-selected')).toBe('true');
+      expect(await third.getAttribute('aria-selected')).toBe('true');
       await page.keyboard.press('Home');
       expect(await first.getAttribute('aria-selected')).toBe('true');
+      await page.keyboard.press('ArrowLeft');
+      expect(await third.getAttribute('aria-selected')).toBe('true');
       await page.keyboard.press('ArrowLeft');
       expect(await second.getAttribute('aria-selected')).toBe('true');
       // 選んでいるタブから Tab で、欄の中の最初の操作（説明のアイコン）へ。選んでいないタブには止まらない
@@ -1334,7 +1340,7 @@ describe('U-34: 答え合わせのタブ「守備」（他家のリーチがあ�
       }));
       expect(found).toEqual({ tabs: 0, text: false });
       await answerCurrent(before.page, 'first');
-      expect(await before.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+      expect(await before.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
       expect(await before.page.getByRole('tab', { name: '受け入れ・役' }).getAttribute('aria-selected')).toBe('true');
       expect(await before.page.locator('[data-ai="danger-box"]').count()).toBe(0);
     } finally {
@@ -1345,7 +1351,7 @@ describe('U-34: 答え合わせのタブ「守備」（他家のリーチがあ�
     try {
       await openReview(only.page);
       await answerCurrent(only.page);
-      expect(await only.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '守備']);
+      expect(await only.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '守備', '他家の手牌']);
     } finally {
       await only.context.close();
     }
@@ -1353,31 +1359,35 @@ describe('U-34: 答え合わせのタブ「守備」（他家のリーチがあ�
     try {
       await openReview(noRiichi.page);
       await answerCurrent(noRiichi.page);
-      expect(await noRiichi.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点']);
+      expect(await noRiichi.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
     } finally {
       await noRiichi.context.close();
     }
   });
 
-  it('← → Home End で、守備を含む 3 つのタブを選べて、キーボードの位置も移る。Tab は選んでいるタブから欄の中（説明のアイコン）へ、その次は差の原因へ。守備の欄の止まり場所は、説明のアイコンだけ', { timeout: 90_000 }, async () => {
+  it('← → Home End で、守備を含む 4 つのタブを選べて、キーボードの位置も移る。Tab は選んでいるタブから欄の中（説明のアイコン）へ、その次は差の原因へ。守備の欄の止まり場所は、説明のアイコンだけ', { timeout: 90_000 }, async () => {
     const { context, page } = await openState(TENPAI_STATE);
     try {
-      const names = ['受け入れ・役', '待ちと打点', '守備'];
+      const names = ['受け入れ・役', '待ちと打点', '守備', '他家の手牌'];
       await page.getByRole('tab', { name: '守備' }).focus();
       const selected = async () =>
         page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent));
       await page.keyboard.press('ArrowRight');
+      expect(await selected()).toEqual([names[3]]);
+      expect(await page.evaluate(() => document.activeElement?.textContent)).toBe(names[3]);
+      await page.keyboard.press('ArrowRight');
       expect(await selected()).toEqual([names[0]]);
-      expect(await page.evaluate(() => document.activeElement?.textContent)).toBe(names[0]);
       await page.keyboard.press('ArrowLeft');
-      expect(await selected()).toEqual([names[2]]);
+      expect(await selected()).toEqual([names[3]]);
       await page.keyboard.press('Home');
       expect(await selected()).toEqual([names[0]]);
       await page.keyboard.press('ArrowRight');
       expect(await selected()).toEqual([names[1]]);
       await page.keyboard.press('End');
+      expect(await selected()).toEqual([names[3]]);
+      await page.keyboard.press('ArrowLeft');
       expect(await selected()).toEqual([names[2]]);
-      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, -1, 0]);
+      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, -1, 0, -1]);
       // Tab: 説明のアイコン → 差の原因（欄の外）
       await page.keyboard.press('Tab');
       expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('守備の目安の説明');

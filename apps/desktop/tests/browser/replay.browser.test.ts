@@ -250,35 +250,6 @@ const STATES: StateDef[] = [
     },
   },
   {
-    name: '他家の手牌を開いたところ（局の終わり）',
-    run: async (page) => {
-      await openReplay(page);
-      await goToKyokuEnd(page, 2);
-      await page.getByRole('button', { name: '他家の手牌を開く', exact: true }).click();
-      await page.locator('[data-open-hands="block"]').waitFor();
-    },
-  },
-  {
-    name: '他家の手牌を開いたところ（答えた場面）',
-    run: async (page) => {
-      await openReplay(page);
-      await page.getByRole('button', { name: '他家の手牌を開く', exact: true }).click();
-      await gotoScene(page, 'k1h1e7');
-      await answerCurrent(page);
-      await page.locator('[data-open-hands="block"]').waitFor();
-    },
-  },
-  {
-    name: 'タブ「他家の手牌」（答えた場面）',
-    run: async (page) => {
-      await openReplay(page);
-      await gotoScene(page, 'k1h1e10');
-      await answerCurrent(page);
-      await page.getByRole('tab', { name: '他家の手牌' }).click();
-      await page.locator('[data-ai="open-hands"]').waitFor();
-    },
-  },
-  {
     name: '局の選択を開いたところ',
     run: async (page) => {
       await openReplay(page);
@@ -321,6 +292,35 @@ const STATES: StateDef[] = [
     run: async (page) => {
       await openReplay(page, 'f9da');
       await goToKyokuEnd(page, 5);
+    },
+  },
+  {
+    name: '他家の手牌を開いたところ（局の終わり）',
+    run: async (page) => {
+      await openReplay(page);
+      await goToKyokuEnd(page, 2);
+      await page.getByRole('button', { name: '他家の手牌を開く', exact: true }).click();
+      await page.locator('[data-open-hands="block"]').waitFor();
+    },
+  },
+  {
+    name: '他家の手牌を開いたところ（答えた場面）',
+    run: async (page) => {
+      await openReplay(page);
+      await page.getByRole('button', { name: '他家の手牌を開く', exact: true }).click();
+      await gotoScene(page, 'k1h1e7');
+      await answerCurrent(page);
+      await page.locator('[data-open-hands="block"]').waitFor();
+    },
+  },
+  {
+    name: 'タブ「他家の手牌」（答えた場面）',
+    run: async (page) => {
+      await openReplay(page);
+      await gotoScene(page, 'k1h1e10');
+      await answerCurrent(page);
+      await page.getByRole('tab', { name: '他家の手牌' }).click();
+      await page.locator('[data-ai="open-hands"]').waitFor();
     },
   },
 ];
