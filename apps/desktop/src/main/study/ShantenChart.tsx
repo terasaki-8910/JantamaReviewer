@@ -3,6 +3,8 @@
  *
  * 横軸は、その人が切った枚数（0 は配牌）、縦軸は向聴数（上が聴牌（0 向聴）、下へ 1・2・3…）。階段の線で、切るたびの向聴数（切ったあとの手）を結ぶ。
  * 聴牌になった打牌の点は、三角（▲。色だけに頼らない）、ほかの点は丸。
+ * 自分の推移（局の評価の行）は、点に印が付く: 迷いは点を囲む輪（○）、大きな不一致は点の右の菱形（◆）。どちらも、呼ぶ側（`MyShantenTrack`）の
+ * 凡例と、吹き出し・表の文字が付くので、色にも形にも頼り切らない。輪のある点は、選んだ印（`cur`）を輪より大きくする。
  * 図は、1 つの止まり場所（Tab）。矢印キー（← →・Home・End）で点を選ぶと、吹き出し（値が先、名前があと。週の集計の図と同じ `ChartTip`）が出る。
  * マウスを乗せても同じ（いちばん近い点）。吹き出しの数字は、読み上げ用の説明（`aria-describedby`）にも、まとめて書く。
  * 色は styles/open-hands.css のトークンだけ。吹き出しは week/ChartTip.tsx（`ChartTipProvider` の中で使う）。
@@ -23,6 +25,10 @@ export interface ShantenPoint {
   name: string;
   /** 聴牌になった打牌の点か（三角で描く）。 */
   mark?: boolean;
+  /** 迷いの場面の点か（点を囲む輪で描く）。 */
+  doubt?: boolean;
+  /** 大きな不一致の場面の点か（点の右に菱形で描く）。 */
+  big?: boolean;
 }
 
 interface ShantenChartProps {
@@ -39,9 +45,17 @@ interface ShantenChartProps {
 const W = 300;
 const H = 94;
 const L = 30;
-const R = 10;
+// 右の余白は、最後の点の右の菱形（点から +10、半分の大きさ 5）が、図の中に収まる大きさ
+const R = 15;
 const T = 24;
 const B = 18;
+/** 大きな不一致の菱形の、点からの右へのずれと、半分の大きさ。 */
+const BIG_DX = 10;
+const BIG_HALF = 5;
+/** 迷いの輪の半径と、選んだ印（cur）の半径（輪のある点は大きく）。 */
+const DOUBT_R = 6.5;
+const CUR_R = 6;
+const CUR_R_RING = 10;
 
 export function ShantenChart({ label, points, yTitle = '向聴数', xTitle = '横軸: その人が切った枚数' }: ShantenChartProps) {
   const tip = useChartTip();
@@ -155,6 +169,9 @@ export function ShantenChart({ label, points, yTitle = '向聴数', xTitle = '�
             {xTitle}
           </text>
           <path className="ln" d={line} />
+          {points.map((p) =>
+            p.doubt === true ? <circle key={`d${p.n}`} className="dbt" cx={x(p.n)} cy={y(p.shanten)} r={DOUBT_R} /> : null,
+          )}
           {points.map((p, i) =>
             p.mark === true ? (
               <path key={p.n} className="tpm" d={`M ${x(p.n)} ${y(p.shanten) - 6.5} L ${x(p.n) + 6} ${y(p.shanten) + 4} L ${x(p.n) - 6} ${y(p.shanten) + 4} Z`} />
@@ -162,8 +179,22 @@ export function ShantenChart({ label, points, yTitle = '向聴数', xTitle = '�
               <circle key={p.n} className="nd" cx={x(p.n)} cy={y(p.shanten)} r={i === active ? 3.6 : 2.4} />
             ),
           )}
+          {points.map((p) =>
+            p.big === true ? (
+              <path
+                key={`b${p.n}`}
+                className="bgm"
+                d={`M ${x(p.n) + BIG_DX} ${y(p.shanten) - BIG_HALF} L ${x(p.n) + BIG_DX + BIG_HALF} ${y(p.shanten)} L ${x(p.n) + BIG_DX} ${y(p.shanten) + BIG_HALF} L ${x(p.n) + BIG_DX - BIG_HALF} ${y(p.shanten)} Z`}
+              />
+            ) : null,
+          )}
           {active !== null && points[active] !== undefined && (
-            <circle className="cur" cx={x((points[active] as ShantenPoint).n)} cy={y((points[active] as ShantenPoint).shanten)} r={6} />
+            <circle
+              className="cur"
+              cx={x((points[active] as ShantenPoint).n)}
+              cy={y((points[active] as ShantenPoint).shanten)}
+              r={(points[active] as ShantenPoint).doubt === true ? CUR_R_RING : CUR_R}
+            />
           )}
         </svg>
       </div>
