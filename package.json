@@ -15,6 +15,7 @@
     "test:rust": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --workspace",
     "test:hook": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --test hook_integration --test input_flow_integration -- --ignored --nocapture",
     "test:task": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml -p jantama-helper --test task_scheduler -- --ignored --nocapture",
+    "test:sync": "node scripts/test-sync.mjs",
     "lint": "pnpm lint:eslint && pnpm lint:style && pnpm lint:types && pnpm lint:clippy && pnpm lint:fmt && pnpm check:mac",
     "check:mac": "node scripts/check-mac.mjs",
     "lint:eslint": "eslint .",

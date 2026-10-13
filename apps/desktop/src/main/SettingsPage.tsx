@@ -12,6 +12,7 @@ import type { HelperStatus, InputStatus, Orientation, Settings } from '../api/ty
 import { platform } from '../shared/platform';
 import { describeTrigger, formatClock } from './format';
 import { RecordsBlock } from './RecordsBlock';
+import { SyncBlock } from './SyncBlock';
 
 const ORIENTATION_CHOICES: ReadonlyArray<{ value: Orientation; label: string }> = [
   { value: 'vertical', label: '縦長' },
@@ -379,6 +380,8 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
             onReplaced={onRecordsReplaced}
             initialNotice={recordsNotice}
           />
+
+          <SyncBlock onModalChange={onRecordsModal} />
 
           {features.capture && (
             <div className="setting field">

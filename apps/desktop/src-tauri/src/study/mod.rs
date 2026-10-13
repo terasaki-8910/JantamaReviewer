@@ -14,11 +14,13 @@
 //! `replace_all`（答え・今日の出題・週の記録を、1 つの取引で全部置き換える。ファイルの入れ替えを、取引の中に挟める）。
 //!
 //! 表の作りは `PRAGMA user_version` で版を持つ。新しい版のアプリが作ったファイルは、読まずにエラーにする（壊さないため）。
+//! 版 3（F15 同期）で、答えに端末をまたいで一意の `uid` を足した（手元の番号 `id` はそのまま。同期は `uid` で突き合わせる。`uid.rs`）。
 //! 消した半荘は、アプリを閉じるとき（落ちたときは次の起動のとき）に、答えと予定も消す（`forget_sessions`。`trash.rs` が呼ぶ）。
 //! 消した半荘を置き場に置いている間は、行をそのまま残す（元に戻せば、答えも戻る）。
 
 pub mod commands;
 pub mod records;
+pub mod uid;
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -35,7 +37,7 @@ use crate::store::{ensure_outside_git, StoreError};
 pub const STUDY_FILE: &str = "study.sqlite";
 
 /// 表の作りの版。
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// 差の原因（U-20）。画面の 5 つのチェックボックスの値。
 pub const CAUSES: [&str; 5] = ["ukeire", "shape", "value", "defense", "other"];
@@ -165,6 +167,9 @@ pub struct NewAnswer {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnswerRow {
     pub id: i64,
+    /// 端末をまたいで一意の id（同期の突き合わせに使う。F15）。昔の書き出しのファイルには無い（読み込むとき、内容から決める）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
     #[serde(flatten)]
     pub answer: NewAnswer,
 }
@@ -504,6 +509,9 @@ impl StudyDb {
                  COMMIT;",
             )?;
         }
+        if version < 3 {
+            migrate_to_v3(&conn)?;
+        }
         Ok(StudyDb { conn })
     }
 
@@ -521,8 +529,8 @@ impl StudyDb {
         let causes = serde_json::to_string(&answer.causes).map_err(|e| invalid(e.to_string()))?;
         self.conn.execute(
             "INSERT INTO answers (session_id, decision_key, mode, shown_at, answered_at, choice, reason,
-               duration_ms, reselect_count, correct, causes, principle, maka_move, interval_days, due_date)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+               duration_ms, reselect_count, correct, causes, principle, maka_move, interval_days, due_date, uid)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 answer.session_id,
                 answer.decision_key,
@@ -539,6 +547,7 @@ impl StudyDb {
                 answer.maka_move,
                 answer.interval_days,
                 answer.due_date,
+                crate::ids::new_uid(),
             ],
         )?;
         let id = self.conn.last_insert_rowid();
@@ -780,6 +789,120 @@ impl StudyDb {
         tx.commit()?;
         Ok((answers, sets))
     }
+
+    // ---- 同期（F15）が使う入口。同期は、端末をまたいで一意の `uid` で記録を突き合わせる ----
+
+    /// `uid` の答え。無ければ `None`。
+    pub fn answer_by_uid(&self, uid: &str) -> Result<Option<AnswerRow>, StudyError> {
+        Ok(self
+            .conn
+            .query_row(
+                &format!("{SELECT_ANSWER} WHERE uid = ?1"),
+                params![uid],
+                row_to_answer,
+            )
+            .optional()?)
+    }
+
+    /// 同期で届いた答えを、`uid` で置く。まだ無ければ足し（手元の番号 `id` は、ここで新しく付く）、あれば全部の欄を置き換える。
+    /// 値は、ふだんの記録と同じ決まりで確かめる。
+    pub fn put_answer_by_uid(&mut self, uid: &str, answer: &NewAnswer) -> Result<(), StudyError> {
+        if !valid_uid(uid) {
+            return Err(invalid(format!("答えの uid の形が違います: {uid}")));
+        }
+        validate(answer)?;
+        let choice = serde_json::to_string(&answer.choice).map_err(|e| invalid(e.to_string()))?;
+        let causes = serde_json::to_string(&answer.causes).map_err(|e| invalid(e.to_string()))?;
+        self.conn.execute(
+            "INSERT INTO answers (session_id, decision_key, mode, shown_at, answered_at, choice, reason,
+               duration_ms, reselect_count, correct, causes, principle, maka_move, interval_days, due_date, uid)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+             ON CONFLICT(uid) DO UPDATE SET
+               session_id = excluded.session_id, decision_key = excluded.decision_key, mode = excluded.mode,
+               shown_at = excluded.shown_at, answered_at = excluded.answered_at, choice = excluded.choice,
+               reason = excluded.reason, duration_ms = excluded.duration_ms, reselect_count = excluded.reselect_count,
+               correct = excluded.correct, causes = excluded.causes, principle = excluded.principle,
+               maka_move = excluded.maka_move, interval_days = excluded.interval_days, due_date = excluded.due_date",
+            params![
+                answer.session_id,
+                answer.decision_key,
+                answer.mode.as_str(),
+                answer.shown_at,
+                answer.answered_at,
+                choice,
+                answer.reason.trim(),
+                answer.duration_ms,
+                answer.reselect_count,
+                i32::from(answer.correct),
+                causes,
+                answer.principle,
+                answer.maka_move,
+                answer.interval_days,
+                answer.due_date,
+                uid,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// 多くの操作を 1 つの取引にまとめる（同期が、新しい端末で記録を一度に入れるとき、1 件ごとの書き込みを待たないため）。
+    /// `begin_batch` のあと、`end_batch` まで、書き込みは取引の中。`end_batch(false)` は、取り消す。
+    pub fn begin_batch(&mut self) -> Result<(), StudyError> {
+        self.conn.execute_batch("BEGIN")?;
+        Ok(())
+    }
+
+    /// `begin_batch` で始めた取引を、確定する（`commit` が false なら、取り消す）。
+    pub fn end_batch(&mut self, commit: bool) -> Result<(), StudyError> {
+        self.conn
+            .execute_batch(if commit { "COMMIT" } else { "ROLLBACK" })?;
+        Ok(())
+    }
+
+    /// `uid` の答えを消す（同期で、ほかの端末が消したとき）。消したなら true。
+    pub fn delete_answer_by_uid(&mut self, uid: &str) -> Result<bool, StudyError> {
+        Ok(self
+            .conn
+            .execute("DELETE FROM answers WHERE uid = ?1", params![uid])?
+            > 0)
+    }
+
+    /// その日の今日の出題の組を、渡したものにそのまま置き換える（同期で届いた組。`save_daily_set` と違い、あっても入れ替える）。
+    /// 組が空なら、その日の組を消す。
+    pub fn put_daily_set(&mut self, date: &str, items: &[ProblemRef]) -> Result<(), StudyError> {
+        if !valid_date(date) {
+            return Err(invalid(format!("日付の形が違います: {date}")));
+        }
+        for item in items {
+            if !valid_session_id(&item.session_id) || !valid_decision_key(&item.decision_key) {
+                return Err(invalid("今日の出題の問題の形が違います"));
+            }
+        }
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM daily_sets WHERE date = ?1", params![date])?;
+        {
+            let mut insert = tx.prepare(
+                "INSERT INTO daily_sets (date, position, session_id, decision_key) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            for (position, item) in items.iter().enumerate() {
+                insert.execute(params![
+                    date,
+                    position as i64,
+                    item.session_id,
+                    item.decision_key
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// その日の今日の出題の組を消す（同期で、ほかの端末が消したとき）。
+    pub fn delete_daily_set(&mut self, date: &str) -> Result<(), StudyError> {
+        self.conn
+            .execute("DELETE FROM daily_sets WHERE date = ?1", params![date])?;
+        Ok(())
+    }
 }
 
 /// `replace_all` が失敗した理由: 値が正しくない・ファイルの扱いに失敗した（`Study`）か、確定の前に挟んだ処理が失敗した（`Hook`）。
@@ -806,6 +929,7 @@ fn check_snapshot(
         }
         validate(&row.answer)?;
     }
+    resolve_answer_uids(answers)?;
     let mut dates = BTreeSet::new();
     for set in daily_sets {
         if !valid_date(&set.date) {
@@ -855,10 +979,11 @@ fn write_snapshot(
     {
         let mut insert = tx.prepare(
             "INSERT INTO answers (id, session_id, decision_key, mode, shown_at, answered_at, choice, reason,
-               duration_ms, reselect_count, correct, causes, principle, maka_move, interval_days, due_date)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+               duration_ms, reselect_count, correct, causes, principle, maka_move, interval_days, due_date, uid)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         )?;
-        for row in answers {
+        let uids = resolve_answer_uids(answers)?;
+        for (row, uid) in answers.iter().zip(uids) {
             let answer = &row.answer;
             let choice =
                 serde_json::to_string(&answer.choice).map_err(|e| invalid(e.to_string()))?;
@@ -881,6 +1006,7 @@ fn write_snapshot(
                 answer.maka_move,
                 answer.interval_days,
                 answer.due_date,
+                uid,
             ])?;
         }
     }
@@ -933,8 +1059,114 @@ fn write_week(tx: &rusqlite::Transaction<'_>, record: &WeekRecord) -> Result<boo
     Ok(true)
 }
 
+/// 答えの uid の形（英数字と `-`、64 文字まで）。
+fn valid_uid(uid: &str) -> bool {
+    !uid.is_empty()
+        && uid.len() <= 64
+        && uid.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+/// 渡した答えそれぞれの uid を決める。`uid` を持つ答えはそれを使い（形と重なりを確かめる）、持たない答え（昔の書き出しのファイル）は、
+/// 内容から決める（`uid::legacy_answer_uid`。同じ中身の答えが続くときだけ、重なりの番号で区別する）。
+fn resolve_answer_uids(answers: &[AnswerRow]) -> Result<Vec<String>, StudyError> {
+    let mut taken: BTreeSet<String> = BTreeSet::new();
+    for row in answers {
+        if let Some(uid) = &row.uid {
+            if !valid_uid(uid) {
+                return Err(invalid(format!("答えの uid の形が違います: {uid}")));
+            }
+            if !taken.insert(uid.clone()) {
+                return Err(invalid(format!("答えの uid が重なっています: {uid}")));
+            }
+        }
+    }
+    let mut uids = Vec::with_capacity(answers.len());
+    for row in answers {
+        match &row.uid {
+            Some(uid) => uids.push(uid.clone()),
+            None => {
+                let mut dup = 0;
+                loop {
+                    let uid = uid::legacy_answer_uid(&row.answer, dup);
+                    if taken.insert(uid.clone()) {
+                        uids.push(uid);
+                        break;
+                    }
+                    dup += 1;
+                }
+            }
+        }
+    }
+    Ok(uids)
+}
+
+/// 版 3: 答えに `uid` を足す。手元の番号 `id` と、答えの中身は変えない。すでにある答えには、中身から決めた uid を付ける
+/// （同じ記録を写した別の端末と、同じ uid になる。`uid::legacy_answer_uid`）。1 つの取引で行い、途中で止まっても、半端な表は残らない。
+fn migrate_to_v3(conn: &Connection) -> Result<(), StudyError> {
+    conn.execute_batch("BEGIN; ALTER TABLE answers ADD COLUMN uid TEXT;")?;
+    let migrated = (|| -> Result<(), StudyError> {
+        let rows: Vec<(i64, String, String, String, i64, i64)> = {
+            let mut statement = conn.prepare(
+                "SELECT id, session_id, decision_key, mode, shown_at, answered_at FROM answers ORDER BY id",
+            )?;
+            let mapped = statement.query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            })?;
+            mapped.collect::<Result<Vec<_>, _>>()?
+        };
+        let mut taken: BTreeSet<String> = BTreeSet::new();
+        let mut update = conn.prepare("UPDATE answers SET uid = ?2 WHERE id = ?1")?;
+        for (id, session_id, decision_key, mode, shown_at, answered_at) in rows {
+            let key = NewAnswer {
+                session_id,
+                decision_key,
+                mode: AnswerMode::parse(&mode).unwrap_or(AnswerMode::Quiz),
+                shown_at,
+                answered_at,
+                choice: Value::Null,
+                reason: String::new(),
+                duration_ms: 0,
+                reselect_count: 0,
+                correct: false,
+                causes: Vec::new(),
+                principle: String::new(),
+                maka_move: None,
+                interval_days: 1,
+                due_date: String::new(),
+            };
+            let mut dup = 0;
+            let uid = loop {
+                let uid = uid::legacy_answer_uid(&key, dup);
+                if taken.insert(uid.clone()) {
+                    break uid;
+                }
+                dup += 1;
+            };
+            update.execute(params![id, uid])?;
+        }
+        drop(update);
+        conn.execute_batch(
+            "CREATE UNIQUE INDEX IF NOT EXISTS answers_uid ON answers (uid);
+             PRAGMA user_version = 3;
+             COMMIT;",
+        )?;
+        Ok(())
+    })();
+    if migrated.is_err() {
+        let _ = conn.execute_batch("ROLLBACK");
+    }
+    migrated
+}
+
 const SELECT_ANSWER: &str = "SELECT id, session_id, decision_key, mode, shown_at, answered_at, choice, reason,
-   duration_ms, reselect_count, correct, causes, principle, maka_move, interval_days, due_date FROM answers";
+   duration_ms, reselect_count, correct, causes, principle, maka_move, interval_days, due_date, uid FROM answers";
 
 fn row_to_answer(row: &rusqlite::Row<'_>) -> rusqlite::Result<AnswerRow> {
     let corrupt = |column: usize, what: &str| {
@@ -949,6 +1181,7 @@ fn row_to_answer(row: &rusqlite::Row<'_>) -> rusqlite::Result<AnswerRow> {
     let causes_text: String = row.get(11)?;
     Ok(AnswerRow {
         id: row.get(0)?,
+        uid: row.get(16)?,
         answer: NewAnswer {
             session_id: row.get(1)?,
             decision_key: row.get(2)?,
@@ -1670,7 +1903,7 @@ mod tests {
             .unwrap();
         }
         let mut db = StudyDb::open(&data).unwrap();
-        assert_eq!(db.schema_version().unwrap(), 2);
+        assert_eq!(db.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(db.list_answers().unwrap().len(), 1);
         assert_eq!(db.list_weeks().unwrap(), Vec::new());
         db.set_week(week("2026-10-05", stats(20.0, 2.5), "重点"))
@@ -1710,6 +1943,218 @@ mod tests {
         assert!(!valid_date("2026-1-09"));
         assert!(!valid_date("2026-00-09"));
         assert!(!valid_date("2026-10-32"));
+    }
+
+    // ---- 版 3（F15 同期）: 答えに uid を足す。いまの記録は変えない ----
+
+    /// 版 2 の表の作りで、答え 3 件（そのうち 2 件は、同じ中身）を入れたファイルを作る。
+    fn make_v2_file(data: &Path) {
+        std::fs::create_dir_all(data).unwrap();
+        let conn = Connection::open(study_path(data)).unwrap();
+        conn.execute_batch(
+            r#"CREATE TABLE answers (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 session_id TEXT NOT NULL,
+                 decision_key TEXT NOT NULL,
+                 mode TEXT NOT NULL CHECK (mode IN ('quiz', 'review')),
+                 shown_at INTEGER NOT NULL,
+                 answered_at INTEGER NOT NULL,
+                 choice TEXT NOT NULL,
+                 reason TEXT NOT NULL,
+                 duration_ms INTEGER NOT NULL,
+                 reselect_count INTEGER NOT NULL,
+                 correct INTEGER NOT NULL CHECK (correct IN (0, 1)),
+                 causes TEXT NOT NULL DEFAULT '[]',
+                 principle TEXT NOT NULL DEFAULT '',
+                 maka_move TEXT,
+                 interval_days INTEGER NOT NULL,
+                 due_date TEXT NOT NULL
+               );
+               CREATE INDEX answers_problem ON answers (session_id, decision_key);
+               CREATE INDEX answers_due ON answers (due_date);
+               CREATE TABLE daily_sets (
+                 date TEXT NOT NULL, position INTEGER NOT NULL, session_id TEXT NOT NULL, decision_key TEXT NOT NULL,
+                 PRIMARY KEY (date, position)
+               );
+               CREATE TABLE weeks (
+                 week TEXT PRIMARY KEY, rank4_pct REAL, deal_pct REAL, avg_rank REAL, win_pct REAL, call_pct REAL,
+                 riichi_pct REAL, focus TEXT NOT NULL DEFAULT ''
+               );
+               INSERT INTO answers (id, session_id, decision_key, mode, shown_at, answered_at, choice, reason,
+                 duration_ms, reselect_count, correct, causes, principle, maka_move, interval_days, due_date)
+               VALUES (5, '20261009-190953', 'k2h1e14', 'quiz', 1, 2, '{"type":"dahai","tile":"1s"}', '理由', 1, 0, 1, '["shape"]', '原則', '5pr', 3, '2026-10-12'),
+                      (9, '20261009-190953', 'k0h0e4', 'review', 10, 20, '{"type":"option","id":"pon"}', '理由2', 4, 2, 0, '[]', '', NULL, 1, '2026-10-10'),
+                      (12, '20261009-190953', 'k0h0e4', 'review', 10, 20, '{"type":"option","id":"pon"}', '理由3', 4, 2, 0, '[]', '', NULL, 1, '2026-10-10');
+               PRAGMA user_version = 2;"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn d4_a_version_2_file_gets_uids_without_changing_any_record() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data");
+        make_v2_file(&data);
+        // 上げる前の中身（番号と中身）
+        let before: Vec<(i64, String, i64)> = {
+            let conn = Connection::open(study_path(&data)).unwrap();
+            let mut st = conn
+                .prepare("SELECT id, reason, answered_at FROM answers ORDER BY id")
+                .unwrap();
+            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        let db = StudyDb::open(&data).unwrap();
+        assert_eq!(db.schema_version().unwrap(), 3);
+        let rows = db.list_answers().unwrap();
+        let after: Vec<(i64, String, i64)> = rows
+            .iter()
+            .map(|r| (r.id, r.answer.reason.clone(), r.answer.answered_at))
+            .collect();
+        assert_eq!(before, after, "番号も中身も変わらない");
+        assert_eq!(rows[0].answer.causes, vec!["shape"]);
+        assert_eq!(rows[0].answer.maka_move.as_deref(), Some("5pr"));
+        let uids: BTreeSet<String> = rows.iter().map(|r| r.uid.clone().unwrap()).collect();
+        assert_eq!(uids.len(), 3, "同じ中身の答えも、別の uid になる");
+        assert!(rows
+            .iter()
+            .all(|r| r.uid.as_deref().unwrap().starts_with('l')));
+        // 次の記録は、番号が続き、新しい uid が付く
+        drop(db);
+        let mut db = StudyDb::open(&data).unwrap();
+        let next = db
+            .record_answer(sample("20261009-190953", "k0h0e9", 99))
+            .unwrap();
+        assert_eq!(next.id, 13);
+        assert!(next.uid.as_deref().unwrap().starts_with('n'));
+    }
+
+    #[test]
+    fn d4_two_copies_of_the_same_old_file_get_the_same_uids() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (a, b) = (tmp.path().join("a"), tmp.path().join("b"));
+        make_v2_file(&a);
+        make_v2_file(&b);
+        let uids = |dir: &Path| -> Vec<(i64, String)> {
+            StudyDb::open(dir)
+                .unwrap()
+                .list_answers()
+                .unwrap()
+                .into_iter()
+                .map(|r| (r.id, r.uid.unwrap()))
+                .collect()
+        };
+        assert_eq!(uids(&a), uids(&b));
+    }
+
+    #[test]
+    fn d4_migration_failure_leaves_the_version_2_file_as_it_was() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("data");
+        make_v2_file(&data);
+        {
+            // answers_uid という名前の別の表があると、版 3 の索引を作れず、途中で止まる
+            let conn = Connection::open(study_path(&data)).unwrap();
+            conn.execute_batch("CREATE TABLE answers_uid (x);").unwrap();
+        }
+        assert!(StudyDb::open(&data).is_err());
+        let conn = Connection::open(study_path(&data)).unwrap();
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+        let has_uid = conn.prepare("SELECT uid FROM answers LIMIT 1").is_ok();
+        assert!(!has_uid, "半端な列が残っていない");
+    }
+
+    #[test]
+    fn d4_answers_are_found_put_and_deleted_by_uid_and_the_local_id_stays_local() {
+        let (_tmp, _data, mut db) = open();
+        let row = db
+            .record_answer(sample("20261009-190953", "k2h1e14", 1_000))
+            .unwrap();
+        let uid = row.uid.clone().unwrap();
+        assert_eq!(db.answer_by_uid(&uid).unwrap(), Some(row.clone()));
+        // 同じ uid で置くと、同じ行が置き換わる（番号は変わらない）
+        let mut edited = row.answer.clone();
+        edited.principle = "直した".to_string();
+        db.put_answer_by_uid(&uid, &edited).unwrap();
+        let after = db.answer_by_uid(&uid).unwrap().unwrap();
+        assert_eq!(after.id, row.id);
+        assert_eq!(after.answer.principle, "直した");
+        // 別の端末から届いた答え: 新しい番号が付く
+        db.put_answer_by_uid("nremote-1", &sample("20261009-190953", "k0h0e1", 2_000))
+            .unwrap();
+        let remote = db.answer_by_uid("nremote-1").unwrap().unwrap();
+        assert!(remote.id > row.id);
+        assert_eq!(db.list_answers().unwrap().len(), 2);
+        // 正しくない値は断る
+        let mut bad = edited.clone();
+        bad.reason = " ".to_string();
+        assert!(db.put_answer_by_uid(&uid, &bad).is_err());
+        assert!(db.put_answer_by_uid("bad uid!", &edited).is_err());
+        // 消す
+        assert!(db.delete_answer_by_uid(&uid).unwrap());
+        assert!(!db.delete_answer_by_uid(&uid).unwrap());
+        assert_eq!(db.list_answers().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn d4_a_daily_set_can_be_put_over_an_existing_one_and_deleted() {
+        let (_tmp, _data, mut db) = open();
+        let item = |key: &str| ProblemRef {
+            session_id: "20261009-190953".to_string(),
+            decision_key: key.to_string(),
+        };
+        db.save_daily_set("2026-10-12", &[item("k0h0e1"), item("k0h0e2")])
+            .unwrap();
+        // save_daily_set は、あっても入れ替えない。put_daily_set は、入れ替える（同期で届いた組）
+        db.put_daily_set("2026-10-12", &[item("k1h0e1")]).unwrap();
+        assert_eq!(
+            db.daily_set("2026-10-12").unwrap(),
+            Some(vec![item("k1h0e1")])
+        );
+        db.delete_daily_set("2026-10-12").unwrap();
+        assert_eq!(db.daily_set("2026-10-12").unwrap(), None);
+        assert!(db.put_daily_set("2026/10/12", &[]).is_err());
+    }
+
+    #[test]
+    fn d4_replacing_everything_keeps_the_given_uids_and_decides_the_missing_ones_from_the_content()
+    {
+        let (_tmp, _dir, mut db) = open();
+        let mut with_uid = AnswerRow {
+            id: 3,
+            uid: Some("nkeep-1".to_string()),
+            answer: sample("20261009-190953", "k0h0e1", 1_000),
+        };
+        with_uid.answer.principle = "x".to_string();
+        let without = AnswerRow {
+            id: 4,
+            uid: None,
+            answer: sample("20261009-190953", "k0h0e2", 2_000),
+        };
+        db.replace_all(&[with_uid.clone(), without.clone()], &[], &[], || {
+            Ok::<(), String>(())
+        })
+        .unwrap();
+        let rows = db.list_answers().unwrap();
+        assert_eq!(rows[0].uid.as_deref(), Some("nkeep-1"));
+        assert_eq!(
+            rows[1].uid,
+            Some(uid::legacy_answer_uid(&without.answer, 0)),
+            "uid の無い答えは、内容から決める"
+        );
+        // uid が重なるファイルは断る
+        let clash = AnswerRow {
+            id: 5,
+            uid: Some("nkeep-1".to_string()),
+            answer: sample("20261009-190953", "k0h0e3", 3_000),
+        };
+        let outcome = db.replace_all(&[with_uid, clash], &[], &[], || Ok::<(), String>(()));
+        assert!(matches!(outcome, Err(ReplaceError::Study(_))));
     }
 
     // ---- D-2: 書き出し・読み込みの入口（list_daily_sets・replace_all） ----
@@ -1765,6 +2210,7 @@ mod tests {
         }
         let mut given = AnswerRow {
             id: 41,
+            uid: Some("t-given-41".to_string()),
             answer: sample("20261009-190953", "k0h0e2", 5_000),
         };
         given.answer.causes = vec!["shape".to_string()];
@@ -1806,6 +2252,7 @@ mod tests {
 
         let good = AnswerRow {
             id: 7,
+            uid: None,
             answer: sample("20261009-190953", "k9h0e9", 9_000),
         };
         // 取引を確定する前の処理が失敗したら、書いた行も取り消す

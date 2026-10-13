@@ -440,6 +440,8 @@ describe('検討画面（設定ページ）', () => {
     const { context, page } = await openSettings();
     try {
       await clearEvents(page);
+      // 設定の欄が増えて、欄が窓の下に出ることがある。座標で押すので、先に見える所へ動かす
+      await page.locator('textarea').scrollIntoViewIfNeeded();
       const area = (await page.locator('textarea').boundingBox())!;
       await page.mouse.click(area.x + 10, area.y + 10, { button: 'right' });
       const onField = (await seenEvents(page)).filter((e) => e.type === 'contextmenu');

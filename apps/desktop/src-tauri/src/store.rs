@@ -416,6 +416,9 @@ pub struct MemoPosition {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ExtraMemo {
     pub id: String,
+    /// 端末をまたいで一意の id（同期が付ける。F15）。`id`（呼び名）は、この半荘の中だけで通じる。無いメモは、同期を入れる前のもの。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -577,6 +580,7 @@ impl SessionRecords {
             let text = checked_memo_text(&extra.candidates, &extra.reason)?;
             extras.push(ExtraMemo {
                 id: extra.id.clone(),
+                uid: extra.uid.clone(),
                 decision: extra.decision.clone(),
                 position: extra.position,
                 candidates: text.candidates,
@@ -1694,6 +1698,7 @@ impl Store {
         }
         let extra = ExtraMemo {
             id: id.to_string(),
+            uid: None,
             decision: decision.map(str::to_string),
             position,
             candidates: text.candidates,
@@ -1701,7 +1706,11 @@ impl Store {
         };
         self.update_json::<Memos>(session_id, MEMOS_FILE, |memos| {
             match memos.extras.iter_mut().find(|e| e.id == extra.id) {
-                Some(found) => *found = extra,
+                // 置き換えても、同期の id は引き継ぐ（直した記録が、別のメモとして増えないように）
+                Some(found) => {
+                    let uid = found.uid.take();
+                    *found = ExtraMemo { uid, ..extra };
+                }
                 None => memos.extras.push(extra),
             }
         })
@@ -4082,6 +4091,7 @@ mod tests {
             memos.extras[0],
             ExtraMemo {
                 id: "x1".into(),
+                uid: None,
                 decision: Some("k4h2e6".into()),
                 position: None,
                 candidates: "1m".into(),
@@ -4193,6 +4203,7 @@ mod tests {
             memos.extras,
             [ExtraMemo {
                 id: "x1".into(),
+                uid: None,
                 decision: None,
                 position: Some(position(2, 0, 9)),
                 candidates: "5s・發".into(),
@@ -4326,6 +4337,7 @@ mod tests {
             memos.extras,
             [ExtraMemo {
                 id: "x1".into(),
+                uid: None,
                 decision: Some("k4h2e5".into()),
                 position: None,
                 candidates: "5s・發".into(),

@@ -29,6 +29,7 @@ import type {
   NewAnswer,
   SolvedCount,
   StoredProblemRef,
+  SyncStatus,
   WeekRecord,
 } from './types';
 
@@ -44,6 +45,8 @@ export const EVENT_MJAI_WINDOW = 'mjai-window';
 export const EVENT_OCR_PROGRESS = 'ocr-progress';
 /** 検討画面が前面に来たときのイベント名（Rust の `EVENT_MAIN_FOCUSED`）。 */
 export const EVENT_MAIN_FOCUSED = 'main-window-focused';
+/** 同期の状態が変わったときのイベント名（Rust の `EVENT_SYNC_STATUS`）。 */
+export const EVENT_SYNC_STATUS = 'sync-status';
 
 export const api = {
   /** 動いている OS の名前と、使える機能（macOS の段階 2）。起動のとき 1 回だけ呼ぶ（`shared/platform.ts`）。 */
@@ -235,6 +238,24 @@ export const api = {
   inspectRecordsFile: (path: string) => invoke<RecordsPreview>('inspect_records_file', { path }),
   /** いまの記録を、ファイルの内容に置き換える（元には戻せない）。途中で失敗したら、元の記録のまま、理由を投げる。 */
   importRecords: (path: string) => invoke<RecordsPreview>('import_records', { path }),
+  /** いまの同期の状態（F15）。 */
+  getSyncStatus: () => invoke<SyncStatus>('get_sync_status'),
+  /**
+   * 同期先の DB の URL と、トークンを保存する（貼ったものだけを替える。どちらも `null` なら何も替えない）。トークンは、Rust 側が OS の
+   * 資格情報の保管庫にだけ入れる（このコマンドの引数として、1 回だけ渡す）。正しくなければ、理由を投げる。
+   */
+  saveSyncConnection: (url: string | null, token: string | null) =>
+    invoke<SyncStatus>('save_sync_connection', { url, token }),
+  /** この端末で同期を使う・使わない。使うには、URL とトークンが要る（足りなければ、理由を投げる）。 */
+  setSyncEnabled: (enabled: boolean) => invoke<SyncStatus>('set_sync_enabled', { enabled }),
+  /** 今すぐ同期する（裏で行う。結果は、同期の状態の知らせで届く）。 */
+  syncNow: () => invoke<void>('sync_now'),
+  /** 同期用の DB を作り直して、手元の記録から入れ直す（裏で行う）。 */
+  rebuildSyncDb: () => invoke<void>('rebuild_sync_db'),
+  /** 大量の消去の止めを、1 回だけ外して同期する（裏で行う）。 */
+  allowSyncMassDelete: () => invoke<void>('allow_sync_mass_delete'),
+  /** この端末の同期を切る（トークンと、同期の作業用のファイルを消す。手元の記録と、同期用の DB には触れない）。 */
+  disconnectSync: () => invoke<SyncStatus>('disconnect_sync'),
 };
 
 export function onStateChanged(handler: (state: AppState) => void): Promise<UnlistenFn> {
@@ -243,6 +264,10 @@ export function onStateChanged(handler: (state: AppState) => void): Promise<Unli
 
 export function onSettingsChanged(handler: (settings: Settings) => void): Promise<UnlistenFn> {
   return listen<Settings>(EVENT_SETTINGS_CHANGED, (event) => handler(event.payload));
+}
+
+export function onSyncStatus(handler: (status: SyncStatus) => void): Promise<UnlistenFn> {
+  return listen<SyncStatus>(EVENT_SYNC_STATUS, (event) => handler(event.payload));
 }
 
 export function onInputStatus(handler: (status: InputStatus) => void): Promise<UnlistenFn> {

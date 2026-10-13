@@ -177,6 +177,26 @@ export interface RecordsScenario {
   importError?: string;
 }
 
+/** 設定の「同期」（F15、D-4）の流れに答えるための、偽物の答え。 */
+export interface SyncScenario {
+  /** `get_sync_status` の答え（足りない項目は、使っていない・未設定の値で補う）。 */
+  status?: Partial<{
+    enabled: boolean;
+    url_host: string;
+    has_token: boolean;
+    state: 'off' | 'idle' | 'syncing' | 'offline' | 'attention' | 'error';
+    last_ok_ms: number | null;
+    message: string | null;
+    warnings: string[];
+    can_allow_mass_delete: boolean;
+    device_id: string;
+  }>;
+  /** `save_sync_connection` が失敗する理由。 */
+  saveError?: string;
+  /** `set_sync_enabled` が失敗する理由。 */
+  enableError?: string;
+}
+
 export interface Scenario {
   label: 'main' | 'widget';
   state: unknown;
@@ -206,6 +226,8 @@ export interface Scenario {
   dailySets?: Record<string, unknown[]>;
   /** 記録の書き出し・読み込み（D-2）への答え。無ければ、ダイアログはやめた扱い。 */
   records?: RecordsScenario;
+  /** 同期（F15）への答え。無ければ、同期は未設定。 */
+  sync?: SyncScenario;
   /**
    * 前の作り方で読んだ半荘の読み直し（F11、E-27）への答え。無ければ、読み直しは要らない（`needs_ocr_reread` は false）。
    * 写しの決まりの名前が `currentGeometry` と違う半荘だけ、要る。読み直しは、写しを `fresh` に置き換えて true を返す
@@ -235,6 +257,29 @@ export function tauriMockScript(scenario: Scenario): string {
   var failDelete = scenario.failDelete || null;
   var failRestore = scenario.failRestore || null;
   var records = scenario.records || {};
+  // 同期（F15）の偽物。Rust 側と同じ決まり: URL を貼ると同期先のホスト名が付き、トークンを貼ると保管庫に入った扱いになる
+  // （トークンの文字は、状態に出ない）。「今すぐ同期」は、同期中の知らせのあと、待機の知らせを出す
+  var syncScenario = scenario.sync || {};
+  var syncStatus = Object.assign(
+    { enabled: false, url_host: '', has_token: false, state: 'off', last_ok_ms: null, message: null, warnings: [], can_allow_mass_delete: false, device_id: 'd-0123abcd' },
+    JSON.parse(JSON.stringify(syncScenario.status || {}))
+  );
+  function syncEmit() {
+    var copy = JSON.parse(JSON.stringify(syncStatus));
+    setTimeout(function () { window.__jrEmit('sync-status', copy); }, 0);
+    return copy;
+  }
+  function syncSettle() {
+    syncStatus.state = 'syncing';
+    syncEmit();
+    setTimeout(function () {
+      syncStatus.state = 'idle';
+      syncStatus.last_ok_ms = Date.now();
+      syncStatus.message = null;
+      syncStatus.can_allow_mass_delete = false;
+      syncEmit();
+    }, 120);
+  }
   // 答えの記録（study.sqlite）の偽物。Rust 側と同じ決まり: 答えには番号が付き、今日の組は、その日に 1 回だけ保存される
   var answers = JSON.parse(JSON.stringify(scenario.answers || []));
   var nextAnswerId = answers.reduce(function (max, a) { return Math.max(max, a.id); }, 0) + 1;
@@ -360,6 +405,24 @@ export function tauriMockScript(scenario: Scenario): string {
         if (records.importError) throw records.importError;
         return records.imported || records.inspect || { sessions: 12, answers: 84, held: 0 };
       }
+      case 'get_sync_status': return JSON.parse(JSON.stringify(syncStatus));
+      case 'save_sync_connection': {
+        if (syncScenario.saveError) throw syncScenario.saveError;
+        if (args.url) syncStatus.url_host = String(args.url).replace(/^[a-z]+:[/][/]/, '').replace(/[/]+$/, '');
+        if (args.token) syncStatus.has_token = true;
+        if (!syncStatus.url_host) throw '同期先の DB の URL を貼ってください';
+        return JSON.parse(JSON.stringify(syncStatus));
+      }
+      case 'set_sync_enabled': {
+        if (syncScenario.enableError) throw syncScenario.enableError;
+        syncStatus.enabled = !!args.enabled;
+        syncStatus.state = args.enabled ? 'idle' : 'off';
+        return JSON.parse(JSON.stringify(syncStatus));
+      }
+      case 'sync_now': case 'rebuild_sync_db': case 'allow_sync_mass_delete': syncSettle(); return null;
+      case 'disconnect_sync':
+        syncStatus.enabled = false; syncStatus.state = 'off'; syncStatus.has_token = false; syncStatus.message = null;
+        return JSON.parse(JSON.stringify(syncStatus));
       case 'needs_ocr_reread': {
         if (!scenario.reread) return false;
         var stale = sessions.filter(function (s) { return s.id === args.sessionId; })[0];
