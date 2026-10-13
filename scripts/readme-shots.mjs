@@ -565,6 +565,38 @@ async function resultPhase() {
   h.stopApp();
 }
 
+// ---- 8. 他家の手牌（盤面の手牌を押して開く）と、聴牌になった巡目の印 ----
+
+/**
+ * 他家の手牌（F14、U-35・U-38。R16-7）: 取り込んだ半荘（FX-4。21:03）の、放銃した局（東3局）の終わり。盤面の他家の手牌（3 人分）を押して開き、
+ * 聴牌になった打牌の枠（対面の河）・他家の手牌の欄（聴牌の 1 行・向聴数の折れ線）・位置の帯の目盛りが出た形を、本文の全体で撮る。
+ */
+async function handsPhase() {
+  console.log('8. 他家の手牌');
+  await boot(7, 6);
+  const A = appActions(h.main);
+  const main = h.main;
+  await A.openSession('21:03');
+  await main.click(byTextIncludes('button', 'この半荘を通して見る'), '通して見る');
+  await main.waitFor(`document.querySelector('.pbar')`, '通して見る画面');
+  await sleep(500);
+  // 放銃した局（東3局）の終わりへ
+  await main.click(`document.querySelector('.kyoku-btn')`, '局の選択');
+  await main.click(
+    `Array.from(document.querySelectorAll('[role=menuitemradio]')).find((e) => e.textContent.trim().startsWith('東3局') && !e.textContent.includes('本場'))`,
+    '東3局',
+  );
+  await sleep(300);
+  await main.click(`document.querySelector('#b-kend')`, '局の終わり');
+  await main.waitFor(`document.querySelector('.now-res')`, '局の結果');
+  await main.click(`document.querySelector('.ohand')`, '他家の手牌');
+  await main.waitFor(`document.querySelector('[data-open-hands="block"]')`, '他家の手牌の欄');
+  await sleep(500);
+  await shotMain('replay-hands.png', {});
+  await main.viewport(1280, 900, 1);
+  h.stopApp();
+}
+
 // ---- 実行 ----
 
 let failed = false;
@@ -576,6 +608,7 @@ try {
   await screensPhase();
   await dangerPhase();
   await resultPhase();
+  await handsPhase();
   console.log('できました');
 } catch (error) {
   failed = true;

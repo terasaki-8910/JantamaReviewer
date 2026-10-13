@@ -10,15 +10,17 @@
  *           嵌張・辺張・単騎・双碰は残る
  *   壁      スジでなく、壁（両面の組に要る牌が 4 枚見えている）だけで、両面が消えている
  *   無スジ  両面で待たれうる形が残っている
- * 見ていないもの: 副露の多い染め手・ドラ待ち・巡目・リーチ宣言牌の周り（ワンチャンス）・リーチした人の河の切り順。
+ * 見ていないもの: ドラ待ち・巡目・リーチ宣言牌の周り（ワンチャンス）・リーチした人の河の切り順（副露した他家の気配は、牌ごとの分類に入れず、1 行だけ出す。下を見る）。
  *
  * 形: 他家 1 人 × 牌 1 種類 → 分類は `classifyAgainst(opponent, kind, view)`。他家の種類（`DangerOpponent` の `kind`）ごとに、分類のしかたを持つ。
- * いまはリーチ（`'riichi'`）だけ。副露した他家への目安（染め手・役牌の仕掛けなど。R15-2 の補足）は、見本を作って決めるまで作らない
- * （足すときは、`DangerOpponent` に種類を足し、`classifyAgainst` の `switch` に 1 つ書く。タブの枠・行の形は変えずに済む）。
+ * 牌ごとの分類を出すのはリーチ（`'riichi'`）の人だけ。副露した他家（R15-2 の補足。R16-6 の B で決まった）には、牌ごとの分類を出さず、
+ * 気配の 1 行だけを出す（open-sign.ts の `openSignLinesOf`。対象は副露が 2 つ以上の人と、染め手の気配の人。リーチの人は対象にしない）。
+ * 行は `DangerBox.signs` に入る。リーチの人がいなくても、この 1 行の人がいれば、タブ「守備」を出す。
  *
  * タブの中身 `dangerBoxOf` は、AI の行動の印（自分・実戦・AI）を含むので、答え合わせのあとにだけ呼ぶ（U-1。呼ぶ側が決める）。
  */
 import type { Decision } from './decision';
+import { type OpenSignLine, openSignLinesOf } from './open-sign';
 import { type AnswerOption, answerOptions, type QuizChoice } from './quiz-choice';
 import type { RiverTile } from './replay';
 import type { Fuuro, Seat } from './report-types';
@@ -54,7 +56,7 @@ export interface RiichiOpponent {
   passed: ReadonlySet<number>;
 }
 
-/** 目安の対象になる他家。いまはリーチした人だけ（副露した他家は、見本で決めてから足す）。 */
+/** 牌ごとの分類を出す他家。いまはリーチした人だけ（副露した他家は、気配の 1 行だけ。open-sign.ts）。 */
 export type DangerOpponent = RiichiOpponent;
 
 /** 他家に依らない、場に見えている牌の数。 */
@@ -153,8 +155,10 @@ export interface DangerSection {
 }
 
 export interface DangerBox {
-  /** リーチを宣言した順。 */
+  /** リーチした人ごとの欄（リーチを宣言した順）。リーチの人がいないときは空。 */
   sections: DangerSection[];
+  /** 副露の気配の 1 行（リーチしていない対象の人。下家・対面・上家の順）。牌ごとの分類は無い。 */
+  signs: OpenSignLine[];
   /** 鳴いたあとに切れる牌の一覧か（鳴きの判断）。打牌の印は付かない。 */
   afterCall: boolean;
 }
@@ -265,8 +269,8 @@ function discardTilesOf(decision: Pick<Decision, 'kind' | 'entry' | 'board'>, mi
 }
 
 /**
- * 答え合わせのタブ「守備」の中身。他家のリーチが無い場面と、切れる牌が無い判断（和了・カン）は null（タブを出さない）。
- * リーチした人ごとの欄を、宣言した順に並べる。切る牌は、打牌の判断・リーチの判断は手牌とツモ牌、鳴きの判断は、比べるチー・ポンのあとに切れる牌
+ * 答え合わせのタブ「守備」の中身。他家のリーチも副露の気配の 1 行の人も無い場面と、切れる牌が無い判断（和了・カン）は null（タブを出さない）。
+ * リーチした人ごとの欄を、宣言した順に並べる（`sections`）。そのあとに、副露の気配の 1 行（`signs`。リーチの人は入らない）。切る牌は、打牌の判断・リーチの判断は手牌とツモ牌、鳴きの判断は、比べるチー・ポンのあとに切れる牌
  * （喰い替えになる牌は除く）。印（自分・実戦・AI）は、比べる打牌に付く（鳴きの判断では、鳴いたあとの打牌が牌譜に無いので付かない）。
  * 答え合わせのあとにだけ呼ぶ（AI の行動の印を含むため。U-1）。
  */
@@ -274,7 +278,8 @@ export function dangerBoxOf(decision: Pick<Decision, 'kind' | 'entry' | 'board'>
   const { board } = decision;
   const me = board.playerId;
   const seats = board.riichiOrder.filter((seat) => seat !== me && board.riichi[seat] !== 'none');
-  if (seats.length === 0) return null;
+  const signs = openSignLinesOf(board);
+  if (seats.length === 0 && signs.length === 0) return null;
   const choices = discardTilesOf(decision, mine);
   if (choices === null || choices.tiles.length === 0) return null;
   const own = countTiles(board.drawn === null ? [...board.hand] : [...board.hand, board.drawn]);
@@ -304,5 +309,5 @@ export function dangerBoxOf(decision: Pick<Decision, 'kind' | 'entry' | 'board'>
       genbutsu: rows.filter((r) => r.cls === '現物').map((r) => r.tile),
     };
   });
-  return { sections, afterCall: choices.afterCall };
+  return { sections, signs, afterCall: choices.afterCall };
 }

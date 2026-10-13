@@ -10,6 +10,7 @@ import {
   nextKyokuStep,
   nextStepIn,
   openHandsAt,
+  opponentTracksOf,
   prevStepIn,
   tileKind,
   tileLabel,
@@ -1163,7 +1164,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.type(reasonBox(), '鳴いて進める');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['受け入れ・役', '待ちと打点']);
     // 選ぶと、待ちと打点の表（ポンのあとに切る牌ごと）
     const [first, second] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement];
     first.focus();
@@ -1195,9 +1196,9 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
     const names = () => screen.getAllByRole('tab').map((tab) => tab.textContent);
-    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
+    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
     // 守備のタブを → を 2 回で選ぶ。← → Home End は、場面の移動に渡さない
-    const [first, , third] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
+    const [first, , third] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement, HTMLElement];
     first.focus();
     await user.keyboard('{ArrowRight}{ArrowRight}');
     expect(third).toHaveAttribute('aria-selected', 'true');
@@ -1214,7 +1215,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getByRole('button', { name: /^前の迷いへ/ }));
     expect(pos()).toBe(posAt(stepOf('k0h0e15')));
     expect(answeringState()).toBe('revealed');
-    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
+    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
   });
 
   it('答えの下書き（選んだ牌・理由）は、場面を離れても残り、戻ると続きから。保存できていない間は、答えていないまま', async () => {
@@ -1360,108 +1361,158 @@ describe('U-19 ドラを目立たせる（通して見る画面）', () => {
   });
 });
 
-describe('U-35 他家の手牌を開く（通して見る画面。R15-5「答える場面でない手なら、いつでも」）', () => {
-  const toggle = () => screen.getByRole('button', { name: /^他家の手牌を(開く|閉じる)$/ });
+describe('U-35 他家の手牌（通して見る画面。R15-5・R16-7: 盤面の手牌を押すと、3 人分が開く。答える場面は、答えるまで押せない）', () => {
+  const handButtons = () => [...document.querySelectorAll<HTMLButtonElement>('.ohand')];
   const block = () => document.querySelector('[data-open-hands="block"]');
   const rows = () => [...document.querySelectorAll<HTMLElement>('.oh-row')];
-  /** 画面に出ている他家の手牌の、人ごとの（閉じた手牌の枚数・ツモ牌の有無・副露の数）。 */
+  /** 盤面に出ている他家の手牌の、人ごとの（表の牌の数・ツモ牌の数）。下家・対面・上家の順。 */
   const shown = () =>
-    rows().map((row) => [
-      row.querySelectorAll('.oh-tiles:not(.gap) .tile').length,
-      row.querySelectorAll('.oh-tiles.gap .tile').length,
-      row.querySelectorAll('.oh-melds .meld').length,
-    ]);
+    ['right', 'top', 'left'].map((position) => {
+      const zone = document.querySelector(`.hzone.${position}`) as HTMLElement;
+      return { faces: zone.querySelectorAll('.tile img').length, drawn: zone.querySelectorAll('.hdraw').length };
+    });
+  /** 盤面の裏向きの牌の数（人ごと）。 */
+  const backs = () => ['right', 'top', 'left'].map((position) => document.querySelectorAll(`.hzone.${position} .tile.back`).length);
   /** エンジンから求めた、その手の他家の手牌（画面と別の経路）。 */
   const expected = (g: number) => {
     const step = timeline.steps[g]!;
-    return openHandsAt(fx4, step.kyokuPosition, step.eventIndex).map((seat) => [seat.hand.length, seat.drawn === null ? 0 : 1, seat.melds.length]);
+    return openHandsAt(fx4, step.kyokuPosition, step.eventIndex).map((seat) => ({ faces: seat.hand.length + (seat.drawn === null ? 0 : 1), drawn: seat.drawn === null ? 0 : 1 }));
   };
-  const noHandsInDom = () => {
+  const noFaceUp = () => {
     expect(block()).toBeNull();
-    expect(document.querySelector('.oh-list, .oh-row, .oh-hand')).toBeNull();
-    expect(document.body.textContent).not.toMatch(/聴牌していません|切る前の手|他家の手牌と待ち/);
+    expect(document.querySelector('.oh-list, .oh-row, .oh-hand, .tile.tp, .tp-line, .shchart, .tk, .tl-note')).toBeNull();
+    expect(shown().every((s) => s.faces === 0)).toBe(true);
+    for (const button of handButtons()) expect(button.querySelectorAll('img')).toHaveLength(0);
+    expect(document.body.textContent).not.toMatch(/聴牌していません|切る前の手|に聴牌（|他家が聴牌になった/);
   };
   /** 東1局の終わりの手の通し番号。 */
   const kyokuEnd = () => timeline.kyokus[0]!.last;
+  const press1 = async (user: ReturnType<typeof userEvent.setup>, at = 0) => user.click(handButtons()[at] as HTMLElement);
 
-  it('既定は閉じている。盤面を見ているだけの手（局の頭）で押せて、押すと他家 3 人（下家・対面・上家）の手牌が出る。もう一度押すと閉じる', async () => {
+  it('操作の段に「他家の手牌を開く」のボタン・説明のアイコンは無い。盤面の他家 3 人の手牌（裏向き）が、押せるボタンとして、凡例の下の 1 行つきである。既定は閉じている', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
-    expect(toggle()).toHaveAccessibleName('他家の手牌を開く');
-    expect(toggle()).toBeEnabled();
-    noHandsInDom();
-    await user.click(toggle());
-    expect(toggle()).toHaveAccessibleName('他家の手牌を閉じる');
-    expect(rows().map((row) => row.querySelector('.oh-hd b')?.textContent)).toEqual(['下家', '対面', '上家']);
-    expect(shown()).toEqual(expected(0));
-    await user.click(toggle());
-    expect(toggle()).toHaveAccessibleName('他家の手牌を開く');
-    noHandsInDom();
+    const bar = document.querySelector('.pbar') as HTMLElement;
+    expect(within(bar).queryByRole('button', { name: /他家の手牌/ })).toBeNull();
+    expect(bar.querySelector('#b-openhands, .pb-open')).toBeNull();
+    expect(handButtons()).toHaveLength(3);
+    for (const button of handButtons()) {
+      expect(button).toBeEnabled();
+      expect(button).toHaveAccessibleName('他家の手牌を開く');
+      expect(button.closest('.pbar')).toBeNull();
+    }
+    expect(document.querySelector('.hands-hint')?.textContent).toBe('他家の手牌は、押すと3人とも開きます（もう一度押すと閉じます）');
+    noFaceUp();
+    // 配牌の盤面: 全員 13 枚の裏向き
+    expect(backs()).toEqual([13, 13, 13]);
   });
 
-  it('開いたまま手を進めても、開いたまま。その手の他家の手牌に替わる（巡目・局をまたいでも）', async () => {
+  it('1 人の手牌を押すと、他家 3 人（下家・対面・上家）の手牌が開く。もう一度押すと、3 人分が閉じる。河を押しても開かない', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
-    await user.click(toggle());
+    await user.click(document.querySelector('.zone.top .river') as HTMLElement);
+    await user.click(document.querySelector('.zone.left .river') as HTMLElement);
+    noFaceUp();
+    await press1(user, 1);
+    for (const button of handButtons()) {
+      expect(button).toHaveAccessibleName('他家の手牌を閉じる');
+      expect(button).toHaveAttribute('aria-pressed', 'true');
+    }
+    expect(rows().map((row) => row.querySelector('.oh-hd b')?.textContent)).toEqual(['下家', '対面', '上家']);
+    expect(shown()).toEqual(expected(0));
+    await press1(user, 2);
+    for (const button of handButtons()) expect(button).toHaveAccessibleName('他家の手牌を開く');
+    noFaceUp();
+  });
+
+  it('開いたまま手を進めても、開いたまま。その手の他家の手牌に替わる（巡目・局をまたいでも）。「他家の手牌」の欄は、右の欄の上', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await openReplay(user);
+    await press1(user);
     const snapshots = new Set<string>();
     for (let g = 0; g < 14; g++) {
-      expect(toggle(), `手 ${g}`).toHaveAccessibleName('他家の手牌を閉じる');
+      expect(handButtons()[0], `手 ${g}`).toHaveAccessibleName('他家の手牌を閉じる');
       expect(shown(), `手 ${g}`).toEqual(expected(g));
-      snapshots.add(rows().map((row) => [...row.querySelectorAll('img')].map((img) => img.alt).join(',')).join('|'));
+      snapshots.add(JSON.stringify(shown()) + rows().map((row) => row.textContent).join('|'));
       press(PERIOD);
       // 場面の手は、答える場面なので、この範囲には無い
       expect(answeringState()).toBe('browse');
     }
-    // 手を進めると、他家の手牌は動く（同じ表示のままではない）
+    // 手を進めると、他家の手牌の欄も動く（同じ表示のままではない）
     expect(snapshots.size).toBeGreaterThan(5);
+    // 右の欄の上に、他家の手牌の欄（下の「いまの一手」の前）
+    const answer = document.querySelector('section.answer') as HTMLElement;
+    expect(answer.firstElementChild).toBe(block());
     // 局の終わり・次の局の頭
     await user.click(screen.getByRole('button', { name: '局の終わりへ' }));
     expect(shown()).toEqual(expected(kyokuEnd()));
     expect(nowText()).toBe('この局が終わりました');
     press(PERIOD);
-    expect(toggle()).toHaveAccessibleName('他家の手牌を閉じる');
+    expect(handButtons()[0]).toHaveAccessibleName('他家の手牌を閉じる');
     expect(shown()).toEqual(expected(kyokuEnd() + 1));
   });
 
-  it('答える場面（迷い・不一致）では、答えるまで押せず、他家の手牌は DOM にも出ない（開いたまま着いても）。答えると押せて、開いたままなら出る。答えたあとのタブにも出る', async () => {
+  it('キーボード: 手牌のボタンは Enter・Space で開閉できる（フォーカスは、そのボタンのまま）', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await openReplay(user);
+    handButtons()[1]?.focus();
+    await user.keyboard('{Enter}');
+    expect(block()).not.toBeNull();
+    expect(handButtons()[1]).toHaveFocus();
+    await user.keyboard(' ');
+    expect(block()).toBeNull();
+    expect(handButtons()[1]).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(handButtons()[1]).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('答える場面（迷い・不一致）では、答えるまで押せず、表の牌は DOM にも出ない（開いたまま着いても）。答えると押せて、開いたままなら出る。答え合わせのタブに「他家の手牌」は無い', async () => {
     const { user, study } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
-    await user.click(toggle());
+    await press1(user);
     expect(block()).not.toBeNull();
     // 場面へ飛ぶ（迷い 3。答える前）
     await user.click(document.querySelector('.pin[data-key="k1h1e7"]') as HTMLElement);
     expect(answeringState()).toBe('answering');
-    expect(toggle()).toBeDisabled();
-    expect(toggle()).toHaveAccessibleName('他家の手牌を開く');
-    noHandsInDom();
+    for (const button of handButtons()) {
+      expect(button).toBeDisabled();
+      expect(button).toHaveAccessibleName('他家の手牌を開く');
+    }
+    noFaceUp();
+    expect(document.querySelector('.hands-hint')).toBeNull();
     // 答えるまで、選んだだけ・理由を書いただけでも出ない
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
     await user.type(reasonBox(), '孤立牌を切る');
-    expect(toggle()).toBeDisabled();
-    noHandsInDom();
+    for (const button of handButtons()) expect(button).toBeDisabled();
+    noFaceUp();
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
     expect(study.rows).toHaveLength(1);
-    // 答えたあと: 押せる。開いたままなので、他家の手牌が出る（右の欄の上）。タブにも出る
-    expect(toggle()).toBeEnabled();
-    expect(toggle()).toHaveAccessibleName('他家の手牌を閉じる');
+    // 答えたあと: 押せる。開いたままなので、盤面に表向きで出て、欄が出る（答えの欄の上）。タブには出ない
+    for (const button of handButtons()) {
+      expect(button).toBeEnabled();
+      expect(button).toHaveAccessibleName('他家の手牌を閉じる');
+    }
     const g = stepOf('k1h1e7');
     expect(block()).not.toBeNull();
     expect(shown()).toEqual(expected(g));
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toContain('他家の手牌');
+    expect(screen.queryAllByRole('tab').map((tab) => tab.textContent)).not.toContain('他家の手牌');
+    expect(document.querySelector('.hands-hint')).not.toBeNull();
     // 閉じる・開く
-    await user.click(toggle());
+    await press1(user, 2);
     expect(block()).toBeNull();
-    expect(toggle()).toHaveAccessibleName('他家の手牌を開く');
-    await user.click(toggle());
+    for (const button of handButtons()) expect(button).toHaveAccessibleName('他家の手牌を開く');
+    await press1(user, 0);
     expect(block()).not.toBeNull();
     // 1 手戻っても、開いたまま
     press(COMMA);
     expect(answeringState()).toBe('browse');
-    expect(toggle()).toHaveAccessibleName('他家の手牌を閉じる');
+    expect(handButtons()[0]).toHaveAccessibleName('他家の手牌を閉じる');
     expect(shown()).toEqual(expected(g - 1));
   });
 
@@ -1470,59 +1521,118 @@ describe('U-35 他家の手牌を開く（通して見る画面。R15-5「答え
     await loaded('5');
     await openReplay(user);
     await user.click(document.querySelector('.pin[data-key="k1h1e7"]') as HTMLElement);
-    expect(toggle()).toBeDisabled();
-    noHandsInDom();
+    for (const button of handButtons()) expect(button).toBeDisabled();
+    noFaceUp();
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
     await user.type(reasonBox(), '孤立牌を切る');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
     expect(block()).toBeNull();
-    await user.click(toggle());
+    await press1(user);
     expect(shown()).toEqual(expected(stepOf('k1h1e7')));
     // 次の場面（答えていない）へ
     await user.click(screen.getByRole('button', { name: /^次の不一致へ/ }));
     expect(answeringState()).toBe('answering');
-    expect(toggle()).toBeDisabled();
-    noHandsInDom();
-  });
-
-  it('「他家の手牌を開く」にキーボードの位置があるまま、答える場面へ進んで押せなくなっても、キーボードの位置が消えない', async () => {
-    const { user } = setup({ links: USER_LINKS });
-    await loaded('5');
-    await openReplay(user);
-    toggle().focus();
-    expect(toggle()).toHaveFocus();
-    // 答える場面（迷い 3）の 1 手前へ戻ってから、キーで 1 手進んで、答える場面へ着く
-    await user.click(document.querySelector('.pin[data-key="k1h1e7"]') as HTMLElement);
-    press(COMMA);
-    expect(answeringState()).toBe('browse');
-    toggle().focus();
-    press(PERIOD);
-    expect(answeringState()).toBe('answering');
-    expect(toggle()).toBeDisabled();
-    expect(document.activeElement).not.toBe(document.body);
-    expect(document.activeElement?.closest('.pbar')).not.toBeNull();
+    for (const button of handButtons()) expect(button).toBeDisabled();
+    noFaceUp();
   });
 
   it('この画面を離れると、閉じに戻る（開いたまま、半荘のページへ戻って、また通して見る画面を開くと、閉じている）', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
-    await user.click(toggle());
+    await press1(user);
     expect(block()).not.toBeNull();
     press({ code: 'ArrowLeft', key: 'ArrowLeft', altKey: true });
     await user.click(await screen.findByRole('button', { name: 'この半荘を通して見る' }));
     await screen.findByRole('region', { name: '半荘を進める' });
-    expect(toggle()).toHaveAccessibleName('他家の手牌を開く');
-    noHandsInDom();
+    for (const button of handButtons()) expect(button).toHaveAccessibleName('他家の手牌を開く');
+    noFaceUp();
   });
+});
 
-  it('説明のアイコン「他家の手牌の開閉の説明」に、使える場面と、答える場面の決まりが書いてある（ボタンの説明としても読み上げる）', async () => {
+describe('U-38 他家が聴牌した巡目（通して見る画面。R16-7 の A）: 開いているときだけ、枠・凡例・1 行・折れ線・位置の帯の目盛りが出る', () => {
+  const handButtons = () => [...document.querySelectorAll<HTMLButtonElement>('.ohand')];
+  const allMarks = () =>
+    fx4.kyokus.flatMap((kyoku) => opponentTracksOf(fx4, kyoku.position).seats.flatMap((track) => track.marks.map((mark) => ({ kyoku: kyoku.position, seat: track.seat, ...mark }))));
+  const ticks = () => [...document.querySelectorAll<HTMLElement>('.tl-track .tk')];
+
+  it('閉じているときは、どれも DOM に無い（枠・凡例の項目・1 行・折れ線・位置の帯の目盛りと、その 1 行）。開くと出て、閉じると消える', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
-    expect(toggle()).toHaveAccessibleDescription(/他家 3 人の手牌と待ちを、右の欄に出します/);
-    await user.hover(screen.getByRole('button', { name: '他家の手牌の開閉の説明' }));
-    expect(screen.getByRole('tooltip')).toHaveTextContent('答えを出すまで開けません');
+    await user.click(screen.getByRole('button', { name: '局の終わりへ' }));
+    const none = () => {
+      expect(document.querySelector('.tile.tp, .tp-line, .shchart, .tk, .tl-note')).toBeNull();
+      expect(document.querySelector('.legend .tile.tp')).toBeNull();
+      expect([...document.querySelectorAll<HTMLImageElement>('.river img')].some((img) => img.alt.includes('聴牌になった打牌'))).toBe(false);
+    };
+    none();
+    await user.click(handButtons()[0] as HTMLElement);
+    // 枠: 東1局の、局の終わりまでの印（河の位置 n - 1）
+    const endEvent = timeline.steps[timeline.kyokus[0]!.last]!.eventIndex;
+    const here = allMarks().filter((mark) => mark.kyoku === 0 && mark.eventIndex <= endEvent);
+    expect(here.length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('.river .tile.tp')).toHaveLength(here.length);
+    expect(document.querySelector('.legend .tile.tp')).not.toBeNull();
+    // 1 行と折れ線（3 人分）
+    expect(document.querySelectorAll('.oh-row .tp-line')).toHaveLength(3);
+    expect(document.querySelectorAll('.oh-row .shchart')).toHaveLength(3);
+    // 位置の帯の目盛り: 半荘の全部の印の数。この局のものは cur
+    expect(ticks()).toHaveLength(allMarks().length);
+    expect(ticks().filter((tick) => tick.classList.contains('cur'))).toHaveLength(allMarks().filter((mark) => mark.kyoku === 0).length);
+    const note = document.querySelector('.tl-note') as HTMLElement;
+    expect(note.textContent).toContain(`この半荘で ${allMarks().length} か所`);
+    expect(note.textContent).toMatch(/この局: .*\d巡目/);
+    for (const tick of ticks()) expect(tick).toHaveAttribute('aria-hidden', 'true');
+    // 閉じると、また消える
+    await user.click(handButtons()[1] as HTMLElement);
+    none();
+  });
+
+  it('枠と 1 行は「いまの手まで」。聴牌になった打牌の手に着くと出て、1 手戻ると消える（まだ聴牌していません → N巡目に聴牌）', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await openReplay(user);
+    await user.click(handButtons()[0] as HTMLElement);
+    const mark = allMarks().find((m) => m.kyoku === 0) as ReturnType<typeof allMarks>[number];
+    const g = timeline.steps.find((s) => s.eventIndex === mark.eventIndex)!.index;
+    const markedUpTo = (which: number) => allMarks().filter((m) => m.kyoku === 0 && m.eventIndex <= timeline.steps[which]!.eventIndex).length;
+    // その 1 手前まで進める
+    await user.click(screen.getByRole('button', { name: '局の頭へ' }));
+    for (let at = 0; at < g - 1; at++) press(PERIOD);
+    expect(pos()).toBe(posAt(g - 1));
+    expect(document.querySelectorAll('.river .tile.tp')).toHaveLength(markedUpTo(g - 1));
+    const lineOf = (seat: number) => document.querySelector(`.oh-row[data-seat="${seat}"] .tp-line`)?.textContent ?? '';
+    const before = lineOf(mark.seat);
+    expect(before).not.toMatch(new RegExp(`^(再び)?${mark.n}巡目に聴牌（`));
+    // その手
+    press(PERIOD);
+    expect(pos()).toBe(posAt(g));
+    expect(markedUpTo(g)).toBe(markedUpTo(g - 1) + 1);
+    expect(document.querySelectorAll('.river .tile.tp')).toHaveLength(markedUpTo(g));
+    expect(lineOf(mark.seat)).toMatch(new RegExp(`^(再び)?${mark.n}巡目に聴牌（`));
+    // 戻ると、また元の 1 行・枠
+    press(COMMA);
+    expect(lineOf(mark.seat)).toBe(before);
+    expect(document.querySelectorAll('.river .tile.tp')).toHaveLength(markedUpTo(g - 1));
+  });
+
+  it('答える場面の答える前は、開いたままでも、枠・1 行・折れ線・位置の帯の目盛りも出ない（聴牌の情報は、他家の手牌と同じに、答えるまで隠す）', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await openReplay(user);
+    await user.click(handButtons()[0] as HTMLElement);
+    expect(ticks().length).toBeGreaterThan(0);
+    await user.click(document.querySelector('.pin[data-key="k1h1e7"]') as HTMLElement);
+    expect(answeringState()).toBe('answering');
+    expect(document.querySelector('.tile.tp, .tp-line, .shchart, .tk, .tl-note')).toBeNull();
+    expect(document.querySelector('.legend .tile.tp')).toBeNull();
+    await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
+    await user.type(reasonBox(), '孤立牌を切る');
+    await user.click(screen.getByRole('button', { name: '答え合わせ' }));
+    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    expect(ticks().length).toBe(allMarks().length);
+    expect(document.querySelectorAll('.oh-row .tp-line')).toHaveLength(3);
   });
 });

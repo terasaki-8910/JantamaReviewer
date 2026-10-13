@@ -1,8 +1,8 @@
-import { findDecisionByKey, type Decision } from '@jantama/engine';
+import { findDecisionByKey, tableAt, type Decision } from '@jantama/engine';
 import { describe, expect, it } from 'vitest';
 
 import { gameOf } from '../../../tests/fake-study';
-import { TURNS_BEFORE, replaySteps, tableExtent } from './steps';
+import { TURNS_BEFORE, replayStepFrames, replaySteps, tableExtent } from './steps';
 
 const fx4 = gameOf('fx4');
 const fx1e = gameOf('fx1e');
@@ -44,6 +44,23 @@ describe('F3 出題の画面の 2〜3 巡前からの再生', () => {
     const decision = decisionOf(fx4, 'k1h1e9');
     expect(replaySteps(fx4, decision, 1).map((step) => step.junme)).toEqual([7, 8]);
     expect(replaySteps(fx4, decision, 0)).toEqual([decision.board]);
+  });
+});
+
+describe('戻って見る盤面の、牌譜の位置（他家の手牌を、その時点で開くのに使う。R16-7）', () => {
+  it('盤面と同じ数・同じ順で、最後は判断の位置。位置は昇順で、その位置まで再生した盤面と合う（枚数・河）', () => {
+    const decision = decisionOf(fx4, 'k1h1e9');
+    const frames = replayStepFrames(fx4, decision);
+    expect(frames.map((frame) => frame.board)).toEqual(replaySteps(fx4, decision));
+    expect(frames[frames.length - 1]?.eventIndex).toBe(decision.eventIndex);
+    const indexes = frames.map((frame) => frame.eventIndex);
+    expect([...indexes].sort((a, b) => a - b)).toEqual(indexes);
+    expect(new Set(indexes).size).toBe(indexes.length);
+    for (const frame of frames) {
+      const table = tableAt(fx4.report.mjai_log, fx4.kyokus[decision.kyokuPosition]!.startIndex, frame.eventIndex, fx4.playerId);
+      expect(table.board.handCounts).toEqual(frame.board.handCounts);
+      expect(table.board.rivers.map((river) => river.length)).toEqual(frame.board.rivers.map((river) => river.length));
+    }
   });
 });
 

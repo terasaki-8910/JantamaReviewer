@@ -322,6 +322,7 @@ function boardOf(over: Partial<BoardState> = {}): BoardState {
     hand: [],
     drawn: null,
     handCounts: [14, 13, 13, 13],
+    handDrawn: [false, false, false, false],
     rivers: [[], [], [], []],
     melds: [[], [], [], []],
     riichi: ['none', 'none', 'none', 'none'],
@@ -616,7 +617,8 @@ describe('E-39 固定データのリーチの場面: 分類の順が、majiang-a
       // 打牌の判断だけ（手牌とツモ牌 14 枚から切る。majiang-ai の数値は、その 14 枚で出す）
       if (d.kind !== 'discard') continue;
       const box = dangerBoxOf(d, actualChoice(d));
-      if (box === null) continue;
+      // リーチの人の欄がある場面だけ（副露の気配の 1 行だけの場面は、分類が無いので、数値と比べない。R16-6）
+      if (box === null || box.sections.length === 0) continue;
       const kyoku = game.kyokus[d.kyokuPosition] as { startIndex: number };
       const hand = d.board.drawn === null ? [...d.board.hand] : [...d.board.hand, d.board.drawn];
       const ai = majiangAiDanger(game, kyoku.startIndex, d.eventIndex, hand);

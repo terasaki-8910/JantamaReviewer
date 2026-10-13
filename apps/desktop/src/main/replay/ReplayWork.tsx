@@ -5,8 +5,10 @@
  *   答えは、出題と同じに記録する（`record_answer`・mode は quiz。1 日後の解き直しの予定も入る）。答えた場面は、答え合わせのあとの形で開く。
  *   迷いの場面は、答える前に、その迷いの終局直後のメモ（「候補」「理由」）を書ける・直せる（迷いのカードと同じ保存先。F4、U-28）。
  *   答えたあとは、メモは書き換えられず、自分の答えの下に出る（AI の情報は、答えるまで出さない）
- * - 「他家の手牌を開く」（F14、R15-5）を開いているとき、場面にいない手と、答えたあとの場面は、右の欄の上に他家の手牌を出す。
- *   答える場面は、答えるまで、他家の手牌を DOM にも出さない（U-35）。開いたままの状態は、手を進めても残る（呼ぶ側が持つ）
+ * - 他家の手牌（F14、R15-5、R16-7）は、盤面に裏向きで置く。どれか 1 人の手牌を押すと 3 人分が開き、もう一度押すと閉じる。場面にいない手は、いつでも押せる。
+ *   開いているあいだ、場面にいない手と、答えたあとの場面は、右の欄の上に「他家の手牌」の欄（聴牌の 1 行・向聴数の折れ線・待ちと点）を出し、
+ *   盤面の河に聴牌になった打牌の枠を付ける。答える場面は、答えるまで、押せず、表の牌も DOM に出さない（U-35）。
+ *   開け閉めの状態は、手を進めても残る（呼ぶ側が持つ。画面を離れると閉じに戻る）
  */
 import type { DecisionRef, ImportedGame, ReplayScene, ReplayTimeline, TimelineStep } from '@jantama/engine';
 import { useMemo } from 'react';
@@ -19,7 +21,7 @@ import { Board, Legend, type BoardInfo } from '../study/Board';
 import { doraKinds } from '../study/dora';
 import { Hand, type HandMark } from '../study/Hand';
 import { buildHandItems } from '../study/handMarks';
-import { OpenHandsBlock } from '../study/OpenHands';
+import { OpenHandsBlock, useOpenHandsView, type OpenHandsControl } from '../study/OpenHands';
 import { QuizWork } from '../study/QuizWork';
 import { useStudy } from '../study/StudyProvider';
 import type { QuizDraft } from '../study/useQuizAnswer';
@@ -33,8 +35,8 @@ const noop = () => undefined;
 interface BrowseWorkProps {
   /** 他家の手牌を組み立てる、取り込んだ半荘。 */
   game: ImportedGame;
-  /** 「他家の手牌を開く」を開いているか。 */
-  openHands: boolean;
+  /** 他家の手牌の開け閉め。 */
+  openHands: OpenHandsControl;
   timeline: ReplayTimeline;
   step: TimelineStep;
   /** 卓の外の決まり（局の中でそろえた、河の段の数など）。 */
@@ -52,12 +54,14 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
   const dora = useMemo(() => (study.highlightDora ? doraKinds(step.board.doraMarkers) : null), [study.highlightDora, step.board]);
   // 直前の打牌を、その席の河の最後の牌に印する
   const latest = step.event.type === 'dahai' ? step.actor : null;
+  // 場面にいない手は、他家の手牌をいつでも開ける
+  const view = useOpenHandsView(game, step.kyokuPosition, step.eventIndex, openHands, true);
   return (
     <div className="qz" data-state="browse" data-dora={study.highlightDora ? 'on' : 'off'}>
       <div className="work">
         <section className="board-col" aria-label="盤面と手牌" data-view="now">
-          <Board info={info} step={step.board} dora={dora} latest={latest} />
-          <Legend riichi={info.riichiAny} called={anyCalled} call={false} pastView={false} latest={latest !== null} />
+          <Board info={info} step={step.board} dora={dora} latest={latest} hands={view.hands} tenpai={view.tenpai} />
+          <Legend riichi={info.riichiAny} called={anyCalled} call={false} pastView={false} latest={latest !== null} tenpai={view.showing} handsHint />
           <Hand
             items={items}
             interactive={false}
@@ -78,7 +82,9 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
           answered={answered}
           go={go}
           above={
-            openHands ? <OpenHandsBlock game={game} kyokuPosition={step.kyokuPosition} eventIndex={step.eventIndex} dora={dora} /> : undefined
+            view.showing && view.seats !== null ? (
+              <OpenHandsBlock me={game.playerId} seats={view.seats} eventIndex={step.eventIndex} dora={dora} tracks={view.tracks} />
+            ) : undefined
           }
         />
       </div>
@@ -91,8 +97,8 @@ export type SceneDrafts = Map<string, QuizDraft>;
 
 interface SceneWorkProps {
   game: ImportedGame;
-  /** 「他家の手牌を開く」を開いているか（答えたあとだけ、欄を出す）。 */
-  openHands: boolean;
+  /** 他家の手牌の開け閉め（答えたあとだけ押せる。開いていれば、答えたあとに、盤面に表向きで出て、欄が出る）。 */
+  openHands: OpenHandsControl;
   step: TimelineStep;
   info: BoardInfo;
   anyCalled: boolean;
@@ -167,11 +173,8 @@ export function SceneWork({ game, openHands, step, info, anyCalled, scene, sessi
         memoEditor={memoEditor}
         memoShown={memoShown}
         game={game}
-        above={
-          work.revealed && openHands ? (
-            <OpenHandsBlock game={game} kyokuPosition={step.kyokuPosition} eventIndex={step.eventIndex} dora={work.dora} />
-          ) : undefined
-        }
+        eventIndex={step.eventIndex}
+        openHands={openHands}
       />
     </div>
   );

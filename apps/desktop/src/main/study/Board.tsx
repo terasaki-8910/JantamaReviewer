@@ -1,5 +1,5 @@
-import type { BoardState, RiverTile, Seat, Tile as TileCode, Wind } from '@jantama/engine';
-import type { CSSProperties } from 'react';
+import type { BoardState, OpenSeat, RiverTile, Seat, Tile as TileCode, Wind } from '@jantama/engine';
+import { useId, type CSSProperties } from 'react';
 
 import { isDoraTile } from './dora';
 import { layoutMeld, MELD_NAME } from './meldLayout';
@@ -45,6 +45,20 @@ function groupedNumber(value: number): string {
   return value.toLocaleString('ja-JP');
 }
 
+/**
+ * 他家の手牌（盤面の、他家の河の外側）の、開け閉めの状態。F14（R16-7）: どれか 1 人の手牌を押すと、3 人分が表向きに開き、もう一度押すと 3 人分が閉じる。
+ * 河を押しても何も起きない。閉じている間は、裏向きの牌（枚数は、盤面の `handCounts`・`handDrawn`。牌は DOM に無い）。
+ */
+export interface BoardHands {
+  /** 開いている状態か（`available` が false のときは、開いていても、裏向きのまま）。 */
+  open: boolean;
+  /** 押せるか。答える場面（迷い・不一致）と出題・解き直しは、答えるまで押せず、表向きの牌も DOM に出さない（U-1・U-35）。 */
+  available: boolean;
+  /** 開いているときの、他家の手牌（下家・対面・上家）。閉じているとき・押せないときは null（作らない）。 */
+  seats: readonly OpenSeat[] | null;
+  onToggle: () => void;
+}
+
 interface BoardProps {
   info: BoardInfo;
   /** 見せる盤面。 */
@@ -55,6 +69,10 @@ interface BoardProps {
   target?: Seat | null;
   /** 直前の打牌を、その席の河の最後の牌に印する（半荘を通して見る画面）。 */
   latest?: Seat | null;
+  /** 他家の手牌の開け閉め。 */
+  hands: BoardHands;
+  /** 聴牌になった打牌の枠（他家の手牌を開いているときだけ渡す）。席 → その席の河の位置（0 から）の集合。 */
+  tenpai?: ReadonlyMap<number, ReadonlySet<number>>;
 }
 
 function riverLabel(position: Position, info: BoardInfo, seat: Seat): string {
@@ -65,10 +83,13 @@ function RiverItem({
   tile,
   dora,
   mark,
+  tenpai,
 }: {
   tile: RiverTile;
   dora: ReadonlySet<number> | null;
   mark: 'target' | 'latest' | null;
+  /** 他家が聴牌になった打牌か（枠と三角。色だけに頼らない）。 */
+  tenpai: boolean;
 }) {
   const called = tile.calledBy !== null;
   // 鳴かれて薄くなった牌には、ドラの強調を付けない（鳴いた副露の側が受け持つ）
@@ -77,6 +98,7 @@ function RiverItem({
     tile.tsumogiri ? 'tg' : '',
     called ? 'called' : '',
     mark === 'target' ? 'target' : mark === 'latest' ? 'latest' : '',
+    tenpai ? 'tp' : '',
   ]
     .filter((c) => c !== '')
     .join(' ');
@@ -85,7 +107,8 @@ function RiverItem({
     (tile.tsumogiri ? '（ツモ切り）' : '') +
     (called ? '（鳴かれた牌）' : '') +
     (mark === 'target' ? '（鳴ける牌）' : mark === 'latest' ? '（直前の打牌）' : '') +
-    (tile.riichi ? '（リーチ宣言牌）' : '');
+    (tile.riichi ? '（リーチ宣言牌）' : '') +
+    (tenpai ? '（聴牌になった打牌）' : '');
   return (
     <li className={`rt${tile.riichi ? ' sw' : ''}`}>
       <Tile tile={tile.tile} className={classes} alt={alt} dora={isDora} />
@@ -147,8 +170,90 @@ export function Meld({
   );
 }
 
-/** 卓の配置（雀魂と同じ並び。河を四方に置く。副露は持ち主の右手側の角）。 */
-export function Board({ info, step, dora, target = null, latest = null }: BoardProps) {
+/** 手牌の牌 1 枚（裏向き。牌は読み上げない。ボタンの名前と説明が読み上げる）。 */
+function BackFace() {
+  return <span className="tile back" aria-hidden="true" />;
+}
+
+/**
+ * 他家 1 人の手牌（盤面の、その人の河の外側）。ボタン 1 つで、どの人のを押しても、他家 3 人の手牌が開閉する。
+ * 閉じている間は裏向きの牌（枚数とツモ牌の有無は、盤面から）。表向きは、開いていて押せるときだけ描く（答える前は、牌が DOM に無い）。
+ * 持ち主の向きで作って、河と同じ向きに回す（対面は 180 度、上家・下家は 90 度）。ツモ牌は、手牌から少し離す。
+ */
+function OpponentHand({
+  position,
+  seat,
+  step,
+  dora,
+  hands,
+}: {
+  position: 'right' | 'top' | 'left';
+  seat: Seat;
+  step: BoardState;
+  dora: ReadonlySet<number> | null;
+  hands: BoardHands;
+}) {
+  const faceUp = hands.open && hands.available && hands.seats !== null;
+  const shown = faceUp ? hands.seats?.find((candidate) => candidate.seat === seat) : undefined;
+  const descId = useId();
+  const who = `${RELATION[position]}の手牌`;
+  const count = step.handCounts[seat] ?? 0;
+  const hasDrawn = step.handDrawn[seat] ?? false;
+  let description: string;
+  if (shown !== undefined) {
+    const names = shown.hand.map((tile) => tileName(tile)).join('、');
+    description = `${who}: ${names}${shown.drawn === null ? '' : `、ツモ牌 ${tileName(shown.drawn)}`}。押すと、他家 3 人の手牌が閉じます`;
+  } else if (hands.available) {
+    description = `${who}（裏向き ${count}枚）。押すと、他家 3 人の手牌が開きます`;
+  } else {
+    description = `${who}（裏向き ${count}枚）。答えを出すまで開けません`;
+  }
+  return (
+    <div className={`hzone ${position}`}>
+      <button
+        type="button"
+        className="ohand"
+        data-seat={seat}
+        data-open={shown !== undefined ? '1' : '0'}
+        aria-pressed={shown !== undefined}
+        aria-label={shown !== undefined ? '他家の手牌を閉じる' : '他家の手牌を開く'}
+        aria-describedby={descId}
+        disabled={!hands.available}
+        onClick={hands.onToggle}
+      >
+        {shown !== undefined ? (
+          <>
+            {shown.hand.map((tile, index) => (
+              <Tile key={`${index}${tile}`} tile={tile} dora={isDoraTile(tile, dora)} />
+            ))}
+            {shown.drawn !== null && (
+              <span className="hdraw">
+                <Tile tile={shown.drawn} alt={`${tileName(shown.drawn)}（ツモ牌）`} dora={isDoraTile(shown.drawn, dora)} />
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            {Array.from({ length: Math.max(0, count - (hasDrawn ? 1 : 0)) }, (_, index) => (
+              <BackFace key={index} />
+            ))}
+            {hasDrawn && (
+              <span className="hdraw">
+                <BackFace />
+              </span>
+            )}
+          </>
+        )}
+      </button>
+      <span className="sr-only" id={descId}>
+        {description}
+      </span>
+    </div>
+  );
+}
+
+/** 卓の配置（雀魂と同じ並び。河を四方に置く。副露は持ち主の右手側の角。他家の手牌は、他家の河の外側）。 */
+export function Board({ info, step, dora, target = null, latest = null, hands, tenpai }: BoardProps) {
   const me = info.me;
   const seatAt: Record<Position, Seat> = {
     bottom: me,
@@ -170,6 +275,7 @@ export function Board({ info, step, dora, target = null, latest = null }: BoardP
               tile={tile}
               dora={dora}
               mark={index === last && target === seat ? 'target' : index === last && latest === seat ? 'latest' : null}
+              tenpai={tenpai?.get(seat)?.has(index) === true}
             />
           ))}
         </ol>
@@ -255,18 +361,26 @@ export function Board({ info, step, dora, target = null, latest = null }: BoardP
         {corner('left', 'bl')}
         {zone('bottom')}
         {corner('bottom', 'br')}
+        <OpponentHand position="right" seat={seatAt.right} step={step} dora={dora} hands={hands} />
+        <OpponentHand position="top" seat={seatAt.top} step={step} dora={dora} hands={hands} />
+        <OpponentHand position="left" seat={seatAt.left} step={step} dora={dora} hands={hands} />
       </div>
     </div>
   );
 }
 
 /** 凡例（盤面の見方）。 */
+/** 他家の手牌を開けるときに、盤面の凡例の下に出す 1 行（R16-7）。 */
+export const HANDS_HINT = '他家の手牌は、押すと3人とも開きます（もう一度押すと閉じます）';
+
 export function Legend({
   riichi,
   called,
   call,
   pastView,
   latest = false,
+  tenpai = false,
+  handsHint = false,
 }: {
   riichi: boolean;
   called: boolean;
@@ -276,41 +390,53 @@ export function Legend({
   pastView: boolean;
   /** 直前の打牌の印を出すか（半荘を通して見る画面）。 */
   latest?: boolean;
+  /** 「聴牌になった打牌」の印を出すか（他家の手牌を開いているとき。F14、R16-7）。 */
+  tenpai?: boolean;
+  /** 「他家の手牌は、押すと…」の 1 行を出すか（他家の手牌を開けるとき）。 */
+  handsHint?: boolean;
 }) {
   const face = <img src="/tiles/Chun.svg" alt="" draggable={false} />;
   return (
-    <ul className="legend" aria-label="凡例">
-      <li>
-        <span className="tile tg">{face}</span>ツモ切り
-      </li>
-      {riichi && (
+    <>
+      <ul className="legend" aria-label="凡例">
         <li>
-          <span className="sw-demo">
-            <span className="tile">{face}</span>
-          </span>
-          リーチ宣言牌
+          <span className="tile tg">{face}</span>ツモ切り
         </li>
-      )}
-      {called && (
-        <li>
-          <span className="tile called">{face}</span>鳴かれた牌
+        {riichi && (
+          <li>
+            <span className="sw-demo">
+              <span className="tile">{face}</span>
+            </span>
+            リーチ宣言牌
+          </li>
+        )}
+        {called && (
+          <li>
+            <span className="tile called">{face}</span>鳴かれた牌
+          </li>
+        )}
+        {latest && (
+          <li>
+            <span className="tile latest">{face}</span>直前の打牌
+          </li>
+        )}
+        {call && (
+          <li>
+            <span className="tile target">{face}</span>鳴ける牌
+          </li>
+        )}
+        {tenpai && (
+          <li>
+            <span className="tile tp">{face}</span>聴牌になった打牌
+          </li>
+        )}
+        <li className="lg-dora">
+          <span className="tile is-dora">{face}</span>ドラ
         </li>
-      )}
-      {latest && (
-        <li>
-          <span className="tile latest">{face}</span>直前の打牌
-        </li>
-      )}
-      {call && (
-        <li>
-          <span className="tile target">{face}</span>鳴ける牌
-        </li>
-      )}
-      <li className="lg-dora">
-        <span className="tile is-dora">{face}</span>ドラ
-      </li>
-      {pastView && <li className="past-flag">過去の盤面</li>}
-    </ul>
+        {pastView && <li className="past-flag">過去の盤面</li>}
+      </ul>
+      {handsHint && <p className="hands-hint">{HANDS_HINT}</p>}
+    </>
   );
 }
 

@@ -252,6 +252,9 @@
   --rows: 河の段の数、--ri: リーチ宣言牌（横向き）の分の余白を取るか（0 か 1）。どちらも JS が入れる。
   牌の幅 --rw は、列の幅と、窓の高さ（見出し・凡例・手牌の分を引いた残り）の小さいほうから決める。
   河は持ち主の向きで作り、まるごと回す。左右の置き場は、幅と高さを入れ替えて取るので、回しても中央の箱に重ならない。
+  他家の手牌（R16-7）は、他家の河の外側に置く: 対面は河の上の 1 段、上家・下家は左右の 1 列（--hh。手牌の牌の高さ）。
+  手牌の牌の幅 --hw は、河の牌の幅の --hf 倍。卓の幅は、左右の列の分（2 × --hh）、高さは上の段の分（1 × --hh）だけ大きくなる。
+  幅の上限は、列の幅から必ず取る（列からはみ出さない）。高さのほうは、大きい配置では下限（36px）がある（下の @container）。
 */
 .table-wrap {
   display: grid;
@@ -263,10 +266,20 @@
   --pad: 12px;
   --rows: 3;
   --ri: 0;
+  --hf: 0.76;
+  --hk: calc(var(--hf) * 4 / 3);
   --kw: calc(2 * var(--pad) + 4 * var(--g) + 2 * var(--rows) * 1px + 3px);
   --cw: calc(6 + var(--rows) * 8 / 3 + var(--ri) / 3);
-  --rw: max(14px, min(46px, calc((min(100cqw, 100vh - var(--chrome-h, 246px)) - var(--kw)) / var(--cw))));
+  --cwx: calc(var(--cw) + 2 * var(--hk));
+  --cwy: calc(var(--cw) + var(--hk));
+  --kwx: calc(var(--kw) + 2 * var(--g));
+  --kwy: calc(var(--kw) + var(--g));
+  --rw-w: calc((100cqw - var(--kwx)) / var(--cwx));
+  --rw-h: calc((100vh - var(--chrome-h, 276px) - var(--kwy)) / var(--cwy));
+  --rw: max(14px, min(46px, var(--rw-w), var(--rw-h)));
   --rh: calc(var(--rw) * 4 / 3);
+  --hw: calc(var(--rw) * var(--hf));
+  --hh: calc(var(--hw) * 4 / 3);
   --river-w: calc(var(--rw) * 6 + var(--ri) * (var(--rh) - var(--rw)) + 5px);
   --side: calc(var(--rh) * var(--rows) + (var(--rows) - 1) * 1px);
   --mw: min(calc(var(--rw) * 0.72), calc((var(--side) - 8px) / 4));
@@ -276,9 +289,10 @@
   gap: var(--g);
   padding: var(--pad);
   grid-template:
-    "tl top tr" var(--side)
-    "left center right" var(--river-w)
-    "bl bottom br" var(--side) / var(--side) var(--river-w) var(--side);
+    ". htop htop htop ." var(--hh)
+    "hleft tl top tr hright" var(--side)
+    "hleft left center right hright" var(--river-w)
+    "hleft bl bottom br hright" var(--side) / var(--hh) var(--side) var(--river-w) var(--side) var(--hh);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r3);
@@ -294,6 +308,74 @@
 .zone.left { grid-area: left; }
 .zone.right { grid-area: right; }
 .zone.bottom { grid-area: bottom; }
+
+/*
+  他家の手牌。1 つの置き場に、手牌をまとめたボタン（.ohand）を置く。ボタンは、持ち主の向きで作った帯（牌 14 枚分: 手牌 13 枚＋ツモ牌）を、
+  置き場の真ん中に置いて、河と同じ向きに回したもの。手牌は持ち主の左から詰める（ツモ牌は、少し離して右端）。枚数が減っても、帯の長さは変わらない。
+*/
+.hzone {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.hzone.top { grid-area: htop; }
+.hzone.left { grid-area: hleft; }
+.hzone.right { grid-area: hright; }
+
+.ohand {
+  --tw: var(--hw);
+  --hgap: calc(var(--hw) * 0.5);
+  --hlen: calc(14 * var(--hw) + 13px + var(--hgap));
+
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 1px;
+  width: calc(var(--hlen) + 6px);
+  height: calc(var(--hh) + 6px);
+  margin: 0;
+  padding: 3px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r1);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.hzone.top .ohand { transform: translate(-50%, -50%) rotate(180deg); }
+.hzone.left .ohand { transform: translate(-50%, -50%) rotate(90deg); }
+.hzone.right .ohand { transform: translate(-50%, -50%) rotate(-90deg); }
+
+.ohand .hdraw {
+  display: block;
+  margin-left: var(--hgap);
+}
+
+.ohand:not(:disabled):hover {
+  background: var(--hover);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.ohand[aria-pressed="true"] {
+  background: var(--accent-fill);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.ohand:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.ohand:disabled {
+  cursor: default;
+}
 
 .river {
   list-style: none;
@@ -584,7 +666,7 @@
   --tw: 22px;
 }
 
-@container board (width <= 579px) {
+@container board (width <= 639px) {
   .table {
     --g: 4px;
     --pad: 6px;
@@ -1713,6 +1795,40 @@ li:has(> .qrow.next) + li > .qrow {
   z-index: 1;
 }
 
+/*
+  河の「聴牌になった打牌」の印（他家の手牌を開いているときだけ。R16-7 の A）: accent の太い枠と、角の三角（形でも示す。河の向きに合わせて回る）。
+  承認済みの 16回目の見本の部品。
+*/
+.tile.tp {
+  box-shadow: 0 0 0 3px var(--accent);
+  z-index: 1;
+}
+
+.tile.tp::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 calc(var(--tw, 26px) * 0.62) calc(var(--tw, 26px) * 0.62) 0;
+  border-color: transparent var(--accent) transparent transparent;
+  border-top-right-radius: 10%;
+}
+
+.legend .tile.tp {
+  --tw: 18px;
+}
+
+.hands-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* 列が 481〜579px のとき（窓がおよそ 1150〜1250px）: 卓は狭い配置のまま、手牌は 1 段に収める（9回目の狭い配置は 36px 固定で折り返していた） */
 @container board (481px <= width <= 579px) {
   .hand {
@@ -1736,11 +1852,12 @@ li:has(> .qrow.next) + li > .qrow {
   }
 }
 
-/* 窓の高さが低くても、卓の中央の文字が重ならない大きさ（牌 36px。中央の箱が約 220px）より小さくしない（どの画面でも）。
-   列が 580px より狭いときは、卓の中央を外に出す狭い配置（quiz.css）に切り替わる（9回目は 480px。その間は中央の文字が重なるので、580px に上げた） */
-@container board (width >= 580px) {
+/* 窓の高さが低くても、卓の中央の文字が重ならない大きさ（牌 36px。中央の箱が約 220px）より小さくしない（どの画面でも。高さの下限だけ。
+   列の幅からはみ出さないほうが優先なので、列が狭くて 36px が入らないときは、幅から決まる大きさまで小さくする）。
+   列が 640px より狭いときは、卓の中央を外に出す狭い配置（quiz.css）に切り替わる（9回目は 480px、10回目は 580px。他家の手牌の帯が左右に付いたので、640px に上げた） */
+@container board (width >= 640px) {
   .table {
-    --rw: max(36px, min(46px, calc((min(100cqw, 100vh - var(--chrome-h, 246px)) - var(--kw)) / var(--cw))));
+    --rw: min(var(--rw-w), max(36px, min(46px, var(--rw-h))));
   }
 }
 

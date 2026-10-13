@@ -51,6 +51,11 @@ export interface BoardState {
   readonly drawn: Tile | null;
   /** 席ごとの閉じた手牌の枚数（ツモ牌を含む）。 */
   readonly handCounts: readonly number[];
+  /**
+   * 席ごとの、ツモってまだ切っていない牌があるか（牌は入れない。チー・ポンのあとの打牌の前は false）。
+   * 他家の手牌を裏向きで置くとき、ツモ牌を少し離すのに使う（実際の卓でも、ツモった牌が離れて見える）。
+   */
+  readonly handDrawn: readonly boolean[];
   /** 席ごとの河（切った順）。 */
   readonly rivers: readonly (readonly RiverTile[])[];
   /** 席ごとの副露（鳴いた順）。 */
@@ -166,6 +171,16 @@ export class KyokuReplayer {
   /** 本人の副露。 */
   ownMelds(): Fuuro[] {
     return [...(this.melds[this.playerId] as Fuuro[])];
+  }
+
+  /** 席 `seat` の閉じた手牌（ツモ牌を含む。並べ替えない。他家の手牌を含むので、答えたあとの画面と、局の終わりの画面だけが使う）。 */
+  handOf(seat: Seat): Tile[] {
+    return [...(this.hands[seat] as Tile[])];
+  }
+
+  /** 席 `seat` の副露（鳴いた順）。 */
+  meldsOf(seat: Seat): Fuuro[] {
+    return [...(this.melds[seat] as Fuuro[])];
   }
 
   private remove(seat: Seat, tile: Tile, eventIndex: number): void {
@@ -341,6 +356,7 @@ export class KyokuReplayer {
       hand: sortTiles(hand),
       drawn,
       handCounts: this.hands.map((h) => h.length),
+      handDrawn: this.drawn.map((tile) => tile !== null),
       rivers: this.rivers.map((r) => r.slice()),
       melds: this.melds.map((m) => m.slice()),
       riichi: [...this.riichi],

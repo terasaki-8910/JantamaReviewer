@@ -1,13 +1,14 @@
 /*
-  open-hands.css: 他家の手牌（F14、E-40、U-34・U-35。R15-2・R15-5。提案 5）の欄と、通して見る画面の操作の段の「他家の手牌を開く」。
-  承認済みの 15回目の見本（samples15.css の .oh-*・.s15-tiles・.s15-meld）の部品を、アプリに移した。色はすべて tokens.css のトークンから
-  （色のリテラルは書かない）。新しい色・トークンは足さない。目立たせ方は、太字・枠の形・淡い accent の塗りだけ（待ちと打点・守備の欄と同じ使い方）。
+  open-hands.css: 他家の手牌（F14、E-40・E-43、U-34・U-35・U-38。R15-2・R15-5・R16-7）の欄。
+  承認済みの 15回目・16回目の見本（samples15.css・samples16.css の .oh-*・.tp-line・.sr-*・.tl-note・.tk）の部品を、アプリに移した。
+  色はすべて tokens.css のトークンから（色のリテラルは書かない）。新しい色・トークンは足さない。目立たせ方は、太字・枠の形・三角・淡い accent の塗りだけ
+  （待ちと打点・守備の欄と同じ使い方）。盤面の手牌（.hzone・.ohand）と河の「聴牌になった打牌」の枠（.tile.tp）は quiz.css。
 
   方針:
-  - 人ごとの行は、見出し（席・風・親・リーチ）・手牌の行・待ちの行の 3 段。手牌は牌の幅 20px の小さな牌で、ツモ牌・和了牌は手牌から少し離し、
-    副露は盤面と同じ並べ方（.meld）。13 枚が、答えの欄の幅 336px に収まる。狭いときは折り返す
+  - 人ごとの行は、見出し（席・風・親・リーチ）・聴牌になった巡目の 1 行・向聴数の折れ線・待ちの行の 4 段（牌の並びは盤面に出ている）。
+    局の結果の手は、牌の並びの行つき（.oh-hand）。手牌は牌の幅 20px の小さな牌で、ツモ牌・和了牌は少し離し、副露は盤面と同じ並べ方（.meld）
   - 人の行の間は、細い線で区切る（行の中より、行の間のほうが離れて見える）
-  - 「他家の手牌を開く」は、操作の段の 2 段目（場面へ飛ぶ段）の、「次の迷いへ」のあとに置く（1 段目は、局・1手・巡目で埋まる）。開いているときは、淡い accent の塗りと accent の枠（承認済みの見本の押した形）
+  - 位置の帯の他家の聴牌の目盛り（.tk）は、帯の下の縁の小さな三角。この局のものは accent、ほかの局は ink。数は、帯の下の 1 行（.tl-note）に書く
 */
 .oh-panel {
   display: grid;
@@ -119,30 +120,114 @@
   color: var(--muted);
 }
 
-/* ---------- 通して見る画面の操作の段: 他家の手牌を開く ---------- */
-.pb-open {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.pb-open .btn[data-open="1"] {
-  background: var(--accent-fill);
-  border-color: var(--accent);
-}
-
-.pb-open .btn .ic {
-  width: 16px;
-  height: 16px;
-}
-
-.pb-open .btn:disabled {
-  background: transparent;
-  border-color: var(--line);
-}
-
 /* 通して見る画面の右の欄の上に出す他家の手牌は、下の「いまの一手」・答えの欄と、細い線で区切る */
 .oh-panel[data-open-hands] {
   padding-bottom: var(--s3);
   border-bottom: 1px solid var(--line);
+}
+
+/* ---------- 聴牌になった巡目の 1 行 ---------- */
+.tp-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.tp-line.none {
+  color: var(--muted);
+}
+
+.tp-key {
+  display: inline-block;
+  flex: none;
+  width: 0;
+  height: 0;
+  margin-right: 6px;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid var(--accent);
+  border-left: 5px solid transparent;
+}
+
+/* ---------- 向聴数の折れ線（ShantenChart。局の評価の行の向聴数の推移も使う） ---------- */
+.shchart {
+  min-width: 0;
+}
+
+.shchart-plot {
+  border-radius: var(--r1);
+}
+
+.shchart-plot:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.shchart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.shchart-svg text {
+  font-size: 9.5px;
+  fill: var(--muted);
+}
+
+.shchart-svg .g {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.shchart-svg .g0 {
+  stroke: var(--line-strong);
+}
+
+.shchart-svg .ln {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.6;
+}
+
+.shchart-svg .nd {
+  fill: var(--ink);
+}
+
+.shchart-svg .tpm {
+  fill: var(--accent);
+}
+
+.shchart-svg .cur {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.2;
+}
+
+/* ---------- 位置の帯の、他家の聴牌の目盛り ---------- */
+.tl-track .tk {
+  position: absolute;
+  bottom: 0;
+  z-index: 1;
+  width: 0;
+  height: 0;
+  margin-left: -4px;
+  border-right: 4px solid transparent;
+  border-bottom: 8px solid var(--ink);
+  border-left: 4px solid transparent;
+  pointer-events: none;
+}
+
+.tl-track .tk.cur {
+  border-bottom-color: var(--accent);
+}
+
+.tl-note {
+  display: flex;
+  align-items: center;
+  margin: -2px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
 }

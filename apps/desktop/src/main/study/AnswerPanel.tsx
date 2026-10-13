@@ -15,7 +15,6 @@ import {
   tileLabel,
   type AnswerOption,
   type Decision,
-  type ImportedGame,
   type QuizChoice,
   type Tile as TileCode,
 } from '@jantama/engine';
@@ -59,9 +58,7 @@ export interface AnswerPanelProps {
   memoEditor?: ReactNode;
   /** 答え合わせのあとに、自分の答えの下へ出す「終局直後のメモ」（無ければ出さない）。答える前は渡さない（DOM にも無い）。 */
   memoShown?: readonly ShownMemo[];
-  /** 取り込んだ半荘。渡すと、答え合わせのあとに、タブ「他家の手牌」を出す（他家の手牌は、そのタブを選んだときに牌譜から組み立てる）。 */
-  game?: ImportedGame;
-  /** 答える場面の上に出す欄（通して見る画面の「他家の手牌を開く」。答えたあとだけ渡す）。 */
+  /** 答えの欄の上に出す欄（他家の手牌を開いているときの「他家の手牌」の欄。答えたあとだけ渡す。R16-7）。 */
   above?: ReactNode;
 }
 
@@ -383,7 +380,7 @@ interface RevealProps extends AnswerPanelProps {
   focusOnMount: boolean;
 }
 
-function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, game }: RevealProps) {
+function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown }: RevealProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
@@ -401,7 +398,7 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
       {model.yaku !== null && <YakuSection box={model.yaku} dora={dora} />}
     </>
   );
-  const context = { decision, model, dora, game };
+  const context = { decision, model, dora };
   const extraTabs = visibleRevealTabs(context);
   const tabs: TabSpec[] = [
     { id: 'default', label: DEFAULT_TAB_LABEL, panel: () => defaultSections },
