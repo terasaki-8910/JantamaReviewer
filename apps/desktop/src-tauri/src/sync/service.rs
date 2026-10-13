@@ -599,6 +599,17 @@ impl<P: Ports> Worker<P> {
         self.finish(outcome, &secrets, last_ok);
         self.last_marker = Some((self.change_marker)());
         self.dirty_since = None;
+        // 同期している間に、利用者が使わない設定にした（または、この端末の同期を切った）なら、状態は「使っていない」のまま
+        let (after, _) = SyncConfig::load(&self.config_dir);
+        if !after.enabled {
+            self.shared.update(|status| {
+                status.enabled = false;
+                status.state = SyncState::Off;
+                status.message = None;
+                status.warnings.clear();
+                status.can_allow_mass_delete = false;
+            });
+        }
     }
 
     fn finish(
