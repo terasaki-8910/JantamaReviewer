@@ -48,6 +48,8 @@ function boardOf(over: Partial<BoardState> = {}): BoardState {
     rivers: [[], [], [], []],
     melds: [[], [], [], []],
     riichi: ['none', 'none', 'none', 'none'],
+    riichiOrder: [],
+    passedAfterRiichi: [[], [], [], []],
     ...over,
   };
 }

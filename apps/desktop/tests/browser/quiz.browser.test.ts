@@ -10,6 +10,8 @@
  * - U-19: ドラ表示牌が指す牌の面が黄色（描いた色を読む）。牌の図柄と黄色のコントラストは 3:1 以上
  * - U-33: 役の欄は、答え合わせのあとの受け入れ枚数の欄の下に出て、幅 390・768・1280px で欄の中身がはみ出さない。警告（札「役無し」・太字の文）は、
  *   色以外（濃い枠・字の太さ）でも見分けられる。説明のアイコンは、Tab で受け入れ枚数のあと・差の原因の前に届く。axe の重大は、上の状態の検査に含まれる
+ * - U-34: 答え合わせのタブ。待ちと打点・守備のタブは、場面に関係があるときだけ出る（守備は他家のリーチがある場面だけ）。← → Home End で選べて、Tab の止まり場所は
+ *   選んでいるタブ 1 つ。守備の欄は、幅 390・768・1280px・ライト・ダークで、はみ出さない（axe の重大は 0 件）
  * - U-1: 答える前の DOM に AI の情報は無い。牌の画像はすべて読み込めて、引きずれない（N-8）。外へ通信しない
  * jsdom の試験（src/main/study）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
@@ -47,6 +49,8 @@ const NOW = new Date(2026, 9, 9, 22, 0, 0);
 
 const FX4_ID = '20261009-190953';
 const FX1A_ID = '20261009-171200';
+/** 守備のタブで、2 人がリーチしている場面を持つ半荘（FX-1 c）。 */
+const FX1C_ID = '20261009-161000';
 
 const baseState = { status: 'idle', session_id: null, mark_count: 0, ratings: [], next_hand: 1, can_undo: false, error: null };
 const baseSettings = {
@@ -101,6 +105,11 @@ function dueAnswers(keys?: readonly string[], sessionId: string = FX4_ID): unkno
     interval_days: 3,
     due_date: '2026-10-09',
   }));
+}
+
+/** 上の 2 つに、FX-1 c の半荘を足したもの（守備のタブの検査用）。 */
+function sessionsWithFx1c() {
+  return [...sessions(), seedSession(local(2026, 10, 9, 16, 10), { id: FX1C_ID, report: 'fx1c' }).session];
 }
 
 function scenario(overrides: Partial<Scenario> & { dora?: boolean; due?: boolean; dueKeys?: readonly string[]; dueSession?: string } = {}): Scenario {
@@ -248,6 +257,22 @@ async function selectWaitsTab(page: Page): Promise<void> {
   await page.locator('[data-ai="waits-box"]').waitFor();
 }
 
+/**
+ * 守備のタブの見本の場面（他家のリーチ中）。FX-4 の東1局 14巡目の打牌（上家のリーチ。聴牌なので、待ちと打点のタブも出る。1s がスジ）、
+ * FX-1 a の東2局1本場 9巡目の打牌（対面のリーチ。聴牌ではない）と、南2局1本場 7巡目の鳴きの判断（対面のリーチ）、
+ * FX-1 c の東2局 16巡目の打牌（対面と下家の 2 人がリーチ。対面が先に宣言）。
+ */
+const DANGER_TENPAI_KEY = 'k0h0e15';
+const DANGER_ONLY_KEY = 'k1h1e13';
+const DANGER_CALL_KEY = 'k5h1e8';
+const DANGER_TWO_KEY = 'k1h0e19';
+
+/** 答え合わせのあと、タブ「守備」を選ぶ。 */
+async function selectDangerTab(page: Page): Promise<void> {
+  await page.getByRole('tab', { name: '守備' }).click();
+  await page.locator('[data-ai="danger-box"]').waitFor();
+}
+
 /** 検査する状態。FX-4 の今日の組は、迷い 1〜5（1 行目: 打牌・1 向聴、3 行目: 打牌・2 向聴、4 行目: 鳴き）。 */
 const STATES: StateDef[] = [
   { name: '今日の出題の一覧', run: openToday },
@@ -367,6 +392,42 @@ const STATES: StateDef[] = [
       await openReview(page);
       await answerCurrent(page);
       await selectWaitsTab(page);
+    },
+  },
+  {
+    name: '解き直し（守備: 打牌・上家のリーチ・聴牌）',
+    scenario: { dueKeys: [DANGER_TENPAI_KEY] },
+    run: async (page) => {
+      await openReview(page);
+      await answerCurrent(page, 'first');
+      await selectDangerTab(page);
+    },
+  },
+  {
+    name: '解き直し（守備: 打牌・対面のリーチ・聴牌ではない）',
+    scenario: { dueKeys: [DANGER_ONLY_KEY], dueSession: FX1A_ID },
+    run: async (page) => {
+      await openReview(page);
+      await answerCurrent(page);
+      await selectDangerTab(page);
+    },
+  },
+  {
+    name: '解き直し（守備: 鳴きの判断・鳴いたあとに切れる牌）',
+    scenario: { dueKeys: [DANGER_CALL_KEY], dueSession: FX1A_ID },
+    run: async (page) => {
+      await openReview(page);
+      await answerWith(page, () => page.locator('[data-option="pass"]').click());
+      await selectDangerTab(page);
+    },
+  },
+  {
+    name: '解き直し（守備: 2 人がリーチ・人ごとの欄）',
+    scenario: { dueKeys: [DANGER_TWO_KEY], dueSession: FX1C_ID, sessions: sessionsWithFx1c(), reports: { [FX4_ID]: REPORT_TEXTS.fx4, [FX1A_ID]: REPORT_TEXTS.fx1a, [FX1C_ID]: REPORT_TEXTS.fx1c } },
+    run: async (page) => {
+      await openReview(page);
+      await answerCurrent(page);
+      await selectDangerTab(page);
     },
   },
 ];
@@ -1220,4 +1281,252 @@ describe('U-34: 答え合わせのタブ（待ちと打点・待ちの形・符�
       }
     });
   }
+});
+
+describe('U-34: 答え合わせのタブ「守備」（他家のリーチがある場面だけ）', () => {
+  const DANGER_STATES = STATES.filter((s) => s.name.startsWith('解き直し（守備'));
+  const [TENPAI_STATE, ONLY_STATE, CALL_STATE, TWO_STATE] = DANGER_STATES as [StateDef, StateDef, StateDef, StateDef];
+
+  /** 守備の欄を、見えている部分ごとに読む（はみ出し・画像・行の中の並び）。 */
+  const measureDanger = (page: Page) =>
+    page.evaluate(() => {
+      const box = document.querySelector<HTMLElement>('[data-ai="danger-box"]');
+      if (box === null) return null;
+      const area = box.getBoundingClientRect();
+      const outside: string[] = [];
+      for (const el of Array.from(box.querySelectorAll<HTMLElement>('*'))) {
+        if (el.closest('.sr-only') !== null) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        if (r.right > area.right + 1 || r.left < area.left - 1) outside.push(`${el.className}:${(el.textContent ?? '').slice(0, 12)}`);
+      }
+      // 行の中: 牌・札・補足が、行からはみ出さず、重ならない
+      const rowProblems: string[] = [];
+      for (const row of Array.from(box.querySelectorAll<HTMLElement>('.dg-row'))) {
+        const r = row.getBoundingClientRect();
+        const parts = Array.from(row.children).map((c) => (c as HTMLElement).getBoundingClientRect());
+        for (const p of parts) if (p.right > r.right + 1 || p.left < r.left - 1) rowProblems.push('はみ出し');
+        for (let i = 1; i < parts.length; i++) if ((parts[i] as DOMRect).left < (parts[i - 1] as DOMRect).right - 1) rowProblems.push('重なり');
+      }
+      return {
+        sections: box.querySelectorAll('.dg-sec').length,
+        rows: box.querySelectorAll('.dg-row').length,
+        marks: box.querySelectorAll('.dg-row .mk').length,
+        scroll: box.scrollWidth,
+        client: box.clientWidth,
+        docScroll: document.documentElement.scrollWidth,
+        docClient: document.documentElement.clientWidth,
+        outside,
+        rowProblems,
+        brokenImages: Array.from(box.querySelectorAll('img')).filter((img) => !(img.complete && img.naturalWidth > 0)).length,
+        riverMarks: box.querySelectorAll('.dg-river .dg-riichi').length,
+        sectionNames: Array.from(box.querySelectorAll('.dg-sec .nm')).map((el) => el.textContent ?? ''),
+      };
+    });
+
+  it('答える前は、タブも、守備の目安も、分類の言葉も DOM に無い。答え合わせのあと、リーチ中の場面にだけ「守備」のタブが足される。中身は、選ぶまで描かれない', { timeout: 120_000 }, async () => {
+    const before = await open({ scenario: scenario({ dueKeys: [DANGER_TENPAI_KEY] }) });
+    try {
+      await openReview(before.page);
+      const found = await before.page.evaluate(() => ({
+        tabs: document.querySelectorAll('[role="tablist"], [role="tab"], [data-ai]').length,
+        text: /守備の目安|形式的な分類|現物|無スジ/.test(document.body.textContent ?? ''),
+      }));
+      expect(found).toEqual({ tabs: 0, text: false });
+      await answerCurrent(before.page, 'first');
+      expect(await before.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+      expect(await before.page.getByRole('tab', { name: '受け入れ・役' }).getAttribute('aria-selected')).toBe('true');
+      expect(await before.page.locator('[data-ai="danger-box"]').count()).toBe(0);
+    } finally {
+      await before.context.close();
+    }
+    // 聴牌ではないがリーチ中: 受け入れ・役と守備の 2 つ。リーチが無い聴牌の場面: 守備は出ない（待ちと打点だけ）
+    const only = await open({ scenario: scenario({ dueKeys: [DANGER_ONLY_KEY], dueSession: FX1A_ID }) });
+    try {
+      await openReview(only.page);
+      await answerCurrent(only.page);
+      expect(await only.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '守備']);
+    } finally {
+      await only.context.close();
+    }
+    const noRiichi = await open({ scenario: scenario({ dueKeys: [WAIT_DISCARD_KEY] }) });
+    try {
+      await openReview(noRiichi.page);
+      await answerCurrent(noRiichi.page);
+      expect(await noRiichi.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点']);
+    } finally {
+      await noRiichi.context.close();
+    }
+  });
+
+  it('← → Home End で、守備を含む 3 つのタブを選べて、キーボードの位置も移る。Tab は選んでいるタブから欄の中（説明のアイコン）へ、その次は差の原因へ。守備の欄の止まり場所は、説明のアイコンだけ', { timeout: 90_000 }, async () => {
+    const { context, page } = await openState(TENPAI_STATE);
+    try {
+      const names = ['受け入れ・役', '待ちと打点', '守備'];
+      await page.getByRole('tab', { name: '守備' }).focus();
+      const selected = async () =>
+        page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent));
+      await page.keyboard.press('ArrowRight');
+      expect(await selected()).toEqual([names[0]]);
+      expect(await page.evaluate(() => document.activeElement?.textContent)).toBe(names[0]);
+      await page.keyboard.press('ArrowLeft');
+      expect(await selected()).toEqual([names[2]]);
+      await page.keyboard.press('Home');
+      expect(await selected()).toEqual([names[0]]);
+      await page.keyboard.press('ArrowRight');
+      expect(await selected()).toEqual([names[1]]);
+      await page.keyboard.press('End');
+      expect(await selected()).toEqual([names[2]]);
+      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, -1, 0]);
+      // Tab: 説明のアイコン → 差の原因（欄の外）
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('守備の目安の説明');
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => document.activeElement?.closest('.pills-set') !== null)).toBe(true);
+      expect(await page.locator('.dg-panel :is(button, a, input, select, textarea, [tabindex]:not([tabindex="-1"]))').count()).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 守備の欄の中身は、欄からも画面からもはみ出さない。行の牌・札・補足は重ならない。牌の画像は読み込めている（ライト・ダーク。4 つの場面）`, { timeout: 240_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        for (const state of DANGER_STATES) {
+          const { context, page, problems, external } = await openState(state, { width, scheme });
+          try {
+            const found = await measureDanger(page);
+            const where = `${state.name} @${width} ${scheme}`;
+            expect(found, where).not.toBeNull();
+            expect(found!.sections, where).toBeGreaterThanOrEqual(1);
+            expect(found!.rows, where).toBeGreaterThanOrEqual(5);
+            expect(found!.scroll, where).toBeLessThanOrEqual(found!.client);
+            expect(found!.docScroll, where).toBeLessThanOrEqual(found!.docClient);
+            expect(found!.outside, where).toEqual([]);
+            expect(found!.rowProblems, where).toEqual([]);
+            expect(found!.brokenImages, where).toBe(0);
+            // リーチした人ごとに、河のリーチ宣言牌の印が 1 つずつ
+            expect(found!.riverMarks, where).toBe(found!.sections);
+            // 比べる打牌の印（自分・実戦・AI）は、打牌の判断では行に出る。鳴きの判断（鳴いたあとの打牌は牌譜に無い）では出ない
+            if (state === CALL_STATE) expect(found!.marks, where).toBe(0);
+            else expect(found!.marks, where).toBeGreaterThanOrEqual(1);
+            expect(problems).toEqual([]);
+            expect(external).toEqual([]);
+          } finally {
+            await context.close();
+          }
+        }
+      }
+    });
+  }
+
+  it('2 人がリーチしている場面は、人ごとの欄が、宣言した順（対面、下家）に 2 つ縦に並ぶ', { timeout: 90_000 }, async () => {
+    const { context, page } = await openState(TWO_STATE);
+    try {
+      const found = await measureDanger(page);
+      expect(found?.sectionNames).toEqual(['対面がリーチ（河。太い枠がリーチ宣言牌）', '下家がリーチ（河。太い枠がリーチ宣言牌）']);
+      const tops = await page.evaluate(() => [...document.querySelectorAll('.dg-sec')].map((el) => Math.round(el.getBoundingClientRect().top)));
+      expect(tops[1] as number).toBeGreaterThan(tops[0] as number);
+    } finally {
+      await context.close();
+    }
+  });
+
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 説明のアイコンは、乗せると、窓の中に、欄にかからずに出る。5 つの分類の説明と「形式的な分類です。AI の確率ではありません」が読める。axe の重大な違反が 0 件（ライト・ダーク）。Esc で閉じる`, { timeout: 180_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const { context, page } = await openState(TENPAI_STATE, { width, scheme });
+        try {
+          const icon = page.locator('.dg-panel .sec-head').getByRole('button', { name: '守備の目安の説明' });
+          expect(await page.locator('.dg-panel').innerText()).not.toContain('両面で待たれる形が');
+          await icon.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+          await icon.hover();
+          await page.getByRole('tooltip').waitFor();
+          const m = await measureInfoTip(page, '.dg-secs');
+          expect(m, `${width} ${scheme}`).not.toBeNull();
+          for (const word of ['形式的な分類です。AI の確率ではありません', '現物:', 'スジ:', '壁:', '字牌:', '無スジ:']) expect(m!.text).toContain(word);
+          expect(m!.tip.left).toBeGreaterThanOrEqual(7);
+          expect(m!.tip.right).toBeLessThanOrEqual(m!.innerWidth - 7);
+          expect(m!.tip.top).toBeGreaterThanOrEqual(0);
+          expect(m!.tip.bottom).toBeLessThanOrEqual(m!.innerHeight);
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          expect(boxesOverlap(m!.tip, m!.icon)).toBe(false);
+          expect(seriousViolations(await runAxe(page)), `${width} ${scheme}`).toEqual([]);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+        } finally {
+          await context.close();
+        }
+      }
+    });
+  }
+
+  it('分類の札は、色だけでなく、枠と字の太さでも見分けられる（現物は accent の塗りと枠、無スジは濃い枠で太字、スジ・壁・字牌は薄い枠）。比べる打牌の行は、塗りで目立つ', { timeout: 120_000 }, async () => {
+    for (const scheme of SCHEMES) {
+      const { context, page } = await openState(ONLY_STATE, { scheme });
+      try {
+        const styles = await page.evaluate(() => {
+          const read = (el: Element | null) => {
+            if (el === null) return null;
+            const cs = getComputedStyle(el);
+            return { text: el.textContent, border: cs.borderTopColor, bg: cs.backgroundColor, weight: Number(cs.fontWeight) };
+          };
+          return {
+            safe: read(document.querySelector('.dg-c.safe')),
+            risky: read(document.querySelector('.dg-c.risky')),
+            mid: read(document.querySelector('.dg-c.mid')),
+            picked: read(document.querySelector('.dg-row.picked')),
+            plain: read(document.querySelector('.dg-row:not(.picked)')),
+          };
+        });
+        expect(styles.safe?.text, scheme).toBe('現物');
+        expect(styles.risky?.text, scheme).toBe('無スジ');
+        expect(styles.safe!.weight, scheme).toBeGreaterThanOrEqual(700);
+        expect(styles.risky!.weight, scheme).toBeGreaterThanOrEqual(700);
+        // 現物は塗りがある。無スジは塗りが無い。枠の色が違う（現物は accent、無スジは ink）
+        expect(styles.safe!.bg, scheme).not.toBe('rgba(0, 0, 0, 0)');
+        expect(styles.risky!.bg, scheme).toBe('rgba(0, 0, 0, 0)');
+        expect(styles.safe!.border, scheme).not.toBe(styles.risky!.border);
+        if (styles.mid !== null) {
+          expect(styles.mid.border, scheme).not.toBe(styles.risky!.border);
+          expect(styles.mid.weight, scheme).toBeLessThan(700);
+        }
+        // 比べる打牌の行は塗りがあり、ほかの行は塗りが無い
+        expect(styles.picked!.bg, scheme).not.toBe('rgba(0, 0, 0, 0)');
+        expect(styles.plain!.bg, scheme).toBe('rgba(0, 0, 0, 0)');
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('欄の幅が広いとき（幅 1040px）は、札の列を少し広げる（6.2em）。狭いとき（幅 390px）は 5.6em。どちらも画面は横にはみ出さない', { timeout: 120_000 }, async () => {
+    const column = async (width: number) => {
+      const { context, page } = await openState(ONLY_STATE, { width });
+      try {
+        return await page.evaluate(() => {
+          const row = document.querySelector<HTMLElement>('.dg-row');
+          const panel = document.querySelector<HTMLElement>('.dg-panel');
+          const cols = row === null ? [] : getComputedStyle(row).gridTemplateColumns.split(' ').map(parseFloat);
+          return {
+            cols,
+            em: row === null ? 0 : parseFloat(getComputedStyle(row).fontSize),
+            panelWidth: Math.round(panel?.getBoundingClientRect().width ?? 0),
+            docScroll: document.documentElement.scrollWidth,
+            docClient: document.documentElement.clientWidth,
+          };
+        });
+      } finally {
+        await context.close();
+      }
+    };
+    const wide = await column(1040);
+    expect(wide.panelWidth).toBeGreaterThanOrEqual(560);
+    expect(Math.round(((wide.cols[1] as number) / wide.em) * 10) / 10).toBe(6.2);
+    const narrow = await column(390);
+    expect(narrow.panelWidth).toBeLessThan(560);
+    expect(Math.round(((narrow.cols[1] as number) / narrow.em) * 10) / 10).toBe(5.6);
+    expect(wide.docScroll).toBeLessThanOrEqual(wide.docClient);
+    expect(narrow.docScroll).toBeLessThanOrEqual(narrow.docClient);
+  });
 });

@@ -1178,6 +1178,44 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     expect(screen.getByRole('heading', { level: 1, name: '東2局1本場 8巡目' })).toBeInTheDocument();
   });
 
+  it('U-34 答えた場面（迷い1。東1局 14巡目、上家のリーチ中）に守備のタブが出る。答える前は出ない。場面を離れて戻ると、答えた場面に守備のタブがある', async () => {
+    // 迷い 1 を、上家がリーチしている場面（FX-4 東1局 e15）に結びつけ直す
+    const links: Links = { ratings: {}, marks: { ...USER_LINKS.marks, '1': 'k0h0e15' } };
+    const { user } = setup({ links });
+    await loaded(null);
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い1）' }));
+    expect(await screen.findByRole('heading', { level: 1, name: '東1局 14巡目' })).toBeInTheDocument();
+    // 答える前: タブも、守備の目安も、分類も、DOM に無い（U-1）
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/守備の目安|形式的な分類|無スジ/);
+    expect(document.querySelector('[data-ai]')).toBeNull();
+    await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
+    await user.type(reasonBox(), '現物を切る');
+    await user.click(screen.getByRole('button', { name: '答え合わせ' }));
+    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    const names = () => screen.getAllByRole('tab').map((tab) => tab.textContent);
+    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+    // 守備のタブを End で選ぶ。← → Home End は、場面の移動に渡さない
+    const [first, , third] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement, HTMLElement];
+    first.focus();
+    await user.keyboard('{End}');
+    expect(third).toHaveAttribute('aria-selected', 'true');
+    const box = document.querySelector('[data-ai="danger-box"]') as HTMLElement;
+    expect(box.querySelector('.dg-line')?.textContent).toMatch(/^上家がリーチ/);
+    expect(screen.getByRole('heading', { level: 1, name: '東1局 14巡目' })).toBeInTheDocument();
+    await user.keyboard('{ArrowRight}');
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { level: 1, name: '東1局 14巡目' })).toBeInTheDocument();
+    // 場面を離れて戻ると、答え合わせのあとの形で開く（守備のタブも出る）
+    await user.click(screen.getByRole('button', { name: /^次の迷いへ/ }));
+    expect(pos()).toBe(posAt(stepOf('k1h0e12')));
+    expect(document.querySelector('[data-ai]')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /^前の迷いへ/ }));
+    expect(pos()).toBe(posAt(stepOf('k0h0e15')));
+    expect(answeringState()).toBe('revealed');
+    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+  });
+
   it('答えの下書き（選んだ牌・理由）は、場面を離れても残り、戻ると続きから。保存できていない間は、答えていないまま', async () => {
     const { user, study } = setup({ links: USER_LINKS });
     await loaded('5');

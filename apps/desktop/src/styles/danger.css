@@ -1,0 +1,159 @@
+/*
+  danger.css: 答え合わせのタブ「守備」の欄（F14、E-39、U-34。R15-2・R15-4。提案 3）。
+  承認済みの 15回目の見本（samples15.css の .dg-*）の部品を、アプリに移した。色はすべて tokens.css のトークンから（色のリテラルは書かない）。
+  新しい色・トークンは足さない。目立たせ方は、太字・枠の形・淡い accent の塗りだけ（待ちと打点の欄と同じ使い方）。
+
+  方針:
+  - 分類の札は 3 通り: 現物は淡い accent の塗りと accent の枠（安全）、無スジは濃い枠（危険）、スジ・壁・字牌は薄い枠
+  - 比べる打牌の行（自分・実戦・AI の印の付いた行）は、淡い塗りで目立たせ、印は行の補足のあとに出す
+  - リーチした人が 2 人以上のとき、人ごとの欄の間は広めにあける（欄の中の行より、欄の間のほうが離れて見える）
+  - 行の列は、牌・札・補足。欄の幅が 560px 以上なら札の列を少し広げる（答えの欄は、広い窓では幅 336px まで狭くなるので、ふだんは狭いほう）
+*/
+.dg-panel {
+  container: dg / inline-size;
+  display: grid;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.dg-after {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dg-secs {
+  display: grid;
+  gap: var(--s5);
+  min-width: 0;
+}
+
+.dg-sec {
+  display: grid;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.dg-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s3);
+  margin: 0;
+  font-size: 13px;
+}
+
+.dg-line b {
+  font-weight: 700;
+}
+
+.dg-opp {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dg-opp .nm {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.dg-river {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+
+.dg-river .tile {
+  --tw: 19px;
+}
+
+.dg-river .tile.dg-riichi {
+  box-shadow: 0 0 0 2px var(--ink);
+  z-index: 1;
+}
+
+.dg-list {
+  max-width: 560px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+
+.dg-row {
+  display: grid;
+  grid-template-columns: 26px 5.6em minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s2);
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.dg-row:first-child {
+  border-top: 0;
+}
+
+.dg-row .tile {
+  --tw: 22px;
+}
+
+.dg-row .nt {
+  color: var(--muted);
+  min-width: 0;
+}
+
+.dg-row .mk {
+  margin-left: var(--s1);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dg-row .mk.act {
+  color: var(--ink);
+}
+
+.dg-row .mk.top {
+  color: var(--accent);
+}
+
+.dg-row .mk.you {
+  color: var(--you);
+}
+
+.dg-row.picked {
+  background: var(--hover);
+}
+
+.dg-c {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dg-c.safe {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.dg-c.risky {
+  border-color: var(--ink);
+  font-weight: 700;
+}
+
+@container dg (width >= 560px) {
+  .dg-row {
+    grid-template-columns: 26px 6.2em minmax(0, 1fr);
+  }
+}

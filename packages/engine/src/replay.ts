@@ -6,7 +6,7 @@
  */
 import { kyokuNumber, seatWindsFor } from './kyoku';
 import type { Fuuro, MjaiEvent, Seat, StartKyokuEvent, Wind } from './report-types';
-import { type Tile, sortTiles, tileKind } from './tiles';
+import { type Tile, plainTile, sortTiles, tileKind } from './tiles';
 
 /** リーチの状態。declared は宣言したが成立前（宣言牌が通る前）、accepted は成立。 */
 export type RiichiState = 'none' | 'declared' | 'accepted';
@@ -57,6 +57,14 @@ export interface BoardState {
   readonly melds: readonly (readonly Fuuro[])[];
   /** 席ごとのリーチの状態。 */
   readonly riichi: readonly RiichiState[];
+  /** リーチを宣言した席を、宣言した順に（宣言した時点で入る。宣言牌が通る前も含む）。 */
+  readonly riichiOrder: readonly Seat[];
+  /**
+   * 席ごとの、その席のリーチ宣言のあとに、だれかが切って通った牌（赤でない表記。切った順で、同じ種類は 1 つ。リーチしていない席は空）。
+   * その席は、これらの牌でロンしていない（ロンできる牌を見逃せば、リーチのフリテンになる）ので、その席に対しては現物（F14 の守備の目安）。
+   * その席自身の河は含まない（河は `rivers`）。
+   */
+  readonly passedAfterRiichi: readonly (readonly Tile[])[];
 }
 
 /** 牌譜が矛盾していて、再生を進められない。 */
@@ -81,6 +89,8 @@ export class KyokuReplayer {
   private readonly rivers: RiverTile[][] = [[], [], [], []];
   private readonly melds: Fuuro[][] = [[], [], [], []];
   private readonly riichi: RiichiState[] = ['none', 'none', 'none', 'none'];
+  private readonly riichiOrder: Seat[] = [];
+  private readonly passed: Tile[][] = [[], [], [], []];
   private readonly scores: number[];
   private readonly doraMarkers: Tile[];
   private kyotaku: number;
@@ -160,6 +170,11 @@ export class KyokuReplayer {
           riichi: declaring,
           calledBy: null,
         });
+        // リーチを宣言している他家に対して、この牌は通った（宣言牌を切る席自身は数えない）
+        for (const seat of this.riichiOrder) {
+          const list = this.passed[seat] as Tile[];
+          if (seat !== event.actor && !list.some((t) => tileKind(t) === tileKind(event.pai))) list.push(plainTile(event.pai));
+        }
         this.lastActor = event.actor;
         this.lastTile = event.pai;
         return;
@@ -211,6 +226,7 @@ export class KyokuReplayer {
       }
       case 'reach': {
         this.riichi[event.actor] = 'declared';
+        if (!this.riichiOrder.includes(event.actor)) this.riichiOrder.push(event.actor);
         this.pendingRiichi = event.actor;
         this.lastActor = event.actor;
         return;
@@ -263,6 +279,8 @@ export class KyokuReplayer {
       rivers: this.rivers.map((r) => r.slice()),
       melds: this.melds.map((m) => m.slice()),
       riichi: [...this.riichi],
+      riichiOrder: [...this.riichiOrder],
+      passedAfterRiichi: this.passed.map((list) => [...list]),
     };
   }
 }

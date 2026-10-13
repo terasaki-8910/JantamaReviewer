@@ -8,12 +8,14 @@
  * - 一言: 自分の打牌と AI の打牌の、向聴数と受け入れ枚数の比べ方
  * - 役の欄（F13。R14-1）: 自分・実戦・AI の行動ごとの、確定している役・近い役・役無しの警告（エンジンの `yakuBoxOf`）
  * - 待ちと打点（F14。R15-2・R15-3）: 聴牌になる行動ごとの、待ち牌ごとの役・飜・符・点数と待ちの形（エンジンの `waitBoxOf`）。タブ「待ちと打点」の中身
+ * - 守備の目安（F14。R15-2・R15-4）: 他家のリーチがある場面の、切れる牌ごとの現物・スジ・壁・字牌・無スジ（エンジンの `dangerBoxOf`）。タブ「守備」の中身
  */
 import {
   actualChoice,
   answerOptions,
   choiceProbability,
   compareDiscardUkeire,
+  dangerBoxOf,
   discardCandidates,
   findDiscardDetail,
   followAfterTwoShanten,
@@ -24,6 +26,7 @@ import {
   topChoice,
   yakuBoxOf,
   type AnswerOption,
+  type DangerBox,
   type Decision,
   type DiscardDetail,
   type QuizChoice,
@@ -91,6 +94,8 @@ export interface RevealModel {
   yaku: YakuBox | null;
   /** タブ「待ちと打点」の中身。聴牌になる行動が無い場面は null（タブを出さない）。 */
   waits: WaitBox | null;
+  /** タブ「守備」の中身。他家のリーチが無い場面と、切れる牌が無い判断は null（タブを出さない）。 */
+  danger: DangerBox | null;
 }
 
 /** 確率の書き方: 97.72%、0.01% 未満は <0.01%。 */
@@ -227,6 +232,7 @@ export function buildReveal(decision: Decision, choice: QuizChoice, threshold?: 
       ukeire: ukeireBox(decision, choice.tile),
       yaku: yakuBoxOf(decision, choice),
       waits: waitBoxOf(decision, choice),
+      danger: dangerBoxOf(decision, choice),
     };
   }
   return {
@@ -238,6 +244,7 @@ export function buildReveal(decision: Decision, choice: QuizChoice, threshold?: 
     ukeire: null,
     yaku: yakuBoxOf(decision, choice),
     waits: waitBoxOf(decision, choice),
+    danger: dangerBoxOf(decision, choice),
   };
 }
 

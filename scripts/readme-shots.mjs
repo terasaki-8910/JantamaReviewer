@@ -19,6 +19,7 @@
  * 4. 履歴: 画面の操作で、昔の問題にも答える。答えの日付と解き直しの期限は、保存先の study.sqlite（一時フォルダの中）を、
  *    アプリを止めたあとに書き換えて、数週間ぶんの履歴にする（問題は、半荘より前の日には答えない）。
  * 5. 履歴の画面: 解き直し・検討ログ・週の集計・検索・半荘を通して見る画面（鳴きの場面に答えて、欄「役」と、タブ「待ちと打点」の符の内訳も撮る）・設定。
+ * 6. 守備のタブ: いちばん古い半荘（結果だけ）の、他家（対面）がリーチしている打牌の場面（南1局 15巡目。大きな不一致）に、通して見る画面で答えて、タブ「守備」を撮る。
  *
  * 安全のための決まりは、readme-lib.mjs の説明を参照（本物のデータに触れない・自分で起動したプロセスだけを止める・
  * 記録の命令は本体に通さない・クリップボードは触らない）。設定ページの写真だけは、本物の状態ではなく、表示を差し替える。
@@ -493,6 +494,52 @@ async function screensPhase() {
   h.stopApp();
 }
 
+// ---- 6. 守備のタブ ----
+
+/** 守備（F14）の場面。いちばん古い半荘（結果だけの半荘。20 日前）の、対面がリーチしている打牌（南1局 15巡目。大きな不一致）。 */
+const DANGER_SCENE = '南1局 15巡目';
+
+async function dangerPhase() {
+  console.log('6. 守備のタブ');
+  await boot(7, 6);
+  const A = appActions(h.main);
+  const main = h.main;
+  // 一覧の最後（いちばん古い半荘）を、通して見る画面で開く
+  await main.click(`Array.from(document.querySelectorAll('.session-scroll [data-open]')).pop()`, 'いちばん古い半荘');
+  await main.waitFor(`document.querySelector('table.tbl')`, '半荘の画面');
+  await sleep(500);
+  await main.click(byTextIncludes('button', 'この半荘を通して見る'), '通して見る');
+  await main.waitFor(`document.querySelector('.rp-strip, .strip, [aria-label*="位置の帯"]') || document.querySelector('.now, .now-panel')`, '通して見る画面');
+  await sleep(500);
+  // 「次の不一致へ」で、守備の場面まで進める
+  const title = () => main.evalJs(`document.querySelector('h1')?.textContent ?? ''`);
+  for (let i = 0; i < 40 && !(await title()).includes(DANGER_SCENE); i += 1) {
+    await main.click(byTextIncludes('button', '次の不一致へ'), '次の不一致へ');
+    await sleep(350);
+  }
+  if (!(await title()).includes(DANGER_SCENE)) throw new Error(`場面が見つかりません: ${DANGER_SCENE}`);
+  // まだ答えていなければ、答える（現物の 3m を切る）
+  if (!(await main.evalJs(`!!document.querySelector('.qz[data-state="revealed"]')`))) {
+    await A.answerQuiz({ pick: 0, reason: '対面のリーチに、現物の 3m を切って押さない' });
+  }
+  await main.click(`Array.from(document.querySelectorAll('[role=tab]')).find((t) => t.textContent === '守備')`, 'タブ「守備」');
+  await main.waitFor(`document.querySelector('[data-ai="danger-box"]')`, '守備の欄');
+  await main.fit(1280, 900, 2);
+  await sleep(300);
+  await main.settle();
+  const answerPanel = await main.rectOf(`document.querySelector('.answer')`);
+  const tabsBox = await main.rectOf(`document.querySelector('.rv-tabs')`);
+  const panelBox = await main.rectOf(`document.querySelector('.dg-panel')`);
+  const top = Math.max(0, Math.floor(tabsBox.y - 16));
+  const bottom = Math.ceil(panelBox.y + panelBox.height + 16);
+  // 盤面の列は、隠す（場所は変わらない）。下家の河の端が、答えの欄の左の縁に少しかかるので、撮る範囲に写り込まないように
+  await main.evalJs(`document.querySelector('.board-col').style.visibility = 'hidden'`);
+  h.writePng('quiz-danger.png', await captureOf(main, { x: answerPanel.x, y: top, width: answerPanel.width, height: bottom - top }));
+  await main.evalJs(`document.querySelector('.board-col').style.visibility = ''`);
+  await main.viewport(1280, 900, 1);
+  h.stopApp();
+}
+
 // ---- 実行 ----
 
 let failed = false;
@@ -502,6 +549,7 @@ try {
   await studyPhase();
   await historyPhase();
   await screensPhase();
+  await dangerPhase();
   console.log('できました');
 } catch (error) {
   failed = true;
