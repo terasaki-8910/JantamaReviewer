@@ -1035,3 +1035,55 @@ fn d4_an_unchanged_local_snapshot_is_cheap_the_reports_are_not_read_again() {
     let _ = fingerprints;
     assert_eq!(a.base.entries[&key].state, BaseState::Present);
 }
+
+/// 手動の目安（`cargo test --lib perf_ -- --ignored --nocapture`）: 1 年ぶん（答え 7300・半荘 300・結果のファイル 200 KB ずつ）の
+/// 1 回分の時間。偽物の同期用の DB なので、手元の読み書き・突き合わせ・圧縮の時間だけ（通信は含まない）。
+#[test]
+#[ignore = "時間の目安を見るだけの手動の試験"]
+fn perf_a_year_of_records_seeds_and_then_stays_cheap() {
+    use std::time::Instant;
+    let server = MemServer::new();
+    let mut a = Dev::new("d-aaaa", &server);
+    let mut b = Dev::new("d-bbbb", &server);
+    let store_dir = a.data().join("games");
+    let big = format!(
+        "{{\"review\":{{\"kyokus\":[{}]}}}}",
+        (0..2500)
+            .map(|i| format!("{{\"i\":{i},\"tile\":\"5p\",\"prob\":0.12{}}}", i % 97))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    for n in 0..300 {
+        let id = format!("2026{:02}{:02}-{:02}0000", 1 + n / 28, 1 + n % 28, n % 24);
+        let dir = store_dir.join(&id);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(REPORT_FILE), &big).unwrap();
+        fs::write(
+            dir.join(MEMOS_FILE),
+            serde_json::to_string(&json!({"marks": {"1": {"candidates": "3m", "reason": "理由"}}, "extras": []})).unwrap(),
+        )
+        .unwrap();
+    }
+    {
+        let mut db = a.ports.study();
+        for i in 0..7300 {
+            db.record_answer(answer("20260101-000000", &format!("k{}h0e{}", i % 80, i / 80), AnswerMode::Quiz, T0 + i))
+                .unwrap();
+        }
+    }
+    let t = Instant::now();
+    let seed = a.cycle(1_000_000).unwrap();
+    eprintln!("A: 最初の同期 {:?} {seed:?}", t.elapsed());
+    let t = Instant::now();
+    let join = b.cycle(2_000_000).unwrap();
+    eprintln!("B: 新しい端末の取り込み {:?} (local_puts {})", t.elapsed(), join.local_puts);
+    let t = Instant::now();
+    let quiet = a.cycle(3_000_000).unwrap();
+    eprintln!("A: 何も変わらない回 {:?} {quiet:?}", t.elapsed());
+    let t = Instant::now();
+    b.cycle(4_000_000).unwrap();
+    eprintln!("B: 何も変わらない回 {:?}", t.elapsed());
+    let marker = Instant::now();
+    let _ = super::local::change_marker(a.data(), std::path::Path::new("none"));
+    eprintln!("手元の目印 {:?}", marker.elapsed());
+}

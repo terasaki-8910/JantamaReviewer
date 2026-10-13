@@ -257,10 +257,21 @@ impl SyncService {
         self.shared.get()
     }
 
-    /// 同期先の URL と、トークン（貼ったときだけ）を保存する。トークンは、資格情報の保管庫にだけ入れる。
-    /// URL を替えたら、前の同期先の手元の写しは捨てる（別の DB の記録に混ざらないように）。同期を使うかは、変えない。
-    pub fn save_connection(&self, url: &str, token: Option<&str>) -> Result<SyncStatus, String> {
-        let endpoint = SyncEndpoint::parse(url).map_err(|e| e.to_string())?;
+    /// 同期先の URL と、トークン（貼ったときだけ）を保存する。どちらも、貼ったものだけを替える（URL を貼らなければ、いまの URL のまま）。
+    /// トークンは、資格情報の保管庫にだけ入れる。URL を替えたら、前の同期先の手元の写しは捨てる（別の DB の記録に混ざらないように）。
+    /// 同期を使うかは、変えない。
+    pub fn save_connection(
+        &self,
+        url: Option<&str>,
+        token: Option<&str>,
+    ) -> Result<SyncStatus, String> {
+        let (mut config, _) = SyncConfig::load(&self.config_dir);
+        let url = url.map(str::trim).filter(|u| !u.is_empty());
+        let endpoint = match url {
+            Some(url) => SyncEndpoint::parse(url).map_err(|e| e.to_string())?,
+            None => SyncEndpoint::parse(&config.url)
+                .map_err(|_| "同期先の DB の URL を貼ってください".to_string())?,
+        };
         let token = token.map(str::trim).filter(|t| !t.is_empty());
         if let Some(token) = token {
             if token.chars().any(char::is_whitespace) {
@@ -268,7 +279,6 @@ impl SyncService {
             }
             self.tokens.save(token).map_err(|e| e.to_string())?;
         }
-        let (mut config, _) = SyncConfig::load(&self.config_dir);
         let changed = config.url != endpoint.base_url();
         config.url = endpoint.base_url();
         config

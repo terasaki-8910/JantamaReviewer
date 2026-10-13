@@ -152,7 +152,7 @@ fn answer(key: &str, at: i64) -> NewAnswer {
 impl Fixture {
     /// URL とトークンを保存して、同期を使う設定にする。
     fn turn_on(&self) {
-        self.service.save_connection(URL, Some(TOKEN)).unwrap();
+        self.service.save_connection(Some(URL), Some(TOKEN)).unwrap();
         self.service.set_enabled(true).unwrap();
     }
 
@@ -319,7 +319,7 @@ fn d4_a_wrong_token_pauses_syncing_until_the_user_acts() {
     // トークンを貼り直して（保存）、直ったら、動き出す
     f.unauthorized.store(false, Ordering::SeqCst);
     f.service
-        .save_connection(URL, Some("NEW-TOKEN-VALUE-123"))
+        .save_connection(Some(URL), Some("NEW-TOKEN-VALUE-123"))
         .unwrap();
     f.wait_state(SyncState::Idle);
     wait_until("答えが届く", || f.answer_keys_on_server() == 1);
@@ -365,11 +365,11 @@ fn d4_a_sync_that_changes_local_records_tells_the_screen_to_reload() {
 fn d4_turning_sync_on_needs_a_url_and_a_token() {
     let f = fixture(fast_timers());
     assert!(f.service.set_enabled(true).is_err(), "URL が無い");
-    f.service.save_connection(URL, None).unwrap();
+    f.service.save_connection(Some(URL), None).unwrap();
     assert!(f.service.set_enabled(true).is_err(), "トークンが無い");
     assert!(f
         .service
-        .save_connection("libsql://example.com", Some(TOKEN))
+        .save_connection(Some("libsql://example.com"), Some(TOKEN))
         .is_err());
     assert!(
         f.tokens.load().unwrap().is_none(),
@@ -380,7 +380,7 @@ fn d4_turning_sync_on_needs_a_url_and_a_token() {
 #[test]
 fn d4_a_url_with_a_space_in_the_token_is_refused_before_anything_is_stored() {
     let f = fixture(fast_timers());
-    assert!(f.service.save_connection(URL, Some("abc def")).is_err());
+    assert!(f.service.save_connection(Some(URL), Some("abc def")).is_err());
     assert!(f.tokens.load().unwrap().is_none());
 }
 

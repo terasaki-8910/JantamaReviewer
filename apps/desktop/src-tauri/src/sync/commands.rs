@@ -155,11 +155,11 @@ pub async fn get_sync_status(
 pub async fn save_sync_connection(
     window: WebviewWindow,
     sync: State<'_, SyncService>,
-    url: String,
+    url: Option<String>,
     token: Option<String>,
 ) -> Result<SyncStatus, String> {
     ensure_main(&window)?;
-    sync.save_connection(&url, token.as_deref())
+    sync.save_connection(url.as_deref(), token.as_deref())
 }
 
 /// 同期を使う・使わない。
