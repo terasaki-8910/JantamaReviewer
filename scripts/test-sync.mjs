@@ -75,10 +75,15 @@ export async function ensureTursodb() {
   }
   const file = join(dir, asset);
   writeFileSync(file, archive);
-  const extract = spawnSync('tar', [asset.endsWith('.zip') ? '-xf' : '-xJf', file, '-C', dir], {
-    stdio: 'inherit',
-  });
-  if (extract.status !== 0) throw new Error('展開できませんでした（tar）');
+  // zip は PowerShell で（Git Bash の tar は、C: を遠隔の機械の名前と読んで、失敗するため）。tar.xz は tar で
+  const extract = asset.endsWith('.zip')
+    ? spawnSync(
+        'powershell',
+        ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${file}' -DestinationPath '${dir}' -Force`],
+        { stdio: 'inherit' },
+      )
+    : spawnSync('tar', ['-xJf', file, '-C', dir], { stdio: 'inherit' });
+  if (extract.status !== 0) throw new Error('展開できませんでした');
   const binary = findBinary(dir);
   if (!binary) throw new Error('展開したものの中に、tursodb が見つかりません');
   return binary;
