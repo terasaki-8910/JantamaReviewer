@@ -20,7 +20,7 @@ import {
   type MortalReport,
   type ReplayTimeline,
 } from '@jantama/engine';
-import { useId, useMemo, useState } from 'react';
+import { Fragment, useId, useMemo, useState } from 'react';
 
 import { Icon } from './Icon';
 import { InfoTip } from './InfoTip';
@@ -158,7 +158,16 @@ function TrackTable({ id, label, rows }: { id: string; label: string; rows: read
           <span role="rowheader">{row.turn}</span>
           <span role="cell">{row.discard ?? '—'}</span>
           <span role="cell">{row.shantenText}</span>
-          <span role="cell">{row.marks.length === 0 ? '—' : row.marks.join('・')}</span>
+          <span role="cell">
+            {row.marks.length === 0
+              ? '—'
+              : row.marks.map((mark, index) => (
+                  <Fragment key={index}>
+                    {index > 0 && '・'}
+                    <span className="hx-mk">{mark}</span>
+                  </Fragment>
+                ))}
+          </span>
         </div>
       ))}
     </div>

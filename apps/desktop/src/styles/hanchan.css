@@ -1322,6 +1322,12 @@ body.lb-open {
   overflow-wrap: anywhere;
 }
 
+/* 印の文は、まとまりごとに折り返す（「迷い4（東をポン）」を、途中で割らない。1 つが欄より長いときだけ、中で折り返す） */
+.hx-sptbl .hx-mk {
+  display: inline-block;
+  max-width: 100%;
+}
+
 @container main (width < 600px) {
   .tbl tr.hx-exp {
     display: block;
