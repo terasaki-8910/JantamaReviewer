@@ -17,6 +17,7 @@ import type { SummaryMap } from '../sessionSummaries';
 import { StudyNotice } from '../study/StudyNotice';
 import { useStudy } from '../study/StudyProvider';
 import { ChartTipProvider } from './ChartTip';
+import { ImportedStatsSection } from './ImportedStatsSection';
 import {
   CausesSection,
   EvaluationSection,
@@ -25,6 +26,7 @@ import {
   RecordSection,
   TilesSection,
 } from './WeekSections';
+import { buildImportedStats } from './importedStats';
 import { summarizeWeeks, weekBounds, weekRangeText, weeksEndingAt } from './weekModel';
 import { buildWeekSource, earliestWeek } from './weekSource';
 import { useWeekRecords } from './useWeekRecords';
@@ -63,6 +65,12 @@ export function WeekPage({ sessions, summaries }: WeekPageProps) {
     return summarizeWeeks(weeks, source);
   }, [ready, sessions, summaries, answers, locate, gameState, problems, weeks]);
 
+  // 取り込んだ半荘から数えた成績（見ている週だけ。週・半荘・読み込みの進みが替わるたびに数え直す。半荘ごとの数は、結果ごとに覚えている）
+  const imported = useMemo(
+    () => (ready ? buildImportedStats({ sessions, summaries, gameState, week }) : null),
+    [ready, sessions, summaries, gameState, week],
+  );
+
   // ← → を押して、押したほうのボタンが使えなくなったら（端の週に着いたら）、もう一方へキーボードの位置を移す
   const prevButton = useRef<HTMLButtonElement>(null);
   const nextButton = useRef<HTMLButtonElement>(null);
@@ -86,6 +94,7 @@ export function WeekPage({ sessions, summaries }: WeekPageProps) {
   if (summary === undefined) return null;
   const previousWeek = addDays(week, -7);
   const windowProps = { weeks, byWeek, summary, isCurrent };
+  const importedSection = imported === null ? null : <ImportedStatsSection stats={imported} />;
 
   return (
     <ChartTipProvider>
@@ -140,13 +149,17 @@ export function WeekPage({ sessions, summaries }: WeekPageProps) {
         <EvaluationSection {...windowProps} />
         {records.error !== null && (
           // 読めなかったときは、入力欄を出さない（読めていない保存済みの値を、空の欄から上書きしてしまわないため）
-          <p className="notice" role="alert">
-            成績と重点を読めませんでした: {records.error}
-          </p>
+          <>
+            <p className="notice" role="alert">
+              成績と重点を読めませんでした: {records.error}
+            </p>
+            {importedSection}
+          </>
         )}
         {records.loaded && records.error === null && (
           <>
             <RecordSection weeks={weeks} records={records.records} save={records.save} />
+            {importedSection}
             <FocusSection
               week={week}
               previous={records.records.get(previousWeek)?.focus ?? ''}

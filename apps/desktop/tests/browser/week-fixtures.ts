@@ -104,17 +104,34 @@ function weekRecords(): unknown[] {
   ];
 }
 
+/** 取り込んだ半荘を増やす（imported）ときの、今週の半荘: 固定データの 7 半荘のうち FX-4 以外の 6 つ（FX-4 は、いつもの今週の半荘）。 */
+function importedWeek() {
+  return [
+    seedSession(local(2026, 10, 5, 10, 0), { id: 'g-fx1a', report: 'fx1a' }),
+    seedSession(local(2026, 10, 6, 11, 0), { id: 'g-fx1b', report: 'fx1b' }),
+    seedSession(local(2026, 10, 6, 12, 0), { id: 'g-fx1c', report: 'fx1c' }),
+    seedSession(local(2026, 10, 7, 13, 0), { id: 'g-fx1d', report: 'fx1d' }),
+    seedSession(local(2026, 10, 7, 14, 0), { id: 'g-fx1e', report: 'fx1e' }),
+    seedSession(local(2026, 10, 8, 15, 35), { id: 'g-fx5', report: 'fx5' }),
+  ];
+}
+
 export interface ScenarioOptions {
+  /** 取り込んだ半荘を今週に 7 つ置く（FX-4 と、固定データの残り 6 つ。「取り込んだ半荘から数えた値」の表が、見本の値になる）。 */
+  imported?: boolean;
   /** 今週だけの記録（答え・半荘が今週のものだけ。先週は、答えの無い週）。 */
   sparse?: boolean;
   weeks?: boolean;
 }
 
 export function scenario(options: ScenarioOptions = {}): Scenario {
+  const week = options.imported ? importedWeek() : [];
   const sessions = options.sparse
     ? [fx4Imported()]
     : [fx4Imported(), seedSession(FX1A_AT, { id: FX1A_ID, report: 'fx1a' }).session];
+  sessions.push(...week.map((seed) => seed.session));
   const reports: Record<string, string> = { [FX4_ID]: REPORT_TEXTS.fx4, [FX1A_ID]: REPORT_TEXTS.fx1a };
+  for (const seed of week) reports[seed.session.id] = REPORT_TEXTS[seed.report as keyof typeof REPORT_TEXTS];
   const all = answers() as Array<{ answered_at: number }>;
   const thisWeek = new Date(2026, 9, 5, 4, 0).getTime();
   return {
