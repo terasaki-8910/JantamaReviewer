@@ -2558,6 +2558,8 @@ dependencies = [
  "jantama-input",
  "jantama-ocr",
  "keyring",
+ "objc2-app-kit",
+ "objc2-foundation",
  "png 0.18.1",
  "rusqlite",
  "serde",

@@ -13,6 +13,7 @@ import {
 import { GradeBadge } from '../GradeBadge';
 import { Icon } from '../Icon';
 import { MenuSelect } from '../MenuSelect';
+import { isMac, modKeyName } from '../../shared/platform';
 import { clockLabel, normalize, STAGES, stageOption } from '../sessionFilter';
 import type { ListRow } from '../sessionRows';
 import type { SummaryMap } from '../sessionSummaries';
@@ -230,7 +231,15 @@ export function SearchOverlay({ rows, summaries, now, onOpenGame, onOpenProblem,
 
   const onInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (isComposing(event)) return;
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    // macOS: Cmd+↑ / Cmd+↓ で、先頭・末尾の行へ（Windows の Ctrl+Home / Ctrl+End にあたる。macOS の一覧の習慣）。
+    const macJump = isMac() && event.metaKey && !event.altKey && !event.shiftKey;
+    if (macJump && event.key === 'ArrowUp') {
+      event.preventDefault();
+      move(() => 0);
+    } else if (macJump && event.key === 'ArrowDown') {
+      event.preventDefault();
+      move((_current, count) => count - 1);
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       const step = event.key === 'ArrowDown' ? 1 : -1;
       move((current, count) => (current + step + count) % count);
@@ -474,7 +483,7 @@ export function SearchOverlay({ rows, summaries, now, onOpenGame, onOpenProblem,
               <kbd>Esc</kbd>閉じる
             </li>
             <li>
-              <kbd>Ctrl</kbd>
+              <kbd>{modKeyName()}</kbd>
               <kbd>K</kbd>開く・閉じる
             </li>
           </ul>

@@ -9,7 +9,7 @@
 //! - S-4: ウィジェットのコードが、ファイル保存と記録の追記以外の窓口（プラグインなど）を読み込むこと。
 //! - macOS（段階 1 から。`analysis/mac/README.md` 4 章）: 画面を続けて取り続ける・ほかのアプリの要素を読む・入力を送る・
 //!   ほかのプロセスに触れる・外部プロセスで撮影する・デバッグ用の権限を付ける API と部品。静止画 1 枚の撮影・入力のタップ・
-//!   文字認識は、決めた 1 か所だけ。
+//!   文字認識は、決めた 1 か所だけ。段階 2 からは、AppKit・Foundation も、クリップボードの文字・ごみ箱の 2 か所の決めた機能だけ。
 //!
 //! 走査の道具そのものも、禁止の一覧のすべてを実際に検出できることをテストする。
 //! 後の機能が通信や文字認識を足すときは、`ALLOWED_*` に理由つきで足す（取り込み F1・F11 が足したのは、
@@ -240,7 +240,7 @@ const HTTP_CLIENT_CRATE: &str = "ureq";
 /// 実行時の依存の一覧では、これらが HTTP クライアントの下にだけ現れることを確かめる。ほかの経路で入ったら、違反。
 const TLS_BELOW_HTTP_CLIENT: &[(&str, &str)] = &[(
     "native-tls",
-    "ureq の https の通信に使う（Windows では SChannel。OS の証明書の一覧を使い、同梱の証明書を持たない）",
+    "ureq の https の通信に使う（Windows では SChannel、macOS では Security.framework。OS の証明書の一覧を使い、同梱の証明書を持たない）",
 )];
 
 /// 同期（F15）の通信の部品（`turso` クレートの同期。Turso Cloud の DB と、この PC の中の試験用サーバーにだけつなぐ）を使ってよい場所
@@ -2726,7 +2726,8 @@ fn d3_every_study_command_refuses_calls_from_other_windows_and_the_widget_never_
 
 // ---- macOS: 規約の線引き（macOS 対応の段階 1。analysis/mac/README.md 4 章） ----
 //
-// macOS の部分は、いまは雛形（`src/platform/mac.rs`、`ocr/src/mac.rs`）だけで、macOS の API は 1 つも呼んでいない。
+// macOS の部分で、画面・入力・ゲーム・ほかのアプリに触れる API は、まだ 1 つも呼んでいない（`src/platform/mac/mod.rs`、`ocr/src/mac.rs` は雛形）。
+// 段階 2 で動くのは、クリップボードの文字の読み取りとごみ箱への移し替え（このファイルの終わりの検査）だけ。
 // 段階 3 以降で作るときに、SPEC 2章の線（対局中に動くのは、押された瞬間の画面 1 枚の保存と記録の追記だけ）を越えさせないため、
 // 禁止の一覧を先に機械の関門にする。語の書き方: `*` で終わるものは前方一致（`AXUIElement*` は `AXUIElementCopyAttributeValue` などにも
 // 当たる）、そうでないものは、その語そのもの（`SCStream` は `SCStreamConfiguration` に当たらない。静止画 1 枚の撮影にも
@@ -3074,4 +3075,182 @@ fn mac_manifests_declare_no_screen_input_or_process_crate_and_gated_crates_stay_
         }
     }
     assert_no_violations(violations);
+}
+
+// ---- macOS 段階 2: クリップボードの文字・ごみ箱・メニューだけ。AppKit と Foundation は、決めた機能だけ ----
+
+/// macOS でクリップボードの文字を読む実装（読み取りの口はここだけ）。
+fn mac_clipboard_reader_source() -> PathBuf {
+    crate_dir()
+        .join("src")
+        .join("platform")
+        .join("mac")
+        .join("clipboard.rs")
+}
+
+/// macOS でごみ箱へ送る実装（ごみ箱へ送る口はここだけ）。
+fn mac_trash_source() -> PathBuf {
+    crate_dir()
+        .join("src")
+        .join("platform")
+        .join("mac")
+        .join("trash.rs")
+}
+
+/// 本体の Cargo.toml の、`name = ...` の宣言の行から、`features = [...]` の中身（宣言の順）を取り出す。
+fn declared_features(manifest: &str, name: &str) -> Vec<String> {
+    let line = manifest
+        .lines()
+        .find(|l| l.trim_start().starts_with(&format!("{name} = ")))
+        .unwrap_or_else(|| panic!("{name} の宣言が無い"));
+    let start = line.find("features = [").expect("features の指定がある") + "features = [".len();
+    let end = start + line[start..].find(']').expect("features が閉じている");
+    line[start..end]
+        .split(',')
+        .map(|f| f.trim().trim_matches('"').to_string())
+        .filter(|f| !f.is_empty())
+        .collect()
+}
+
+#[test]
+fn s4_the_macos_clipboard_is_only_read_as_text_from_one_file() {
+    let reader = read(&mac_clipboard_reader_source());
+    let product = product_part(&reader);
+    // 読む口は 1 つ（文字の形式だけ）。
+    assert_eq!(product.matches("stringForType(").count(), 1);
+    assert!(product.contains("NSPasteboardTypeString"));
+    // 書き込み・消去・ほかの形式（画像・ファイル・HTML・RTF）・複数の項目・変更の監視・別の名前のペーストボードは使わない。
+    for forbidden in [
+        "clearContents",
+        "setString",
+        "setData",
+        "setPropertyList",
+        "writeObjects",
+        "declareTypes",
+        "addTypes",
+        "dataForType",
+        "propertyListForType",
+        "readObjects",
+        "pasteboardItems",
+        "changeCount",
+        "pasteboardWithName",
+        "pasteboardWithUniqueName",
+        "NSPasteboardTypePNG",
+        "NSPasteboardTypeTIFF",
+        "NSPasteboardTypeFileURL",
+        "NSPasteboardTypeURL",
+        "NSPasteboardTypeHTML",
+        "NSPasteboardTypeRTF",
+        "NSPasteboardTypePDF",
+        "NSPasteboardNameFind",
+        "NSPasteboardNameDrag",
+    ] {
+        assert!(!product.contains(forbidden), "{forbidden} を使っている");
+    }
+    // AppKit に触れるのは、このファイルだけ。クリップボードの文字を読む関数を呼ぶのは、鍵を持つ `src/clipboard.rs` だけ
+    // （Windows の読み取りの検査 `s4_the_clipboard_is_only_read_as_text_and_only_the_import_command_reads_it` が、両方の OS で確かめている）。
+    let users: Vec<String> = rust_sources()
+        .into_iter()
+        .filter(|file| read(file).contains("objc2_app_kit"))
+        .map(|file| file.to_string_lossy().replace('\\', "/"))
+        .collect();
+    assert_eq!(users.len(), 1, "{users:?}");
+    assert!(
+        users[0].ends_with("src/platform/mac/clipboard.rs"),
+        "{users:?}"
+    );
+}
+
+#[test]
+fn u9_the_macos_trash_api_is_called_from_one_place_and_nothing_deletes_in_place() {
+    let users = product_files_containing("trashItemAtURL");
+    assert_eq!(users.len(), 1, "{users:?}");
+    assert!(users[0].ends_with("src/platform/mac/trash.rs"), "{users:?}");
+
+    let trash = read(&mac_trash_source());
+    let product = product_part(&trash);
+    assert_eq!(
+        product
+            .matches("trashItemAtURL_resultingItemURL_error(")
+            .count(),
+        1,
+        "呼ぶのは 1 回だけ"
+    );
+    // ごみ箱を通さずに消す・動かす・写す呼び方を入れない。
+    for banned in [
+        "removeItemAtURL",
+        "removeItemAtPath",
+        "moveItemAtURL",
+        "moveItemAtPath",
+        "copyItemAtURL",
+        "copyItemAtPath",
+        "remove_dir_all",
+        "remove_dir(",
+        "remove_file",
+    ] {
+        assert!(!product.contains(banned), "{banned} がある");
+    }
+    // 本物のごみ箱の道具を作るのは、この 1 つのファイルの 1 つの関数だけ。
+    let makers = product_files_containing("MacRecycler");
+    assert_eq!(makers.len(), 1, "{makers:?}");
+    assert_eq!(product.matches("Box::new(MacRecycler)").count(), 1);
+    // 頼むパスは、完全なパスだけ（相対パスを渡さない）。
+    assert!(product.contains("is_absolute()"));
+}
+
+#[test]
+fn mac_appkit_and_foundation_are_declared_with_a_fixed_short_feature_list() {
+    // 画面・入力・ほかのアプリの情報に触れる部分（NSEvent・NSScreen・NSWorkspace・NSRunningApplication・NSAccessibility など）を、
+    // 黙って足さない。足すときは、ここの一覧と、使う 1 か所の理由を決めてから。
+    let manifest = read(&crate_dir().join("Cargo.toml"));
+    assert_eq!(
+        declared_features(&manifest, "objc2-app-kit"),
+        ["std", "NSPasteboard"]
+    );
+    assert_eq!(
+        declared_features(&manifest, "objc2-foundation"),
+        ["std", "NSError", "NSFileManager", "NSString", "NSURL"]
+    );
+    for name in ["objc2-app-kit", "objc2-foundation"] {
+        let line = manifest
+            .lines()
+            .find(|l| l.trim_start().starts_with(&format!("{name} = ")))
+            .expect("宣言がある");
+        assert!(
+            line.contains("default-features = false"),
+            "{name}: 既定の機能（すべて）を入れない"
+        );
+    }
+    // 部品を使うソースは、決めた 2 つのファイルだけ。
+    let mut users: Vec<String> = rust_sources()
+        .into_iter()
+        .filter(|file| {
+            let text = read(file);
+            text.contains("objc2_app_kit") || text.contains("objc2_foundation")
+        })
+        .map(|file| file.to_string_lossy().replace('\\', "/"))
+        .collect();
+    users.sort();
+    assert_eq!(users.len(), 2, "{users:?}");
+    assert!(
+        users[0].ends_with("src/platform/mac/clipboard.rs"),
+        "{users:?}"
+    );
+    assert!(users[1].ends_with("src/platform/mac/trash.rs"), "{users:?}");
+}
+
+#[test]
+fn mac_platform_config_files_are_scanned_and_the_windows_helper_is_not_built_for_macos() {
+    // macOS 用の設定（tauri.macos.conf.json）も、署名・権限の検査（`mac_signing_and_build_files_grant_no_debug_or_injection_entitlement`）の
+    // 対象になっている。補助プログラムは Windows だけ（macOS の梱包には入れない）。
+    let files = mac_config_files();
+    assert!(
+        files.iter().any(|p| p
+            .to_string_lossy()
+            .replace('\\', "/")
+            .ends_with("tauri.macos.conf.json")),
+        "走査の対象に tauri.macos.conf.json が入っていない"
+    );
+    let conf = read(&crate_dir().join("tauri.macos.conf.json"));
+    assert!(!conf.to_lowercase().contains("helper"));
 }

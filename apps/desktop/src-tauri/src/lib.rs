@@ -59,9 +59,10 @@ pub const CONFIG_DIR_ENV: &str = "JANTAMA_CONFIG_DIR";
 pub const SHOW_MAIN_ARG: &str = "--show-main";
 
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            commands::get_platform_info,
             commands::get_state,
             commands::add_mark,
             commands::add_rating,
@@ -136,17 +137,21 @@ pub fn run() {
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)
-        .setup(setup)
+        .setup(setup);
+    // macOS だけ、アプリ全体のメニュー（メニューバー）を付ける。Windows では何もしない。
+    let app = platform::with_app_menu(builder)
         .build(tauri::generate_context!())
         .expect("アプリを起動できませんでした");
     app.run(|app, event| {
-        // アプリを閉じるとき: 消した半荘のフォルダを、Windows のごみ箱へ送る（U-9）。落ちたときは、次の起動で送る。
+        // アプリを閉じるとき: 消した半荘のフォルダを、OS のごみ箱へ送る（U-9）。落ちたときは、次の起動で送る。
         if let tauri::RunEvent::Exit = event {
             if let Some(sync) = app.try_state::<sync::service::SyncService>() {
                 sync.shutdown();
             }
             recycle_deleted_sessions(app);
         }
+        // macOS: Dock のアイコンを押したときに、検討画面を開く（OS ごとの知らせは platform に任せる）。
+        platform::on_run_event(app, &event);
     });
 }
 
@@ -257,12 +262,17 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
 
     // 窓は、どちらも隠したまま作る。画面が最初の絵を描き終えて知らせて（window_ready）から見せるので、
     // 描き終える前の白い面が見えない（N-7）。ウィジェットは位置を決めておき、知らせが来たら見せる。
+    // ウィジェットの無い OS（macOS の段階 2。`Features::widget`）では、ウィジェットの窓・右クリックのメニュー・タスクトレイを作らない。
+    let features = platform::info().features;
     app.manage(SharedShowGate::new());
-    let widget_spec = widget_window_spec(settings.orientation);
-    let widget = build_window(app, &widget_spec)?;
-    platform::style_window(&widget, &widget_spec);
-    if let Some(position) = commands::initial_widget_position(&widget, settings.widget_position) {
-        move_window(&widget, position);
+    if features.widget {
+        let widget_spec = widget_window_spec(settings.orientation);
+        let widget = build_window(app, &widget_spec)?;
+        platform::style_window(&widget, &widget_spec);
+        if let Some(position) = commands::initial_widget_position(&widget, settings.widget_position)
+        {
+            move_window(&widget, position);
+        }
     }
 
     // 検討画面の窓。起動時は隠しておく。
@@ -270,26 +280,29 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let main_window = build_window(app, &main_spec)?;
     platform::style_window(&main_window, &main_spec);
     // 開発と確認用: 引数に --show-main があれば、起動と同時に検討画面を開く（画面が描き終えたら見せる）。
-    if std::env::args().any(|arg| arg == SHOW_MAIN_ARG) {
+    // ウィジェットの無い OS では、ほかに開く入口が無いので、いつも起動と同時に開く（閉じたあとは、Dock のアイコンから開き直す）。
+    if !features.widget || std::env::args().any(|arg| arg == SHOW_MAIN_ARG) {
         commands::open_main_window_now(&handle);
     }
     // 画面からの知らせが来なくても、窓が見えないままにならないようにする。
     commands::spawn_show_watchdog(handle.clone(), SHOW_TIMEOUT);
 
     // 右クリックのメニューとタスクトレイ。「音を鳴らす」の印は、設定が変わるたびに両方で合わせる（W-12）。
-    let widget_menu = menu::build_menu(app, settings.sound)?;
-    let tray_menu = menu::build_menu(app, settings.sound)?;
-    app.manage(SoundMenuItems(vec![
-        widget_menu.sound.clone(),
-        tray_menu.sound.clone(),
-    ]));
-    app.manage(WidgetMenu(widget_menu.menu));
-    let mut tray = TrayIconBuilder::new()
-        .tooltip("JantamaReviewer")
-        .menu(&tray_menu.menu);
-    if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
+    if features.widget {
+        let widget_menu = menu::build_menu(app, settings.sound)?;
+        let tray_menu = menu::build_menu(app, settings.sound)?;
+        app.manage(SoundMenuItems(vec![
+            widget_menu.sound.clone(),
+            tray_menu.sound.clone(),
+        ]));
+        app.manage(WidgetMenu(widget_menu.menu));
+        let mut tray = TrayIconBuilder::new()
+            .tooltip("JantamaReviewer")
+            .menu(&tray_menu.menu);
+        if let Some(icon) = app.default_window_icon() {
+            tray = tray.icon(icon.clone());
+        }
+        tray.build(app)?;
     }
-    tray.build(app)?;
     Ok(())
 }

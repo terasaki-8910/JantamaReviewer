@@ -2,6 +2,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, us
 
 import { api, errorMessage } from '../api/tauri';
 import type { AnswerMode, SessionRecord } from '../api/types';
+import { ariaModShortcut, historyKeyDirection, modShortcut } from '../shared/platform';
 import { applyTheme, effectiveTheme, storeTheme, type ThemeChoice } from '../shared/theme';
 import { reportBackground, signalWindowReady } from '../shared/windowReady';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -224,8 +225,8 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
       focusAction,
       action: {
         label: '元に戻す',
-        title: '元に戻す（Ctrl+Z）',
-        keyShortcuts: 'Control+Z',
+        title: `元に戻す（${modShortcut('Z')}）`,
+        keyShortcuts: ariaModShortcut('Z'),
         // 通知の「元に戻す」は、押すと消える。キーボードの位置が消えないよう、一覧の「選択」か検索欄に移す。
         onAction: () =>
           void undo
@@ -247,12 +248,13 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
   );
 
   const onHistoryKey = useEffectEvent((event: KeyboardEvent) => {
-    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    // Windows は Alt+← →、macOS は Cmd+[ ]（Option+← → は、入力欄の単語の移動なので使わない）。
+    const direction = historyKeyDirection(event);
+    if (direction === null) return;
     // メニューやダイアログが開いている間は、そこに任せる。マウスの戻る・進むのボタンには、何も割り当てない（SPEC 3a）。
     if (shortcutsBlocked()) return;
     event.preventDefault();
-    step(event.key === 'ArrowLeft' ? -1 : 1);
+    step(direction === 'back' ? -1 : 1);
   });
   useEffect(() => {
     const handler = (event: KeyboardEvent) => onHistoryKey(event);

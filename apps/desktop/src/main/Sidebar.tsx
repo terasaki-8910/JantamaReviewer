@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode, type Ref } from 'react';
 
 import appIcon from '../../src-tauri/icons/128x128.png';
+import { ariaModShortcut, historyShortcut, modShortcut } from '../shared/platform';
 import type { ThemeChoice } from '../shared/theme';
 import { Icon } from './Icon';
 import type { View } from './views';
@@ -55,6 +56,9 @@ export function SidebarToggle({
 
 /** 検索のアイコンと、そのすぐ右の ← →（見た画面の履歴）。 */
 export function HeaderTools({ canGoBack, canGoForward, onGoBack, onGoForward, searchOpen, onSearch }: HeaderToolsProps) {
+  // ショートカットの表示は OS で違う（Windows は Ctrl+K・Alt+← →、macOS は Cmd+K・Cmd+[ ]）。
+  const back = historyShortcut('back');
+  const forward = historyShortcut('forward');
   const searchRef = useRef<HTMLButtonElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const forwardRef = useRef<HTMLButtonElement>(null);
@@ -79,10 +83,10 @@ export function HeaderTools({ canGoBack, canGoForward, onGoBack, onGoForward, se
         className="icon-btn search-btn"
         ref={searchRef}
         aria-label="検索"
-        title="検索（Ctrl+K）"
+        title={`検索（${modShortcut('K')}）`}
         aria-haspopup="dialog"
         aria-expanded={searchOpen}
-        aria-keyshortcuts="Control+K"
+        aria-keyshortcuts={ariaModShortcut('K')}
         onClick={(event) => onSearch(event.currentTarget)}
       >
         <Icon name="search" />
@@ -92,8 +96,8 @@ export function HeaderTools({ canGoBack, canGoForward, onGoBack, onGoForward, se
           type="button"
           className="icon-btn hist-btn"
           aria-label="戻る"
-          title="戻る（Alt+←）"
-          aria-keyshortcuts="Alt+ArrowLeft"
+          title={`戻る（${back.label}）`}
+          aria-keyshortcuts={back.aria}
           ref={backRef}
           disabled={!canGoBack}
           onClick={() => {
@@ -107,8 +111,8 @@ export function HeaderTools({ canGoBack, canGoForward, onGoBack, onGoForward, se
           type="button"
           className="icon-btn hist-btn"
           aria-label="進む"
-          title="進む（Alt+→）"
-          aria-keyshortcuts="Alt+ArrowRight"
+          title={`進む（${forward.label}）`}
+          aria-keyshortcuts={forward.aria}
           ref={forwardRef}
           disabled={!canGoForward}
           onClick={() => {

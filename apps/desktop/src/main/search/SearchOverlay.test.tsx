@@ -10,6 +10,7 @@ import { local } from '../../../tests/fake-sessions';
 import { answerRow } from '../../../tests/fake-study';
 import { SEARCH_NOW, SEARCH_SEEDS, searchFixture, type SearchFixture, type SearchSeed } from '../../../tests/search-fixtures';
 import type { AnswerRow } from '../../api/types';
+import { MAC_STAGE_2_PLATFORM, setPlatform, WINDOWS_PLATFORM } from '../../shared/platform';
 import { StudyProvider, type StudyValue } from '../study/StudyProvider';
 import { useShortcutsBlocked } from '../undo/shortcutGuard';
 import { UndoProvider } from '../undo/UndoProvider';
@@ -723,5 +724,31 @@ describe('U-22: 開いている間のアプリのキー操作（Ctrl+Z・Alt+←
     expect(screen.getAllByRole('combobox')).toHaveLength(1);
     expect(screen.getAllByRole('listbox')).toHaveLength(1);
     expect(SEARCH_SEEDS).toHaveLength(7);
+  });
+});
+
+describe('macOS: Cmd の組み合わせ（段階 2）', () => {
+  afterEach(() => setPlatform(WINDOWS_PLATFORM));
+
+  it('Cmd+↑ ↓ で、先頭・末尾の行へ行く。「Cmd」の印が出る', async () => {
+    setPlatform(MAC_STAGE_2_PLATFORM);
+    const { user } = setup();
+    const total = options().length;
+    expect(within(dialog()).getByText('Cmd')).toBeInTheDocument();
+    expect(within(dialog()).queryByText('Ctrl')).toBeNull();
+    await user.keyboard('{Meta>}{ArrowDown}{/Meta}');
+    expect(options().indexOf(active() as HTMLElement)).toBe(total - 1);
+    await user.keyboard('{Meta>}{ArrowUp}{/Meta}');
+    expect(options().indexOf(active() as HTMLElement)).toBe(0);
+    // Ctrl+Home / Ctrl+End も、これまでどおり使える
+    await user.keyboard('{Control>}{End}{/Control}');
+    expect(options().indexOf(active() as HTMLElement)).toBe(total - 1);
+  });
+
+  it('Windows では、Cmd（Win キー）+↓ は、ただの ↓（1 つ進むだけ）。印は「Ctrl」', async () => {
+    const { user } = setup();
+    expect(within(dialog()).getByText('Ctrl')).toBeInTheDocument();
+    await user.keyboard('{Meta>}{ArrowDown}{/Meta}');
+    expect(options().indexOf(active() as HTMLElement)).toBe(1);
   });
 });

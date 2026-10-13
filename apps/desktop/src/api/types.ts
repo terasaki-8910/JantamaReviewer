@@ -452,3 +452,31 @@ export interface SyncStatus {
   /** この端末の名前（読み物）。 */
   device_id: string;
 }
+
+// ---- OS ごとの違い（macOS 対応の段階 2。Rust の `platform::PlatformInfo`） ----
+
+/** 動いている OS の名前。 */
+export type Os = 'windows' | 'macos';
+
+/**
+ * この OS で使える機能。`false` の機能の行は、画面に出さない（または「まだ使えません」と書く）。
+ * macOS の段階 2 は、検討画面だけ（どれも false）。
+ */
+export interface PlatformFeatures {
+  /** ウィジェットの窓と、タスクトレイのアイコン。 */
+  widget: boolean;
+  /** 迷いマークのボタン（マウスの横ボタン・キー）を拾うこと。 */
+  button_hook: boolean;
+  /** ボタンを押した瞬間の、画面の撮影。 */
+  capture: boolean;
+  /** 取り込みのときの文字認識。 */
+  ocr: boolean;
+  /** 管理者の補助プログラム（Windows だけ）。 */
+  helper: boolean;
+}
+
+/** 動いている OS の名前と、使える機能（起動のとき 1 回、`get_platform_info` で受け取る）。 */
+export interface PlatformInfo {
+  os: Os;
+  features: PlatformFeatures;
+}
