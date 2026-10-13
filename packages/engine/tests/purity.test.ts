@@ -15,6 +15,17 @@ const SRC_DIR = path.resolve(FIXTURES_DIR, '..', '..', 'src');
 /** URL の書き方と雀魂のドメインを持ってよいファイル（safety.rs の ALLOWED_NETWORK_FILES と同じ）。 */
 const LINK_FILES = ['paipu-link.ts', 'tenhou-url.ts'];
 
+/**
+ * 外の部品を読み込んでよいファイルと、読んでよい部品（名前を決めた例外。R14-3、F14）。
+ * 待ちと打点の点数の計算は、kobalab の majiang-core（MIT。npm の dependencies に、版 1.4.1 を固定）に頼る。
+ * エンジンは、ほかのファイルが外の部品に依存しない決まりなので、majiang-core を読み込む場所を majiang-adapter.ts の 1 つに閉じ込める
+ * （牌の表記の対応・供託・ロンの向き・待ちの判定といった、癖のある部分もここだけが持つ）。ほかのファイルは、この受け口の関数だけを使う。
+ * majiang-core は、実行時に通信・ファイル・時計・乱数（牌山のシャッフル）を呼ばない部分だけを使う（和了の計算・向聴数・面子の分解）。
+ */
+const EXTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
+  'majiang-adapter.ts': ['@kobalab/majiang-core'],
+};
+
 function sourceFiles(): { name: string; text: string }[] {
   return readdirSync(SRC_DIR)
     .filter((n) => n.endsWith('.ts') && !n.includes('.test.'))
@@ -62,15 +73,28 @@ describe('エンジンの純粋さ（画面・Tauri・通信・ファイル・�
     expect(found).toEqual([]);
   });
 
-  it('src の読み込みは、同じフォルダのファイル（./）だけで、外の部品に依存しない', () => {
+  it('src の読み込みは、同じフォルダのファイル（./）だけで、外の部品に依存しない（例外は、majiang-adapter.ts が majiang-core を読み込む 1 つだけ）', () => {
     const found: string[] = [];
     for (const { name, text } of sourceFiles()) {
       for (const m of text.matchAll(/(?:^|\n)\s*(?:import|export)\b[^;]*?from\s+['"]([^'"]+)['"]/g)) {
         const spec = m[1] ?? '';
-        if (!spec.startsWith('./')) found.push(`${name}: ${spec}`);
+        if (!spec.startsWith('./') && !(EXTERNAL_IMPORTS[name] ?? []).includes(spec)) found.push(`${name}: ${spec}`);
       }
     }
     expect(found).toEqual([]);
+  });
+
+  it('majiang-core を読み込む src のファイルは、例外の表に書いた majiang-adapter.ts だけ。型の宣言は majiang-core.d.ts だけ', () => {
+    const importers = sourceFiles()
+      .filter(({ text }) => /from\s+['"]@kobalab\//.test(text))
+      .map(({ name }) => name);
+    // 例外の表に書いたファイルが、実際に読み込んでいる（表だけが残って、読み込みが無くなっていない）
+    expect(importers).toEqual(Object.keys(EXTERNAL_IMPORTS));
+    // 型の宣言（majiang-core.d.ts）は、読み込みではない
+    const declares = sourceFiles()
+      .filter(({ text }) => /declare module ['"]@kobalab\//.test(text))
+      .map(({ name }) => name);
+    expect(declares).toEqual(['majiang-core.d.ts']);
   });
 
   it('URL の書き方と雀魂のドメインを持つのは、牌譜リンクと天鳳牌理の 2 ファイルだけ', () => {
