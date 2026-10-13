@@ -11,8 +11,10 @@ use std::path::PathBuf;
 use jantama_reviewer_lib::external::{download_hook, navigation_hook, new_window_hook};
 use jantama_reviewer_lib::navigation::{
     allow_download, decide_navigation, decide_new_window, is_external_web_page, AppOrigins,
-    NavigationDecision, NewWindowDecision, Origin, PRODUCTION_HOST,
+    NavigationDecision, NewWindowDecision, Origin, MAC_PRODUCTION_HOST, MAC_PRODUCTION_SCHEME,
+    PRODUCTION_HOST,
 };
+use jantama_reviewer_lib::platform::{self, Os};
 use tauri::webview::DownloadEvent;
 use url::Url;
 
@@ -20,8 +22,9 @@ fn url(text: &str) -> Url {
     Url::parse(text).unwrap_or_else(|e| panic!("{text}: {e}"))
 }
 
+/// Windows の決め（`http://tauri.localhost`）。どの OS でも、同じ決めを試験する（動いている OS の分は、最後の試験で確かめる）。
 fn production() -> AppOrigins {
-    AppOrigins::production()
+    AppOrigins::production_on(Os::Windows)
 }
 
 fn dev() -> AppOrigins {
@@ -165,6 +168,72 @@ fn n5_origins_compare_by_scheme_host_and_effective_port() {
     );
     assert!(Origin::of(&url("data:text/plain,hi")).is_none());
     assert_eq!(PRODUCTION_HOST, "tauri.localhost");
+}
+
+#[test]
+fn n5_on_macos_the_pages_are_served_from_the_tauri_scheme_and_only_from_there() {
+    let origins = AppOrigins::production_on(Os::Macos);
+    for page in [
+        "tauri://localhost/index.html",
+        "tauri://localhost/widget.html",
+        "tauri://localhost/",
+        "tauri://LOCALHOST/index.html#anything",
+    ] {
+        assert_eq!(
+            decide_navigation(&url(page), &origins),
+            NavigationDecision::Allow,
+            "{page}"
+        );
+    }
+    for page in [
+        "http://tauri.localhost/index.html",
+        "tauri://localhost.evil.example/",
+        "tauri://localhost:8080/index.html",
+        "tauri://tauri.localhost/index.html",
+        "https://localhost/index.html",
+        "asset://localhost/x.png",
+        "ipc://localhost/get_state",
+        "file:///Users/someone/x.txt",
+        "about:blank",
+    ] {
+        assert_eq!(
+            decide_navigation(&url(page), &origins),
+            NavigationDecision::Cancel,
+            "{page}"
+        );
+    }
+    // 外部の Web ページは、macOS でも、取り消して既定のブラウザで開く。
+    assert_eq!(
+        decide_navigation(&url("https://tenhou.net/2/?q=1m"), &origins),
+        NavigationDecision::OpenExternal
+    );
+    assert_eq!(
+        Origin::new(MAC_PRODUCTION_SCHEME, MAC_PRODUCTION_HOST, None),
+        Origin::of(&url("tauri://localhost/x")).unwrap()
+    );
+}
+
+#[test]
+fn n5_each_os_allows_only_its_own_origin_and_the_running_os_gets_the_right_one() {
+    let windows_page = url("http://tauri.localhost/index.html");
+    let mac_page = url("tauri://localhost/index.html");
+    let windows = AppOrigins::production_on(Os::Windows);
+    let mac = AppOrigins::production_on(Os::Macos);
+    assert!(windows.allows(&windows_page) && !windows.allows(&mac_page));
+    assert!(mac.allows(&mac_page) && !mac.allows(&windows_page));
+    // 動いている OS の分だけが、製品の決めになる。
+    let expected = match platform::info().os {
+        Os::Windows => windows,
+        Os::Macos => mac,
+    };
+    assert_eq!(AppOrigins::production(), expected);
+    // `tauri dev` でも、製品の画面の分は許したまま、開発サーバーを足すだけ。
+    let dev_url = url("http://localhost:1420/");
+    assert_eq!(
+        AppOrigins::for_run(true, Some(&dev_url)),
+        expected.clone().with_dev_server(&dev_url)
+    );
+    assert_eq!(AppOrigins::for_run(false, Some(&dev_url)), expected);
 }
 
 // ---- N-5: 新しい窓の要求 ----

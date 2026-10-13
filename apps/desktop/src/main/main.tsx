@@ -20,6 +20,7 @@ import { createRoot } from 'react-dom/client';
 
 import { ErrorBoundary } from '../shared/ErrorBoundary';
 import { installNativeBehavior } from '../shared/nativeBehavior';
+import { loadPlatform } from '../shared/platform';
 import { initTheme } from '../shared/theme';
 import { App } from './App';
 
@@ -28,11 +29,16 @@ installNativeBehavior();
 
 const container = document.getElementById('root');
 if (container) {
-  createRoot(container).render(
-    <StrictMode>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </StrictMode>,
-  );
+  const root = createRoot(container);
+  // 最初の絵を描く前に、OS の名前と使える機能を受け取る（設定ページの行・ショートカットの表示を、最初から合わせるため）。
+  // 受け取れなくても、Windows として描く。
+  void loadPlatform().then(() => {
+    root.render(
+      <StrictMode>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </StrictMode>,
+    );
+  });
 }

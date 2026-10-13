@@ -22,7 +22,7 @@ use crate::app_core::{AppState, Core, SettingsChange};
 use crate::appearance::{parse_css_color, Rgb};
 use crate::clock::now_ms;
 use crate::input_flow::{page_key_input, HelperOp, Input, InputService, InputStatus};
-use crate::platform::HelperHost;
+use crate::platform::{HelperHost, PlatformInfo};
 use crate::ready::ShowGate;
 use crate::settings::{Orientation, Settings, WidgetPosition};
 use crate::store::{Rating, SessionRecord};
@@ -199,6 +199,10 @@ pub fn spawn_show_watchdog<R: Runtime>(app: AppHandle<R>, after: Duration) {
         .spawn(move || {
             thread::sleep(after);
             for label in [WIDGET_LABEL, MAIN_LABEL] {
+                // ウィジェットの無い OS（macOS の段階 2）では、ウィジェットの窓は作っていない。
+                if app.get_webview_window(label).is_none() {
+                    continue;
+                }
                 let show = app.state::<SharedShowGate>().lock().timeout(label);
                 if show {
                     eprintln!(
@@ -404,6 +408,12 @@ pub fn widget_moved<R: Runtime>(app: &AppHandle<R>, position: PhysicalPosition<i
 }
 
 // ---- Tauri のコマンド ----
+
+/// 動いている OS の名前と、使える機能（macOS の段階 2。設定ページが、使えない機能の行を出さないために、起動のとき 1 回呼ぶ）。
+#[tauri::command]
+pub async fn get_platform_info() -> Result<PlatformInfo, String> {
+    Ok(crate::platform::info())
+}
 
 #[tauri::command]
 pub async fn get_state(core: State<'_, SharedCore>) -> Result<AppState, String> {

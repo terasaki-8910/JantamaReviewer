@@ -41,7 +41,7 @@ jantama-input = { path = "input" }
 # 取り込みのときだけ使う文字認識（保存済みのスクリーンショットを読む。S-3）。src/import/ocr_job.rs の 1 か所からだけ使う。
 jantama-ocr = { path = "ocr" }
 # 結果 JSON の取得（GET の 1 種類だけ）。src/import/report_fetch.rs の 1 か所からだけ使う（S-2）。
-# TLS は Windows の SChannel（native-tls）。同梱の証明書の一覧を持たず、OS の信頼する証明書を使う。
+# TLS は OS のもの（native-tls。Windows は SChannel、macOS は Security.framework）。同梱の証明書の一覧を持たず、OS の信頼する証明書を使う。
 ureq = { version = "3", default-features = false, features = ["native-tls"] }
 # 答え・解き直しの予定・今日の出題を置く SQLite（D-3。保存先の study.sqlite）。SQLite 本体は同梱（bundled）で、通信はしない。
 # src/study/ の中だけで使う（検討画面だけが使う。ウィジェット・ボタンを拾う部分・補助プログラムには入れない）。
@@ -65,6 +65,15 @@ windows = { version = "0.62", features = [
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }
+
+# macOS の部品（src/platform/mac）。いまの機能は、クリップボードの文字の読み取りと、ごみ箱への移し替えだけ。
+# どちらも、tao・wry を通して依存の一覧に入っている版（Cargo.lock）のまま。使う機能（features）だけを宣言する。
+# 画面・入力・ほかのプロセスに触れる部品は、ここに宣言しない（tests/safety.rs の macOS の部品の検査）。
+[target.'cfg(target_os = "macos")'.dependencies]
+# NSFileManager の trashItemAtURL（src/platform/mac/trash.rs の 1 か所からだけ使う）。
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
+# NSPasteboard の文字の読み取り（src/platform/mac/clipboard.rs の 1 か所からだけ使う）。
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPasteboard"] }
 
 [dev-dependencies]
 tempfile = "3"

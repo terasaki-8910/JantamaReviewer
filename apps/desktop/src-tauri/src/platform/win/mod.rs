@@ -15,8 +15,9 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
 use jantama_input::protocol::ToHelper;
+use tauri::{AppHandle, Builder, Manager, RunEvent, Runtime, WebviewWindowBuilder};
 
-use super::{HelperHost, Platform};
+use super::{Features, HelperHost, Os, Platform};
 use crate::capture::ScreenCapturer;
 use crate::input_flow::Input;
 
@@ -25,6 +26,35 @@ pub use hook::start_input_hook;
 pub use style::style_window;
 pub use trash::recycler;
 pub use webview::harden as harden_webview;
+
+/// OS の名前。
+pub const OS: Os = Os::Windows;
+
+/// 使える機能。Windows は、すべて使える。
+pub const FEATURES: Features = Features {
+    widget: true,
+    button_hook: true,
+    capture: true,
+    ocr: true,
+    helper: true,
+};
+
+/// 窓を作るときに渡す、WebView の設定。WebView2 の設定は、窓を作ったあとに書き込む（`harden_webview`）ので、ここでは何もしない。
+/// 保存領域は、`data_directory`（`widget_window::build_window`・mjai の窓）で分ける。
+pub fn with_webview_options<'a, R: Runtime, M: Manager<R>>(
+    builder: WebviewWindowBuilder<'a, R, M>,
+    _store: Option<[u8; 16]>,
+) -> WebviewWindowBuilder<'a, R, M> {
+    builder
+}
+
+/// アプリ全体のメニューは、Windows には無い（メニューバーが窓ごとに付いてしまう。右クリックのメニューとトレイのメニューだけ）。
+pub fn with_app_menu<R: Runtime>(builder: Builder<R>) -> Builder<R> {
+    builder
+}
+
+/// アプリの実行中の出来事（`RunEvent`）への、OS ごとの対応。Windows は、共通の対応（終了のときの片づけ）のほかは無い。
+pub fn on_run_event<R: Runtime>(_app: &AppHandle<R>, _event: &RunEvent) {}
 
 /// Windows の部品を作る。
 pub fn platform() -> Platform {

@@ -302,6 +302,14 @@ pub fn open<R: Runtime>(
     ) {
         builder = builder.data_directory(dir);
     }
+    // macOS の WKWebView の設定（リンクのプレビューを出さない・保存領域を識別子で分ける。mjai の窓は、いつも画面とは別の保存領域）。
+    // Windows では何もしない。
+    builder = crate::platform::with_webview_options(
+        builder,
+        Some(crate::webview_data::mjai_data_store_id(
+            crate::webview_data::config_env(),
+        )),
+    );
 
     app.state::<MjaiWindowState>()
         .set(Some(Arc::clone(&session)));

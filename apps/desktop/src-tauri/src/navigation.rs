@@ -1,7 +1,9 @@
 //! 画面の遷移の決まり（N-5、N-6）。
 //!
 //! 窓が読み込んでよいのは、アプリ自身の画面だけ（製品では Tauri が配るオリジン、`tauri dev` ではそれに加えて
-//! Vite の開発サーバー）。それ以外への遷移は取り消す。ふつうの Web ページ（http / https）へのリンクをクリックしたときだけ、
+//! Vite の開発サーバー）。Tauri が画面を配るオリジンは OS で違う（Windows は http のスキームの tauri.localhost、macOS は
+//! カスタムスキーム tauri のホスト localhost）ので、動いている OS の分だけを許す（`AppOrigins::production`）。
+//! それ以外への遷移は取り消す。ふつうの Web ページ（http / https）へのリンクをクリックしたときだけ、
 //! 取り消したうえで既定のブラウザで開く（`external.rs`）。新しい窓の要求（target=_blank・window.open）は必ず拒み、
 //! 外部の Web ページなら同じく既定のブラウザに回す。ダウンロードは受け付けない。
 //!
@@ -10,6 +12,8 @@
 //! （スキーム・ホスト・ポートの部品で持つ）。テストは `tests/navigation_policy.rs`。
 
 use url::{Host, Url};
+
+use crate::platform::Os;
 
 /// 画面を読み込んでよいオリジン（スキーム・ホスト・ポート）。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +57,10 @@ impl Origin {
 /// Tauri が Windows で製品の画面を配るオリジンのホスト名。
 pub const PRODUCTION_HOST: &str = "tauri.localhost";
 
+/// Tauri が macOS で製品の画面を配るオリジンのスキームとホスト名（カスタムスキーム tauri のホスト localhost）。
+pub const MAC_PRODUCTION_SCHEME: &str = "tauri";
+pub const MAC_PRODUCTION_HOST: &str = "localhost";
+
 /// 窓が読み込んでよいオリジンの一覧。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppOrigins {
@@ -60,10 +68,20 @@ pub struct AppOrigins {
 }
 
 impl AppOrigins {
-    /// 製品: Tauri が配る画面のオリジンだけ（`use_https_scheme` は使わないので http）。
+    /// 製品: 動いている OS で、Tauri が配る画面のオリジンだけ。
     pub fn production() -> AppOrigins {
+        AppOrigins::production_on(crate::platform::info().os)
+    }
+
+    /// 製品: `os` で、Tauri が配る画面のオリジンだけ。Windows は http のスキームの tauri.localhost（`use_https_scheme` は使わないので http）、
+    /// macOS はカスタムスキーム tauri の localhost。どちらの決まりも、どの OS でも試験できる。
+    pub fn production_on(os: Os) -> AppOrigins {
+        let origin = match os {
+            Os::Windows => Origin::new("http", PRODUCTION_HOST, None),
+            Os::Macos => Origin::new(MAC_PRODUCTION_SCHEME, MAC_PRODUCTION_HOST, None),
+        };
         AppOrigins {
-            allowed: vec![Origin::new("http", PRODUCTION_HOST, None)],
+            allowed: vec![origin],
         }
     }
 

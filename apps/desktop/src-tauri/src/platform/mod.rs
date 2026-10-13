@@ -4,7 +4,8 @@
 //! OS ごとの実装は 1 つずつのモジュールにまとめ、`#[cfg]` で選ぶのはこのファイルだけ。
 //!
 //! - Windows（`win`）: これまでの実装を、動きを変えずにここへ集めたもの。
-//! - macOS（`mac`）: 口に合わせた雛形。コンパイルは通るが、どれも「まだ対応していません」と返すか、何もしない。
+//! - macOS（`mac`）: 段階 2 で動くのは、検討画面に要るもの（クリップボードの文字・ごみ箱・メニュー・WKWebView の設定）だけ。
+//!   ウィジェット・ボタンを拾うこと・撮影・文字認識は、口に合わせた雛形のまま（どれも「まだ対応していません」と返すか、何もしない）。
 //!   画面・ゲーム・ほかのアプリには触れない（段階 3 以降で作る。`analysis/mac/README.md`）。
 //!
 //! 口は 2 つに分かれる。起動のときに 1 度作って持ち歩くもの（`Platform`: 撮影・音・補助プログラム）と、
@@ -18,6 +19,7 @@ use std::sync::Arc;
 use jantama_input::hook::HookStatus;
 use jantama_input::logic::Config;
 use jantama_input::protocol::ToHelper;
+use serde::Serialize;
 
 use crate::capture::Capturer;
 use crate::input_flow::Input;
@@ -36,7 +38,49 @@ use mac as native;
 #[cfg(windows)]
 use win as native;
 
-pub use native::{harden_webview, read_clipboard_string, recycler, start_input_hook, style_window};
+pub use native::{
+    harden_webview, on_run_event, read_clipboard_string, recycler, start_input_hook, style_window,
+    with_app_menu, with_webview_options,
+};
+
+/// OS の名前（画面の出し分けに使う）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Os {
+    Windows,
+    Macos,
+}
+
+/// この OS で使える機能。画面（設定ページなど）が、使えない機能の行を出さないために使う。
+/// どれも `false` の機能は、口（`Platform`・`InputHook`・`ScreenSource` など）は雛形のままで、まだ作っていない（macOS の段階 3 以降）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Features {
+    /// ウィジェットの窓と、タスクトレイ（メニューバー）のアイコン。
+    pub widget: bool,
+    /// 迷いマークのボタン（マウスの横ボタン・キー）を拾うこと。
+    pub button_hook: bool,
+    /// ボタンを押した瞬間の、画面の撮影。
+    pub capture: bool,
+    /// 取り込みのときの文字認識。
+    pub ocr: bool,
+    /// 管理者の補助プログラム（Windows だけ）。
+    pub helper: bool,
+}
+
+/// いま動いている OS の名前と、使える機能。画面は、起動のときに 1 回の命令（`get_platform_info`）で受け取る。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct PlatformInfo {
+    pub os: Os,
+    pub features: Features,
+}
+
+/// いま動いている OS の名前と、使える機能。
+pub fn info() -> PlatformInfo {
+    PlatformInfo {
+        os: native::OS,
+        features: native::FEATURES,
+    }
+}
 
 /// 本体の中でボタンを拾うフック。OS ごとの実装（Windows は低レベルのマウス・キーボードのフック）を、同じ呼び方で使う。
 /// フックの手続きの中では、判定（`jantama_input::logic`）と本体への知らせ（`start_input_hook` に渡す `sink`）だけを行う。
@@ -88,5 +132,50 @@ impl Platform {
     /// いま動いている OS の部品を作る。
     pub fn native() -> Platform {
         native::platform()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MAC_STAGE_2: PlatformInfo = PlatformInfo {
+        os: Os::Macos,
+        features: Features {
+            widget: false,
+            button_hook: false,
+            capture: false,
+            ocr: false,
+            helper: false,
+        },
+    };
+
+    #[test]
+    fn the_platform_info_has_the_shape_the_screen_reads() {
+        // 画面（`src/api/types.ts` の `PlatformInfo`）が読む形。名前を変えるときは、画面と一緒に変える。
+        assert_eq!(
+            serde_json::to_value(MAC_STAGE_2).unwrap(),
+            serde_json::json!({
+                "os": "macos",
+                "features": {
+                    "widget": false,
+                    "button_hook": false,
+                    "capture": false,
+                    "ocr": false,
+                    "helper": false,
+                }
+            })
+        );
+        assert_eq!(serde_json::to_value(Os::Windows).unwrap(), "windows");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_offers_every_feature_and_the_helper_flag_matches_the_real_helper() {
+        let info = info();
+        assert_eq!(info.os, Os::Windows);
+        assert!(info.features.widget && info.features.button_hook);
+        assert!(info.features.capture && info.features.ocr);
+        assert_eq!(Platform::native().helper.supported(), info.features.helper);
     }
 }

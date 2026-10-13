@@ -381,6 +381,7 @@ mod tests {
         assert_eq!(db.list_answers().unwrap().len(), 0);
     }
 
+    #[cfg(windows)]
     #[test]
     fn u9_the_inside_check_accepts_only_things_strictly_under_the_trash_folder() {
         let trash = Path::new(r"C:\data\trash");
@@ -392,8 +393,22 @@ mod tests {
         assert!(!is_strictly_inside(trash, Path::new(r"C:\data")));
     }
 
+    #[cfg(unix)]
     #[test]
-    fn u9_a_junction_inside_trash_that_points_outside_is_never_recycled() {
+    fn u9_the_inside_check_accepts_only_things_strictly_under_the_trash_folder_on_unix() {
+        // macOS 版の同じ試験（区切りが `/` のパス）。
+        let trash = Path::new("/data/trash");
+        assert!(is_strictly_inside(trash, Path::new("/data/trash/a")));
+        assert!(is_strictly_inside(trash, Path::new("/data/trash/a/b")));
+        assert!(!is_strictly_inside(trash, Path::new("/data/trash")));
+        assert!(!is_strictly_inside(trash, Path::new("/data/games/a")));
+        assert!(!is_strictly_inside(trash, Path::new("/data/trash2/a")));
+        assert!(!is_strictly_inside(trash, Path::new("/data")));
+    }
+
+    /// 置き場の中に、置き場の外のフォルダを指すリンクがあっても、ごみ箱へ送る口に渡さず、リンクの先も無傷のままにする。
+    /// `make_link(リンクの場所, リンクの先)` は、OS ごとのリンクの作り方（Windows はジャンクション、macOS はシンボリックリンク）。
+    fn assert_a_link_pointing_outside_is_never_recycled(make_link: impl FnOnce(&Path, &Path)) {
         let tmp = tempfile::tempdir().unwrap();
         let data = tmp.path().join("data");
         make_session(&data, "20261009-190953");
@@ -401,18 +416,7 @@ mod tests {
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("precious.txt"), "do not touch").unwrap();
         let link = trash_dir(&data).join("link");
-        // ジャンクションは、管理者の権限が無くても作れる。
-        let made = std::process::Command::new("cmd")
-            .args(["/C", "mklink", "/J"])
-            .arg(&link)
-            .arg(&outside)
-            .output()
-            .expect("cmd を動かせる");
-        assert!(
-            made.status.success(),
-            "ジャンクションを作れなかった: {}",
-            String::from_utf8_lossy(&made.stdout)
-        );
+        make_link(&link, &outside);
 
         let recycler = FakeRecycler::new();
         let report = recycle_trash(&data, &recycler);
@@ -432,7 +436,46 @@ mod tests {
             trash_dir(&data).exists(),
             "リンクが残るので、置き場は片づけない"
         );
-        // 後片づけ: ジャンクションそのものを外す（中身は消えない）。
-        fs::remove_dir(&link).unwrap();
+        // 後片づけ: リンクそのものを外す（中身は消えない）。
+        remove_dir_link(&link);
+    }
+
+    #[cfg(windows)]
+    fn remove_dir_link(link: &Path) {
+        // ジャンクションは、`remove_dir` で外せる（中身は消えない）。
+        fs::remove_dir(link).unwrap();
+    }
+
+    #[cfg(unix)]
+    fn remove_dir_link(link: &Path) {
+        // シンボリックリンクは、ファイルとして外す（先のフォルダは消えない）。
+        fs::remove_file(link).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn u9_a_junction_inside_trash_that_points_outside_is_never_recycled() {
+        assert_a_link_pointing_outside_is_never_recycled(|link, outside| {
+            // ジャンクションは、管理者の権限が無くても作れる。
+            let made = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(link)
+                .arg(outside)
+                .output()
+                .expect("cmd を動かせる");
+            assert!(
+                made.status.success(),
+                "ジャンクションを作れなかった: {}",
+                String::from_utf8_lossy(&made.stdout)
+            );
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn u9_a_symlink_inside_trash_that_points_outside_is_never_recycled() {
+        assert_a_link_pointing_outside_is_never_recycled(|link, outside| {
+            std::os::unix::fs::symlink(outside, link).expect("シンボリックリンクを作れる");
+        });
     }
 }

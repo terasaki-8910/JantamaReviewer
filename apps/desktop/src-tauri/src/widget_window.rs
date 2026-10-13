@@ -162,6 +162,11 @@ pub fn build_window<R: Runtime, M: Manager<R>>(
     if let Some(dir) = crate::webview_data::app_webview_dir(crate::webview_data::config_env()) {
         builder = builder.data_directory(dir);
     }
+    // macOS の WKWebView の設定（リンクのプレビューを出さない・保存領域を識別子で分ける）。Windows では何もしない。
+    builder = crate::platform::with_webview_options(
+        builder,
+        crate::webview_data::app_data_store_id(crate::webview_data::config_env()),
+    );
     let window = builder.build()?;
     if spec.min_size.is_some() {
         // 作る最中は Windows の既定の下限（幅 136px）が先に効いて、小さい窓が広がってしまう。
