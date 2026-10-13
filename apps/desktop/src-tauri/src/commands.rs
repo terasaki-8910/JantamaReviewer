@@ -199,6 +199,10 @@ pub fn spawn_show_watchdog<R: Runtime>(app: AppHandle<R>, after: Duration) {
         .spawn(move || {
             thread::sleep(after);
             for label in [WIDGET_LABEL, MAIN_LABEL] {
+                // ウィジェットの無い OS（macOS の段階 2）では、ウィジェットの窓は作っていない。
+                if app.get_webview_window(label).is_none() {
+                    continue;
+                }
                 let show = app.state::<SharedShowGate>().lock().timeout(label);
                 if show {
                     eprintln!(

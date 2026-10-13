@@ -43,13 +43,22 @@ function isPlatformInfo(value: unknown): value is PlatformInfo {
   );
 }
 
-/** Rust から OS の情報を受け取って決める。受け取れなかったときは、Windows のまま（画面は描けるようにする）。 */
+/** OS の情報の答えを待つ上限（ミリ秒）。答えが来なくても、画面が描けないままにならないようにする。 */
+const LOAD_TIMEOUT_MS = 3000;
+
+/** Rust から OS の情報を受け取って決める。受け取れなかったとき・答えが遅いときは、Windows のまま（画面は描けるようにする）。 */
 export async function loadPlatform(): Promise<PlatformInfo> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const info: unknown = await api.getPlatformInfo();
+    const waited = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), LOAD_TIMEOUT_MS);
+    });
+    const info: unknown = await Promise.race([api.getPlatformInfo(), waited]);
     if (isPlatformInfo(info)) current = info;
   } catch {
     // 受け取れなくても、画面は描く。
+  } finally {
+    clearTimeout(timer);
   }
   return current;
 }

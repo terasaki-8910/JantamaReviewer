@@ -51,6 +51,18 @@ describe('OS の情報の受け取り（macOS 対応の段階 2）', () => {
     expect(platform().features.widget).toBe(false);
   });
 
+  it('答えが来ないときは、少し待って Windows のまま進む（画面が描けないままにならない）', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(invoke).mockReturnValue(new Promise(() => undefined));
+      const loading = loadPlatform();
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(await loading).toEqual(WINDOWS_PLATFORM);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('形の違う答え・失敗のときは、Windows のまま（画面は描ける）', async () => {
     const replies = [
       undefined,
