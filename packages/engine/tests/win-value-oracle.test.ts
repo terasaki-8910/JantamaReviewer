@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { fuBreakdownOf, fuDetailOf } from '../src/fu-detail';
 import { importReportText } from '../src/import';
+import { kyokuResultOf } from '../src/kyoku-result';
 import { type WaitShape, type WinSpec, coreEvaluateWin, coreTenpaiWaits, coreWaitShapes } from '../src/majiang-adapter';
 import type { Fuuro, Seat, Wind } from '../src/report-types';
 import { type Tile, countTiles, kindToTile, parseTenhouNotation, tileKind } from '../src/tiles';
 import { type WinInput, YAKU_NAMES, type YakuId, yakuMeldOf } from '../src/yaku';
 import { FX1_IDS, FX4_ID, FX5_ID, loadFixtureJson, loadReportText } from './helpers/fixtures';
-import { horaCasesOf } from './helpers/hora-rebuild';
 import { ORACLE_YAKU_IDS, meldsOf } from './helpers/yaku-oracle';
 
 // E-36（待ちと打点）・E-37（待ちの形）・E-38（符の内訳）: Python の mahjong ライブラリの正解表（fixtures/win-value-oracle.json。
@@ -144,10 +144,12 @@ describe('E-36 待ちと打点: 牌譜の和了 69 件の再計算', () => {
       const game = importReportText(loadReportText(id));
       if (!game.ok) throw new Error(game.error.message);
       for (let position = 0; position < game.value.kyokus.length; position++) {
-        for (const h of horaCasesOf(game.value, id, position)) {
-          expect(h.value.none, h.id).toBe(false);
-          expect(h.deltasCore, h.id).toEqual(h.deltasLog);
-          if (h.spec.honba > 0 || h.spec.kyotaku > 0) withBonus++;
+        const result = kyokuResultOf(game.value.report, position);
+        for (const [i, h] of (result?.kind === 'win' ? result.wins : []).entries()) {
+          const name = `${id} 局${position} 和了${i}`;
+          expect(h.line.none, name).toBe(false);
+          expect(h.deltasComputed, name).toEqual(h.deltas);
+          if (h.honba > 0 || h.kyotaku > 0) withBonus++;
           n++;
         }
       }
