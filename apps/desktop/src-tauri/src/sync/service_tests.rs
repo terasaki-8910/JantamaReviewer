@@ -309,6 +309,17 @@ fn d4_a_wrong_token_pauses_syncing_until_the_user_acts() {
     f.unauthorized.store(true, Ordering::SeqCst);
     f.sync_and_wait(SyncState::Attention);
     assert!(f.service.status().message.unwrap().contains("トークン"));
+    // 保存・使うの設定で頼んだ同期が、残らず片づくのを待つ（その分の通信は、数えない）
+    let mut last = f.pulls.load(Ordering::SeqCst);
+    let mut quiet_since = Instant::now();
+    while quiet_since.elapsed() < Duration::from_millis(300) {
+        std::thread::sleep(Duration::from_millis(20));
+        let now = f.pulls.load(Ordering::SeqCst);
+        if now != last {
+            last = now;
+            quiet_since = Instant::now();
+        }
+    }
     // 止まっている間は、時間が来ても、通信しない
     let pulls = f.pulls.load(Ordering::SeqCst);
     f.dev
