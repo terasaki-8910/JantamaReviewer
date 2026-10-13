@@ -20,7 +20,8 @@
  *    アプリを止めたあとに書き換えて、数週間ぶんの履歴にする（問題は、半荘より前の日には答えない）。
  * 5. 履歴の画面: 解き直し・検討ログ・週の集計・検索・半荘を通して見る画面（鳴きの場面に答えて、欄「役」と、タブ「待ちと打点」の符の内訳も撮る）・設定。
  * 6. 守備のタブ: いちばん古い半荘（結果だけ）の、他家（対面）がリーチしている打牌の場面（南1局 15巡目。大きな不一致）に、通して見る画面で答えて、タブ「守備」を撮る。
- * 7. 局の結果の手: 取り込んだ半荘（FX-4）の局の評価の表で、放銃した局の行を開いて、局の結果の手（相手の手牌・待ち・役・符・点数）を撮る。
+ * 7. 局の結果の手と向聴数の推移: 取り込んだ半荘（FX-4）の局の評価の表で、自分が和了した局（迷い・大きな不一致・聴牌になった打牌の印が付く）と、放銃した局の行を開いて、
+ *    局の結果の手（相手の手牌・待ち・役・符・点数）と、その下の向聴数の推移の折れ線を撮る。
  *
  * 安全のための決まりは、readme-lib.mjs の説明を参照（本物のデータに触れない・自分で起動したプロセスだけを止める・
  * 記録の命令は本体に通さない・クリップボードは触らない）。設定ページの写真だけは、本物の状態ではなく、表示を差し替える。
@@ -543,24 +544,31 @@ async function dangerPhase() {
 
 // ---- 7. 局の結果の手 ----
 
-/** 局の結果の手（F14、U-36）: 取り込んだ半荘（FX-4。21:03）の、放銃した局（東3局）の行を開く。 */
+/**
+ * 局の結果の手と向聴数の推移（F14、U-36）: 取り込んだ半荘（FX-4。21:03）の、自分が和了した局（東2局1本場。迷い 3・4 と大きな不一致 2 つ、聴牌になった打牌の印が付く）と、
+ * 放銃した局（東3局。相手の手牌と待ち）の行を開く。どちらも、局の結果の手の下に、向聴数の推移の折れ線が出る。
+ */
 async function resultPhase() {
-  console.log('7. 局の結果の手');
+  console.log('7. 局の結果の手と向聴数の推移');
   await boot(7, 6);
   const A = appActions(h.main);
   const main = h.main;
   await A.openSession('21:03');
   await main.waitFor(`document.querySelector('table.tbl')`, '局の評価の表');
   const side = await sideWidth();
-  const opener = `Array.from(document.querySelectorAll('.tbl tbody tr')).find((tr) => tr.querySelector('td') && tr.querySelector('td').textContent === '放銃').querySelector('button.hx-open')`;
-  await main.click(opener, '放銃した局の名前');
-  await main.waitFor(`document.querySelector('tr.hx-exp .hx-win')`, '局の結果の手');
+  const opener = (result) =>
+    `Array.from(document.querySelectorAll('.tbl tbody tr')).find((tr) => tr.querySelector('td') && tr.querySelector('td').textContent === '${result}').querySelector('button.hx-open')`;
+  await main.click(opener('和了'), '自分が和了した局の名前');
+  await main.waitFor(`document.querySelectorAll('tr.hx-exp .hx-trk').length === 1`, '向聴数の推移（和了した局）');
+  await main.click(opener('放銃'), '放銃した局の名前');
+  await main.waitFor(`document.querySelectorAll('tr.hx-exp .hx-trk').length === 2 && document.querySelector('tr.hx-exp .hx-win .hx-waits')`, '局の結果の手と向聴数の推移（放銃した局）');
   await main.fit(1280, 900, 2);
   await main.settle();
   const section = await main.rectOf(byText('h2.sec-title', '局の評価') + `.closest('section')`);
-  const open = await main.rectOf(`document.querySelector('tr.hx-exp')`);
-  const bottom = Math.ceil(open.y + open.height + 16);
-  await shot('hanchan-result.png', { x: side, y: Math.max(0, Math.floor(section.y - 12)), width: 1280 - side, height: bottom - Math.max(0, Math.floor(section.y - 12)) });
+  const last = await main.rectOf(`Array.from(document.querySelectorAll('tr.hx-exp')).pop()`);
+  const top = Math.max(0, Math.floor(section.y - 12));
+  const bottom = Math.ceil(last.y + last.height + 2);
+  await shot('hanchan-result.png', { x: side, y: top, width: 1280 - side, height: bottom - top });
   await main.viewport(1280, 900, 1);
   h.stopApp();
 }

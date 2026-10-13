@@ -1224,6 +1224,110 @@ body.lb-open {
   color: var(--muted);
 }
 
+/*
+  向聴数の推移（自分。局の結果の手の下。承認済みの見本の .sp-* の部品）: 折れ線（ShantenChart）・凡例・「表で見る」。
+  折れ線は、広い幅でも、見本と同じ大きさまでにとどめる（幅いっぱいに伸ばさない）。凡例の記号の色は、折れ線の印と同じトークン。
+  「表で見る」の表は、局の評価の表（.tbl）の中に入るので、table 要素ではなく、表の役割を付けた箱（.tbl の th・td の規則が及ばないように）。
+*/
+.hx-trk .shchart {
+  max-width: 440px;
+}
+
+.hx-leg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--s4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hx-leg li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hx-leg svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  overflow: visible;
+}
+
+.hx-leg .dbt {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.hx-leg .bgm {
+  fill: var(--ink);
+}
+
+.hx-leg .tpm {
+  fill: var(--accent);
+}
+
+.hx-tgl {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  min-height: 28px;
+  margin: -2px 0 0 -4px;
+  padding: 0 8px 0 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.hx-tgl:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.hx-tgl[aria-expanded="true"] .hx-chev {
+  transform: rotate(90deg);
+}
+
+.hx-sptbl {
+  display: grid;
+  max-width: 440px;
+  font-size: 12.5px;
+}
+
+.hx-sptbl [role="row"] {
+  display: grid;
+  grid-template-columns: 4.5em 3.2em 5em minmax(0, 1fr);
+  gap: 0 var(--s3);
+  padding: 3px 0;
+  border-top: 1px solid var(--line);
+}
+
+.hx-sptbl [role="columnheader"] {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.hx-sptbl [role="rowheader"],
+.hx-sptbl [role="cell"] {
+  min-width: 0;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+/* 印の文は、まとまりごとに折り返す（「迷い4（東をポン）」を、途中で割らない。1 つが欄より長いときだけ、中で折り返す） */
+.hx-sptbl .hx-mk {
+  display: inline-block;
+  max-width: 100%;
+}
+
 @container main (width < 600px) {
   .tbl tr.hx-exp {
     display: block;

@@ -38,6 +38,8 @@
  *   （席ごとの枚数 `handCounts` と、ツモ牌の有無 `handDrawn` だけ）。卓の全部は `tableAt`（replay.ts の `TableView`。和了の状況も持つ）
  * - 他家が聴牌した巡目（F14、E-43。R16-7 の A）: `opponentTracksOf`（局を牌譜で追い、他家 3 人ごとに、切るたびの向聴数（E-21 と同じ数え方）、
  *   聴牌になった打牌（聴牌の区間ごとに最初の 1 つ）、そこに至った経路（ツモ・チー・ポン・カン）、待ち）
+ * - 自分の向聴数の推移（F14、E-41。局の評価の表の行を開いたとき）: `myTrackOf`（局を牌譜で追い、配牌と自分が切るたびの場面の向聴数（E-21 と同じ数え方。巡目は記録のまま）、
+ *   聴牌になった打牌、その局の迷い・大きな不一致の場面（`listReplayScenes`）が横軸のどこにあるか。チー・ポンは点を作らず、鳴いたあとの打牌が点になる）
  * - 局の結果の手（F14、E-40。局の評価の表の行を開いたとき）: `kyokuResultOf`（牌譜から和了者の手牌・和了牌・和了の状況を組み立てて majiang-core で役・飜・符・点数を計算し直す。
  *   他家のツモ・ロンも、ダブロンも。計算し直した点の増減は牌譜と一致する。放銃した局は相手の手牌と待ち。流局は 4 人の手牌（荒牌平局は聴牌・ノーテン））
  * - 役の調査（R10-6・R12-14。画面には使わない試作）: `evaluateWin`（和了形の役・符。HandCalculator と同じ選び方）、`settledYaku`（聴牌の手の「確定している役」）、
@@ -110,6 +112,7 @@ export * from './maka';
 export * from './maka-fit';
 export * from './maka-fit-base';
 export * from './mark-link';
+export * from './my-track';
 export * from './open-hands';
 export * from './open-sign';
 export * from './opponent-track';

@@ -527,6 +527,7 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
               rereads={rereads}
               onOpenReplay={openReplay}
               fit={fit}
+              threshold={study.threshold}
             />
           )}
           {sessions !== null && selectedSession === null && (view.kind === 'none' || view.kind === 'session') && (

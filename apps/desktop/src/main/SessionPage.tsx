@@ -1,7 +1,7 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
-import { listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
+import { DEFAULT_DISAGREEMENT_THRESHOLD, listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
 
 import { api } from '../api/tauri';
 import type { RatingEntry, SelfRatingValue, SessionRecord } from '../api/types';
@@ -19,6 +19,7 @@ import { chipsByKyoku } from './markChips';
 import { markCaptionParts, resolveMarks, type ResolvedMark } from './markCards';
 import { MarkCard } from './MarkCard';
 import { MarkMemoFields } from './MarkMemoFields';
+import { MyShantenTrack } from './MyShantenTrack';
 import { MEMO_INTRO, memoOfMark } from './memos';
 import { ReplayIcon } from './replay/ReplayIcons';
 import { IDLE_REREADS, type Rereads } from './rereadStore';
@@ -60,6 +61,11 @@ interface SessionPageProps {
    * このページで MAKA の評価を入れて当てはめが替わったら、「合わせ直しました」も出す。渡さなければ、基礎の 67 局の見込みを出す。
    */
   fit?: MakaFitState;
+  /**
+   * 大きな不一致の基準（確率。設定の「大きな不一致の基準」。検討画面のシェルが渡す）。局の評価の表の行を開いたときの向聴数の推移の、
+   * 大きな不一致の印（菱形）に使う（U-36）。渡さなければ、既定の 5%。
+   */
+  threshold?: number;
 }
 
 const noop = () => Promise.resolve();
@@ -84,6 +90,7 @@ export function SessionPage({
   rereads = IDLE_REREADS,
   onOpenReplay,
   fit = BASE_FIT_STATE,
+  threshold = DEFAULT_DISAGREEMENT_THRESHOLD,
 }: SessionPageProps) {
   const titleId = useId();
   const marksId = useId();
@@ -126,6 +133,18 @@ export function SessionPage({
   );
   // 局の評価の表の「迷い」の列の札（迷いのカードと同じ結びつけから。U-27）
   const chips = useMemo(() => (resolved === null ? undefined : chipsByKyoku(resolved)), [resolved]);
+  // 局の評価の表の行を開いたときの、向聴数の推移（U-36）: 迷いごとの、結びつけた判断の鍵（迷いの番号は、並びの位置 + 1）
+  const markKeys = useMemo(
+    () => (resolved ?? []).map((mark) => (mark.resolution.kind === 'linked' ? mark.resolution.ref.key : null)),
+    [resolved],
+  );
+  const myTrackBelow = useCallback(
+    (row: HandRow) =>
+      report === null ? null : (
+        <MyShantenTrack report={report} position={row.position} label={row.label} markKeys={markKeys} threshold={threshold} />
+      ),
+    [report, markKeys, threshold],
+  );
 
   // 札を押すと、その迷いのカードへ移って、少しの間目立たせる（キーボードの位置もカードへ移す）
   const cards = useRef(new Map<number, HTMLElement>());
@@ -338,6 +357,7 @@ export function SessionPage({
                 fit={fit}
                 refit={refit}
                 report={report ?? undefined}
+                detailBelow={myTrackBelow}
               />
             </section>
           ) : readingReport ? (

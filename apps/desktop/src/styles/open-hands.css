@@ -200,6 +200,19 @@
   fill: var(--accent);
 }
 
+/* 自分の推移の印: 迷いは点を囲む輪、大きな不一致は点の右の菱形（線から浮かないように、面の色の縁を付ける） */
+.shchart-svg .dbt {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+}
+
+.shchart-svg .bgm {
+  fill: var(--ink);
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+
 .shchart-svg .cur {
   fill: none;
   stroke: var(--ink);
