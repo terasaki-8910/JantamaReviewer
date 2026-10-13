@@ -738,6 +738,105 @@
   grid-column: 1;
 }
 
+/* 取り込んだ半荘から数えた値（参考。F14、U-37、R15-7 の B）: 成績（手入力）のすぐ下の、別の小さな表。見本の st-tbl のとおり */
+.wk-sec + .wk-sec.wk-imp {
+  margin-top: var(--s4);
+}
+
+.wk-imp-tbl {
+  width: 100%;
+  max-width: 640px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.wk-imp-tbl th,
+.wk-imp-tbl td {
+  padding: 8px var(--s3) 8px 0;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  font-weight: 400;
+  vertical-align: baseline;
+}
+
+.wk-imp-tbl thead th {
+  padding-top: 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wk-imp-tbl tbody th {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wk-imp-tbl .num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wk-imp-tbl td small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.wk-imp-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.wk-games {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.wk-games > * {
+  min-width: 0;
+}
+
+.wk-games-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  min-height: 40px;
+  padding: 0 var(--s3) 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.wk-games-btn:hover {
+  color: var(--ink);
+}
+
+.wk-games-btn .chev {
+  width: 16px;
+  height: 16px;
+  transition: transform 120ms ease;
+}
+
+.wk-games-btn[aria-expanded="true"] .chev {
+  transform: rotate(90deg);
+}
+
+.wk-imp-games tbody th small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 /* 来週の重点 */
 .wk-focus {
   display: grid;

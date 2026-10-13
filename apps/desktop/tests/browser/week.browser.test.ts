@@ -114,17 +114,27 @@ const STATES: StateDef[] = [
     },
   },
   {
+    name: '取り込んだ半荘から数えた値（半荘ごとに見るを開いた状態。7半荘）',
+    run: async (page) => {
+      await page.getByRole('table', { name: /値ともとの数/ }).waitFor({ timeout: 30_000 });
+      await page.getByRole('button', { name: /^半荘ごとに見る/ }).click();
+      await page.getByRole('table', { name: '取り込んだ半荘ごとの成績' }).waitFor();
+    },
+  },
+  {
     name: '先週（記録が今週だけの週の前。答えの無い週）',
     run: async (page) => {
       await page.getByRole('button', { name: '前の週' }).click();
       await page.getByText('この週は、答えた問題がありません。').first().waitFor();
+      await page.getByText('この週に取り込んだ半荘はありません。').waitFor();
     },
   },
 ];
 
 async function openState(state: StateDef, options: { width?: number; scheme?: Scheme } = {}): Promise<Opened> {
   const sparse = state.name.startsWith('先週');
-  const opened = await open({ ...options, sparse });
+  const imported = state.name.startsWith('取り込んだ半荘');
+  const opened = await open({ ...options, sparse, imported });
   await openWeek(opened.page);
   await state.run(opened.page);
   return opened;
@@ -501,6 +511,183 @@ describe('U-30: 成績と来週の重点を、本物のキーで入れて保存�
       expect(fits).toBe(true);
     } finally {
       await context.close();
+    }
+  });
+});
+
+// ---- 取り込んだ半荘から数えた値（U-37。F14、R15-7 の B） ----
+
+const IMPORTED_HEADING = '取り込んだ半荘から数えた値（参考）';
+
+/** 取り込んだ半荘の表が、7 半荘の値で出るまで待つ。 */
+async function waitImported(page: Page): Promise<void> {
+  await page.getByRole('table', { name: /値ともとの数/ }).waitFor({ timeout: 30_000 });
+  await page.getByText('2半荘 / 7半荘').waitFor({ timeout: 30_000 });
+}
+
+describe('U-37: 取り込んだ半荘から数えた値（手入力の成績の下の別の表）', () => {
+  for (const width of [390, 768, 1280]) {
+    for (const scheme of SCHEMES) {
+      it(`幅 ${width}px・${scheme}: 手入力のカードの下に表が出て、見本の値が出る。表は横にはみ出さない（はみ出す半荘ごとの表は、名前つきの横スクロールの領域になる）。手入力の欄は空のまま`, { timeout: 120_000 }, async () => {
+        const { context, page, problems } = await open({ width, scheme, imported: true });
+        try {
+          await openWeek(page);
+          await waitImported(page);
+          const where = `@${width} ${scheme}`;
+          const info = await page.evaluate((heading) => {
+            const section = (name: string) => [...document.querySelectorAll('section')].find((el) => el.querySelector('h2')?.textContent === name) as HTMLElement;
+            const manual = section('成績（手入力）');
+            const imported = section(heading);
+            const focus = section('来週の重点');
+            const r = (el: Element) => el.getBoundingClientRect();
+            const wrap = imported.querySelector('.wk-tablewrap') as HTMLElement;
+            return {
+              order: r(manual).bottom <= r(imported).top + 1 && r(imported).bottom <= r(focus).top + 1,
+              gap: Math.round(r(imported).top - r(manual).bottom),
+              manualInputs: [...manual.querySelectorAll('input')].map((input) => input.value),
+              manualCards: manual.querySelectorAll('.wk-recc').length,
+              rows: [...imported.querySelectorAll('tbody tr')].map((tr) => [...tr.children].map((c) => (c.textContent ?? '').replace(/\s+/g, ' ').trim())),
+              mainOverflow: wrap.scrollWidth > wrap.clientWidth + 1,
+              mainRegion: wrap.getAttribute('role'),
+              tableRight: Math.round(r(imported.querySelector('table') as Element).right),
+              pageScroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            };
+          }, IMPORTED_HEADING);
+          expect(info.order, `${where} 並び（手入力 → 取り込んだ半荘 → 来週の重点）`).toBe(true);
+          expect(info.gap, `${where} 手入力の成績との間`).toBeLessThanOrEqual(40);
+          expect(info.manualCards, where).toBe(6);
+          expect(info.manualInputs, where).toEqual(['', '', '', '', '', '']);
+          expect(info.rows, where).toEqual([
+            ['4位率', '28.6%', '2半荘 / 7半荘'],
+            ['放銃率', '11.0%', '9局 / 82局'],
+            ['平均順位', '2.71位', '順位の合計 19 / 7半荘'],
+            ['和了率', '19.5%', '16局 / 82局'],
+            ['副露率', '29.3%', '24局 / 82局'],
+            ['立直率', '19.5%', '16局 / 82局'],
+            ['平均和了点', '6,925点', '和了 16回の点数の合計 110,800'],
+          ]);
+          // 3 列の表は、細い窓でも「もとの数」が折り返して、横にはみ出さない
+          expect(info.mainOverflow, `${where} 表が横にはみ出す`).toBe(false);
+          expect(info.mainRegion, where).toBeNull();
+          expect(info.tableRight, where).toBeLessThanOrEqual(width);
+          expect(info.pageScroll, where).toBeLessThanOrEqual(0);
+
+          // 「半荘ごとに見る」を開く。8 列の表は、はみ出すときだけ、名前つきの領域（キーボードで止まれる）にする
+          await page.getByRole('button', { name: '半荘ごとに見る（7半荘）' }).click();
+          await page.getByRole('table', { name: '取り込んだ半荘ごとの成績' }).waitFor();
+          const games = await page.evaluate((heading) => {
+            const imported = [...document.querySelectorAll('section')].find((el) => el.querySelector('h2')?.textContent === heading) as HTMLElement;
+            const table = [...imported.querySelectorAll('table')].find((t) => t.querySelector('caption')?.textContent === '取り込んだ半荘ごとの成績') as HTMLElement;
+            const wrap = table.closest('.wk-tablewrap') as HTMLElement;
+            return {
+              rows: table.querySelectorAll('tbody tr').length,
+              overflow: wrap.scrollWidth > wrap.clientWidth + 1,
+              region: wrap.getAttribute('role'),
+              label: wrap.getAttribute('aria-label'),
+              tabindex: wrap.getAttribute('tabindex'),
+              right: Math.round(wrap.getBoundingClientRect().right),
+              pageScroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            };
+          }, IMPORTED_HEADING);
+          expect(games.rows, where).toBe(7);
+          expect(games.right, where).toBeLessThanOrEqual(width);
+          expect(games.pageScroll, `${where} ページが横にはみ出す`).toBeLessThanOrEqual(0);
+          if (games.overflow) {
+            expect(games.region, where).toBe('region');
+            expect(games.label, where).toBe('半荘ごとの成績（横にスクロールできます）');
+            expect(games.tabindex, where).toBe('0');
+          } else {
+            expect(games.region, where).toBeNull();
+          }
+          if (width === 390) expect(games.overflow, `${where} 8 列の表は、細い窓では領域の中で動く`).toBe(true);
+          expect(problems, where).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('「半荘ごとに見る」は、本物のキー（Enter・Space）で開閉できる。Tab の順は、成績（手入力）→ 説明のアイコン → 半荘ごとに見る → 来週の重点', { timeout: 120_000 }, async () => {
+    const { context, page } = await open({ width: 1280, imported: true });
+    try {
+      await openWeek(page);
+      await waitImported(page);
+      const toggle = page.getByRole('button', { name: '半荘ごとに見る（7半荘）' });
+      expect(await toggle.getAttribute('aria-expanded')).toBe('false');
+      // 立直率の欄から Tab を押していくと、説明のアイコン → 開閉のボタン → 来週の重点の欄の順に止まる
+      await page.getByRole('textbox', { name: '立直率' }).focus();
+      const stops: string[] = [];
+      for (let i = 0; i < 6; i += 1) {
+        await page.keyboard.press('Tab');
+        stops.push(
+          await page.evaluate(() => {
+            const el = document.activeElement as HTMLElement | null;
+            return el?.getAttribute('aria-label') ?? (el?.tagName === 'TEXTAREA' ? 'TEXTAREA' : (el?.textContent ?? '').trim());
+          }),
+        );
+      }
+      const tip = stops.indexOf('取り込んだ半荘からの成績の説明');
+      expect(tip, `止まる順 ${JSON.stringify(stops)}`).toBeGreaterThanOrEqual(0);
+      expect(stops[tip + 1], `止まる順 ${JSON.stringify(stops)}`).toBe('半荘ごとに見る（7半荘）');
+      expect(stops[tip + 2], `止まる順 ${JSON.stringify(stops)}`).toBe('TEXTAREA');
+      // Enter で開く → 7 行 → Space で閉じる → もう一度 Space で開く
+      await toggle.focus();
+      await page.keyboard.press('Enter');
+      const games = page.getByRole('table', { name: '取り込んだ半荘ごとの成績' });
+      await games.waitFor();
+      expect(await toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(await games.locator('tbody tr').count()).toBe(7);
+      await page.keyboard.press('Space');
+      expect(await toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(await games.count()).toBe(0);
+      await page.keyboard.press('Space');
+      expect(await toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(await games.locator('tbody tr').count()).toBe(7);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('幅 1280・390px: 半荘ごとの表を開いた状態でも、Tab だけで、すべての操作に届く', { timeout: 120_000 }, async () => {
+    for (const width of [1280, 390]) {
+      const { context, page } = await open({ width, imported: true });
+      try {
+        await openWeek(page);
+        await waitImported(page);
+        await page.getByRole('button', { name: '半荘ごとに見る（7半荘）' }).click();
+        await page.getByRole('table', { name: '取り込んだ半荘ごとの成績' }).waitFor();
+        const reach = await unreachableByTab(page);
+        expect(reach.total, `@${width}`).toBeGreaterThan(30);
+        expect(reach.missed, `@${width}`).toEqual([]);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('取り込んだ半荘が無い週は、表を出さず 1 行だけ（先週。幅 390・1280、ライト・ダーク）。手入力のカードはそのまま', { timeout: 120_000 }, async () => {
+    for (const width of [390, 1280]) {
+      for (const scheme of SCHEMES) {
+        const { context, page } = await open({ width, scheme, sparse: true });
+        try {
+          await openWeek(page);
+          await page.getByRole('button', { name: '前の週' }).click();
+          await page.getByText('この週に取り込んだ半荘はありません。').waitFor();
+          const info = await page.evaluate((heading) => {
+            const imported = [...document.querySelectorAll('section')].find((el) => el.querySelector('h2')?.textContent === heading) as HTMLElement;
+            return {
+              tables: imported.querySelectorAll('table').length,
+              buttons: [...imported.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent),
+              lines: imported.querySelectorAll('.wk-empty').length,
+            };
+          }, IMPORTED_HEADING);
+          expect(info, `@${width} ${scheme}`).toEqual({ tables: 0, buttons: ['取り込んだ半荘からの成績の説明'], lines: 1 });
+          expect(await page.getByRole('textbox', { name: '4位率' }).count()).toBe(1);
+        } finally {
+          await context.close();
+        }
+      }
     }
   });
 });
