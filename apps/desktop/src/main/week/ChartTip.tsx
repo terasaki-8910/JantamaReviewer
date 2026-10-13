@@ -39,6 +39,9 @@ export function ChartTipProvider({ children }: { children: ReactNode }) {
     valueRef.current.textContent = value;
     labelRef.current.textContent = label;
     tip.hidden = false;
+    // 前の位置のまま測ると、右端の近くでは使える幅が狭まり、文が折り返された幅になる。左上に置いてから測る
+    tip.style.left = '0px';
+    tip.style.top = '0px';
     const width = tip.offsetWidth;
     const height = tip.offsetHeight;
     const left = Math.min(Math.max(EDGE, x + 12), window.innerWidth - width - EDGE);

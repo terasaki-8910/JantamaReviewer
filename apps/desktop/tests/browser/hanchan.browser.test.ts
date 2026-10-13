@@ -736,6 +736,13 @@ describe('U-36 向聴数の推移（実ブラウザ。局の評価の行を開�
         expect(await read()).toMatchObject({ value: '2向聴', label: '配牌', inside: true });
         for (let i = 0; i < 11; i += 1) await page.keyboard.press('ArrowRight');
         expect(await read()).toMatchObject({ value: '1向聴・迷い2・大きな不一致', label: '11巡目 打8p', inside: true });
+        // 印の付いた値は、途中で折り返さず 1 行に収まる（吹き出しの幅が狭いと「大きな / 不一致」と割れた）
+        const valueLines = await page.evaluate(() => {
+          const v = document.querySelector<HTMLElement>('.wk-tip:not([hidden]) .wk-tip-v');
+          if (v === null) return 0;
+          return Math.round(v.getBoundingClientRect().height / parseFloat(getComputedStyle(v).lineHeight));
+        });
+        expect(valueLines).toBe(1);
         await page.keyboard.press('End');
         expect(await read()).toMatchObject({ value: '1向聴', label: '13巡目 打8s', inside: true });
         await page.keyboard.press('Escape');

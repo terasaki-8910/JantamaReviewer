@@ -56,23 +56,46 @@ async function fetchFromServer(url: URL): Promise<Response> {
   }
 }
 
+/** 準備の読み込みを、同時にいくつまで送るか。 */
+const WARM_UP_CONCURRENCY = 6;
+
 /**
  * 入口のモジュールから読み込まれるものを、先にすべて 1 回ずつ読んでおく（依存の事前変換の結果も含む）。
  * 事前変換は最初の要求のあとに始まって数秒かかるので、最初のテストの制限時間の中で待たせないための準備。
+ * 1 つずつ読むと、モジュールが増えたとき（2026-10-13 の F14 の段で、エンジンのファイルが増えた）、3 つのファイルが
+ * 同時に準備する間に、準備（beforeAll）の制限時間 60 秒を超えた。いくつかずつ並べて読む。
  */
 async function warmUp(origin: string): Promise<void> {
-  const seen = new Set<string>();
+  const seen = new Set<string>(ENTRY_MODULES);
   const queue = [...ENTRY_MODULES];
-  for (let path = queue.pop(); path !== undefined; path = queue.pop()) {
-    if (seen.has(path)) continue;
-    seen.add(path);
-    const response = await fetchFromServer(new URL(path, origin));
-    const body = await response.text();
-    if (!response.ok) throw new Error(`開発サーバーの応答が ${response.status} でした: ${path}`);
-    for (const match of body.matchAll(/(?:from|import)\s*"(\/[^"]+)"/g)) {
-      if (match[1] !== undefined) queue.push(match[1]);
+  let busy = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const path = queue.pop();
+      if (path === undefined) {
+        // ほかの読み込みが、まだ新しいモジュールを見つけるかもしれない
+        if (busy === 0) return;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        continue;
+      }
+      busy += 1;
+      try {
+        const response = await fetchFromServer(new URL(path, origin));
+        const body = await response.text();
+        if (!response.ok) throw new Error(`開発サーバーの応答が ${response.status} でした: ${path}`);
+        for (const match of body.matchAll(/(?:from|import)\s*"(\/[^"]+)"/g)) {
+          const found = match[1];
+          if (found !== undefined && !seen.has(found)) {
+            seen.add(found);
+            queue.push(found);
+          }
+        }
+      } finally {
+        busy -= 1;
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: WARM_UP_CONCURRENCY }, worker));
 }
 
 export async function startPageServer(): Promise<PageServer> {
