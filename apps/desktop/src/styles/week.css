@@ -379,7 +379,7 @@
   z-index: 90;
   display: grid;
   gap: 2px;
-  max-width: 16em;
+  max-width: min(24em, calc(100vw - 16px));
   padding: 6px 10px;
   background: var(--surface);
   border: 1px solid var(--line-strong);
