@@ -1053,8 +1053,8 @@ describe('U-34: 答え合わせのタブ（待ちと打点・待ちの形・符�
       expect(found).toEqual({ tabs: 0, text: false });
       await answerCurrent(before.page);
       const tabs = before.page.getByRole('tab');
-      // 「他家の手牌」のタブは、答えたあとの、どの場面にも出る（いちばん右）
-      expect(await tabs.allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
+      // 「他家の手牌」のタブは無い（盤面の手牌を押して開く。R16-7）
+      expect(await tabs.allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点']);
       expect(await before.page.getByRole('tab', { name: '受け入れ・役' }).getAttribute('aria-selected')).toBe('true');
       // 既定のタブの中身は、これまでと同じ（受け入れ枚数の欄と役の欄）で、待ちと打点の中身は描かれていない
       expect(await before.page.locator('[data-ai="ukeire-box"], [data-ai="yaku-box"]').count()).toBe(2);
@@ -1062,12 +1062,13 @@ describe('U-34: 答え合わせのタブ（待ちと打点・待ちの形・符�
     } finally {
       await before.context.close();
     }
-    // 聴牌でない判断（FX-4 の最初の問題）には、待ちと打点のタブは出ない（既定のタブと、他家の手牌だけ）
-    const far = await open({ scenario: scenario({ due: true }) });
+    // 聴牌でない判断（FX-4 東1局 4巡目）には、待ちと打点のタブは出ない（リーチも副露の気配も無いので、タブの並びも無い）
+    const far = await open({ scenario: scenario({ dueKeys: ['k0h0e4'] }) });
     try {
       await openReview(far.page);
       await answerCurrent(far.page);
-      expect(await far.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '他家の手牌']);
+      expect(await far.page.getByRole('tab').allInnerTexts()).toEqual([]);
+      expect(await far.page.getByRole('tablist').count()).toBe(0);
     } finally {
       await far.context.close();
     }
@@ -1078,24 +1079,23 @@ describe('U-34: 答え合わせのタブ（待ちと打点・待ちの形・符�
     try {
       const first = page.getByRole('tab', { name: '受け入れ・役' });
       const second = page.getByRole('tab', { name: '待ちと打点' });
-      const third = page.getByRole('tab', { name: '他家の手牌' });
       await first.focus();
       await page.keyboard.press('ArrowRight');
       expect(await second.getAttribute('aria-selected')).toBe('true');
       expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('待ちと打点');
-      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, 0, -1]);
-      // 通して見る画面のキーにも割り当てられている ← → Home End は、タブが受ける（画面は動かない）
-      await page.keyboard.press('ArrowRight');
-      expect(await third.getAttribute('aria-selected')).toBe('true');
+      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, 0]);
+      // 通して見る画面のキーにも割り当てられている ← → Home End は、タブが受ける（画面は動かない）。端では反対の端へ
       await page.keyboard.press('ArrowRight');
       expect(await first.getAttribute('aria-selected')).toBe('true');
       await page.keyboard.press('End');
-      expect(await third.getAttribute('aria-selected')).toBe('true');
+      expect(await second.getAttribute('aria-selected')).toBe('true');
       await page.keyboard.press('Home');
       expect(await first.getAttribute('aria-selected')).toBe('true');
       await page.keyboard.press('ArrowLeft');
-      expect(await third.getAttribute('aria-selected')).toBe('true');
+      expect(await second.getAttribute('aria-selected')).toBe('true');
       await page.keyboard.press('ArrowLeft');
+      expect(await first.getAttribute('aria-selected')).toBe('true');
+      await page.keyboard.press('ArrowRight');
       expect(await second.getAttribute('aria-selected')).toBe('true');
       // 選んでいるタブから Tab で、欄の中の最初の操作（説明のアイコン）へ。選んでいないタブには止まらない
       await page.keyboard.press('Tab');
@@ -1340,7 +1340,7 @@ describe('U-34: 答え合わせのタブ「守備」（他家のリーチがあ�
       }));
       expect(found).toEqual({ tabs: 0, text: false });
       await answerCurrent(before.page, 'first');
-      expect(await before.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
+      expect(await before.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
       expect(await before.page.getByRole('tab', { name: '受け入れ・役' }).getAttribute('aria-selected')).toBe('true');
       expect(await before.page.locator('[data-ai="danger-box"]').count()).toBe(0);
     } finally {
@@ -1351,7 +1351,7 @@ describe('U-34: 答え合わせのタブ「守備」（他家のリーチがあ�
     try {
       await openReview(only.page);
       await answerCurrent(only.page);
-      expect(await only.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '守備', '他家の手牌']);
+      expect(await only.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '守備']);
     } finally {
       await only.context.close();
     }
@@ -1359,35 +1359,35 @@ describe('U-34: 答え合わせのタブ「守備」（他家のリーチがあ�
     try {
       await openReview(noRiichi.page);
       await answerCurrent(noRiichi.page);
-      expect(await noRiichi.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
+      expect(await noRiichi.page.getByRole('tab').allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点']);
     } finally {
       await noRiichi.context.close();
     }
   });
 
-  it('← → Home End で、守備を含む 4 つのタブを選べて、キーボードの位置も移る。Tab は選んでいるタブから欄の中（説明のアイコン）へ、その次は差の原因へ。守備の欄の止まり場所は、説明のアイコンだけ', { timeout: 90_000 }, async () => {
+  it('← → Home End で、待ちと打点・守備を含む 3 つのタブを選べて、キーボードの位置も移る。Tab は選んでいるタブから欄の中（説明のアイコン）へ、その次は差の原因へ。守備の欄の止まり場所は、説明のアイコンだけ', { timeout: 90_000 }, async () => {
     const { context, page } = await openState(TENPAI_STATE);
     try {
-      const names = ['受け入れ・役', '待ちと打点', '守備', '他家の手牌'];
+      const names = ['受け入れ・役', '待ちと打点', '守備'];
       await page.getByRole('tab', { name: '守備' }).focus();
       const selected = async () =>
         page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent));
       await page.keyboard.press('ArrowRight');
-      expect(await selected()).toEqual([names[3]]);
-      expect(await page.evaluate(() => document.activeElement?.textContent)).toBe(names[3]);
-      await page.keyboard.press('ArrowRight');
       expect(await selected()).toEqual([names[0]]);
+      expect(await page.evaluate(() => document.activeElement?.textContent)).toBe(names[0]);
       await page.keyboard.press('ArrowLeft');
-      expect(await selected()).toEqual([names[3]]);
+      expect(await selected()).toEqual([names[2]]);
       await page.keyboard.press('Home');
       expect(await selected()).toEqual([names[0]]);
       await page.keyboard.press('ArrowRight');
       expect(await selected()).toEqual([names[1]]);
       await page.keyboard.press('End');
-      expect(await selected()).toEqual([names[3]]);
-      await page.keyboard.press('ArrowLeft');
       expect(await selected()).toEqual([names[2]]);
-      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, -1, 0, -1]);
+      await page.keyboard.press('ArrowLeft');
+      expect(await selected()).toEqual([names[1]]);
+      await page.keyboard.press('ArrowRight');
+      expect(await selected()).toEqual([names[2]]);
+      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, -1, 0]);
       // Tab: 説明のアイコン → 差の原因（欄の外）
       await page.keyboard.press('Tab');
       expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('守備の目安の説明');
@@ -1539,4 +1539,81 @@ describe('U-34: 答え合わせのタブ「守備」（他家のリーチがあ�
     expect(wide.docScroll).toBeLessThanOrEqual(wide.docClient);
     expect(narrow.docScroll).toBeLessThanOrEqual(narrow.docClient);
   });
+});
+
+describe('U-35・U-38: 出題・解き直しの盤面の他家の手牌（実ブラウザ）', () => {
+  const faceUpInDom = (page: Page) =>
+    page.evaluate(() => document.querySelectorAll('[data-open-hands], .oh-row, .oh-hand, .ohand img, .tile.tp, .tp-line, .shchart, .hands-hint').length);
+
+  it('解き直し: 答える前は、盤面に裏向きの手牌が 3 つ（押せない）。表の牌・欄・印は DOM に無い。答えると押せて、1 人の手牌を押すと 3 人分が開き、答えの欄の上に「他家の手牌」の欄が出る。もう一度押すと閉じる', { timeout: 120_000 }, async () => {
+    const { context, page } = await open({ scenario: scenario({ due: true }) });
+    try {
+      await openReview(page);
+      expect(await page.locator('.ohand').count()).toBe(3);
+      for (let i = 0; i < 3; i++) {
+        expect(await page.locator('.ohand').nth(i).isDisabled()).toBe(true);
+        expect(await page.locator('.ohand').nth(i).locator('.tile.back').count()).toBeGreaterThan(0);
+      }
+      expect(await page.locator('.ohand .tile.back').count()).toBeGreaterThan(20);
+      expect(await faceUpInDom(page)).toBe(0);
+      // 押そうとしても、開かない（disabled）
+      await page.locator('.ohand').first().click({ force: true, timeout: 2000 }).catch(() => undefined);
+      expect(await faceUpInDom(page)).toBe(0);
+      await answerCurrent(page);
+      for (let i = 0; i < 3; i++) expect(await page.locator('.ohand').nth(i).isEnabled()).toBe(true);
+      expect(await page.locator('.hands-hint').textContent()).toBe('他家の手牌は、押すと3人とも開きます（もう一度押すと閉じます）');
+      await page.locator('.ohand').nth(2).click();
+      expect(await page.locator('[data-open-hands="block"] .oh-row').count()).toBe(3);
+      expect(await page.locator('.ohand img').count()).toBeGreaterThan(20);
+      expect(await page.locator('.ohand .tile.back').count()).toBe(0);
+      // 欄は、答えの欄の先頭（答えのタブ・差の原因より上）
+      expect(await page.evaluate(() => document.querySelector('section.answer')?.firstElementChild?.getAttribute('data-open-hands'))).toBe('block');
+      await page.locator('.ohand').first().click();
+      expect(await faceUpInDom(page)).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 他家の手牌を開いた出題の画面（答えたあと）は、横スクロールが無く、卓が列からはみ出さず、手牌の帯が卓の中で河・中央の箱と重ならない。axe の重大が 0（ライト・ダーク）`, { timeout: 180_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const { context, page } = await open({ width, scheme, scenario: scenario({ due: true }) });
+        try {
+          await openReview(page);
+          await answerCurrent(page);
+          await page.locator('.ohand').first().click();
+          await page.locator('[data-open-hands="block"]').waitFor();
+          const o = await overflow(page);
+          expect(o.scroll, `@${width} ${scheme}`).toBeLessThanOrEqual(o.client);
+          const clash = await page.evaluate(() => {
+            const rect = (el: Element) => el.getBoundingClientRect();
+            const table = rect(document.querySelector('.table') as Element);
+            const column = rect(document.querySelector('.board-col') as Element);
+            const center = rect(document.querySelector('.table .center') as Element);
+            const bad: string[] = [];
+            if (table.right > column.right + 1) bad.push('卓が列からはみ出す');
+            for (const hand of document.querySelectorAll('.ohand')) {
+              const r = rect(hand);
+              if (r.left < table.left - 1 || r.right > table.right + 1 || r.top < table.top - 1 || r.bottom > table.bottom + 1) bad.push('卓の外');
+              if (!(r.right <= center.left || r.left >= center.right || r.bottom <= center.top || r.top >= center.bottom)) bad.push('中央の箱と重なる');
+              for (const river of document.querySelectorAll('.table .river .rt')) {
+                const q = rect(river);
+                if (!(r.right <= q.left + 1 || r.left >= q.right - 1 || r.bottom <= q.top + 1 || r.top >= q.bottom - 1)) {
+                  bad.push('河と重なる');
+                  break;
+                }
+              }
+            }
+            return bad;
+          });
+          expect(clash, `@${width} ${scheme}`).toEqual([]);
+          const found = seriousViolations(await runAxe(page));
+          expect(found, `@${width} ${scheme}`).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      }
+    });
+  }
 });

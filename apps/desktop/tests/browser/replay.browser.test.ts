@@ -295,11 +295,11 @@ const STATES: StateDef[] = [
     },
   },
   {
-    name: '他家の手牌を開いたところ（局の終わり）',
+    name: '他家の手牌を開いたところ（局の終わり。聴牌の印つき）',
     run: async (page) => {
       await openReplay(page);
-      await goToKyokuEnd(page, 2);
-      await page.getByRole('button', { name: '他家の手牌を開く', exact: true }).click();
+      await goToKyokuEnd(page, 0);
+      await page.locator('.ohand').first().click();
       await page.locator('[data-open-hands="block"]').waitFor();
     },
   },
@@ -307,20 +307,20 @@ const STATES: StateDef[] = [
     name: '他家の手牌を開いたところ（答えた場面）',
     run: async (page) => {
       await openReplay(page);
-      await page.getByRole('button', { name: '他家の手牌を開く', exact: true }).click();
+      await page.locator('.ohand').first().click();
       await gotoScene(page, 'k1h1e7');
       await answerCurrent(page);
       await page.locator('[data-open-hands="block"]').waitFor();
     },
   },
   {
-    name: 'タブ「他家の手牌」（答えた場面）',
+    name: '守備のタブ（副露の気配の 1 行。答えた場面）',
     run: async (page) => {
       await openReplay(page);
-      await gotoScene(page, 'k1h1e10');
+      await gotoScene(page, 'k1h0e12');
       await answerCurrent(page);
-      await page.getByRole('tab', { name: '他家の手牌' }).click();
-      await page.locator('[data-ai="open-hands"]').waitFor();
+      await page.getByRole('tab', { name: '守備' }).click();
+      await page.locator('[data-ai="danger-box"]').waitFor();
     },
   },
 ];
@@ -444,7 +444,7 @@ describe('U-4: 盤面（卓・手牌）と、右の答えの欄が、重なら�
       const named: Array<[string, Element]> = [
         ['卓', document.querySelector('.table') as Element],
         ['盤面の列', board],
-        ...Array.from(document.querySelectorAll('.table .tile, .hand .tile, .legend li')).map((el, i): [string, Element] => [`牌・凡例 ${i}`, el]),
+        ...Array.from(document.querySelectorAll('.table .tile, .table .ohand, .hand .tile, .legend li, .hands-hint')).map((el, i): [string, Element] => [`牌・手牌・凡例 ${i}`, el]),
       ];
       return { answer: box(answer), items: named.map(([name, el]) => ({ name, box: box(el) })) };
     });
@@ -462,6 +462,11 @@ describe('U-4: 盤面（卓・手牌）と、右の答えの欄が、重なら�
           for (const kyoku of [0, 1, 2]) {
             await goToKyokuEnd(fx4.page, kyoku);
             expect(await overlaps(fx4.page), `FX-4 ${kyoku} 局目の終わり @${width}x${height}`).toEqual([]);
+            // 他家の手牌を開いたときも（手牌は盤面に出る。欄が右の欄の上に増える）
+            await fx4.page.locator('.ohand').first().click();
+            await fx4.page.locator('[data-open-hands="block"]').waitFor();
+            expect(await overlaps(fx4.page), `FX-4 ${kyoku} 局目の終わり（他家の手牌を開いて） @${width}x${height}`).toEqual([]);
+            await fx4.page.locator('.ohand').first().click();
           }
           for (const key of ['k1h0e12', 'k1h1e7']) {
             await gotoScene(fx4.page, key);
@@ -478,6 +483,10 @@ describe('U-4: 盤面（卓・手牌）と、右の答えの欄が、重なら�
           for (const kyoku of [5, 7]) {
             await goToKyokuEnd(long.page, kyoku);
             expect(await overlaps(long.page), `f9da ${kyoku} 局目の終わり @${width}x${height}`).toEqual([]);
+            await long.page.locator('.ohand').first().click();
+            await long.page.locator('[data-open-hands="block"]').waitFor();
+            expect(await overlaps(long.page), `f9da ${kyoku} 局目の終わり（他家の手牌を開いて） @${width}x${height}`).toEqual([]);
+            await long.page.locator('.ohand').first().click();
           }
         } finally {
           await long.context.close();
@@ -494,9 +503,9 @@ describe('U-5: Tab ですべての操作に届く', () => {
     '局の終わり（結果と点の増減）',
     '迷いの場面（答える前）',
     '迷いの場面（答え合わせのあと）',
-    '他家の手牌を開いたところ（局の終わり）',
+    '他家の手牌を開いたところ（局の終わり。聴牌の印つき）',
     '他家の手牌を開いたところ（答えた場面）',
-    'タブ「他家の手牌」（答えた場面）',
+    '守備のタブ（副露の気配の 1 行。答えた場面）',
     '鳴きの場面（答える前）',
     'キーの一覧を開いたところ',
     '不一致も出す（設定が入）',
@@ -560,37 +569,122 @@ describe('U-5: Tab ですべての操作に届く', () => {
   });
 });
 
-describe('U-35: 他家の手牌を開く（実ブラウザ）', () => {
-  const toggle = (page: Page) => page.locator('#b-openhands');
-  const handsInDom = (page: Page) => page.locator('[data-open-hands], .oh-row, .oh-hand').count();
+describe('U-35・U-38: 他家の手牌（実ブラウザ。盤面の手牌を押すと 3 人分が開く）', () => {
+  const hands = (page: Page) => page.locator('.ohand');
+  /** 表向きの他家の手牌・欄・聴牌の印のどれかが DOM にあるか（閉じているとき・答える前は、どれも無い）。 */
+  const faceUpInDom = (page: Page) =>
+    page.evaluate(
+      () =>
+        document.querySelectorAll('[data-open-hands], .oh-row, .oh-hand, .ohand img, .tile.tp, .tp-line, .shchart, .tk, .tl-note').length,
+    );
 
-  it('既定は閉じている。答える場面でない手では押せる。開くと、手を進めても開いたまま。答える場面の答える前は、全 10 場面で、押せず、他家の手牌が DOM にも無い。答えると出る', { timeout: 240_000 }, async () => {
+  it('既定は閉じている（裏向きの 3 つの手牌のボタン）。操作の段に開閉のボタンは無い。1 人の手牌を押すと 3 人分が開き、手を進めても開いたまま。答える場面の答える前は、全 10 場面で、押せず、表の牌・印も DOM に無い。答えると出る', { timeout: 240_000 }, async () => {
     const { context, page } = await open();
     try {
       await openReplay(page);
-      expect(await handsInDom(page)).toBe(0);
-      expect(await toggle(page).isEnabled()).toBe(true);
-      expect(((await toggle(page).textContent()) ?? '').trim()).toBe('他家の手牌を開く');
-      await toggle(page).click();
+      expect(await faceUpInDom(page)).toBe(0);
+      expect(await hands(page).count()).toBe(3);
+      expect(await page.locator('.pbar #b-openhands, .pbar .pb-open').count()).toBe(0);
+      for (let i = 0; i < 3; i++) {
+        expect(await hands(page).nth(i).isEnabled()).toBe(true);
+        expect(await hands(page).nth(i).getAttribute('aria-label')).toBe('他家の手牌を開く');
+      }
+      await hands(page).nth(1).click();
       expect(await page.locator('.oh-row').count()).toBe(3);
+      expect(await page.locator('.ohand img').count()).toBeGreaterThan(30);
       await page.locator('#b-next').click();
       await page.locator('#b-next').click();
       expect(await page.locator('.oh-row').count()).toBe(3);
-      expect(((await toggle(page).textContent()) ?? '').trim()).toBe('他家の手牌を閉じる');
+      for (let i = 0; i < 3; i++) expect(await hands(page).nth(i).getAttribute('aria-label')).toBe('他家の手牌を閉じる');
       // 開いたまま、各場面へ。答える前は、押せず、DOM にも無い
       for (const key of SCENE_KEYS) {
         await page.locator(`.pin[data-key="${key}"]`).first().click();
         await page.locator('.qz[data-state="answering"]').waitFor();
-        expect(await toggle(page).isDisabled(), key).toBe(true);
-        expect(await handsInDom(page), key).toBe(0);
+        for (let i = 0; i < 3; i++) expect(await hands(page).nth(i).isDisabled(), key).toBe(true);
+        expect(await faceUpInDom(page), key).toBe(0);
         expect(await page.locator('[data-ai]').count(), key).toBe(0);
       }
       // 答えたあと: 押せて、開いたままなので出る
       await answerCurrent(page);
-      expect(await toggle(page).isEnabled()).toBe(true);
+      expect(await hands(page).first().isEnabled()).toBe(true);
       expect(await page.locator('[data-open-hands="block"] .oh-row').count()).toBe(3);
+      expect(await page.locator('.ohand img').count()).toBeGreaterThan(30);
+      // もう一度押すと、3 人分が閉じる
+      await hands(page).nth(2).click();
+      expect(await faceUpInDom(page)).toBe(0);
     } finally {
       await context.close();
+    }
+  });
+
+  it('河を押しても開かない。Enter・Space で開閉できる。手牌のボタンには、位置の帯から Tab で進むと届く', { timeout: 90_000 }, async () => {
+    const { context, page } = await open();
+    try {
+      await openReplay(page);
+      // 手牌の外（自分の河）を押しても、開かない
+      const box = await page.locator('.zone.bottom .river').boundingBox();
+      expect(box).not.toBeNull();
+      await page.mouse.click((box as { x: number }).x + 6, (box as { y: number }).y + 6);
+      expect(await faceUpInDom(page)).toBe(0);
+      // キーボード: 位置の帯から Tab で進むと、手牌のボタンに届く
+      await page.getByRole('slider', { name: '半荘の中の位置（左右の矢印で1手ずつ）' }).focus();
+      let reached = false;
+      for (let i = 0; i < 30 && !reached; i++) {
+        await page.keyboard.press('Tab');
+        reached = await page.evaluate(() => document.activeElement?.classList.contains('ohand') === true);
+      }
+      expect(reached).toBe(true);
+      await page.keyboard.press('Enter');
+      expect(await page.locator('[data-open-hands="block"]').count()).toBe(1);
+      await page.keyboard.press('Space');
+      expect(await faceUpInDom(page)).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('表向きの手牌・枠・目盛りは、幅 390・768・1280px のライト・ダークで、横スクロールが無く、卓が列からはみ出さない。手牌の帯は、卓の中に収まり、河・中央の箱と重ならない（局の終わりの、聴牌の印つき）', { timeout: 300_000 }, async () => {
+    for (const width of [390, 768, 1280]) {
+      for (const scheme of SCHEMES) {
+        const { context, page } = await open({ width, scheme });
+        try {
+          await openReplay(page);
+          await goToKyokuEnd(page, 0);
+          await hands(page).first().click();
+          await page.locator('[data-open-hands="block"]').waitFor();
+          const o = await overflow(page);
+          expect(o.scroll, `@${width} ${scheme}`).toBeLessThanOrEqual(o.client);
+          expect(o.tableRight, `@${width} ${scheme} table`).toBeLessThanOrEqual(o.columnRight + 1);
+          // 聴牌になった打牌の枠（河）と、帯の目盛りがある
+          expect(await page.locator('.river .tile.tp').count()).toBeGreaterThan(0);
+          expect(await page.locator('.tl-track .tk').count()).toBeGreaterThan(0);
+          const track = await page.locator('.tl-track').boundingBox();
+          expect((track as { height: number }).height).toBeGreaterThan(20);
+          // 他家の手牌の帯（3 つ）は、卓の中に収まり、河・中央の箱と重ならない
+          const clash = await page.evaluate(() => {
+            const rect = (el: Element) => el.getBoundingClientRect();
+            const table = rect(document.querySelector('.table') as Element);
+            const center = rect(document.querySelector('.table .center') as Element);
+            const bad: string[] = [];
+            for (const hand of document.querySelectorAll('.ohand')) {
+              const r = rect(hand);
+              if (r.left < table.left - 1 || r.right > table.right + 1 || r.top < table.top - 1 || r.bottom > table.bottom + 1) bad.push('卓の外');
+              if (!(r.right <= center.left || r.left >= center.right || r.bottom <= center.top || r.top >= center.bottom)) bad.push('中央の箱と重なる');
+              for (const river of document.querySelectorAll('.table .river .rt')) {
+                const q = rect(river);
+                if (!(r.right <= q.left + 1 || r.left >= q.right - 1 || r.bottom <= q.top + 1 || r.top >= q.bottom - 1)) {
+                  bad.push('河と重なる');
+                  break;
+                }
+              }
+            }
+            return bad;
+          });
+          expect(clash, `@${width} ${scheme}`).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      }
     }
   });
 });
