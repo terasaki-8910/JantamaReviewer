@@ -463,7 +463,9 @@ async function screensPhase() {
   await main.waitFor(`document.querySelector('[data-ai="waits-box"]')`, '待ちと打点の欄');
   await main.fit(1280, 900, 2);
   await main.settle();
-  const fuBox = await main.viewRectOf(`document.querySelector('.wt-panel .wt-fu')`);
+  // 最後の待ちの行のロンの符に乗せる（重なりは符の上に出るので、1 つ目の待ちの形と役の札が隠れない）
+  const lastFu = `Array.from(document.querySelectorAll('.wt-tbl tbody tr')).pop().querySelector('td.dama .wt-fu')`;
+  const fuBox = await main.viewRectOf(lastFu);
   await main.mouse('mouseMoved', fuBox.x + fuBox.width / 2, fuBox.y + fuBox.height / 2, { button: 'none', clickCount: 0 });
   await main.waitFor(`document.querySelector('.wt-fu-pop:not([hidden])')`, '符の内訳の重なり');
   await sleep(400);
