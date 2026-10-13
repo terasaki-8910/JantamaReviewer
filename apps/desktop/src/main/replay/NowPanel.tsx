@@ -17,7 +17,7 @@ interface NowPanelProps {
   scenes: readonly ReplayScene[];
   answered: ReadonlySet<string>;
   go: (g: number) => void;
-  /** 右の欄の上に出す欄（「他家の手牌を開く」を開いているとき）。 */
+  /** 右の欄の上に出す欄（他家の手牌を開いているとき。R16-7）。 */
   above?: ReactNode;
 }
 
