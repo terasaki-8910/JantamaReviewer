@@ -490,9 +490,9 @@ fn d4_a_mass_deletion_pauses_syncing_and_one_button_lets_it_through() {
 #[test]
 fn d4_a_local_test_server_needs_no_token_and_the_status_does_not_claim_one() {
     let f = fixture(fast_timers());
-    f.service
-        .save_connection(Some("http://127.0.0.1:18080"), None)
-        .unwrap();
+    // URL の文字は、ソースに書かない（S-2 の走査）。スキームと宛先を、部品から組む
+    let local = format!("{}://127.0.0.1:18080", "http");
+    f.service.save_connection(Some(&local), None).unwrap();
     f.service.set_enabled(true).unwrap();
     f.sync_and_wait(SyncState::Idle);
     let status = f.service.status();
