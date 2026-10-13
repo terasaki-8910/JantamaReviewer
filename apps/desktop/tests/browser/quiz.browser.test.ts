@@ -69,8 +69,11 @@ function sessions() {
   ];
 }
 
-/** FX-4 の大きな不一致の先頭 3 問（`keys` を渡したときは、その判断）を、期限が今日以前の答えとして保存済みにする（解き直しの問題）。 */
-function dueAnswers(keys?: readonly string[]): unknown[] {
+/**
+ * FX-4 の大きな不一致の先頭 3 問（`keys` を渡したときは、その判断）を、期限が今日以前の答えとして保存済みにする（解き直しの問題）。
+ * `sessionId` を渡すと、その半荘の判断として保存する（FX-1 の半荘の場面を解き直したいとき）。
+ */
+function dueAnswers(keys?: readonly string[], sessionId: string = FX4_ID): unknown[] {
   const imported = importReportText(REPORT_TEXTS.fx4);
   if (!imported.ok) throw new Error('FX-4 を読めません');
   const problems =
@@ -82,7 +85,7 @@ function dueAnswers(keys?: readonly string[]): unknown[] {
       .map((problem) => problem.key);
   return problems.map((key, index) => ({
     id: index + 1,
-    session_id: FX4_ID,
+    session_id: sessionId,
     decision_key: key,
     mode: 'quiz',
     shown_at: 1,
@@ -100,8 +103,8 @@ function dueAnswers(keys?: readonly string[]): unknown[] {
   }));
 }
 
-function scenario(overrides: Partial<Scenario> & { dora?: boolean; due?: boolean; dueKeys?: readonly string[] } = {}): Scenario {
-  const { dora = false, due = false, dueKeys, ...rest } = overrides;
+function scenario(overrides: Partial<Scenario> & { dora?: boolean; due?: boolean; dueKeys?: readonly string[]; dueSession?: string } = {}): Scenario {
+  const { dora = false, due = false, dueKeys, dueSession, ...rest } = overrides;
   return {
     label: 'main',
     state: baseState,
@@ -110,7 +113,7 @@ function scenario(overrides: Partial<Scenario> & { dora?: boolean; due?: boolean
     sessions: sessions(),
     reports: { [FX4_ID]: REPORT_TEXTS.fx4, [FX1A_ID]: REPORT_TEXTS.fx1a },
     thumb: TINY_PNG,
-    answers: dueKeys !== undefined ? dueAnswers(dueKeys) : due ? dueAnswers() : [],
+    answers: dueKeys !== undefined ? dueAnswers(dueKeys, dueSession) : due ? dueAnswers() : [],
     ...rest,
   };
 }
@@ -215,7 +218,7 @@ async function openUkeire(page: Page, n = 0): Promise<Locator> {
 
 interface StateDef {
   name: string;
-  scenario?: Partial<Scenario> & { dora?: boolean; due?: boolean; dueKeys?: readonly string[] };
+  scenario?: Partial<Scenario> & { dora?: boolean; due?: boolean; dueKeys?: readonly string[]; dueSession?: string };
   run: (page: Page) => Promise<void>;
 }
 
@@ -230,6 +233,20 @@ async function answerWith(page: Page, pick: () => Promise<void>): Promise<void> 
 /** 役の欄の見本の場面（FX-4）。東2局1本場 8巡目の打牌（実戦 4p・AI 7p）と、東3局1本場 11巡目のチー（5s 7s は役無し聴牌）。 */
 const YAKU_DISCARD_KEY = 'k1h1e9';
 const YAKU_CHI_KEY = 'k2h1e15';
+
+/**
+ * 待ちと打点のタブの見本の場面。FX-4 の東2局1本場 9巡目の打牌（7p を切って聴牌。両面）、FX-1 a の東2局 10巡目のリーチの判断（聴牌になる切り方）、
+ * 東4局1本場 8巡目の打牌（多面張）。チーの場面（東3局1本場 11巡目。ダマでロンできない待ちがある）は、役の欄の見本と同じ `YAKU_CHI_KEY`。
+ */
+const WAIT_DISCARD_KEY = 'k1h1e11';
+const WAIT_RIICHI_KEY = 'k1h0e10';
+const WAIT_WIDE_KEY = 'k3h1e9';
+
+/** 答え合わせのあと、タブ「待ちと打点」を選ぶ。 */
+async function selectWaitsTab(page: Page): Promise<void> {
+  await page.getByRole('tab', { name: '待ちと打点' }).click();
+  await page.locator('[data-ai="waits-box"]').waitFor();
+}
 
 /** 検査する状態。FX-4 の今日の組は、迷い 1〜5（1 行目: 打牌・1 向聴、3 行目: 打牌・2 向聴、4 行目: 鳴き）。 */
 const STATES: StateDef[] = [
@@ -306,6 +323,50 @@ const STATES: StateDef[] = [
     run: async (page) => {
       await openReview(page);
       await answerWith(page, () => page.getByRole('button', { name: '四筒を切る' }).first().click());
+    },
+  },
+  {
+    name: '解き直し（聴牌・タブは既定の「受け入れ・役」・答え合わせのあと）',
+    scenario: { dueKeys: [WAIT_DISCARD_KEY] },
+    run: async (page) => {
+      await openReview(page);
+      await answerCurrent(page);
+    },
+  },
+  {
+    name: '解き直し（待ちと打点: 打牌・両面）',
+    scenario: { dueKeys: [WAIT_DISCARD_KEY] },
+    run: async (page) => {
+      await openReview(page);
+      await answerCurrent(page);
+      await selectWaitsTab(page);
+    },
+  },
+  {
+    name: '解き直し（待ちと打点: チー・スルー・ダマでロンできない待ち）',
+    scenario: { dueKeys: [YAKU_CHI_KEY] },
+    run: async (page) => {
+      await openReview(page);
+      await answerWith(page, () => page.locator('[data-option="chi:5s+7s"]').click());
+      await selectWaitsTab(page);
+    },
+  },
+  {
+    name: '解き直し（待ちと打点: リーチの判断・門前のダマとリーチ）',
+    scenario: { dueKeys: [WAIT_RIICHI_KEY], dueSession: FX1A_ID },
+    run: async (page) => {
+      await openReview(page);
+      await answerWith(page, () => page.locator('[data-option="pass"]').click());
+      await selectWaitsTab(page);
+    },
+  },
+  {
+    name: '解き直し（待ちと打点: 多面張）',
+    scenario: { dueKeys: [WAIT_WIDE_KEY], dueSession: FX1A_ID },
+    run: async (page) => {
+      await openReview(page);
+      await answerCurrent(page);
+      await selectWaitsTab(page);
     },
   },
 ];
@@ -905,6 +966,252 @@ describe('U-33: 役の欄（答え合わせのあと。受け入れ枚数の欄�
           expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
           expect(boxesOverlap(m!.tip, m!.icon)).toBe(false);
           expect(seriousViolations(await runAxe(page)), `${width} ${scheme}`).toEqual([]);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+        } finally {
+          await context.close();
+        }
+      }
+    });
+  }
+});
+
+describe('U-34: 答え合わせのタブ（待ちと打点・待ちの形・符の内訳）', () => {
+  // 待ちと打点のタブを開いた状態（打牌・両面 / チー・スルー / リーチの判断 / 多面張）と、既定のタブのまま
+  const WAIT_STATES = STATES.filter((s) => s.name.startsWith('解き直し（待ちと打点'));
+  const DEFAULT_STATE = STATES.find((s) => s.name.startsWith('解き直し（聴牌・タブは既定')) as StateDef;
+
+  it('答える前は、タブも、待ちと打点も、形の言葉も DOM に無い。答え合わせのあと、既定は「受け入れ・役」で、「待ちと打点」のタブが足される（聴牌でない場面には出ない）', { timeout: 90_000 }, async () => {
+    const before = await open({ scenario: scenario({ dueKeys: [WAIT_DISCARD_KEY] }) });
+    try {
+      await openReview(before.page);
+      const found = await before.page.evaluate(() => ({
+        tabs: document.querySelectorAll('[role="tablist"], [role="tab"], [data-ai]').length,
+        text: /待ちと打点|受け入れ・役|両面|双碰|嵌張|多面張|フリテン/.test(document.body.textContent ?? ''),
+      }));
+      expect(found).toEqual({ tabs: 0, text: false });
+      await answerCurrent(before.page);
+      const tabs = before.page.getByRole('tab');
+      expect(await tabs.allInnerTexts()).toEqual(['受け入れ・役', '待ちと打点']);
+      expect(await before.page.getByRole('tab', { name: '受け入れ・役' }).getAttribute('aria-selected')).toBe('true');
+      // 既定のタブの中身は、これまでと同じ（受け入れ枚数の欄と役の欄）で、待ちと打点の中身は描かれていない
+      expect(await before.page.locator('[data-ai="ukeire-box"], [data-ai="yaku-box"]').count()).toBe(2);
+      expect(await before.page.locator('[data-ai="waits-box"]').count()).toBe(0);
+    } finally {
+      await before.context.close();
+    }
+    // 聴牌でない判断（FX-4 の最初の問題）には、タブが出ない
+    const far = await open({ scenario: scenario({ due: true }) });
+    try {
+      await openReview(far.page);
+      await answerCurrent(far.page);
+      expect(await far.page.getByRole('tablist').count()).toBe(0);
+    } finally {
+      await far.context.close();
+    }
+  });
+
+  it('← → Home End でタブを選び、キーボードの位置もタブへ移る。選んでいるタブだけが Tab の止まり場所。Tab で欄の中へ進む', { timeout: 90_000 }, async () => {
+    const { context, page } = await openState(DEFAULT_STATE);
+    try {
+      const first = page.getByRole('tab', { name: '受け入れ・役' });
+      const second = page.getByRole('tab', { name: '待ちと打点' });
+      await first.focus();
+      await page.keyboard.press('ArrowRight');
+      expect(await second.getAttribute('aria-selected')).toBe('true');
+      expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('待ちと打点');
+      expect(await page.evaluate(() => [...document.querySelectorAll('[role="tab"]')].map((t) => (t as HTMLElement).tabIndex))).toEqual([-1, 0]);
+      // 通して見る画面のキーにも割り当てられている ← → Home End は、タブが受ける（画面は動かない）
+      await page.keyboard.press('ArrowRight');
+      expect(await first.getAttribute('aria-selected')).toBe('true');
+      await page.keyboard.press('End');
+      expect(await second.getAttribute('aria-selected')).toBe('true');
+      await page.keyboard.press('Home');
+      expect(await first.getAttribute('aria-selected')).toBe('true');
+      await page.keyboard.press('ArrowLeft');
+      expect(await second.getAttribute('aria-selected')).toBe('true');
+      // 選んでいるタブから Tab で、欄の中の最初の操作（説明のアイコン）へ。選んでいないタブには止まらない
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('待ちと打点の説明');
+      await page.keyboard.press('Shift+Tab');
+      expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-selected'))).toBe('true');
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('Tab の順番: 選んでいるタブ → 説明のアイコン → 待ちごとの符（ダマのロン・ツモ、リーチのロン・ツモの順）→ 差の原因。符はどれも Tab で届く', { timeout: 90_000 }, async () => {
+    // 門前の手（リーチの判断）の場面
+    const { context, page } = await openState(WAIT_STATES[2] as StateDef);
+    try {
+      const expected = await page.locator('.wt-panel .wt-fu').count();
+      expect(expected).toBeGreaterThanOrEqual(4);
+      await page.getByRole('tab', { name: '待ちと打点' }).focus();
+      const labels: string[] = [];
+      for (let i = 0; i < expected + 1; i++) {
+        await page.keyboard.press('Tab');
+        labels.push(await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? ''));
+      }
+      expect(labels[0]).toBe('待ちと打点の説明');
+      // 符は、待ち牌の行の順に、ダマのロン・ダマのツモ・リーチのロン・リーチのツモ
+      expect(labels.slice(1, 5).map((l) => l.replace(/^\d+符の内訳（\S+ /, '').replace(/）$/, ''))).toEqual(['ダマ ロン', 'ダマ ツモ', 'リーチ ロン', 'リーチ ツモ']);
+      for (const label of labels.slice(1)) expect(label).toMatch(/^\d+符の内訳（/);
+      // 符の次は、差の原因（欄の外）。説明のアイコンと符のほかに、欄の中の止まり場所は無い（行・表の見出しは、止まり場所ではない）
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => document.activeElement?.closest('.pills-set') !== null)).toBe(true);
+      const stops = await page.locator('.wt-panel :is(button, a, input, select, textarea, [tabindex]:not([tabindex="-1"]))').count();
+      expect(stops).toBe(expected + 1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 待ちと打点の欄の中身は、欄からも画面からもはみ出さない。牌の画像は読み込めて、符の数は読める大きさ（ライト・ダーク）`, { timeout: 180_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        for (const state of WAIT_STATES) {
+          const { context, page, problems, external } = await openState(state, { width, scheme });
+          try {
+            const found = await page.evaluate(() => {
+              const box = document.querySelector<HTMLElement>('[data-ai="waits-box"]');
+              if (box === null) return null;
+              const area = box.getBoundingClientRect();
+              const outside: string[] = [];
+              for (const el of Array.from(box.querySelectorAll<HTMLElement>('*'))) {
+                if (el.closest('.sr-only') !== null) continue;
+                const r = el.getBoundingClientRect();
+                if (r.width === 0 && r.height === 0) continue;
+                if (r.right > area.right + 1 || r.left < area.left - 1) outside.push(`${el.className}:${(el.textContent ?? '').slice(0, 12)}`);
+              }
+              return {
+                tables: box.querySelectorAll('[data-ai="waits"]').length,
+                rows: box.querySelectorAll('tbody tr').length,
+                scroll: box.scrollWidth,
+                client: box.clientWidth,
+                docScroll: document.documentElement.scrollWidth,
+                docClient: document.documentElement.clientWidth,
+                outside,
+                brokenImages: Array.from(box.querySelectorAll('img')).filter((img) => !(img.complete && img.naturalWidth > 0)).length,
+                fuSize: Math.min(...Array.from(box.querySelectorAll<HTMLElement>('.wt-fu')).map((el) => parseFloat(getComputedStyle(el).fontSize))),
+                fuCount: box.querySelectorAll('.wt-fu').length,
+              };
+            });
+            const where = `${state.name} @${width} ${scheme}`;
+            expect(found, where).not.toBeNull();
+            expect(found!.tables, where).toBeGreaterThanOrEqual(1);
+            expect(found!.rows, where).toBeGreaterThanOrEqual(1);
+            expect(found!.scroll, where).toBeLessThanOrEqual(found!.client);
+            expect(found!.docScroll, where).toBeLessThanOrEqual(found!.docClient);
+            expect(found!.outside, where).toEqual([]);
+            expect(found!.brokenImages, where).toBe(0);
+            // チーのあとの聴牌は、どの待ちも役が無く、符が出ない（符の数が無いので、内訳の重なりも無い）
+            if (state.name.includes('チー')) expect(found!.fuCount, where).toBe(0);
+            else {
+              expect(found!.fuCount, where).toBeGreaterThan(0);
+              expect(found!.fuSize, where).toBeGreaterThanOrEqual(12);
+            }
+            expect(problems).toEqual([]);
+            expect(external).toEqual([]);
+          } finally {
+            await context.close();
+          }
+        }
+      }
+    });
+  }
+
+  it('欄の幅が広いとき（幅 1040px。答えの欄が全幅になる）は、表の形（列の見出しが見える）。狭いとき（幅 390・1280px）は、待ち 1 つを 1 かたまりに積む', { timeout: 120_000 }, async () => {
+    const layout = async (width: number) => {
+      const { context, page } = await openState(WAIT_STATES[0] as StateDef, { width });
+      try {
+        return await page.evaluate(() => {
+          const head = document.querySelector<HTMLElement>('.wt-tbl thead');
+          const panel = document.querySelector<HTMLElement>('.wt-panel');
+          const row = document.querySelector<HTMLElement>('.wt-tbl tbody tr');
+          return {
+            panelWidth: Math.round(panel?.getBoundingClientRect().width ?? 0),
+            headVisible: head !== null && head.getBoundingClientRect().width > 1 && head.getBoundingClientRect().height > 1,
+            rowDisplay: row === null ? '' : getComputedStyle(row).display,
+            docScroll: document.documentElement.scrollWidth,
+            docClient: document.documentElement.clientWidth,
+          };
+        });
+      } finally {
+        await context.close();
+      }
+    };
+    const wide = await layout(1040);
+    expect(wide.panelWidth).toBeGreaterThanOrEqual(680);
+    expect(wide.headVisible).toBe(true);
+    expect(wide.rowDisplay).toBe('table-row');
+    expect(wide.docScroll).toBeLessThanOrEqual(wide.docClient);
+    for (const width of [390, 1280]) {
+      const narrow = await layout(width);
+      expect(narrow.panelWidth, `@${width}`).toBeLessThan(680);
+      expect(narrow.headVisible, `@${width}`).toBe(false);
+      expect(narrow.rowDisplay, `@${width}`).toBe('grid');
+    }
+  });
+
+  it('表の形（幅 1040px）でも、axe の重大な違反が 0 件（ライト・ダーク）', { timeout: 120_000 }, async () => {
+    for (const scheme of SCHEMES) {
+      const { context, page } = await openState(WAIT_STATES[2] as StateDef, { width: 1040, scheme });
+      try {
+        expect(seriousViolations(await runAxe(page)), scheme).toEqual([]);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  for (const width of [390, 768, 1280]) {
+    it(`幅 ${width}px: 符の内訳は、乗せる・Tab で選ぶと、窓の中に、符の数にかからずに出る。axe の重大な違反が 0 件（ライト・ダーク）。Esc で閉じる`, { timeout: 180_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const { context, page } = await openState(WAIT_STATES[0] as StateDef, { width, scheme });
+        try {
+          const measure = () =>
+            page.evaluate(() => {
+              const tip = document.querySelector<HTMLElement>('.wt-fu-pop:not([hidden])');
+              const fu = document.querySelector<HTMLElement>('.wt-fu[data-open="1"]');
+              if (tip === null || fu === null) return null;
+              const box = (el: Element) => {
+                const r = el.getBoundingClientRect();
+                return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+              };
+              return { tip: box(tip), fu: box(fu), innerWidth: window.innerWidth, innerHeight: window.innerHeight, text: tip.textContent ?? '', parentIsBody: tip.parentElement === document.body };
+            });
+          const check = (m: NonNullable<Awaited<ReturnType<typeof measure>>>, how: string) => {
+            expect(m.text, `${width} ${scheme} ${how}`).toContain('の内訳');
+            expect(m.text, `${width} ${scheme} ${how}`).toContain('副底');
+            expect(m.parentIsBody).toBe(true);
+            expect(m.tip.left, how).toBeGreaterThanOrEqual(7);
+            expect(m.tip.right, how).toBeLessThanOrEqual(m.innerWidth - 7);
+            expect(m.tip.top, how).toBeGreaterThanOrEqual(0);
+            expect(m.tip.bottom, how).toBeLessThanOrEqual(m.innerHeight);
+            expect(boxesOverlap(m.tip, m.fu), how).toBe(false);
+          };
+          // 乗せる
+          const fu = page.locator('.wt-panel .wt-fu').first();
+          await fu.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          await fu.hover();
+          await page.locator('.wt-fu-pop:not([hidden])').waitFor();
+          const hovered = await measure();
+          expect(hovered, `${width} ${scheme} hover`).not.toBeNull();
+          check(hovered!, 'hover');
+          expect(seriousViolations(await runAxe(page)), `${width} ${scheme}`).toEqual([]);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          await page.mouse.move(0, 0);
+          // キーボードで選ぶ（説明のアイコンのあと、最初の符へ Tab）
+          await page.getByRole('tab', { name: '待ちと打点' }).focus();
+          await page.keyboard.press('Tab');
+          await page.keyboard.press('Tab');
+          expect(await page.evaluate(() => document.activeElement?.classList.contains('wt-fu'))).toBe(true);
+          await page.locator('.wt-fu-pop:not([hidden])').waitFor();
+          const focused = await measure();
+          expect(focused, `${width} ${scheme} focus`).not.toBeNull();
+          check(focused!, 'focus');
           await page.keyboard.press('Escape');
           expect(await page.getByRole('tooltip').count()).toBe(0);
         } finally {

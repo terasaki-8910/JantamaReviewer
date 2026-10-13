@@ -1,3 +1,5 @@
+// 型の宣言（declare module）を、このファイルを読み込む側（画面の tsc）にも届ける。import では、宣言だけのファイルを指せない
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./majiang-core.d.ts" />
 /**
  * @kobalab/majiang-core（MIT。Copyright (c) 2021 Satoshi Kobayashi。THIRD_PARTY_NOTICES.md）の和了の計算・待ちの判定を、

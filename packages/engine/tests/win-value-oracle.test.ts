@@ -6,7 +6,7 @@ import { type WaitShape, type WinSpec, coreEvaluateWin, coreTenpaiWaits, coreWai
 import type { Fuuro, Seat, Wind } from '../src/report-types';
 import { type Tile, countTiles, kindToTile, parseTenhouNotation, tileKind } from '../src/tiles';
 import { type WinInput, YAKU_NAMES, type YakuId, yakuMeldOf } from '../src/yaku';
-import { FIXTURES_DIR, FX1_IDS, FX4_ID, FX5_ID, loadFixtureJson, loadReportText } from './helpers/fixtures';
+import { FX1_IDS, FX4_ID, FX5_ID, loadFixtureJson, loadReportText } from './helpers/fixtures';
 import { horaCasesOf } from './helpers/hora-rebuild';
 import { ORACLE_YAKU_IDS, meldsOf } from './helpers/yaku-oracle';
 
