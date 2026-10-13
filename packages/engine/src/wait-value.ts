@@ -67,6 +67,12 @@ export interface WaitRow {
   riichi: WaitSide | null;
 }
 
+/** 待ちも点も同じなので、1 つの表にまとめた、ほかの切り方。 */
+export interface WaitSame {
+  discard: Tile;
+  tags: YakuMark[];
+}
+
 /** 聴牌になる行動 1 つの表。 */
 export interface WaitTable {
   /** 画面の鍵。 */
@@ -74,6 +80,8 @@ export interface WaitTable {
   tags: YakuMark[];
   /** 切る牌（打牌・チー・ポンのあとの打牌）。スルーでは null。 */
   discard: Tile | null;
+  /** 待ち牌・残り枚数・飜・符・点数・待ちの形が全部同じ、ほかの切り方（承認された見本の「待ちも点も同じ」）。まとめたものが無ければ空。 */
+  same: WaitSame[];
   /** 打牌以外の行動のボタン（チー・ポン・スルー）。 */
   option: AnswerOption | null;
   /** その行動のあとの手が門前か（リーチできるか）。 */
@@ -299,6 +307,7 @@ export function waitTableOf(decision: Pick<Decision, 'board'>, plan: WaitPlan): 
     key: plan.key,
     tags: plan.tags,
     discard: plan.discard,
+    same: [],
     option: plan.option,
     closed,
     shape: wide ? '多面張' : firsts.join('・'),
@@ -308,16 +317,39 @@ export function waitTableOf(decision: Pick<Decision, 'board'>, plan: WaitPlan): 
   };
 }
 
+/** 待ち牌・残り枚数・形・飜・符・点数が同じ（打牌だけが違う）表の鍵。 */
+function contentKey(table: WaitTable): string {
+  const line = (l: WaitLine) => [l.none, l.han, l.yakuman, l.fu, l.base];
+  return JSON.stringify([
+    table.option?.id ?? null,
+    table.waits.map((w) => [w.tile, w.remaining, w.shapes, w.furiten, line(w.dama.ron), line(w.dama.tsumo), w.riichi === null ? null : [line(w.riichi.ron), line(w.riichi.tsumo)]]),
+  ]);
+}
+
+/** 待ちも点も同じ表（打牌違い）を 1 つにまとめる。先頭の表（印の付いたものが先）が、まとめた表の打牌になる。 */
+function mergeSame(tables: readonly WaitTable[]): WaitTable[] {
+  const out: Array<{ table: WaitTable; key: string }> = [];
+  for (const table of tables) {
+    const key = contentKey(table);
+    const found = table.discard === null ? undefined : out.find((o) => o.key === key && o.table.discard !== null);
+    if (found !== undefined && table.discard !== null) found.table.same.push({ discard: table.discard, tags: table.tags });
+    else out.push({ table, key });
+  }
+  return out.map((o) => o.table);
+}
+
 /**
  * 答え合わせのタブ「待ちと打点」の中身。聴牌になる行動が無ければ null（タブを出さない）。
  * 比べる行動（`comparedActions`）の、聴牌になるものごとに表を作る。リーチの判断は、聴牌になる切り方すべて。
+ * 待ちも点も同じ表（打牌だけが違う）は、1 つにまとめる（`WaitTable.same`）。
  */
 export function waitBoxOf(decision: Pick<Decision, 'kind' | 'entry' | 'board'>, mine: QuizChoice): WaitBox | null {
-  const tables: WaitTable[] = [];
+  const built: WaitTable[] = [];
   for (const plan of waitPlansOf(decision, mine)) {
     const table = waitTableOf(decision, plan);
-    if (table !== null) tables.push(table);
+    if (table !== null) built.push(table);
   }
-  if (tables.length === 0) return null;
+  if (built.length === 0) return null;
+  const tables = mergeSame(built);
   return { tables: tables.slice(0, MAX_WAIT_TABLES), dealer: decision.board.oya === decision.board.playerId, omitted: Math.max(0, tables.length - MAX_WAIT_TABLES) };
 }

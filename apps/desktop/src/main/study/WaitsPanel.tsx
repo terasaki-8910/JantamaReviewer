@@ -136,30 +136,39 @@ function Row({ row, table, dealer }: { row: WaitRow; table: WaitTable; dealer: b
   );
 }
 
-/** 表の見出し（行動）: 打牌は「打」と牌、スルーはボタンの名前、チー・ポンはボタンの名前と鳴く牌に続けて「打」と牌。 */
+const kindOf = (tags: readonly string[]): string => (tags.includes('自分') ? 'you' : tags.includes('AI') ? 'top' : tags.includes('実戦') ? 'act' : 'other');
+
+/**
+ * 表の見出し（行動）: 打牌は「打」と牌、スルーはボタンの名前、チー・ポンはボタンの名前と鳴く牌に続けて「打」と牌。
+ * 待ちも点も同じ打牌をまとめた表は、打牌を「・」で並べ、「（待ちも点も同じ）」と添える（承認された見本のとおり）。
+ */
 function Heading({ table, dora }: { table: WaitTable; dora: Dora }) {
   const option: AnswerOption | null = table.option;
   const meld = option !== null && (option.kind === 'chi' || option.kind === 'pon') ? sortTiles(option.called === null ? option.use : [...option.use, option.called]) : [];
-  const kind = table.tags.includes('自分') ? 'you' : table.tags.includes('AI') ? 'top' : table.tags.includes('実戦') ? 'act' : 'other';
+  const merged = table.same.length > 0;
+  const discards = table.discard === null ? [] : [{ discard: table.discard, tags: table.tags }, ...table.same];
   return (
     <div className="wt-h">
-      <span className="wt-disc">
-        {option !== null && (
-          <>
-            <b>{option.label}</b>{' '}
-            {meld.map((tile, index) => (
-              <Tile key={`${index}${tile}`} tile={tile} dora={isDoraTile(tile, dora)} />
-            ))}
-          </>
-        )}
-        {option !== null && table.discard !== null && <> <span className="wt-then">→</span> </>}
-        {table.discard !== null && (
-          <>
-            打<Tile tile={table.discard} dora={isDoraTile(table.discard, dora)} />
-          </>
-        )}
-      </span>{' '}
-      <span className={`wt-tags ${kind}`}>{table.tags.length > 0 ? table.tags.join('・') : '候補'}</span>{' '}
+      {option !== null && (
+        <span className="wt-disc">
+          <b>{option.label}</b>{' '}
+          {meld.map((tile, index) => (
+            <Tile key={`${index}${tile}`} tile={tile} dora={isDoraTile(tile, dora)} />
+          ))}
+          {table.discard !== null && <> <span className="wt-then">→</span> </>}
+        </span>
+      )}
+      {discards.map(({ discard, tags }, index) => (
+        <Fragment key={discard}>
+          {index > 0 && <> <span className="wt-cnt">・</span> </>}
+          <span className="wt-disc">
+            打<Tile tile={discard} dora={isDoraTile(discard, dora)} />
+          </span>{' '}
+          {(!merged || tags.length > 0) && <span className={`wt-tags ${kindOf(tags)}`}>{tags.length > 0 ? tags.join('・') : '候補'}</span>}
+        </Fragment>
+      ))}
+      {option !== null && table.discard === null && <span className={`wt-tags ${kindOf(table.tags)}`}>{table.tags.length > 0 ? table.tags.join('・') : '候補'}</span>}
+      {merged && <> <span className="wt-cnt">（待ちも点も同じ）</span></>}{' '}
       <span className={`wt-shape${table.wide ? ' wide' : ''}`}>{table.shape}</span>{' '}
       <span className="wt-cnt">
         待ち{table.waits.length}種・残り{table.remaining}枚
@@ -169,7 +178,8 @@ function Heading({ table, dora }: { table: WaitTable; dora: Dora }) {
 }
 
 function captionOf(table: WaitTable): string {
-  const what = [table.option?.text ?? null, table.discard === null ? null : `打${table.discard}`].filter((x) => x !== null).join(' → ');
+  const discards = table.discard === null ? null : [table.discard, ...table.same.map((s) => s.discard)].map((d) => `打${d}`).join('・');
+  const what = [table.option?.text ?? null, discards].filter((x) => x !== null).join(' → ');
   return `${what} の待ちごとの役と点数`;
 }
 

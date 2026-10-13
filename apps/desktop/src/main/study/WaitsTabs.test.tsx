@@ -250,17 +250,16 @@ describe('F14 リーチの判断（南4局 10巡目）: 聴牌になる切り方
     return view;
   }
 
-  it('聴牌になる 4 通りの切り方に表。3 種類以上の待ちの手は「多面張」（強調の札）、嵌張の手は 1 語', async () => {
+  it('聴牌になる 4 通りの切り方。待ちも点も同じ 1s と 4s は 1 つの表にまとまり、見出しに「（待ちも点も同じ）」。3 種類以上の待ちの手は「多面張」（強調の札）、嵌張の手は 1 語', async () => {
     await open();
     const tables = [...document.querySelectorAll<HTMLElement>('[data-ai="waits"]')];
     expect(tables.map((t) => text(t.querySelector('.wt-h')))).toEqual([
-      '打 一索 AI 多面張 待ち3種・残り6枚',
-      '打 四索 候補 多面張 待ち3種・残り6枚',
+      '打 一索 AI ・ 打 四索 （待ちも点も同じ） 多面張 待ち3種・残り6枚',
       '打 六索 候補 嵌張 待ち1種・残り4枚',
       '打 九索 候補 嵌張 待ち1種・残り4枚',
     ]);
     expect(tables[0]?.querySelector('.wt-h .wt-shape')).toHaveClass('wide');
-    expect(tables[2]?.querySelector('.wt-h .wt-shape')).not.toHaveClass('wide');
+    expect(tables[1]?.querySelector('.wt-h .wt-shape')).not.toHaveClass('wide');
   });
 
   it('リーチの欄は、ロンとツモ、ダマとの差。点数はダマと同じ表の中に並ぶ', async () => {

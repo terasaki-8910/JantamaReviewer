@@ -188,14 +188,15 @@ describe('F14 判断ごとの表（実戦の半荘）', () => {
     const box = waitBoxOf(d, actualChoice(d));
     expect(box).not.toBeNull();
     const tables = (box as NonNullable<typeof box>).tables;
+    // 1s と 4s は、待ちも点も同じ（多面張 6s・9s・南）なので、1 つの表にまとまる（承認された見本の「待ちも点も同じ」）
     expect(tables.map((t) => [t.discard, t.shape, t.remaining])).toEqual([
       ['1s', '多面張', 6],
-      ['4s', '多面張', 6],
       ['6s', '嵌張', 4],
       ['9s', '嵌張', 4],
     ]);
     expect(tables[0]?.tags).toEqual(['AI']);
-    expect(tables[1]?.tags).toEqual([]);
+    expect(tables[0]?.same).toEqual([{ discard: '4s', tags: [] }]);
+    expect(tables[1]?.same).toEqual([]);
     const six = tables[0]?.waits.find((w) => w.tile === '6s') as WaitRow;
     // ロン 8000（4 飜 40 符）・ツモ 2000・4000（5 飜 30 符）、リーチはロン 8000（5 飜 40 符）・ツモ 3000・6000（6 飜 30 符）
     expect([six.dama.ron.han, six.dama.ron.fu, six.dama.ron.base, six.dama.ron.limit]).toEqual([4, 40, 8000, '満貫']);
@@ -216,6 +217,23 @@ describe('F14 判断ごとの表（実戦の半荘）', () => {
     // 場風・自風が同じ南の役牌は 1 行にまとめる
     const south = tables[0]?.waits.find((w) => w.tile === 'S') as WaitRow;
     expect(south.yaku.map((y) => `${y.name}${y.han}`)).toEqual(['役牌 南（場風・自風）2', '一盃口1', '混一色3']);
+  });
+
+  it('待ちも点も同じ表だけをまとめる: 待ち・残り・形・飜・符・点数のどれかが違えば、別の表のまま', () => {
+    const d = decisionOf(FX5_ID, '南4局', 10);
+    const box = waitBoxOf(d, actualChoice(d));
+    // まとめる前の表（聴牌になる 4 つの切り方）の数と、まとめたあとの数
+    const plans = waitPlansOf(d, actualChoice(d)).filter((p) => waitTableOf(d, p) !== null);
+    expect(plans).toHaveLength(4);
+    expect(box?.tables).toHaveLength(3);
+    // まとめた表の、ほかの切り方も、元の表と同じ待ち・同じ点
+    const merged = box?.tables[0] as WaitTable;
+    const other = waitTableOf(d, plans.find((p) => p.discard === '4s') as WaitPlan) as WaitTable;
+    expect(other.waits.map((w) => [w.tile, w.remaining, w.dama.ron.base])).toEqual(merged.waits.map((w) => [w.tile, w.remaining, w.dama.ron.base]));
+    // スルー（切る牌が無い表）は、ほかの表とまとめない
+    const call = games.get(FX5_ID)?.decisions.find((x) => x.kyokuLabel === '東4局' && x.kind === 'call' && x.junme === 8) as Decision;
+    const callBox = waitBoxOf(call, actualChoice(call));
+    expect(callBox?.tables.find((t) => t.discard === null)?.same).toEqual([]);
   });
 
   it('ダマでロンできない待ち（役が無い）は、ロンを「なし」にし、役の欄には役を付けた分を出す（東4局1本場 4巡目）', () => {
