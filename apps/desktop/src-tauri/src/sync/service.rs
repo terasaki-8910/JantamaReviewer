@@ -563,9 +563,10 @@ impl<P: Ports> Worker<P> {
             self.runner = None;
             return;
         }
+        let has_token = self.runner.as_ref().is_some_and(|r| r.secret.is_some());
         self.shared.update(|status| {
             status.enabled = true;
-            status.has_token = true;
+            status.has_token = has_token;
             status.state = SyncState::Syncing;
             status.message = None;
             status.can_allow_mass_delete = false;

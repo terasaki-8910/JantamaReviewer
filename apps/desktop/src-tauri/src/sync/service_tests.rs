@@ -486,3 +486,17 @@ fn d4_a_mass_deletion_pauses_syncing_and_one_button_lets_it_through() {
     f.wait_state(SyncState::Idle);
     wait_until("消した印が届く", || f.answer_keys_on_server() == 0);
 }
+
+#[test]
+fn d4_a_local_test_server_needs_no_token_and_the_status_does_not_claim_one() {
+    let f = fixture(fast_timers());
+    f.service
+        .save_connection(Some("http://127.0.0.1:18080"), None)
+        .unwrap();
+    f.service.set_enabled(true).unwrap();
+    f.sync_and_wait(SyncState::Idle);
+    let status = f.service.status();
+    assert!(!status.has_token, "トークンは入っていない: {status:?}");
+    assert_eq!(status.url_host, "127.0.0.1:18080");
+    assert!(f.tokens.load().unwrap().is_none());
+}
