@@ -29,8 +29,8 @@ Node（22 以上。この PC は 25.2）と pnpm（11.9.0）。
 
 ```
 brew install node          # Homebrew を使っているとき。無ければ https://nodejs.org/ から LTS の .pkg を入れる
-npm install -g pnpm@11.9.0
-node -v && pnpm -v         # pnpm は 11.9.0
+npm install -g pnpm@11.9.0   # 権限のエラーが出たら、先頭に sudo を付ける
+node -v && pnpm -v           # pnpm は 11.9.0
 ```
 
 画面の試験（`pnpm test`）は、実ブラウザとして、入っている Chrome か Edge を使う。どちらも無いと、その試験が「ブラウザを起動できません」で落ちる
@@ -40,11 +40,11 @@ node -v && pnpm -v         # pnpm は 11.9.0
 
 いちばん簡単なのは `git bundle`（履歴ごと 1 つのファイルにする。GitHub に上げない）。
 
-Windows 側（どの worktree でもよい。ブランチ名は、いま確認したいもの。`feature/mac2` が `main` に入ったあとは `main`）:
+Windows 側（PowerShell。どの worktree でもよい。ブランチ名は、いま確認したいもの。`feature/mac2` が `main` に入ったあとは `main`）:
 
 ```
 cd C:\Users\e8910\Documents\project\JantamaReviewer.worktrees\mac2
-git bundle create %USERPROFILE%\Desktop\jantama.bundle feature/mac2
+git bundle create "$env:USERPROFILE\Desktop\jantama.bundle" feature/mac2
 ```
 
 `jantama.bundle` を Mac に写す（AirDrop・iCloud Drive・USB・`scp` のどれでも）。Mac 側:
