@@ -94,7 +94,19 @@ GIF は、ウィジェットの窓の中のボタンを、撮影の道具が押�
 - 役無しの警告: 副露して役が無い手は、札「役無し」と太字の文で出します。聴牌しても待ちに役が付かないときは「和了れない」と出します。門前でダマだと役が無い待ちは、薄い注にとどめます。
 - 行動の中身が全部同じなら、1 つにまとめて「どの行動でも同じ」と出します。答える前には出ません。
 
-役の判定は、エンジンの自前のコードです（雀魂の規則: 喰いタンあり・後付けあり・赤ドラあり）。正しさは、Python の mahjong と kobalab の majiang-core（MIT。試験だけで使います）の 2 つの正解表と照らして確かめています。
+役の判定は、エンジンの自前のコードです（雀魂の規則: 喰いタンあり・後付けあり・赤ドラあり）。正しさは、Python の mahjong と kobalab の majiang-core（MIT）の 2 つの正解表と照らして確かめています（役の欄では、majiang-core は試験だけで使います。次の「待ちと打点」の点数の計算には、実行時にも使います）。
+
+### 待ちと打点・待ちの形・符の内訳
+
+<img src="docs/images/quiz-waits.png" alt="答え合わせのタブ「待ちと打点」。ポンのあとの打牌ごとに、待ち牌の行へ、待ちの形（両面）・どちらでも付く役・ダマのロンとツモの飜・符・点数が並び、符の数に乗せると、副底と明刻の内訳が重なって出ている" width="336">
+
+答え合わせのあと、聴牌になる行動がある場面だけ、既定のタブ「受け入れ・役」のとなりに、タブ「待ちと打点」が出ます（出題・解き直し・半荘を通して見る画面で同じです。聴牌にならない場面には、タブは出ません）。聴牌になる行動は、比べる打牌（自分・実戦・AI）、スルーのままの聴牌、チー・ポンのあとに切る牌、リーチの判断（聴牌になる切り方すべて）です。タブは、← →・Home・End で選べます。答える前には出ません。
+
+- 待ち牌ごとの行: 待ち（牌と、見えている牌と自分の手牌を除いた残り枚数）、待ちの形（両面・嵌張・辺張・双碰・単騎。3 種類以上の待ちは、表の見出しに「多面張」）、どちらでも付く役、ダマとリーチ（門前だけ）それぞれの、ロンとツモの飜・符・点数を並べます。ロンできない待ち（役が無い）は「役なし（ロンできない）」、自分の河にある牌の待ちは「（フリテン）」と出ます。待ちも点も同じ打牌は、1 つの表にまとめます。
+- 符は「40符」のように数だけ出し、マウスを乗せる（キーボードで選ぶ）と、内訳（副底・門前ロン・暗刻・明刻・雀頭・待ちなど）が重なって出ます。
+- 数えないもの: 裏ドラ・一発・海底などの和了の状況で決まるもの、和了牌が赤のときの赤ドラ（手牌の中の赤は数えます）。点数は、本場・供託を除いた値で、雀魂の規則（切り上げ満貫なし・喰いタンあり・赤ドラ各 1 枚）です。
+
+点数の計算は、kobalab の majiang-core（MIT。版を 1.4.1 に固定し、エンジンの 1 つのファイルの中だけで読み込みます）です。符の内訳は、Python の mahjong の `fu_details` の数え方をエンジンに移したものです（実行時に Python は使いません）。どちらも、Python の mahjong で作った正解表（実戦の聴牌になる全部の待ち・乱数の和了形）と、牌譜の和了 69 件の点の増減（本場・供託を含む）に、全部照らして確かめています。
 
 ### 解き直し
 
@@ -216,6 +228,7 @@ pnpm dev              # tauri dev（先に pnpm build:helper で補助プログ�
 pnpm build:debug      # デバッグビルド（本体と補助プログラム）
 ```
 
+- 待ちと打点の正解表（`packages/engine/tests/fixtures/win-value-oracle.json`）は、`packages/engine` で `WIN_VALUE_DUMP=1 pnpm exec vitest run tests/win-value-dump.test.ts` を動かしたあと、`tests/fixtures` で `uv run --offline --with mahjong python generate_win_value.py` を動かすと、作り直せます。
 - 実機の入力を通す手動の試験は、`pnpm test:hook`（本物のフックに入力を注入）と `pnpm test:task`（本物のタスクスケジューラ）です。`pnpm test` には含めていません。
 - 試しに動かすときは、環境変数 `JANTAMA_CONFIG_DIR` に一時フォルダを指定し、そこの `settings.json` の `data_dir` も一時フォルダにします。本物のデータには触れません。
 - README の画面写真は、`node scripts/readme-shots.mjs <迷いマークの画像のフォルダ>` で、作った実行ファイルから撮り直せます（一時フォルダだけを使います）。GIF は、`node scripts/readme-gifs.mjs <迷いマークの画像のフォルダ>` で録り直せます（ffmpeg が PATH に要ります）。どちらも、アプリ自身の窓を WebView2 の遠隔デバッグ（CDP）で操作して撮るので、画面全体やほかのアプリは撮りません。ウィジェットの GIF では、迷い・〇△✕・取り消しの命令を窓の通信の層で受け止め、本体には通しません。
@@ -233,6 +246,7 @@ pnpm build:debug      # デバッグビルド（本体と補助プログラム�
   - ライセンスの全文は、`pnpm install` のあと、`apps/desktop/node_modules/@fontsource/ibm-plex-mono/LICENSE` と `apps/desktop/node_modules/@fontsource/zen-old-mincho/LICENSE` にあります。
   - 本文の文字は、Windows に入っている書体（BIZ UDPGothic、Yu Gothic UI、Meiryo の順）を使い、同梱していません。
 - 牌の画像: [FluffyStuff/riichi-mahjong-tiles](https://github.com/FluffyStuff/riichi-mahjong-tiles)（パブリックドメイン）。出題・半荘を通して見る画面・検討ログの手牌と、確認シート（`docs/sheet/tiles`）で使っています。
+- 待ちと打点の点数の計算: kobalab の [majiang-core](https://github.com/kobalab/majiang-core) 1.4.1（MIT。Copyright (c) 2021 Satoshi Kobayashi）。符の内訳の数え方は、[MahjongRepository/mahjong](https://github.com/MahjongRepository/mahjong)（MIT）の数え方を移したものです。許諾の全文は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) にあります。
 
 そのほかの依存パッケージ（Tauri・React・Rust のクレートなど）は、それぞれのライセンスに従います。`docs/images` の画面写真と GIF に写っている雀魂の画面の権利は、それぞれの権利者にあります。
 

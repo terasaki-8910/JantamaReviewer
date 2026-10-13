@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
 
-import { InfoTip } from './InfoTip';
+import { InfoTip, Tip } from './InfoTip';
 
 const TEXT = '行を押すと、受け入れ牌と枚数・残りの一覧を開きます。';
 
@@ -211,5 +211,43 @@ describe('U-25 説明のアイコン: axe', () => {
     await user.hover(icon);
     expect(tip()).not.toBeNull();
     expect(await serious()).toEqual([]);
+  });
+});
+
+describe('Tip（符の数のように、アイコン以外の文字から出す重なり。F14）', () => {
+  function setupFu() {
+    const user = userEvent.setup();
+    render(
+      <p>
+        <Tip wrapperClassName="wt-fu-wrap" triggerClassName="wt-fu" triggerLabel="40符の内訳（六索 ダマ ロン）" triggerContent="40符" popClassName="wt-fu-pop" id="fu-tip">
+          <span>40符の内訳</span> <span>副底 20</span>
+        </Tip>
+        <button type="button">ほかのボタン</button>
+      </p>,
+    );
+    return { user, fu: screen.getByRole('button', { name: '40符の内訳（六索 ダマ ロン）' }) };
+  }
+
+  it('出す元は、文字（40符）のボタン。重なりは、読み上げの説明で、閉じている間は出ない', () => {
+    const { fu } = setupFu();
+    expect(fu).toHaveTextContent('40符');
+    expect(fu).toHaveAccessibleDescription('40符の内訳 副底 20');
+    expect(tip()).toBeNull();
+    expect(document.getElementById('fu-tip')).toHaveClass('infotip-pop', 'wt-fu-pop');
+  });
+
+  it('乗せると出て、離すと閉じる。Tab で位置が来ると出て、Esc で閉じる。外れると閉じる', async () => {
+    const { user, fu } = setupFu();
+    await user.hover(fu);
+    expect(tip()).toHaveTextContent('副底 20');
+    await user.unhover(fu);
+    await waitFor(() => expect(tip()).toBeNull());
+    await user.tab();
+    expect(fu).toHaveFocus();
+    expect(tip()).toHaveTextContent('40符の内訳');
+    await user.keyboard('{Escape}');
+    expect(tip()).toBeNull();
+    await user.tab();
+    expect(tip()).toBeNull();
   });
 });

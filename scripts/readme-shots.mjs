@@ -18,7 +18,7 @@
  * 3. 出題: 今日の出題・出題（答える前・答え合わせのあと・受け入れ枚数の小窓・2 向聴からの先）。画面の操作で答える。
  * 4. 履歴: 画面の操作で、昔の問題にも答える。答えの日付と解き直しの期限は、保存先の study.sqlite（一時フォルダの中）を、
  *    アプリを止めたあとに書き換えて、数週間ぶんの履歴にする（問題は、半荘より前の日には答えない）。
- * 5. 履歴の画面: 解き直し・検討ログ・週の集計・検索・半荘を通して見る画面（鳴きの場面に答えて、欄「役」も撮る）・設定。
+ * 5. 履歴の画面: 解き直し・検討ログ・週の集計・検索・半荘を通して見る画面（鳴きの場面に答えて、欄「役」と、タブ「待ちと打点」の符の内訳も撮る）・設定。
  *
  * 安全のための決まりは、readme-lib.mjs の説明を参照（本物のデータに触れない・自分で起動したプロセスだけを止める・
  * 記録の命令は本体に通さない・クリップボードは触らない）。設定ページの写真だけは、本物の状態ではなく、表示を差し替える。
@@ -456,6 +456,26 @@ async function screensPhase() {
   const yakuBox = await main.rectOf(`document.querySelector('[data-ai="yaku-box"]')`);
   const answerPanel = await main.rectOf(`document.querySelector('.answer')`);
   await shot('quiz-yaku.png', { x: answerPanel.x, y: Math.max(0, Math.floor(yakuBox.y - 16)), width: answerPanel.width, height: Math.ceil(yakuBox.height + 32) });
+
+  // 待ちと打点（F14）: 同じ場面（東をポンしたあとは聴牌）の、タブ「待ちと打点」。符の数にマウスを乗せて、内訳を出した形を撮る
+  // （重なりは、マウスを離すと閉じるので、整える（settle）のは乗せる前に済ませ、撮るときは整えない）
+  await main.click(`Array.from(document.querySelectorAll('[role=tab]')).find((t) => t.textContent === '待ちと打点')`, 'タブ「待ちと打点」');
+  await main.waitFor(`document.querySelector('[data-ai="waits-box"]')`, '待ちと打点の欄');
+  await main.fit(1280, 900, 2);
+  await main.settle();
+  // 最後の待ちの行のロンの符に乗せる（重なりは符の上に出るので、1 つ目の待ちの形と役の札が隠れない）
+  const lastFu = `Array.from(document.querySelectorAll('.wt-tbl tbody tr')).pop().querySelector('td.dama .wt-fu')`;
+  const fuBox = await main.viewRectOf(lastFu);
+  await main.mouse('mouseMoved', fuBox.x + fuBox.width / 2, fuBox.y + fuBox.height / 2, { button: 'none', clickCount: 0 });
+  await main.waitFor(`document.querySelector('.wt-fu-pop:not([hidden])')`, '符の内訳の重なり');
+  await sleep(400);
+  const tabsBox = await main.rectOf(`document.querySelector('.rv-tabs')`);
+  const panelBox = await main.rectOf(`document.querySelector('.wt-panel')`);
+  const tipBox = await main.rectOf(`document.querySelector('.wt-fu-pop:not([hidden])')`);
+  const waitsTop = Math.max(0, Math.floor(Math.min(tabsBox.y, tipBox.y) - 16));
+  const waitsBottom = Math.ceil(panelBox.y + panelBox.height + 16);
+  h.writePng('quiz-waits.png', await captureOf(main, { x: answerPanel.x, y: waitsTop, width: answerPanel.width, height: waitsBottom - waitsTop }));
+  await main.mouse('mouseMoved', 1270, 1, { button: 'none', clickCount: 0 });
   await main.viewport(1280, 900, 1);
 
   // 設定（表示だけ差し替える。ファイルの上の説明を参照）

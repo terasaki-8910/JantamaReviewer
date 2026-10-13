@@ -1,0 +1,420 @@
+/*
+  waits.css: 答え合わせのタブの枠と、タブ「待ちと打点」の欄（F14、E-36〜E-38、U-34。R15-2・R15-3）。
+  承認済みの 15回目の見本（samples15.css の .rv-tabs・.wt-*・符の内訳の重なり）の部品を、アプリに移した。色はすべて tokens.css のトークンから
+  （色のリテラルは書かない）。新しい色・トークンは足さない。目立たせ方は、太字・枠の形・淡い accent の塗りだけ（アプリの既存の使い方）。
+
+  方針:
+  - タブは下線のタブ（選んでいるタブは太字と accent の下線）。タブの並びと欄は、答えの欄の他の欄と同じ区切りの欄（.q-sec）に入れる
+  - 「待ちと打点」の欄は、幅が 680px 以上なら表（待ち・形・役・ダマ・リーチ）、狭いと 1 つの待ちを 1 かたまりにして積む（答えの欄は、広い窓では
+    幅 336px まで狭くなるので、ふだんは積んだ形）。表の幅は、欄の幅（コンテナ wt）で決める
+  - 符の数は点線の下線の文字（cursor: help）。マウスを乗せる・キーボードで選ぶと、説明のアイコン（InfoTip）と同じ重なりで内訳が出る
+*/
+.rv-tabs-box {
+  display: grid;
+  min-width: 0;
+}
+
+.rv-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.rv-tabs [role="tab"] {
+  min-height: 34px;
+  padding: 0 var(--s3);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.rv-tabs [role="tab"]:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.rv-tabs [role="tab"][aria-selected="true"] {
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom-color: var(--accent);
+}
+
+.rv-tabs [role="tab"]:focus-visible {
+  outline-offset: -2px;
+}
+
+.rv-panel {
+  display: grid;
+  gap: var(--s3);
+  padding-top: var(--s3);
+}
+
+.rv-panel[hidden] {
+  display: none;
+}
+
+/* ---------- 説明の重なり（アプリの InfoTip と同じ見た目。符の内訳も、これで出す） ---------- */
+.wt-fu {
+  display: inline;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dotted var(--ink);
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  line-height: inherit;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.wt-fu:hover,
+.wt-fu[data-open="1"] {
+  background: var(--hover);
+}
+
+.wt-fu:focus-visible {
+  outline-offset: 2px;
+}
+
+.wt-fu-pop {
+  display: grid;
+  gap: 4px;
+}
+
+.fp-t {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fp-r {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s4);
+  font-size: 13px;
+}
+
+.fp-r .n {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.fp-sum {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding-top: 4px;
+  border-top: 1px solid var(--line-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fp-n {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+/* ---------- 提案 1・2・8: 待ちと打点 ---------- */
+.wt {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.wt-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s3);
+}
+
+.wt-disc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.wt-disc .tile {
+  --tw: 22px;
+}
+
+.wt-tags {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.wt-tags.you {
+  color: var(--you);
+}
+
+.wt-shape {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.wt-shape.wide {
+  border-color: var(--accent);
+  background: var(--accent-fill);
+  font-weight: 700;
+}
+
+.wt-cnt {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.wt-tbl {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.wt-tbl col.c-wait {
+  width: 6.4em;
+}
+
+.wt-tbl col.c-shape {
+  width: 5.6em;
+}
+
+.wt-tbl col.c-yaku {
+  width: 22%;
+}
+
+.wt-tbl th,
+.wt-tbl td {
+  padding: 8px var(--s3) 8px 0;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  font-weight: 400;
+}
+
+.wt-tbl thead th {
+  padding-top: 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wt-tbl tbody th {
+  white-space: nowrap;
+}
+
+.wt-wait {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+}
+
+.wt-wait .tile {
+  --tw: 24px;
+}
+
+.wt-wait small {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.wt-ev {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wt-y {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 0;
+}
+
+.wt-y .q-tag {
+  white-space: normal;
+  line-height: 1.3;
+  min-height: 18px;
+  padding: 2px 6px;
+  font-size: 11.5px;
+}
+
+.wt-p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--s2);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.wt-k {
+  min-width: 2.4em;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.wt-n {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wt-hf {
+  font-size: 12.5px;
+}
+
+.wt-lim {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.wt-none {
+  font-weight: 700;
+}
+
+.wt-diff {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.wt-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 幅が狭いとき: 待ち 1 つを 1 かたまりにする。左に牌と残り、右に形と役。その下に、ダマとリーチを 1 行ずつ（小さな見出し付き） */
+@container wt (width < 680px) {
+  .wt-tbl,
+  .wt-tbl tbody {
+    display: block;
+  }
+
+  .wt-tbl thead,
+  .wt-tbl colgroup {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .wt-tbl tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "wait shape"
+      "wait yaku"
+      "dama dama"
+      "riichi riichi";
+    gap: 4px var(--s3);
+    padding: var(--s2) 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .wt-tbl th,
+  .wt-tbl td {
+    display: block;
+    padding: 0;
+    border-top: 0;
+  }
+
+  .wt-tbl th {
+    grid-area: wait;
+  }
+
+  .wt-tbl td.shape {
+    grid-area: shape;
+    align-self: start;
+  }
+
+  .wt-tbl td.yaku {
+    grid-area: yaku;
+  }
+
+  .wt-tbl td.dama {
+    grid-area: dama;
+  }
+
+  .wt-tbl td.riichi {
+    grid-area: riichi;
+  }
+
+  .wt-tbl td[data-label] {
+    display: grid;
+    grid-template-columns: 3.6em minmax(0, 1fr);
+    gap: var(--s2);
+    padding-top: 4px;
+    border-top: 1px dotted var(--line);
+  }
+
+  .wt-tbl td[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1.8;
+  }
+}
+
+
+/* 欄の幅で、表と積んだ形を切り替える */
+.wt-panel {
+  container: wt / inline-size;
+  display: grid;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.wt-list {
+  display: grid;
+  gap: var(--s5);
+  min-width: 0;
+}
+
+.wt-tags.act {
+  color: var(--ink);
+}
+
+.wt-tags.other {
+  color: var(--muted);
+}
+
+.wt-then {
+  color: var(--muted);
+}
+
+.wt-fu-wrap {
+  display: inline;
+}
+
+@media (width <= 520px) {
+  .rv-tabs [role="tab"] {
+    padding: 0 var(--s2);
+    font-size: 12.5px;
+  }
+}

@@ -26,6 +26,27 @@ interface InfoTipProps {
   id?: string;
 }
 
+/**
+ * 重なりを出す部品の土台（アイコンの `InfoTip` と、符の数の `FuTip` が使う）。出し方・置き方・閉じ方は、上に書いたとおりで、
+ * 出す元（ボタン）の見た目と中身だけが違う。
+ */
+export interface TipProps {
+  /** 重なりの中身。 */
+  children: ReactNode;
+  /** 重なりの id。ほかの物の aria-describedby から指すとき。無ければ、自動。 */
+  id?: string;
+  /** 出す元のボタンの class。 */
+  triggerClassName: string;
+  /** 出す元のボタンの名前（aria-label）。ボタンの中の文字が名前になるなら、渡さない。 */
+  triggerLabel?: string;
+  /** 出す元のボタンの中身。 */
+  triggerContent: ReactNode;
+  /** ボタンを包む要素の class。 */
+  wrapperClassName?: string;
+  /** 重なりに足す class。 */
+  popClassName?: string;
+}
+
 type Mode = 'closed' | 'peek' | 'pinned';
 
 /** マウスを離してから閉じるまでの、猶予（ミリ秒）。アイコンと重なりの間を、マウスが渡れるように。 */
@@ -45,6 +66,14 @@ function focusVisible(element: HTMLElement): boolean {
 }
 
 export function InfoTip({ label, children, id }: InfoTipProps) {
+  return (
+    <Tip id={id} wrapperClassName="infotip" triggerClassName="infotip-btn" triggerLabel={label} triggerContent={<Icon name="info" />}>
+      {children}
+    </Tip>
+  );
+}
+
+export function Tip({ children, id, triggerClassName, triggerLabel, triggerContent, wrapperClassName, popClassName }: TipProps) {
   const autoId = useId();
   const tipId = id ?? autoId;
   const [mode, setMode] = useState<Mode>('closed');
@@ -171,12 +200,12 @@ export function InfoTip({ label, children, id }: InfoTipProps) {
   }, [onEnter, onLeave]);
 
   return (
-    <span className="infotip">
+    <span className={wrapperClassName}>
       <button
         type="button"
-        className="infotip-btn"
+        className={triggerClassName}
         ref={buttonRef}
-        aria-label={label}
+        aria-label={triggerLabel}
         aria-describedby={tipId}
         data-open={open ? '1' : undefined}
         onPointerEnter={onEnter}
@@ -191,11 +220,11 @@ export function InfoTip({ label, children, id }: InfoTipProps) {
           setMode((current) => (current === 'pinned' ? 'closed' : 'pinned'));
         }}
       >
-        <Icon name="info" />
+        {triggerContent}
       </button>
       {createPortal(
         <span
-          className="infotip-pop"
+          className={popClassName === undefined ? 'infotip-pop' : `infotip-pop ${popClassName}`}
           id={tipId}
           ref={tipRef}
           role="tooltip"
