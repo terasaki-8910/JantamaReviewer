@@ -106,6 +106,8 @@ export * from './maka-fit';
 export * from './maka-fit-base';
 export * from './mark-link';
 export * from './open-hands';
+export * from './open-sign';
+export * from './opponent-track';
 export * from './outcome';
 export * from './paipu-link';
 export * from './problems';

@@ -45,6 +45,7 @@ function boardOf(over: Partial<BoardState> = {}): BoardState {
     hand: [],
     drawn: null,
     handCounts: [13, 13, 13, 13],
+    handDrawn: [false, false, false, false],
     rivers: [[], [], [], []],
     melds: [[], [], [], []],
     riichi: ['none', 'none', 'none', 'none'],
