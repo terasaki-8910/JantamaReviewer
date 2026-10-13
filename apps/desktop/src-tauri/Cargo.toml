@@ -47,6 +47,22 @@ ureq = { version = "3", default-features = false, features = ["native-tls"] }
 # src/study/ の中だけで使う（検討画面だけが使う。ウィジェット・ボタンを拾う部分・補助プログラムには入れない）。
 rusqlite = { version = "0.40", features = ["bundled"] }
 
+# 記録の同期（F15、D-4）。手元の SQLite と JSON が元の記録のままで、同期用の DB を別に持ち、Turso Cloud と同期する。
+# src/sync/ の中だけで使う（通信するのは、ここだけ。tests/safety.rs の S-2 が、通信先と使える場所を確かめる）。
+# 版は 0.8.2 に固定する: 同期の試し（analysis/sync-spike）で Turso Cloud（東京）と、同じ版の tursodb --sync-server に対して、
+# 競合・削除・オフライン・時間切れを確かめた版だから。0.8.3 は 2026-10-12 に出たばかりで、Cloud に対しては確かめていない。
+# 既定の機能（mimalloc・全文検索）は切る。
+turso = { version = "=0.8.2", default-features = false, features = ["sync"] }
+# turso の同期が使う非同期の実行環境（同期の裏のスレッドが 1 つだけ持つ）。
+tokio = { version = "1", default-features = false, features = ["rt", "time"] }
+# トークンを入れる OS の資格情報の保管庫（Windows の資格情報マネージャー、Mac のキーチェーン）。ファイルには書かない。
+keyring = "4"
+# report.json の圧縮（gzip）と、内容の指紋（SHA-256）。
+flate2 = "1"
+sha2 = "0.10"
+# 端末をまたいで重ならない id の乱数。
+getrandom = "0.3"
+
 [target.'cfg(windows)'.dependencies]
 # クリップボードの文字を読む（文字だけ。画像やファイルは読まない）。src/platform/win/clipboard.rs の 1 か所からだけ使う。
 clipboard-win = "5"
