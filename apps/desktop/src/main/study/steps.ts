@@ -10,19 +10,30 @@ import { framesBeforeDecision, type BoardState, type Decision, type ImportedGame
 /** 何巡前から見せるか。 */
 export const TURNS_BEFORE = 3;
 
-export function replaySteps(game: ImportedGame, decision: Decision, turnsBefore: number = TURNS_BEFORE): BoardState[] {
+/** 戻って見る盤面 1 つと、その盤面の牌譜の位置（`mjai_log` の中の event の位置。他家の手牌を、その時点で開くのに使う）。 */
+export interface ReplayStepFrame {
+  board: BoardState;
+  eventIndex: number;
+}
+
+/** 戻って見る盤面（古い順。最後は判断の盤面）と、それぞれの牌譜の位置。 */
+export function replayStepFrames(game: ImportedGame, decision: Decision, turnsBefore: number = TURNS_BEFORE): ReplayStepFrame[] {
   const frames = framesBeforeDecision(game, decision, turnsBefore);
   const target = decision.board.junme - turnsBefore;
-  const steps: BoardState[] = [];
+  const steps: ReplayStepFrame[] = [];
   let lastJunme = -1;
   for (const frame of frames) {
     const board = frame.board;
     if (board.junme >= Math.max(1, target) && board.junme < decision.board.junme && board.junme !== lastJunme) {
-      steps.push(board);
+      steps.push({ board, eventIndex: frame.eventIndex });
       lastJunme = board.junme;
     }
   }
-  return [...steps, decision.board];
+  return [...steps, { board: decision.board, eventIndex: decision.eventIndex }];
+}
+
+export function replaySteps(game: ImportedGame, decision: Decision, turnsBefore: number = TURNS_BEFORE): BoardState[] {
+  return replayStepFrames(game, decision, turnsBefore).map((frame) => frame.board);
 }
 
 /** 盤面の、河の段の数（6 枚で折り返す。最低 2 段）と、リーチ宣言牌（横向き）があるか。盤面の大きさを、どの巡目でもそろえるのに使う。 */

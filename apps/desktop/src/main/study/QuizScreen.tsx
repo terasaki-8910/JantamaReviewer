@@ -15,7 +15,7 @@ import { resolveMarks } from '../markCards';
 import { memosForDecision } from '../memos';
 import { anyCalled, boardInfoOf } from './Board';
 import { QuizWork } from './QuizWork';
-import { replaySteps } from './steps';
+import { replayStepFrames } from './steps';
 import { useStudy, type Located } from './StudyProvider';
 import { useQuizWork } from './useQuizWork';
 
@@ -65,9 +65,13 @@ export function QuizScreen({
 }: QuizScreenProps) {
   const study = useStudy();
   const { game, decision, session } = located;
-  const steps = useMemo(() => replaySteps(game, decision), [game, decision]);
+  const frames = useMemo(() => replayStepFrames(game, decision), [game, decision]);
+  const steps = useMemo(() => frames.map((frame) => frame.board), [frames]);
   const last = steps.length - 1;
   const [step, setStep] = useState(last);
+  // 他家の手牌の開け閉め（F14、R16-7）。問題ごとに作り直すので、問題を離れると閉じに戻る。巡目を戻っても、開いたまま（その時点の手牌）
+  const [handsOpen, setHandsOpen] = useState(false);
+  const openHands = useMemo(() => ({ open: handsOpen, onToggle: () => setHandsOpen((value) => !value) }), [handsOpen]);
 
   const board = steps[step] ?? decision.board;
   const past = step < last;
@@ -181,6 +185,8 @@ export function QuizScreen({
         onNext={onNext}
         memoShown={memoShown}
         game={game}
+        eventIndex={frames[step]?.eventIndex ?? decision.eventIndex}
+        openHands={openHands}
       />
     </div>
   );

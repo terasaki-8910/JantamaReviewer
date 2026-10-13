@@ -2,6 +2,8 @@
  * 位置の帯（F12）。半荘の全体を、局ごとの区間に分けて横に並べ、いまの手の位置（縦の線）を出す。
  * 迷いの場面は帯の上の丸、不一致の場面は下のひし形（色だけで区別しない）。解答済みの場面は、中を抜いた輪郭だけ。
  * 帯を押す・引きずると、その手へ動く。印を押すと、その場面へ飛ぶ。帯は、スライダー（矢印で 1 手ずつ・Home・End）。
+ * 他家の手牌を開いているときだけ（R16-7 の A）、他家が聴牌になった手の目盛り（帯の下の縁の小さな三角。この局のものは accent）と、その数と、この局の分を書いた 1 行を、帯の下に出す。
+ * 目盛りは押せない（押す・引きずるは、帯のまま）ので、読み上げは 1 行のほうに任せる（目盛りは aria-hidden）。
  */
 import type { ReplayScene, ReplayTimeline } from '@jantama/engine';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
@@ -9,6 +11,18 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProper
 import { KIND_NAME } from '../study/labels';
 import { kyokuShortLabel, mismatchName, turnLabel } from './replayModel';
 import { layoutPins, stepAtPoint } from './stripLayout';
+
+/** 他家が聴牌になった手の目盛り 1 つ。 */
+export interface StripTick {
+  /** その手（聴牌になった打牌）の通し番号。 */
+  g: number;
+  /** どの局か（いまの局の目盛りを、色で分ける）。 */
+  kyokuPosition: number;
+  /** 自分から見た呼び名（下家・対面・上家）。 */
+  who: string;
+  /** その人の何枚目の打牌か（N巡目）。 */
+  n: number;
+}
 
 interface StripProps {
   timeline: ReplayTimeline;
@@ -20,6 +34,8 @@ interface StripProps {
   /** いま着いている場面の鍵（無ければ null）。 */
   currentKey: string | null;
   go: (g: number) => void;
+  /** 他家が聴牌になった手の目盛り（他家の手牌を開いているときだけ渡す。無ければ出さない）。 */
+  ticks?: readonly StripTick[];
 }
 
 interface Pin {
@@ -46,7 +62,7 @@ function placePins(list: readonly Pin[], width: number, total: number): number[]
   );
 }
 
-export function Strip({ timeline, g, scenes, answered, currentKey, go }: StripProps) {
+export function Strip({ timeline, g, scenes, answered, currentKey, go, ticks }: StripProps) {
   const total = timeline.steps.length;
   const step = timeline.steps[g];
   const kyoku = step === undefined ? undefined : timeline.kyokus[step.kyokuPosition];
@@ -143,41 +159,60 @@ export function Strip({ timeline, g, scenes, answered, currentKey, go }: StripPr
     );
   };
 
+  const here = ticks?.filter((tick) => tick.kyokuPosition === step?.kyokuPosition) ?? [];
   return (
-    <div className="tl">
-      <div className="tl-pins up">{pins.up.map((pin, index) => renderPin(pin, upX[index]))}</div>
-      <div
-        className="tl-track"
-        ref={trackRef}
-        role="slider"
-        tabIndex={0}
-        aria-label="半荘の中の位置（左右の矢印で1手ずつ）"
-        aria-valuemin={1}
-        aria-valuemax={total}
-        aria-valuenow={g + 1}
-        aria-valuetext={valueText}
-        onPointerDown={onPointerDown}
-        onPointerMove={(event) => {
-          if (dragging.current) seek(event.clientX);
-        }}
-        onPointerUp={() => {
-          dragging.current = false;
-        }}
-        onPointerCancel={() => {
-          dragging.current = false;
-        }}
-        onKeyDown={onKeyDown}
-      >
-        <span className="tl-fill" style={style} />
-        {timeline.kyokus.map((item) => (
-          <span className="tl-seg" key={item.position} style={{ flex: `${item.steps.length} 1 0` }}>
-            <span className="long">{item.label}</span>
-            <span className="short">{kyokuShortLabel(item.label)}</span>
-          </span>
-        ))}
-        <span className="tl-cursor" style={style} />
+    <>
+      <div className="tl">
+        <div className="tl-pins up">{pins.up.map((pin, index) => renderPin(pin, upX[index]))}</div>
+        <div
+          className="tl-track"
+          ref={trackRef}
+          role="slider"
+          tabIndex={0}
+          aria-label="半荘の中の位置（左右の矢印で1手ずつ）"
+          aria-valuemin={1}
+          aria-valuemax={total}
+          aria-valuenow={g + 1}
+          aria-valuetext={valueText}
+          onPointerDown={onPointerDown}
+          onPointerMove={(event) => {
+            if (dragging.current) seek(event.clientX);
+          }}
+          onPointerUp={() => {
+            dragging.current = false;
+          }}
+          onPointerCancel={() => {
+            dragging.current = false;
+          }}
+          onKeyDown={onKeyDown}
+        >
+          <span className="tl-fill" style={style} />
+          {timeline.kyokus.map((item) => (
+            <span className="tl-seg" key={item.position} style={{ flex: `${item.steps.length} 1 0` }}>
+              <span className="long">{item.label}</span>
+              <span className="short">{kyokuShortLabel(item.label)}</span>
+            </span>
+          ))}
+          {ticks?.map((tick) => (
+            <span
+              className={`tk${tick.kyokuPosition === step?.kyokuPosition ? ' cur' : ''}`}
+              key={`${tick.g}:${tick.who}`}
+              aria-hidden="true"
+              style={{ left: `${((total > 1 ? tick.g / (total - 1) : 0) * 100).toFixed(3)}%` }}
+            />
+          ))}
+          <span className="tl-cursor" style={style} />
+        </div>
+        <div className="tl-pins down">{pins.down.map((pin, index) => renderPin(pin, downX[index]))}</div>
       </div>
-      <div className="tl-pins down">{pins.down.map((pin, index) => renderPin(pin, downX[index]))}</div>
-    </div>
+      {ticks !== undefined && (
+        <p className="tl-note" data-ticks={ticks.length}>
+          <span className="tp-key" aria-hidden="true" />
+          <span>
+            他家が聴牌になった手の位置（この半荘で {ticks.length} か所）。この局: {here.length === 0 ? 'なし' : here.map((tick) => `${tick.who} ${tick.n}巡目`).join('、')}
+          </span>
+        </p>
+      )}
+    </>
   );
 }

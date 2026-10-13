@@ -1,4 +1,4 @@
-import type { Decision } from '@jantama/engine';
+import { openSignLinesOf, type Decision } from '@jantama/engine';
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,7 +9,7 @@ import { renderQuiz } from '../../../tests/study-harness';
 // ここでは、タブが出るところ・出ないところ、キーボード（← → Home End）、表の見え方、符の内訳の重なり、答える前に何も出ないことを確かめる。
 // 実ブラウザでの見え方（横スクロール・axe・Tab の順・重なりが窓の中に入る）は、tests/browser/quiz.browser.test.ts が確かめる。
 // 場面は、確認シートの見本と同じ（FX-5 の南4局 10巡目のリーチの判断、東4局 8巡目のポンのあとの打牌）。
-// タブ「他家の手牌」（R15-5。OpenHands.test.tsx）は、答えたあとの、どの場面にも出るので、どの場面でも、いちばん右に付く。
+// 他家の手牌（R15-5）は、タブにしない。盤面の手牌を押して開く（R16-7。OpenHands.test.tsx）。
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -27,8 +27,15 @@ const RIICHI = { report: 'fx5' as const, find: (d: Decision) => d.kyokuLabel ===
 const AFTER_PON = { report: 'fx5' as const, find: (d: Decision) => d.kyokuLabel === '東4局' && d.entryIndex === 8 };
 /** FX-5 東4局 8巡目 鳴きの判断（スルーが実戦と AI。チーすると聴牌になる切り方がある）。 */
 const CALL = { report: 'fx5' as const, find: (d: Decision) => d.kyokuLabel === '東4局' && d.kind === 'call' && d.junme === 8 };
-/** 聴牌にならない判断（FX-1 の最初の判断の 1 つ。既定の場面）。 */
-const FAR = { report: 'fx1a' as const };
+/** 聴牌にならない判断で、他家のリーチも副露の気配の 1 行の人も無い（FX-1 の 2 向聴以上の判断の 1 つ）。 */
+const FAR = {
+  report: 'fx1a' as const,
+  find: (d: Decision) =>
+    d.kind === 'discard' &&
+    d.shanten >= 2 &&
+    !d.board.riichiOrder.some((seat) => seat !== d.board.playerId && d.board.riichi[seat] !== 'none') &&
+    openSignLinesOf(d.board).length === 0,
+};
 
 async function reveal(user: ReturnType<typeof renderQuiz>['user'], pick: () => HTMLElement) {
   await user.click(pick());
@@ -70,20 +77,24 @@ describe('U-34 答える前は、どのタブも、待ちも点も出ない（U-
   });
 });
 
-describe('U-34 タブは、その場面に関係があるときだけ出る（他家の手牌は、答えたあとのどの場面にも）', () => {
-  it('聴牌にならない場面は、待ちと打点のタブを出さない（既定のタブと、他家の手牌だけ）。受け入れ枚数の欄と役の欄は、既定のタブに並ぶ', async () => {
+describe('U-34 タブは、その場面に関係があるときだけ出る（他家の手牌のタブは無い。R16-7）', () => {
+  it('聴牌にならず、リーチも副露の気配も無い場面は、タブの並びを出さない（他家の手牌のタブは無い）。受け入れ枚数の欄と役の欄が、そのまま並ぶ', async () => {
     const { user } = renderQuiz(FAR);
     await reveal(user, () => screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
-    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '他家の手牌']);
-    expect(within(panel()).getByRole('heading', { name: '受け入れ枚数' })).toBeInTheDocument();
+    expect(tabs()).toEqual([]);
+    expect(screen.queryByRole('tablist')).toBeNull();
+    const review = document.getElementById('review') as HTMLElement;
+    expect(within(review).getByRole('heading', { name: '受け入れ枚数' })).toBeInTheDocument();
+    expect(within(review).getByRole('heading', { name: '役' })).toBeInTheDocument();
     expect(document.querySelector('[data-ai="waits-box"]')).toBeNull();
+    expect(document.querySelector('[data-ai="danger-box"]')).toBeNull();
   });
 
   it('聴牌になる場面は、既定のタブ「受け入れ・役」と、タブ「待ちと打点」が出る。既定のタブには、受け入れ枚数の欄と役の欄', async () => {
     const { user } = renderQuiz(AFTER_PON);
     await reveal(user, tile('三萬'));
     // この場面は、下家のリーチがあるので、守備のタブも出る（DangerTab.test.tsx）
-    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
+    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備']);
     expect(screen.getByRole('tab', { name: '受け入れ・役', selected: true })).toBeInTheDocument();
     expect(screen.getByRole('tablist')).toHaveAccessibleName('答え合わせの内容');
     const shown = panel();
@@ -103,18 +114,19 @@ describe('U-34 タブは、その場面に関係があるときだけ出る（�
   it('リーチの判断の場面でも出る。鳴きの判断（スルーで聴牌のまま）でも出る', async () => {
     const riichi = renderQuiz(RIICHI);
     await reveal(riichi.user, option('pass'));
-    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
+    // この場面は、リーチの人はいないが、副露の気配の 1 行の人がいるので、守備のタブも出る（R16-6。DangerTab.test.tsx）
+    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備']);
     riichi.unmount();
     const call = renderQuiz(CALL);
     await reveal(call.user, option('pass'));
     // この鳴きの判断は、下家のリーチ中なので、守備のタブも出る
-    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
+    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備']);
   });
 
   it('解き直し（review）でも、同じ部品が出る（答えが保存してあるとき、答え合わせのあとの形で開く）', async () => {
     const { user } = renderQuiz({ ...AFTER_PON, mode: 'review' });
     await reveal(user, tile('三萬'));
-    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
+    expect(tabs().map((t) => t.textContent)).toEqual(['受け入れ・役', '待ちと打点', '守備']);
   });
 });
 
@@ -136,10 +148,11 @@ describe('U-34 タブのキーボード（WAI-ARIA のタブ）', () => {
     expect(document.getElementById(second.getAttribute('aria-controls') ?? '')).toHaveAttribute('hidden');
   });
 
-  it('→ で次のタブを選んで、キーボードの位置も移す。← で戻る。端では反対の端へ。Home・End で最初・最後（この場面は、守備と他家の手牌を足した 4 つ）', async () => {
+  it('→ で次のタブを選んで、キーボードの位置も移す。← で戻る。端では反対の端へ。Home・End で最初・最後（この場面は、待ちと打点と守備を足した 3 つ）', async () => {
     const { user } = renderQuiz(AFTER_PON);
     await reveal(user, tile('三萬'));
-    const [first, second, third, fourth] = tabs() as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
+    const [first, second, third] = tabs() as [HTMLElement, HTMLElement, HTMLElement];
+    expect(tabs()).toHaveLength(3);
     first.focus();
     await user.keyboard('{ArrowRight}');
     expect(second).toHaveAttribute('aria-selected', 'true');
@@ -151,12 +164,8 @@ describe('U-34 タブのキーボード（WAI-ARIA のタブ）', () => {
     await user.keyboard('{ArrowRight}');
     expect(third).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{ArrowRight}');
-    expect(fourth).toHaveAttribute('aria-selected', 'true');
-    await user.keyboard('{ArrowRight}');
     expect(first).toHaveAttribute('aria-selected', 'true');
     expect(first).toHaveFocus();
-    await user.keyboard('{ArrowLeft}');
-    expect(fourth).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{ArrowLeft}');
     expect(third).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{ArrowLeft}');
@@ -165,8 +174,8 @@ describe('U-34 タブのキーボード（WAI-ARIA のタブ）', () => {
     expect(first).toHaveAttribute('aria-selected', 'true');
     expect(first).toHaveFocus();
     await user.keyboard('{End}');
-    expect(fourth).toHaveAttribute('aria-selected', 'true');
-    expect(fourth).toHaveFocus();
+    expect(third).toHaveAttribute('aria-selected', 'true');
+    expect(third).toHaveFocus();
     // 押して選ぶこともできる
     await user.click(first);
     expect(first).toHaveAttribute('aria-selected', 'true');
@@ -218,7 +227,11 @@ describe('F14 タブ「待ちと打点」の表（ポンのあとの打牌。副
     expect(box.textContent).not.toContain('裏ドラ・一発・海底');
     await user.hover(within(box).getByRole('button', { name: '待ちと打点の説明' }));
     const tip = screen.getByRole('tooltip');
-    expect(tip).toHaveTextContent('裏ドラ・一発・海底などは数えていません');
+    // 16回目の回答（R16-2）の文そのまま
+    expect(tip.textContent).toBe(
+      'リーチの列は、ダマの役に立直の 1 飜を足した点です。裏ドラ・一発・海底など、和了のときの運で決まるものは数えていません。門前でツモったときは、ダマでもリーチでも門前清自摸和の 1 飜が付きます。和了牌が赤のときの赤ドラも数えません。雀魂の規則（切り上げ満貫なし・喰いタンあり・赤ドラ各 1 枚）で計算しています。符の数にマウスを乗せると、内訳が出ます。',
+    );
+    expect(tip).toHaveTextContent('裏ドラ・一発・海底など、和了のときの運で決まるものは数えていません');
     expect(tip).toHaveTextContent('和了牌が赤のときの赤ドラも数えません');
     expect(tip).toHaveTextContent('雀魂の規則（切り上げ満貫なし・喰いタンあり・赤ドラ各 1 枚）で計算しています');
     expect(tip).toHaveTextContent('符の数にマウスを乗せると、内訳が出ます');

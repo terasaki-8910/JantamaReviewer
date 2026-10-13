@@ -23,12 +23,15 @@ import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import type { SessionRecord } from '../../api/types';
 import { resolveMarks } from '../markCards';
 import { anyCalled, boardInfoOf } from '../study/Board';
+import { useGameTracks } from '../study/OpenHands';
 import { latestAnswerFor } from '../study/QuizPage';
 import { useStudy } from '../study/StudyProvider';
+import { relationName } from '../study/labels';
 import { ControlBar } from './ControlBar';
 import { REPLAY_ACTIONS } from './keys';
 import { compactBelowHeight, replayNav, replayStops, sceneTags, turnLabel } from './replayModel';
 import { BrowseWork, SceneWork, type SceneDrafts } from './ReplayWork';
+import type { StripTick } from './Strip';
 import { useReplayKeys, type ReplayHandlers } from './useReplayKeys';
 import { useReplaySettings } from './useReplaySettings';
 
@@ -89,8 +92,9 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   // 窓の高さが足りないときは、卓を小さい配置にする（操作の段・卓・手牌が、1 画面に入るように）
   const windowHeight = useWindowHeight();
   const [drafts] = useState<SceneDrafts>(() => new Map());
-  // 「他家の手牌を開く」: 手を進めても、開いたままにする（この画面を離れると、閉じに戻る）
-  const [openHands, setOpenHands] = useState(false);
+  // 他家の手牌の開け閉め（盤面の手牌を押す。F14、R16-7）: 手を進めても、開いたままにする（この画面を離れると、閉じに戻る）
+  const [handsOpen, setHandsOpen] = useState(false);
+  const openHands = useMemo(() => ({ open: handsOpen, onToggle: () => setHandsOpen((value) => !value) }), [handsOpen]);
 
   const answered = useMemo(
     () =>
@@ -99,6 +103,24 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
       ),
     [study.answers, session.id],
   );
+
+  // 他家が聴牌になった手の目盛り（位置の帯。他家の手牌を、いま開いて見せているときだけ。答える場面の答える前は、開いていても出さない）
+  const showingHands = handsOpen && (scene === null || answered.has(scene.key));
+  const gameTracks = useGameTracks(game, showingHands);
+  const ticks = useMemo<StripTick[] | undefined>(() => {
+    if (gameTracks === null) return undefined;
+    const stepOfEvent = new Map(timeline.steps.map((item) => [item.eventIndex, item.index]));
+    const out: StripTick[] = [];
+    for (const tracks of gameTracks) {
+      for (const track of tracks.seats) {
+        for (const mark of track.marks) {
+          const at = stepOfEvent.get(mark.eventIndex);
+          if (at !== undefined) out.push({ g: at, kyokuPosition: tracks.kyokuPosition, who: relationName(timeline.playerId, track.seat), n: mark.n });
+        }
+      }
+    }
+    return out.sort((a, b) => a.g - b.g);
+  }, [gameTracks, timeline]);
 
   const handlers = useMemo(() => {
     const table = {} as ReplayHandlers;
@@ -152,8 +174,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
         currentKey={scene === null ? null : scene.key}
         go={go}
         onChangeKeys={(next) => settings.update({ replay_keys: next })}
-        // 答える場面（迷い・不一致）は、答えたあとだけ開ける。ほかの手は、いつでも
-        openHands={{ open: openHands, available: scene === null || answered.has(scene.key), onToggle: () => setOpenHands((value) => !value) }}
+        ticks={ticks}
       />
       {scene === null ? (
         <BrowseWork

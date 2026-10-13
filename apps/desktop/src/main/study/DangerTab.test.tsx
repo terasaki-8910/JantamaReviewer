@@ -1,15 +1,16 @@
-import type { Decision } from '@jantama/engine';
+import { openSignLinesOf, type Decision } from '@jantama/engine';
 import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { renderQuiz } from '../../../tests/study-harness';
+import { decisionOf, renderQuiz } from '../../../tests/study-harness';
 
-// 答え合わせのタブ「守備」（F14、E-39、U-34。R15-2・R15-4。提案 3）の画面の試験。
+// 答え合わせのタブ「守備」（F14、E-39、U-34。R15-2・R15-4・R16-6。提案 3）の画面の試験。
 // 分類の正しさ（現物・スジ・壁・字牌・無スジ。majiang-ai の数値の順との照合）は、エンジンの試験（danger.test.ts）が固定している。
 // ここでは、タブが出る場面・出ない場面、答える前に何も出ないこと、キーボード（← → Home End）、欄の中身（見出し・説明・1 行・河・行・印）、
 // リーチが 2 人のときの欄の順、鳴きの判断・リーチの判断を確かめる。
 // 実ブラウザでの見え方（横スクロール・axe・Tab の順）は tests/browser/quiz.browser.test.ts、通して見る画面で答えた場面は replay の試験。
 // 場面は、確認シートの見本と同じもの（FX-5 の東4局 8巡目・東2局 8巡目）と、固定データの別の場面。
+// 副露の気配の 1 行（R16-6 の B。対象の決め方はエンジンの試験 open-sign.test.ts）: リーチの人がいなくても、対象の人がいれば、タブが出る。
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -31,8 +32,13 @@ const TWO_RIICHI = { report: 'fx1c' as const, find: (d: Decision) => d.kyokuLabe
 const CALL = { report: 'fx1a' as const, find: (d: Decision) => d.kyokuLabel === '南2局1本場' && d.entryIndex === 8 };
 /** FX-1b 東3局2本場 11巡目 リーチの判断（上家のリーチ。自分は聴牌）。 */
 const RIICHI_DECISION = { report: 'fx1b' as const, find: (d: Decision) => d.kyokuLabel === '東3局2本場' && d.entryIndex === 12 };
-/** 他家のリーチが無い場面（FX-1a の最初の判断の 1 つ。既定の場面）。 */
-const NO_RIICHI = { report: 'fx1a' as const };
+const hasRiichi = (d: Decision): boolean => d.board.riichiOrder.some((seat) => seat !== d.board.playerId && d.board.riichi[seat] !== 'none');
+/** 他家のリーチも副露の気配の 1 行の人も無い、打牌の場面（FX-1a の 2 向聴以上の判断の 1 つ。聴牌にならないので、待ちと打点のタブも出ない）。 */
+const NO_RIICHI = { report: 'fx1a' as const, find: (d: Decision) => d.kind === 'discard' && d.shanten >= 2 && !hasRiichi(d) && openSignLinesOf(d.board).length === 0 };
+/** リーチの人がいなくて、副露の気配の 1 行の人がいる、打牌の場面（FX-4。2 向聴以上で、待ちと打点のタブは出ない）。 */
+const SIGN_ONLY = { report: 'fx4' as const, find: (d: Decision) => d.kind === 'discard' && d.shanten >= 2 && !hasRiichi(d) && openSignLinesOf(d.board).length > 0 };
+/** リーチの人と、副露の気配の 1 行の人が、同じ場面にいる、打牌の場面（FX-1。2 向聴以上）。 */
+const RIICHI_AND_SIGN = { report: 'fx1c' as const, find: (d: Decision) => d.kind === 'discard' && d.shanten >= 2 && hasRiichi(d) && openSignLinesOf(d.board).length > 0 };
 /** 聴牌の場面で、他家のリーチが無い（待ちと打点のタブだけ）。FX-5 南4局 10巡目のリーチの判断。 */
 const TENPAI_NO_RIICHI = { report: 'fx5' as const, find: (d: Decision) => d.kyokuLabel === '南4局' && d.entryIndex === 10 };
 
@@ -79,31 +85,43 @@ describe('U-34 答える前は、守備のタブも、分類も、AI の印も�
   });
 });
 
-describe('U-34 守備のタブは、他家のリーチがある場面だけ出る', () => {
-  it('他家のリーチが無い場面は、守備のタブを出さない（聴牌の場面なら、待ちと打点のタブだけ。リーチが無く聴牌でもない場面は、タブの並びも無い）', async () => {
+describe('U-34 守備のタブは、他家のリーチがある場面か、副露の気配の 1 行の人がいる場面だけ出る（他家の手牌のタブは無い。R16-7）', () => {
+  it('リーチも副露の気配も無い場面は、守備のタブを出さない（聴牌でもなければ、タブの並びも無い）。聴牌でリーチの人がいなくても、副露の気配の人がいれば、守備も出る', async () => {
     const plain = renderQuiz(NO_RIICHI);
     await reveal(plain.user, () => screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
-    // 他家の手牌のタブは、答えたあとのどの場面にも付く（OpenHands.test.tsx）
-    expect(tabNames()).toEqual(['受け入れ・役', '他家の手牌']);
+    expect(tabNames()).toEqual([]);
+    expect(screen.queryByRole('tablist')).toBeNull();
     expect(document.querySelector('[data-ai="danger-box"]')).toBeNull();
     expect(document.body.textContent).not.toContain('守備の目安');
     plain.unmount();
     const tenpai = renderQuiz(TENPAI_NO_RIICHI);
     await reveal(tenpai.user, option('pass'));
-    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
+    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+  });
+
+  it('リーチの人がいなくても、副露の気配の 1 行の人がいれば、守備のタブが出る。リーチの人も一緒にいても、1 つのタブ', async () => {
+    const sign = renderQuiz(SIGN_ONLY);
+    await reveal(sign.user, () => screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
+    expect(tabNames()).toEqual(['受け入れ・役', '守備']);
+    // 中身は、選ぶまで描かない
+    expect(document.querySelector('[data-ai="danger-box"]')).toBeNull();
+    sign.unmount();
+    const both = renderQuiz(RIICHI_AND_SIGN);
+    await reveal(both.user, () => screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
+    expect(tabNames()).toEqual(['受け入れ・役', '守備']);
   });
 
   it('他家のリーチがある場面は、既定のタブ「受け入れ・役」と、守備。聴牌なら、待ちと打点の次に守備（作る順・並べる順は 受け入れ・役、待ちと打点、守備）', async () => {
     const only = renderQuiz(REACH_ONLY);
     await reveal(only.user, tile('九萬'));
-    expect(tabNames()).toEqual(['受け入れ・役', '守備', '他家の手牌']);
+    expect(tabNames()).toEqual(['受け入れ・役', '守備']);
     expect(screen.getByRole('tab', { name: '受け入れ・役', selected: true })).toBeInTheDocument();
     // 中身は、選ぶまで描かない
     expect(document.querySelector('[data-ai="danger-box"]')).toBeNull();
     only.unmount();
     const both = renderQuiz(REACH_AND_TENPAI);
     await reveal(both.user, tile('三萬'));
-    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
+    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
   });
 
   it('鳴きの判断（対面のリーチ）でも、リーチの判断（上家のリーチ）でも出る。解き直し（review）でも同じ部品', async () => {
@@ -113,19 +131,20 @@ describe('U-34 守備のタブは、他家のリーチがある場面だけ出�
     call.unmount();
     const riichi = renderQuiz(RIICHI_DECISION);
     await reveal(riichi.user, option('pass'));
-    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
+    expect(tabNames()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
     riichi.unmount();
     const again = renderQuiz({ ...REACH_ONLY, mode: 'review' });
     await reveal(again.user, tile('九萬'));
-    expect(tabNames()).toEqual(['受け入れ・役', '守備', '他家の手牌']);
+    expect(tabNames()).toEqual(['受け入れ・役', '守備']);
   });
 });
 
-describe('U-34 タブのキーボード（守備を含む 4 つ）', () => {
+describe('U-34 タブのキーボード（待ちと打点・守備を含む 3 つ）', () => {
   it('→ で守備まで。端では反対の端へ。Home・End。選ぶと守備の欄が出て、キーボードの位置も移る', async () => {
     const { user } = renderQuiz(REACH_AND_TENPAI);
     await reveal(user, tile('三萬'));
-    const [first, second, third, fourth] = tabs() as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
+    expect(tabs()).toHaveLength(3);
+    const [first, second, third] = tabs() as [HTMLElement, HTMLElement, HTMLElement];
     first.focus();
     await user.keyboard('{ArrowRight}{ArrowRight}');
     expect(third).toHaveAttribute('aria-selected', 'true');
@@ -134,16 +153,14 @@ describe('U-34 タブのキーボード（守備を含む 4 つ）', () => {
     // 守備の欄を選んでいる間、待ちと打点の欄は描かない
     expect(document.querySelector('[data-ai="waits-box"]')).toBeNull();
     await user.keyboard('{ArrowRight}');
-    expect(fourth).toHaveAttribute('aria-selected', 'true');
-    await user.keyboard('{ArrowRight}');
     expect(first).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{ArrowLeft}');
-    expect(fourth).toHaveAttribute('aria-selected', 'true');
+    expect(third).toHaveAttribute('aria-selected', 'true');
     await user.keyboard('{Home}');
     expect(first).toHaveFocus();
     await user.keyboard('{End}');
-    expect(fourth).toHaveFocus();
-    await user.keyboard('{ArrowLeft}{ArrowLeft}');
+    expect(third).toHaveFocus();
+    await user.keyboard('{ArrowLeft}');
     expect(second).toHaveAttribute('aria-selected', 'true');
   });
 
@@ -175,7 +192,9 @@ describe('F14 タブ「守備」の欄（東4局 8巡目。下家のリーチ。
     const tip = screen.getByRole('tooltip');
     expect(tip).toHaveTextContent('形式的な分類です。AI の確率ではありません。');
     for (const label of ['現物:', 'スジ:', '壁:', '字牌:', '無スジ:']) expect(tip).toHaveTextContent(label);
-    expect(tip).toHaveTextContent('副露の多い染め手・ドラ待ち・巡目は見ていません');
+    // 牌ごとの分類はリーチの人だけ。副露の人は 1 行だけ（R16-6）
+    expect(tip).toHaveTextContent('リーチしていない人のうち、副露が 2 つ以上の人と、染め手の気配（副露がすべて同じ色か字牌で、河にその色が 1 枚以下）の人には、気配の 1 行だけを出します');
+    expect(tip).toHaveTextContent('ドラ待ち・巡目は見ていません');
   });
 
   it('欄の頭の 1 行: リーチした人・比べる打牌（自分・実戦と AI）の分類・現物の牌', async () => {
@@ -286,5 +305,57 @@ describe('F14 タブ「守備」: 鳴きの判断（鳴いたあとに切れる�
     expect(text(box.querySelector('.dg-line'))).toMatch(/^上家がリーチ 実戦・AI 打9p .*現物: /);
     expect([...box.querySelectorAll('.dg-row.picked')]).toHaveLength(1);
     expect(box.querySelector('.dg-row.picked .mk')?.textContent).toBe('実戦・AI');
+  });
+});
+
+describe('E-39・U-34 副露の気配の 1 行（R16-6 の B）: リーチの人がいない場面は、行と断りだけ', () => {
+  const signTexts = (d: Decision) => openSignLinesOf(d.board).map((line) => line.text);
+
+  it('見出しは「守備の目安（副露の気配）」。行は対象の人ごとに 1 つ（下家・対面・上家の順）で、エンジンの文と同じ。断りの 1 行が付く。分類の欄・行・河は無い', async () => {
+    const decision = decisionOf(SIGN_ONLY.report, SIGN_ONLY);
+    const view = renderQuiz(SIGN_ONLY);
+    await reveal(view.user, () => screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
+    const box = await openDanger(view.user);
+    expect(within(box).getByRole('heading', { level: 2, name: '守備の目安（副露の気配）' })).toBeInTheDocument();
+    const list = within(box).getByRole('list', { name: '副露の気配' });
+    const lines = within(list).getAllByRole('listitem').map((li) => li.textContent);
+    expect(lines).toEqual(signTexts(decision));
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) expect(line).toMatch(/^(下家|対面|上家): \d副露/);
+    expect(box.querySelector('.dg-sign-note')?.textContent).toBe('副露の人は、牌ごとの分類を出さず、気配の 1 行だけです。');
+    // リーチの人がいないので、牌ごとの分類・河・「形式的な分類です」の断りは出ない
+    expect(box.querySelector('.dg-sec, .dg-row, .dg-river, .dg-after')).toBeNull();
+    expect(box.textContent).not.toContain('形式的な分類です');
+    expect(box.textContent).not.toMatch(/現物|スジ|無スジ/);
+    // 説明のアイコンは、行の決め方（リーチの人がいない欄用の文）
+    await view.user.hover(within(box).getByRole('button', { name: '守備の目安の説明' }));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('副露が 2 つ以上の人と、染め手の気配');
+  });
+
+  it('リーチの人もいるとき: リーチの人の欄が先、そのあとに行と断り。リーチの人は行に出ない', async () => {
+    const decision = decisionOf(RIICHI_AND_SIGN.report, RIICHI_AND_SIGN);
+    const view = renderQuiz(RIICHI_AND_SIGN);
+    await reveal(view.user, () => screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
+    const box = await openDanger(view.user);
+    expect(within(box).getByRole('heading', { level: 2, name: '守備の目安（形式的な分類です。AI の確率ではありません）' })).toBeInTheDocument();
+    const sections = box.querySelector('.dg-secs') as HTMLElement;
+    const signs = box.querySelector('.dg-signs') as HTMLElement;
+    expect(sections).not.toBeNull();
+    expect(signs).not.toBeNull();
+    // 並び: 欄が先、行があと
+    expect(sections.compareDocumentPosition(signs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const riichiWho = [...sections.querySelectorAll('.dg-sec')].map((sec) => sec.getAttribute('aria-label')?.slice(0, 2));
+    const lines = [...signs.querySelectorAll('li')].map((li) => li.textContent ?? '');
+    expect(lines).toEqual(signTexts(decision));
+    for (const line of lines) expect(riichiWho).not.toContain(line.slice(0, 2));
+    expect(signs.querySelector('.dg-sign-note')?.textContent).toContain('気配の 1 行だけです');
+  });
+
+  it('リーチだけの場面（副露の気配の人がいない）は、行も断りも出ない', async () => {
+    const { user } = renderQuiz(REACH_ONLY);
+    await reveal(user, tile('九萬'));
+    const box = await openDanger(user);
+    expect(box.querySelector('.dg-signs')).toBeNull();
+    expect(box.textContent).not.toContain('気配の 1 行');
   });
 });
