@@ -24,7 +24,7 @@
 - Mac を使う確認は約 65 項目（半分は段階 3）。往復はおよそ 11〜16 回。
 - 雀魂の Mac 版: アプリ版は Windows のみ。Mac ではブラウザ版を打つのが現実的。Steam 版（2026-07-20 配信）が Mac に対応しているかは、公開情報が割れていて確かめられていない。
 
-最初の一歩の提案は、(a) 段階 1（共通化。Windows だけで終わり、見た目は変わらない）と、(b) 段階 0（Mac で確かめ用のプログラムを 30〜40 分動かす。`appendix/mac-steps.md` の A）を並べて進めること。質問は 7 章。
+最初の一歩の提案は、(a) 段階 1（共通化。Windows だけで終わり、見た目は変わらない）と、(b) 段階 0（Mac で確かめ用のプログラムを 30〜40 分動かす。`appendix/mac-steps.md` の B）を並べて進めること。質問は 7 章。
 
 ## 1. 棚卸し
 
@@ -345,5 +345,5 @@ Mac で自動の試験を動かしてもらう段階: 2（`pnpm test`）、3（`
 - `README.md` この文書。
 - `appendix/cross-check.md` この機械での macOS 向けの型検査の結果。道具（`check-mac.ps1`・`zigcc.cmd`・`zigar.cmd`）は、段階 1 で `scripts/` へ移した（`pnpm check:mac`）。
 - `appendix/proto/` 型検査だけ通した確かめ用の雛形（Rust）。実機では未実行。
-- `appendix/mac-steps.md` 段階 0 の手順と、あとの段階の手順案。
+- `appendix/mac-steps.md` Mac でやること。A は段階 2（作る・署名する・14 項目の確認）、B は段階 0（確かめ用のプログラム。Logi Options+ の確認を含む）、C は段階 3 以降の許可の流れ。
 - `appendix/mac-checks.md` Mac での確認項目 65 の一覧。
