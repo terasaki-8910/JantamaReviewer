@@ -1,6 +1,8 @@
 //! 同期の試験（D-4）: 手元の記録 → 同期用の DB の行 → 別の手元の記録、2 台の模擬、消す・直す・同じ名前の追加、
 //! 結果のファイル、同期しないもの。同期用の DB は偽物（`testing::MemRemote`）。実機の同期用サーバーでの試験は `tests/sync_integration.rs`。
 
+#![cfg(test)]
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
@@ -772,7 +774,7 @@ fn d4_a_record_file_that_cannot_be_read_is_never_taken_for_a_deletion() {
 #[test]
 fn d4_changes_made_offline_are_kept_and_sent_when_the_connection_returns() {
     let (server, mut a, mut b, sa, _sb) = pair();
-    a.remote.offline = true;
+    a.remote.set_offline(true);
     let mut ma = read_memos(&a, &sa);
     ma.marks
         .insert("1".into(), memo("3m", "オフラインで直した"));
@@ -803,7 +805,7 @@ fn d4_changes_made_offline_are_kept_and_sent_when_the_connection_returns() {
     a.cycle(2_100_000).unwrap();
     assert_eq!(read_memos(&a, &sa).marks["1"].reason, "オフラインで直した");
     // つながる
-    a.remote.offline = false;
+    a.remote.set_offline(false);
     let report = a.cycle(3_000_000).unwrap();
     assert!(
         report.pushed && report.network_error.is_none(),
@@ -819,7 +821,7 @@ fn d4_changes_made_offline_are_kept_and_sent_when_the_connection_returns() {
 fn d4_an_edit_made_offline_earlier_than_another_devices_edit_loses_to_it() {
     let (server, mut a, mut b, sa, _sb) = pair();
     // A は、オフラインで、メモを直す（時刻 2,000,000）
-    a.remote.offline = true;
+    a.remote.set_offline(true);
     let mut ma = read_memos(&a, &sa);
     ma.marks.insert("1".into(), memo("3m", "A の古い直し"));
     write_memos(&a, &sa, &ma);
@@ -830,7 +832,7 @@ fn d4_an_edit_made_offline_earlier_than_another_devices_edit_loses_to_it() {
     write_memos(&b, &sa, &mb);
     b.cycle(2_500_000).unwrap();
     // A がやっとつながる。A の古い直しが、いったんサーバーの行を上書きする
-    a.remote.offline = false;
+    a.remote.set_offline(false);
     a.cycle(3_000_000).unwrap();
     // B と A が、くり返し同期すると、新しい B の直しに落ち着く
     settle(&mut a, &mut b, 4_000_000);

@@ -28,7 +28,7 @@ pub const SYNC_DB_FILE: &str = "sync.db";
 pub const BASE_VERSION: u32 = 1;
 
 /// 同期の設定（端末ごと。同期しない）。トークンは入れない（OS の資格情報の保管庫にだけ入れる。`credentials.rs`）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncConfig {
     /// 同期を使うか。
     #[serde(default)]
@@ -39,16 +39,6 @@ pub struct SyncConfig {
     /// この端末の名前（同期の行に「どの端末が直したか」として付く）。
     #[serde(default)]
     pub device_id: String,
-}
-
-impl Default for SyncConfig {
-    fn default() -> Self {
-        SyncConfig {
-            enabled: false,
-            url: String::new(),
-            device_id: String::new(),
-        }
-    }
 }
 
 impl SyncConfig {
@@ -81,10 +71,22 @@ impl SyncConfig {
     }
 }
 
-/// 同期の作業のフォルダ（保存先ごとに別。設定のフォルダの下）。
-pub fn profile_dir(config_dir: &Path, data_dir: &Path) -> PathBuf {
-    let digest = sha256_hex(data_dir.to_string_lossy().as_bytes());
-    config_dir.join(SYNC_DIR).join(&digest[..12])
+/// 同期の作業のフォルダの親（同期用の DB の手元の写しとベースを、全部ここの下に置く。「この端末の同期を切る」で、まるごと消す）。
+pub fn sync_root(config_dir: &Path) -> PathBuf {
+    config_dir.join(SYNC_DIR)
+}
+
+/// 同期の作業のフォルダ（保存先と同期先の組ごとに別。保存先や同期先を替えたとき、前のものに混ざらないように）。
+pub fn profile_dir(config_dir: &Path, data_dir: &Path, remote_url: &str) -> PathBuf {
+    let digest = sha256_hex(
+        format!(
+            "{}
+{remote_url}",
+            data_dir.to_string_lossy()
+        )
+        .as_bytes(),
+    );
+    sync_root(config_dir).join(&digest[..12])
 }
 
 /// ベースの 1 行の状態。
@@ -220,13 +222,16 @@ mod tests {
     }
 
     #[test]
-    fn the_work_folder_depends_on_the_data_dir() {
-        let config = Path::new("C:\\cfg");
-        let a = profile_dir(config, Path::new("C:\\data-a"));
-        let b = profile_dir(config, Path::new("C:\\data-b"));
+    fn the_work_folder_depends_on_the_data_dir_and_the_sync_target() {
+        let config = Path::new(r"C:\cfg");
+        let url = "db-org.turso.io";
+        let a = profile_dir(config, Path::new(r"C:\data-a"), url);
+        let b = profile_dir(config, Path::new(r"C:\data-b"), url);
+        let c = profile_dir(config, Path::new(r"C:\data-a"), "other-org.turso.io");
         assert_ne!(a, b);
-        assert!(a.starts_with(config.join(SYNC_DIR)));
-        assert_eq!(a, profile_dir(config, Path::new("C:\\data-a")));
+        assert_ne!(a, c);
+        assert!(a.starts_with(sync_root(config)));
+        assert_eq!(a, profile_dir(config, Path::new(r"C:\data-a"), url));
     }
 
     #[test]
@@ -234,10 +239,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let (empty, broken) = Base::load(tmp.path());
         assert!(!broken && empty.entries.is_empty());
-        let mut base = Base::default();
-        base.db_id = Some("db-1".into());
-        base.last_ok_ms = Some(1_760_000_000_000);
-        base.reconciled_once = true;
+        let mut base = Base {
+            db_id: Some("db-1".into()),
+            last_ok_ms: Some(1_760_000_000_000),
+            reconciled_once: true,
+            ..Base::default()
+        };
         base.entries.insert(
             "mm:20261009-190953:3".into(),
             BaseEntry {

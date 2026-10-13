@@ -62,7 +62,7 @@ pub struct RemoteMeta {
 pub const ENCODING_GZIP: &str = "gzip";
 
 /// 同期用の DB への口。実装は、Turso（`TursoRemote`）と、試験の偽物（`testing::MemRemote`）。
-pub trait Remote {
+pub trait Remote: Send {
     /// ほかの端末の変更を取り込む（通信）。
     fn pull(&mut self) -> Result<(), SyncError>;
     /// 手元の写しへの変更を送る（通信）。

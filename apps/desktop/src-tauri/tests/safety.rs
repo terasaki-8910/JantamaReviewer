@@ -243,6 +243,32 @@ const TLS_BELOW_HTTP_CLIENT: &[(&str, &str)] = &[(
     "ureq の https の通信に使う（Windows では SChannel。OS の証明書の一覧を使い、同梱の証明書を持たない）",
 )];
 
+/// 同期（F15）の通信の部品（`turso` クレートの同期。Turso Cloud の DB と、この PC の中の試験用サーバーにだけつなぐ）を使ってよい場所
+/// （ファイル名とその理由）。使えるのはここだけで、本体のクレートの依存にだけ置く。通信先は、`sync/endpoint.rs` が確かめた
+/// `*.turso.io` かこの PC の中だけ（`SyncEndpoint` を通ったものしか渡せない）。
+const ALLOWED_SYNC_CLIENT_FILES: &[(&str, &str)] = &[(
+    "src/sync/remote.rs",
+    "F15・D-4: 同期用の DB（Turso の同期）の手元の写しを開き、pull・push を、決めた時間で打ち切って行う。通信先は SyncEndpoint から取った 1 つだけ",
+)];
+
+/// 同期の通信の部品の名前（Rust のソースでの書き方）。
+const SYNC_CLIENT_RUST: &str = "turso::";
+/// 同期の通信の部品のクレート名（Cargo.toml での書き方）。
+const SYNC_CLIENT_CRATE: &str = "turso";
+
+/// 通信の部品のうち、同期のクライアントの下にだけ入ってよいもの（クレート名とその理由）。
+/// 実行時の依存の一覧では、これらが同期のクライアント（`turso`）の直下からだけ入ることを確かめる。
+const NETWORK_BELOW_SYNC_CLIENT: &[(&str, &str)] = &[
+    (
+        "hyper",
+        "turso の同期が使う HTTP の部品（同期用の DB への通信）",
+    ),
+    (
+        "rustls",
+        "turso の同期が使う https の部品（Turso Cloud への通信を暗号にする）",
+    ),
+];
+
 /// 文字認識のクレート（`ocr`）を使ってよい本体のソース（ファイル名とその理由）。取り込みのときだけ動く読み取りの 1 か所。
 /// ウィジェット・ボタンを拾う部分・撮影・記録・補助プログラムのコードは、文字認識に触れない（S-3）。
 const ALLOWED_OCR_FILES: &[(&str, &str)] = &[(
@@ -1140,12 +1166,21 @@ fn network_crate_violations(name: &str, version: &str) -> Vec<String> {
             && if name == HTTP_CLIENT_CRATE {
                 // HTTP クライアントは、本体のクレートが直接使う（間に別の部品を挟まない）。
                 path.len() == 2
+            } else if name == SYNC_CLIENT_CRATE {
+                false
             } else {
                 // TLS の窓口は、HTTP クライアントを通ってだけ入る。
-                path.iter().any(|p| p == HTTP_CLIENT_CRATE)
+                let below_http = path.iter().any(|p| p == HTTP_CLIENT_CRATE)
                     && TLS_BELOW_HTTP_CLIENT
                         .iter()
-                        .any(|(allowed, reason)| *allowed == name && !reason.is_empty())
+                        .any(|(allowed, reason)| *allowed == name && !reason.is_empty());
+                // 同期の通信の部品は、同期のクライアント（本体のクレートが直接使う `turso`）の直下からだけ入る。
+                let below_sync = path.len() >= 3
+                    && path[path.len() - 2] == SYNC_CLIENT_CRATE
+                    && NETWORK_BELOW_SYNC_CLIENT
+                        .iter()
+                        .any(|(allowed, reason)| *allowed == name && !reason.is_empty());
+                below_http || below_sync
             };
         if !allowed {
             violations.push(format!(
@@ -1154,6 +1189,247 @@ fn network_crate_violations(name: &str, version: &str) -> Vec<String> {
         }
     }
     violations
+}
+
+// ---- S-2: 記録の同期（F15）の通信は、決めた 1 か所だけ ----
+
+/// 同期のソース（`src/sync/` の下の、製品のもの）。
+fn sync_sources() -> Vec<PathBuf> {
+    files_under(&crate_dir().join("src").join("sync"), &|p| {
+        has_ext(p, &["rs"])
+    })
+}
+
+fn sync_file(name: &str) -> String {
+    read(&crate_dir().join("src").join("sync").join(name))
+}
+
+/// 同期の通信の部品（`turso`）は、許した 1 か所だけが使い、本体のクレートだけが、既定の機能を切り、版を固定して宣言する。
+#[test]
+fn s2_the_sync_client_is_used_from_its_one_file_and_declared_once_by_the_main_crate() {
+    let mut users: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        if product_part(&read(&file)).contains(SYNC_CLIENT_RUST) {
+            users.push(file.to_string_lossy().replace('\\', "/"));
+        }
+    }
+    assert_eq!(users.len(), ALLOWED_SYNC_CLIENT_FILES.len(), "{users:?}");
+    for user in &users {
+        assert!(
+            ALLOWED_SYNC_CLIENT_FILES
+                .iter()
+                .any(|(file, reason)| user.ends_with(file) && !reason.is_empty()),
+            "許していない場所が同期の通信の部品を使っている: {user}"
+        );
+    }
+    // 共有の部品・補助プログラム・文字認識のクレートは、宣言しない
+    for dir in [
+        crate_dir().join("input"),
+        crate_dir().join("helper"),
+        ocr_dir(),
+    ] {
+        let toml = read(&dir.join("Cargo.toml"));
+        assert!(
+            forbidden_crates_in_manifest(&toml, &[SYNC_CLIENT_CRATE]).is_empty(),
+            "{} が同期の通信の部品を宣言している",
+            dir.display()
+        );
+    }
+    // 本体のクレートの宣言は 1 つで、既定の機能（mimalloc・全文検索）を切り、同期の機能だけを入れ、版を `=` で固定する
+    let main_toml = read(&crate_dir().join("Cargo.toml"));
+    let declared: Vec<&str> = main_toml
+        .lines()
+        .filter(|l| {
+            l.trim_start()
+                .starts_with(&format!("{SYNC_CLIENT_CRATE} = "))
+        })
+        .collect();
+    assert_eq!(declared.len(), 1, "{declared:?}");
+    assert!(
+        declared[0].contains("default-features = false")
+            && declared[0].contains("features = [\"sync\"]")
+            && declared[0].contains("version = \"=0."),
+        "同期の通信の部品は、既定の機能を切って、同期だけにし、版を固定する: {}",
+        declared[0]
+    );
+}
+
+/// 同期の通信先は、`SyncEndpoint`（設定に貼った Turso Cloud の DB の `*.turso.io` か、この PC の中）から取った 1 つだけ。
+#[test]
+fn s2_the_sync_destination_is_only_a_checked_turso_host_or_this_pc() {
+    let remote = sync_file("remote.rs");
+    let product = product_part(&remote);
+    // 手元の写しを開くのは 1 か所で、通信先は、`SyncEndpoint` から取った文字だけ
+    assert_eq!(product.matches("Builder::new_remote(").count(), 1);
+    assert_eq!(product.matches(".with_remote_url(").count(), 1);
+    assert_eq!(product.matches("endpoint.base_url()").count(), 1);
+    assert!(product.contains("endpoint: &SyncEndpoint"));
+    // 通信は、`pull` と `push` の 2 つだけ（どちらも打ち切りの時間つき）
+    assert_eq!(product.matches("db.pull()").count(), 1);
+    assert_eq!(product.matches("db.push()").count(), 1);
+    assert!(product.contains("tokio::time::timeout(limit, handle.db.pull())"));
+    assert!(product.contains("tokio::time::timeout(limit, handle.db.push())"));
+    assert!(product.contains("tokio::time::timeout(limit, build)"));
+
+    // 通信先の検査: `*.turso.io` と、この PC の中だけ。試験用に緩める入口が無い
+    let endpoint = sync_file("endpoint.rs");
+    let endpoint_product = product_part(&endpoint);
+    assert!(endpoint_product.contains("TURSO_HOST_SUFFIX: &str = \".turso.io\""));
+    assert!(endpoint_product.contains("Ipv4(ip)) => ip.is_loopback()"));
+    assert!(endpoint_product.contains("Ipv6(ip)) => ip.is_loopback()"));
+    assert!(endpoint_product.contains("eq_ignore_ascii_case(\"localhost\")"));
+    assert!(!endpoint_product.contains("for_test"));
+    // `SyncEndpoint` を、検査を通さずに作れない（フィールドが非公開で、作るのは `parse` だけ）
+    assert!(endpoint_product.contains("pub fn parse(text: &str)"));
+    assert!(endpoint_product.contains("pub struct SyncEndpoint {"));
+    assert!(endpoint_product.contains("scheme: &'static str,"));
+    assert!(!endpoint_product.contains("pub scheme") && !endpoint_product.contains("pub host"));
+    for file in sync_sources() {
+        let name = file.to_string_lossy().replace('\\', "/");
+        if name.ends_with("src/sync/endpoint.rs") {
+            continue;
+        }
+        assert!(
+            !product_part(&read(&file)).contains("SyncEndpoint {"),
+            "{name}: 通信先を、検査を通さずに作っている"
+        );
+    }
+    // 同期用の DB を開くのは、アプリのつなぎ（commands.rs）の 1 か所だけ。開く前に、貼った URL を `parse` で確かめる
+    let users = product_files_containing("TursoRemote::new(");
+    assert_eq!(users.len(), 1, "{users:?}");
+    assert!(users[0].ends_with("src/sync/commands.rs"), "{users:?}");
+    let service = sync_file("service.rs");
+    let service = product_part(&service);
+    let parse_at = service
+        .find("SyncEndpoint::parse(&config.url)")
+        .expect("開く前に、通信先を確かめている");
+    let open_at = service
+        .find("(self.open_remote)(")
+        .expect("同期用の DB を開く");
+    assert!(parse_at < open_at, "通信先を確かめてから、開く");
+    // 通信先を保存する前にも、確かめている
+    assert!(service.contains("SyncEndpoint::parse(url).map_err"));
+}
+
+/// トークンは、OS の資格情報の保管庫にだけ置く。取り出す所は決まっていて、ファイル・ログ・パニックの文に出さない。
+#[test]
+fn s2_the_sync_token_is_exposed_only_where_it_is_needed_and_never_written_or_printed() {
+    // 保管庫の部品（keyring）は、`credentials.rs` だけが使い、本体のクレートだけが宣言する
+    let users = product_files_containing("keyring::");
+    assert_eq!(users.len(), 1, "{users:?}");
+    assert!(users[0].ends_with("src/sync/credentials.rs"), "{users:?}");
+    for dir in [
+        crate_dir().join("input"),
+        crate_dir().join("helper"),
+        ocr_dir(),
+    ] {
+        let toml = read(&dir.join("Cargo.toml"));
+        assert!(
+            forbidden_crates_in_manifest(&toml, &["keyring"]).is_empty(),
+            "{} が保管庫の部品を宣言している",
+            dir.display()
+        );
+    }
+    // トークンの文字を取り出せるのは、通信に渡す所（remote.rs）と、伏せ字・鍵の計算の所（service.rs）だけ
+    let exposers = product_files_containing(".expose()");
+    let names: Vec<&str> = exposers
+        .iter()
+        .map(|p| p.rsplit("src/").next().unwrap_or(p))
+        .collect();
+    assert_eq!(
+        names,
+        vec!["sync/remote.rs", "sync/service.rs"],
+        "{names:?}"
+    );
+    // 設定のファイルの形に、トークンの項目が無い
+    let base = sync_file("base.rs");
+    let config_at = base
+        .find("pub struct SyncConfig {")
+        .expect("設定の形がある");
+    let config_block = &base[config_at
+        ..base[config_at..]
+            .find("\n}\n")
+            .map_or(base.len(), |n| config_at + n)];
+    assert!(
+        !config_block.to_lowercase().contains("token"),
+        "設定のファイルに、トークンの項目がある"
+    );
+    // トークンを持つ型は、`Display` も `Serialize` も持たない（`Debug` は伏せる）
+    let credentials = sync_file("credentials.rs");
+    let credentials = product_part(&credentials);
+    assert!(credentials.contains("pub struct Secret(String);"));
+    assert!(!credentials.contains("impl fmt::Display for Secret"));
+    assert!(!credentials.contains("derive(Serialize"));
+    assert!(credentials.contains("write!(f, \"Secret({MASK})\")"));
+    // トークン・秘密の語を含む行で、書き出し・表示・パニックを起こさない
+    let outputs = [
+        "println!",
+        "eprintln!",
+        "print!(",
+        "dbg!(",
+        "panic!(",
+        "write!(",
+        "writeln!(",
+        "fs::write(",
+        "write_atomic(",
+        ".unwrap()",
+        ".expect(",
+    ];
+    let mut violations = Vec::new();
+    for file in sync_sources() {
+        let text = read(&file);
+        for (number, line) in product_part(&text).lines().enumerate() {
+            let lower = line.to_lowercase();
+            let mentions = lower.contains("token") || lower.contains("secret");
+            if !mentions || line.trim_start().starts_with("//") {
+                continue;
+            }
+            for output in outputs {
+                // トークンの文字を作る・渡す行ではなく、書く・出す行だけを見る
+                if line.contains(output)
+                    && !line.contains("MASK")
+                    && !line.contains("redact(")
+                    && !line.contains("sha256_hex")
+                {
+                    violations.push(format!("{}:{}: {line}", file.display(), number + 1));
+                }
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "トークンの語がある行で、書き出し・表示・パニックの恐れ:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// 同期は、同期しないもの（スクショ・ウィジェットの記録・文字認識の写し）に触れない。
+#[test]
+fn s2_the_sync_never_names_the_files_it_must_not_sync() {
+    let forbidden = [
+        "EVENTS_FILE",
+        "OCR_FILE",
+        "MARKS_DIR",
+        "RATINGS_DIR",
+        "events.jsonl",
+        "ocr.json",
+        "\"marks\"",
+        "\"ratings\"",
+        ".png",
+        "load_ocr",
+        "save_ocr",
+        "screenshots_of",
+    ];
+    for file in sync_sources() {
+        let text = read(&file);
+        for word in forbidden {
+            assert!(
+                !product_part(&text).contains(word),
+                "{}: 同期しないもの {word} に触れている",
+                file.display()
+            );
+        }
+    }
 }
 
 // ---- S-3: 対局中に画面を読まない ----
@@ -1865,7 +2141,11 @@ fn install_source() -> PathBuf {
 }
 
 /// ファイルの製品の部分（`#[cfg(test)]` より前）。試験の道具は、製品ではない。
+/// 試験だけのファイル（先頭近くに、内側の属性 `#![cfg(test)]` がある）は、製品の部分が無い。
 fn product_part(text: &str) -> &str {
+    if text.lines().any(|line| line.trim() == "#![cfg(test)]") {
+        return "";
+    }
     text.split("#[cfg(test)]").next().unwrap_or("")
 }
 
@@ -2253,11 +2533,25 @@ fn u9_the_real_recycler_is_made_in_one_function_and_nothing_deletes_folders_in_p
         "recycle_pending の 1 か所だけ"
     );
 
-    // フォルダを、ごみ箱を通さずに、中身ごと消すコードが、製品に無い。
+    // フォルダを、ごみ箱を通さずに、中身ごと消すコードが、製品に無い。例外は 1 つ: 「この端末の同期を切る」が、設定のフォルダの下の
+    // 同期の作業のフォルダ（同期用の DB の手元の写しと、前回の記録。利用者の記録ではない）を消すところ。保存先には触れない。
     let recursive = product_files_containing("remove_dir_all");
-    assert!(
-        recursive.is_empty(),
+    assert_eq!(
+        recursive.len(),
+        1,
         "remove_dir_all を使っている: {recursive:?}"
+    );
+    assert!(
+        recursive[0].ends_with("src/sync/service.rs"),
+        "{recursive:?}"
+    );
+    let service = read(&PathBuf::from(&recursive[0]));
+    let product = product_part(&service);
+    assert_eq!(product.matches("remove_dir_all").count(), 1);
+    assert!(
+        product.contains("let root = sync_root(&self.config_dir);")
+            && product.contains("std::fs::remove_dir_all(&root)"),
+        "同期の作業のフォルダだけを消す"
     );
 }
 
@@ -2365,7 +2659,8 @@ fn d3_the_study_database_is_used_only_by_the_study_module_in_the_main_crate() {
         declared[0]
     );
 
-    // 答えのファイルを扱う `study` の名前を使うのは、登録（lib.rs）・置き場の片づけ（trash.rs）・study 自身だけ。
+    // 答えのファイルを扱う `study` の名前を使うのは、登録（lib.rs）・置き場の片づけ（trash.rs）・記録の同期（F15。答えを読み書きする
+    // 2 つのファイル: 手元の記録の読み書き `sync/local.rs` と、アプリのつなぎ `sync/commands.rs`）・study 自身だけ。
     let mut referers: Vec<String> = Vec::new();
     for file in rust_sources() {
         let name = file.to_string_lossy().replace('\\', "/");
@@ -2378,7 +2673,11 @@ fn d3_the_study_database_is_used_only_by_the_study_module_in_the_main_crate() {
         }
     }
     referers.sort();
-    assert_eq!(referers, vec!["lib.rs", "trash.rs"], "{referers:?}");
+    assert_eq!(
+        referers,
+        vec!["lib.rs", "sync/commands.rs", "sync/local.rs", "trash.rs"],
+        "{referers:?}"
+    );
 }
 
 #[test]

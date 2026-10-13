@@ -126,6 +126,13 @@ pub fn run() {
             study::commands::export_records,
             study::commands::inspect_records_file,
             study::commands::import_records,
+            sync::commands::get_sync_status,
+            sync::commands::save_sync_connection,
+            sync::commands::set_sync_enabled,
+            sync::commands::sync_now,
+            sync::commands::rebuild_sync_db,
+            sync::commands::allow_sync_mass_delete,
+            sync::commands::disconnect_sync,
         ])
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)
@@ -135,6 +142,9 @@ pub fn run() {
     app.run(|app, event| {
         // アプリを閉じるとき: 消した半荘のフォルダを、Windows のごみ箱へ送る（U-9）。落ちたときは、次の起動で送る。
         if let tauri::RunEvent::Exit = event {
+            if let Some(sync) = app.try_state::<sync::service::SyncService>() {
+                sync.shutdown();
+            }
             recycle_deleted_sessions(app);
         }
     });
@@ -218,6 +228,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // 答え・解き直しの予定・今日の出題を置く SQLite の接続（検討画面だけが使う。最初に呼ばれたとき開く）。
     app.manage(study::commands::SharedStudy::new());
     commands::allow_asset_dir(&handle, &settings.data_dir);
+    // 記録の同期（F15）。使わない設定なら、裏のスレッドは何もしない。
+    sync::commands::start(&handle, config_dir(app)?);
 
     // 入力の流れ: 本体の中のフック・補助プログラム・ボタンの登録とテスト（W-9、W-10、W-11）。
     // フックを入れられなくても、ウィジェットのボタンだけで動かせる。

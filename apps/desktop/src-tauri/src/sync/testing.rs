@@ -6,8 +6,11 @@
 //! - `pull` は、サーバーの行を取り込んだうえで、未送信の更新を重ね直す。
 //! - つながらない状態（`offline`）では、`pull`・`push` が `Offline` で失敗する。手元の写しへの読み書きは、できる。
 
+#![cfg(test)]
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use super::base::Base;
@@ -144,12 +147,14 @@ pub struct MemRemote {
     view: MemStore,
     pending: Vec<MemOp>,
     /// true の間、`pull`・`push` が失敗する（つながらない）。
-    pub offline: bool,
+    pub offline: Arc<AtomicBool>,
     /// `pull`・`push` を呼んだ回数。
-    pub pulls: usize,
-    pub pushes: usize,
+    pub pulls: Arc<AtomicUsize>,
+    pub pushes: Arc<AtomicUsize>,
     /// `pull`・`push` の失敗の文に混ぜる文字（トークンの漏れの試験）。
-    pub failure_note: Option<String>,
+    pub failure_note: Arc<Mutex<Option<String>>>,
+    /// true の間、`pull`・`push` が「トークンが通らない」で失敗する。
+    pub unauthorized: Arc<AtomicBool>,
     /// `ensure_schema` を呼んだときに新しく付ける名前。
     pub fresh_db_id: String,
 }
@@ -161,10 +166,11 @@ impl MemRemote {
             server: server.clone(),
             view: server.store().clone(),
             pending: Vec::new(),
-            offline: false,
-            pulls: 0,
-            pushes: 0,
-            failure_note: None,
+            offline: Arc::new(AtomicBool::new(false)),
+            pulls: Arc::new(AtomicUsize::new(0)),
+            pushes: Arc::new(AtomicUsize::new(0)),
+            failure_note: Arc::new(Mutex::new(None)),
+            unauthorized: Arc::new(AtomicBool::new(false)),
             fresh_db_id: "db-test-1".to_string(),
         }
     }
@@ -178,17 +184,32 @@ impl MemRemote {
         self.pending.push(op);
     }
 
-    fn failure(&self, what: &str) -> SyncError {
-        let note = self.failure_note.clone().unwrap_or_default();
-        SyncError::Offline(format!("{what}に失敗しました {note}"))
+    pub fn set_offline(&self, offline: bool) {
+        self.offline.store(offline, Ordering::SeqCst);
+    }
+
+    fn failure(&self, what: &str) -> Option<SyncError> {
+        if self.unauthorized.load(Ordering::SeqCst) {
+            return Some(SyncError::Unauthorized);
+        }
+        if self.offline.load(Ordering::SeqCst) {
+            let note = self
+                .failure_note
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone()
+                .unwrap_or_default();
+            return Some(SyncError::Offline(format!("{what}に失敗しました {note}")));
+        }
+        None
     }
 }
 
 impl Remote for MemRemote {
     fn pull(&mut self) -> Result<(), SyncError> {
-        self.pulls += 1;
-        if self.offline {
-            return Err(self.failure("取り込み"));
+        self.pulls.fetch_add(1, Ordering::SeqCst);
+        if let Some(error) = self.failure("取り込み") {
+            return Err(error);
         }
         let mut view = self.server.store().clone();
         for op in &self.pending {
@@ -199,9 +220,9 @@ impl Remote for MemRemote {
     }
 
     fn push(&mut self) -> Result<(), SyncError> {
-        self.pushes += 1;
-        if self.offline {
-            return Err(self.failure("送信"));
+        self.pushes.fetch_add(1, Ordering::SeqCst);
+        if let Some(error) = self.failure("送信") {
+            return Err(error);
         }
         let mut server = self.server.store();
         for op in self.pending.drain(..) {
@@ -330,8 +351,10 @@ pub struct TestPorts {
 
 impl TestPorts {
     pub fn new(data_dir: &Path) -> Arc<TestPorts> {
-        let mut settings = Settings::default();
-        settings.data_dir = data_dir.to_path_buf();
+        let settings = Settings {
+            data_dir: data_dir.to_path_buf(),
+            ..Settings::default()
+        };
         Arc::new(TestPorts {
             data_dir: data_dir.to_path_buf(),
             db: Mutex::new(StudyDb::open(data_dir).expect("答えのファイルを開ける")),
@@ -410,6 +433,8 @@ pub struct Dev {
     pub local: FsLocal<Arc<TestPorts>>,
     pub base: Base,
     pub remote: MemRemote,
+    /// 一時フォルダを、端末が使っている間、消さずに持っておく。
+    #[allow(dead_code)]
     pub tmp: tempfile::TempDir,
 }
 
