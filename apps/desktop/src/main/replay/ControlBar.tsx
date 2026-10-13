@@ -3,7 +3,7 @@
  * 1 段目: 局の選択（迷いと不一致の数つき）・局の頭・前の巡目・1手戻る・「手 34 / 48」・1手進む・次の巡目・局の終わり・キーの一覧のアイコン
  * 2 段目: 前・次の不一致（あと何か所）・前・次の迷い（あと何か所）
  * 3 段目: 位置の帯
- * 1 段目の右に、「他家の手牌を開く / 閉じる」（F14、R15-5）。答える場面（迷い・不一致）では、答えるまで押せない（U-35）
+ * 2 段目の右に、「他家の手牌を開く / 閉じる」（F14、R15-5）。答える場面（迷い・不一致）では、答えるまで押せない（U-35）
  * 押したボタンが端で押せなくなったとき、キーボードの位置が消えないよう、対のボタン（それも押せなければ位置の帯）へ移す。
  */
 import type { ReplayScene, ReplayTimeline } from '@jantama/engine';
@@ -235,6 +235,11 @@ export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, 
             </>
           ), 'b-kend')}
         </div>
+        <KeyHelp keys={keys} onChange={onChangeKeys} />
+      </div>
+      <div className="pb-jumps">
+        {jump('mismatch')}
+        {jump('doubt')}
         <div className="pb-open">
           <button
             type="button"
@@ -255,15 +260,10 @@ export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, 
             <Icon name="eye" />
             <span className="lbl">{openHands.open && openAvailable ? '他家の手牌を閉じる' : '他家の手牌を開く'}</span>
           </button>
-          <InfoTip label="他家の手牌を開くの説明" id="oh-ctl-hint">
+          <InfoTip label="他家の手牌の開閉の説明" id="oh-ctl-hint">
             {OPEN_HANDS_HINT}
           </InfoTip>
         </div>
-        <KeyHelp keys={keys} onChange={onChangeKeys} />
-      </div>
-      <div className="pb-jumps">
-        {jump('mismatch')}
-        {jump('doubt')}
       </div>
       <div ref={trackFallback}>
         <Strip timeline={timeline} g={g} scenes={scenes} answered={answered} currentKey={currentKey} go={go} />

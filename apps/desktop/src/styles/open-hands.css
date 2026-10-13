@@ -7,7 +7,7 @@
   - 人ごとの行は、見出し（席・風・親・リーチ）・手牌の行・待ちの行の 3 段。手牌は牌の幅 20px の小さな牌で、ツモ牌・和了牌は手牌から少し離し、
     副露は盤面と同じ並べ方（.meld）。13 枚が、答えの欄の幅 336px に収まる。狭いときは折り返す
   - 人の行の間は、細い線で区切る（行の中より、行の間のほうが離れて見える）
-  - 「他家の手牌を開く」は、操作の段の 1 段目の右に置く。開いているときは、淡い accent の塗りと accent の枠（承認済みの見本の押した形）
+  - 「他家の手牌を開く」は、操作の段の 2 段目（場面へ飛ぶ段）の、「次の迷いへ」のあとに置く（1 段目は、局・1手・巡目で埋まる）。開いているときは、淡い accent の塗りと accent の枠（承認済みの見本の押した形）
 */
 .oh-panel {
   display: grid;
@@ -124,7 +124,6 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  margin-left: auto;
 }
 
 .pb-open .btn[data-open="1"] {
@@ -140,4 +139,10 @@
 .pb-open .btn:disabled {
   background: transparent;
   border-color: var(--line);
+}
+
+/* 通して見る画面の右の欄の上に出す他家の手牌は、下の「いまの一手」・答えの欄と、細い線で区切る */
+.oh-panel[data-open-hands] {
+  padding-bottom: var(--s3);
+  border-bottom: 1px solid var(--line);
 }

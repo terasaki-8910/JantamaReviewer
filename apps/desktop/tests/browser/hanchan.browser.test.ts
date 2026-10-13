@@ -240,14 +240,25 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     await thumb(page, 3).click();
     await page.getByRole('dialog', { name: '迷いの画像' }).waitFor();
   },
+  // 局の名前を押して、局の結果の手を開いたところ（U-36）: 放銃した局（東3局）、和了・他家のツモ・他家のロンを含む複数の行
+  rowOpenDealIn: async (page) => {
+    await (await reveal(page, page.getByRole('button', { name: '東3局', exact: true }))).click();
+    await page.locator('tr.hx-exp').waitFor();
+  },
+  rowOpenMany: async (page) => {
+    for (const label of ['東1局', '東2局1本場', '東3局', '東3局1本場']) {
+      await (await reveal(page, page.getByRole('button', { name: label, exact: true }))).click();
+    }
+    await page.locator('tr.hx-exp').first().waitFor();
+  },
 };
 
 describe('U-4・U-5・U-6: 半荘のページの各状態（実ブラウザ）', () => {
   for (const scheme of SCHEMES) {
     for (const width of [390, 768, 1280] as const) {
       for (const [name, drive] of Object.entries(STATES)) {
-        // メニューと画像の表示は、幅 390 と 1280 だけ（768 は、通常の状態と同じ作り）。
-        if (width === 768 && name !== 'default') continue;
+        // メニューと画像の表示は、幅 390 と 1280 だけ（768 は、通常の状態と同じ作り）。局の結果の手は、幅 390・768・1280 のすべて。
+        if (width === 768 && name !== 'default' && !name.startsWith('rowOpen')) continue;
         it(`${name} 幅${width}px ${scheme}: 横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届き、外へ通信しない`, async () => {
           const { context, page, problems, external } = await open({
             width,
@@ -272,7 +283,7 @@ describe('U-4・U-5・U-6: 半荘のページの各状態（実ブラウザ）',
             // 画像の表示の間は、裏の画面は inert（Tab で届かないのが正しい）なので、数えるのは画像の表示の中の操作だけ
             expect(reach.total).toBeGreaterThan(name === 'lightbox' ? 1 : 3);
             // メニューと画像の表示は、中だけに留まるので、Tab で全部には届かない。
-            if (name === 'default') expect(reach.missed).toEqual([]);
+            if (name === 'default' || name.startsWith('rowOpen')) expect(reach.missed).toEqual([]);
             if (name === 'lightbox') expect(reach.missed.filter((label) => /前の画像|次の画像|閉じる/.test(label))).toEqual([]);
 
             expect(problems).toEqual([]);
@@ -400,6 +411,59 @@ describe('F9 迷いのカードの形（実ブラウザ）', () => {
 });
 
 describe('F10 局の評価の表の形（実ブラウザ）', () => {
+  it('390px: 局の名前のボタンがあっても、行ごとに縦が伸びない（名前の高さは結果の文字と同じ）。局を開いても、閉じた行の高さは変わらない。ボタンの押せる範囲は 24px 以上（U-36）', async () => {
+    const { context, page } = await open({ width: 390 });
+    try {
+      const measure = () =>
+        page.locator('.tbl tbody tr:not(.hx-exp)').evaluateAll((rows) =>
+          rows.map((row) => {
+            const th = row.querySelector('th') as HTMLElement;
+            const result = row.querySelector('td') as HTMLElement;
+            const button = th.querySelector('button');
+            return {
+              row: Math.round(row.getBoundingClientRect().height),
+              th: Math.round(th.getBoundingClientRect().height),
+              result: Math.round(result.getBoundingClientRect().height),
+              button: button === null ? 0 : Math.round(button.getBoundingClientRect().height),
+            };
+          }),
+        );
+      const before = await measure();
+      expect(before).toHaveLength(5);
+      for (const [index, m] of before.entries()) {
+        expect(m.th, `行 ${index}: 名前の高さ ${m.th}、結果の文字の高さ ${m.result}`).toBeLessThanOrEqual(m.result + 1);
+        expect(m.button, `行 ${index} のボタン`).toBeGreaterThanOrEqual(24);
+      }
+      await page.getByRole('button', { name: '東3局', exact: true }).click();
+      await page.locator('tr.hx-exp').waitFor();
+      expect(await measure()).toEqual(before);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('1280px: 開いた行は、表の全幅の 1 行。手牌・待ちは表からはみ出さず、閉じた行の高さは変わらない（42px 前後）。開いた行の下の罫線で、次の行と分かれる', async () => {
+    const { context, page } = await open();
+    try {
+      await page.getByRole('button', { name: '東3局', exact: true }).click();
+      const detail = page.locator('tr.hx-exp');
+      await detail.waitFor();
+      const m = await page.evaluate(() => {
+        const table = document.querySelector('.tbl') as HTMLElement;
+        const cell = document.querySelector('tr.hx-exp > td') as HTMLElement;
+        const tiles = [...cell.querySelectorAll('.tile')].map((el) => el.getBoundingClientRect().right);
+        return { tableRight: table.getBoundingClientRect().right, cellWidth: cell.getBoundingClientRect().width, tableWidth: table.getBoundingClientRect().width, tilesRight: Math.max(...tiles), cellRight: cell.getBoundingClientRect().right };
+      });
+      expect(m.cellWidth).toBeGreaterThanOrEqual(m.tableWidth - 1);
+      expect(m.tilesRight).toBeLessThanOrEqual(m.cellRight + 1);
+      const heights = await page.locator('.tbl tbody tr:not(.hx-exp)').evaluateAll((rows) => rows.map((r) => Math.round(r.getBoundingClientRect().height)));
+      expect(new Set(heights).size).toBe(1);
+      expect(heights[0]).toBeLessThanOrEqual(44);
+    } finally {
+      await context.close();
+    }
+  });
+
   it('1280px: 表の幅は 760px 以内。見出しの行が見え、各行は 1 行', async () => {
     const { context, page } = await open();
     try {

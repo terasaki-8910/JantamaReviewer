@@ -41,7 +41,7 @@ function WinBlock({ win, me }: { win: KyokuWinView; me: Seat }) {
   return (
     <div className="hx-win" data-winner={win.winner}>
       <p className="hx-who">
-        <b>{who}</b>
+        <b>{who}</b>{' '}
         <span>
           {WIND_NAME[win.wind]}家が {how}
         </span>
@@ -58,7 +58,7 @@ function WinBlock({ win, me }: { win: KyokuWinView; me: Seat }) {
         {win.dora.ura > 0 && <span className="q-tag">裏ドラ {win.dora.ura}</span>}
       </p>
       <p className="hx-pts">
-        <span className="n">{points}</span>
+        <span className="n">{points}</span>{' '}
         <span>
           {line.limit !== null && line.yakuman === 0 && <b>{line.limit} </b>}
           {hanText(line)} <FuTip line={line} context={context} />
