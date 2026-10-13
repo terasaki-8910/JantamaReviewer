@@ -1060,15 +1060,23 @@ fn perf_a_year_of_records_seeds_and_then_stays_cheap() {
         fs::write(dir.join(REPORT_FILE), &big).unwrap();
         fs::write(
             dir.join(MEMOS_FILE),
-            serde_json::to_string(&json!({"marks": {"1": {"candidates": "3m", "reason": "理由"}}, "extras": []})).unwrap(),
+            serde_json::to_string(
+                &json!({"marks": {"1": {"candidates": "3m", "reason": "理由"}}, "extras": []}),
+            )
+            .unwrap(),
         )
         .unwrap();
     }
     {
         let mut db = a.ports.study();
         for i in 0..7300 {
-            db.record_answer(answer("20260101-000000", &format!("k{}h0e{}", i % 80, i / 80), AnswerMode::Quiz, T0 + i))
-                .unwrap();
+            db.record_answer(answer(
+                "20260101-000000",
+                &format!("k{}h0e{}", i % 80, i / 80),
+                AnswerMode::Quiz,
+                T0 + i,
+            ))
+            .unwrap();
         }
     }
     let t = Instant::now();
@@ -1076,7 +1084,11 @@ fn perf_a_year_of_records_seeds_and_then_stays_cheap() {
     eprintln!("A: 最初の同期 {:?} {seed:?}", t.elapsed());
     let t = Instant::now();
     let join = b.cycle(2_000_000).unwrap();
-    eprintln!("B: 新しい端末の取り込み {:?} (local_puts {})", t.elapsed(), join.local_puts);
+    eprintln!(
+        "B: 新しい端末の取り込み {:?} (local_puts {})",
+        t.elapsed(),
+        join.local_puts
+    );
     let t = Instant::now();
     let quiet = a.cycle(3_000_000).unwrap();
     eprintln!("A: 何も変わらない回 {:?} {quiet:?}", t.elapsed());

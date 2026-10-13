@@ -845,6 +845,20 @@ impl StudyDb {
         Ok(())
     }
 
+    /// 多くの操作を 1 つの取引にまとめる（同期が、新しい端末で記録を一度に入れるとき、1 件ごとの書き込みを待たないため）。
+    /// `begin_batch` のあと、`end_batch` まで、書き込みは取引の中。`end_batch(false)` は、取り消す。
+    pub fn begin_batch(&mut self) -> Result<(), StudyError> {
+        self.conn.execute_batch("BEGIN")?;
+        Ok(())
+    }
+
+    /// `begin_batch` で始めた取引を、確定する（`commit` が false なら、取り消す）。
+    pub fn end_batch(&mut self, commit: bool) -> Result<(), StudyError> {
+        self.conn
+            .execute_batch(if commit { "COMMIT" } else { "ROLLBACK" })?;
+        Ok(())
+    }
+
     /// `uid` の答えを消す（同期で、ほかの端末が消したとき）。消したなら true。
     pub fn delete_answer_by_uid(&mut self, uid: &str) -> Result<bool, StudyError> {
         Ok(self

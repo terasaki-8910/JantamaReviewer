@@ -794,11 +794,13 @@ impl<P: Ports> LocalAccess for FsLocal<P> {
         if !study_ops.is_empty() {
             let mut outcome: Vec<ApplyResult> = Vec::new();
             let run = self.ports.with_study(&mut |db| {
+                // 1 つの取引にまとめる（新しい端末で、1 年ぶんの答えを入れるとき、1 件ごとの書き込みを待たない）
+                db.begin_batch().map_err(|e| e.to_string())?;
                 outcome = study_ops
                     .iter()
                     .map(|index| apply_study_op(db, &ops[*index]))
                     .collect();
-                Ok(())
+                db.end_batch(true).map_err(|e| e.to_string())
             });
             match run {
                 Ok(()) => {

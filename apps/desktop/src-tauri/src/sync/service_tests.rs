@@ -152,7 +152,9 @@ fn answer(key: &str, at: i64) -> NewAnswer {
 impl Fixture {
     /// URL とトークンを保存して、同期を使う設定にする。
     fn turn_on(&self) {
-        self.service.save_connection(Some(URL), Some(TOKEN)).unwrap();
+        self.service
+            .save_connection(Some(URL), Some(TOKEN))
+            .unwrap();
         self.service.set_enabled(true).unwrap();
     }
 
@@ -380,7 +382,10 @@ fn d4_turning_sync_on_needs_a_url_and_a_token() {
 #[test]
 fn d4_a_url_with_a_space_in_the_token_is_refused_before_anything_is_stored() {
     let f = fixture(fast_timers());
-    assert!(f.service.save_connection(Some(URL), Some("abc def")).is_err());
+    assert!(f
+        .service
+        .save_connection(Some(URL), Some("abc def"))
+        .is_err());
     assert!(f.tokens.load().unwrap().is_none());
 }
 
