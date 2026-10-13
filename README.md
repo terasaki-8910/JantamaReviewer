@@ -269,7 +269,7 @@ pnpm build:debug      # デバッグビルド（本体と補助プログラム�
   - IBM Plex Mono（ラテン文字の 400・500）: `@fontsource/ibm-plex-mono` 5.3.0。Copyright 2017 IBM Corp.
   - Zen Old Mincho（ラテン文字の 700）: `@fontsource/zen-old-mincho` 5.3.0。Copyright 2021 The Zen Old Mincho Project Authors (https://github.com/googlefonts/zen-oldmincho)
   - ライセンスの全文は、`pnpm install` のあと、`apps/desktop/node_modules/@fontsource/ibm-plex-mono/LICENSE` と `apps/desktop/node_modules/@fontsource/zen-old-mincho/LICENSE` にあります。
-  - 本文の文字は、Windows に入っている書体（BIZ UDPGothic、Yu Gothic UI、Meiryo の順）を使い、同梱していません。
+  - 本文の文字は、OS に入っている書体（Windows は BIZ UDPGothic、Yu Gothic UI、Meiryo の順、Mac はヒラギノ角ゴシック）を使い、同梱していません。
 - 牌の画像: [FluffyStuff/riichi-mahjong-tiles](https://github.com/FluffyStuff/riichi-mahjong-tiles)（パブリックドメイン）。出題・半荘を通して見る画面・検討ログの手牌と、確認シート（`docs/sheet/tiles`）で使っています。
 - 待ちと打点の点数の計算: kobalab の [majiang-core](https://github.com/kobalab/majiang-core) 1.4.1（MIT。Copyright (c) 2021 Satoshi Kobayashi）。符の内訳の数え方は、[MahjongRepository/mahjong](https://github.com/MahjongRepository/mahjong)（MIT）の数え方を移したものです。許諾の全文は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) にあります。
 

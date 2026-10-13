@@ -26,7 +26,7 @@
   --focus: #1B6A49;
   --on-accent: #FFFFFF;
 
-  --font-body: 'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  --font-body: 'BIZ UDPGothic', 'Yu Gothic UI', 'Meiryo', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
   --font-head: 'Zen Old Mincho', 'Yu Mincho', serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
 
