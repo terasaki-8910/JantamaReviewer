@@ -688,6 +688,31 @@ describe('U-36 向聴数の推移（実ブラウザ。局の評価の行を開�
     }
   });
 
+  it('「表で見る」は、実際の Enter でも Space でも開閉する。キーボードの位置はボタンに残り、表は折れ線と同じ点（東2局1本場は 配牌 + 9 打の 10 行）', async () => {
+    const { context, page } = await open({ width: 1280 });
+    try {
+      await page.getByRole('button', { name: '東2局1本場', exact: true }).click();
+      const toggle = page.locator('.hx-trk').getByRole('button', { name: '表で見る' });
+      await toggle.focus();
+      const state = () =>
+        page.evaluate(() => ({
+          expanded: document.querySelector('.hx-trk .hx-tgl')?.getAttribute('aria-expanded'),
+          rows: document.querySelectorAll('.hx-trk .hx-sptbl [role="row"]').length,
+          focused: document.activeElement?.classList.contains('hx-tgl') === true,
+        }));
+      await page.keyboard.press('Enter');
+      expect(await state()).toEqual({ expanded: 'true', rows: 11, focused: true });
+      await page.keyboard.press('Enter');
+      expect(await state()).toEqual({ expanded: 'false', rows: 0, focused: true });
+      await page.keyboard.press('Space');
+      expect(await state()).toEqual({ expanded: 'true', rows: 11, focused: true });
+      await page.keyboard.press('Space');
+      expect(await state()).toEqual({ expanded: 'false', rows: 0, focused: true });
+    } finally {
+      await context.close();
+    }
+  });
+
   for (const width of [390, 768, 1280] as const) {
     it(`幅 ${width}px: 折れ線を矢印キーで選ぶと、吹き出しが窓の中に収まる。印のある点の吹き出しに、迷いと大きな不一致の文字が出る`, async () => {
       const { context, page } = await open({ width });
