@@ -28,6 +28,9 @@
  * - 待ちと打点・待ちの形・符の内訳（F14、E-36〜E-38。答え合わせのタブ「待ちと打点」）: `waitBoxOf`（聴牌になる行動ごとに、待ち牌ごとの役・飜・符・点数を
  *   ダマ・リーチ × ロン・ツモで。待ちの形は両面・嵌張・辺張・双碰・単騎、3 種類以上は多面張）。点数の計算は majiang-core（受け口は majiang-adapter.ts。
  *   エンジンで majiang-core を読み込むのはそのファイルだけ）、符の内訳 `fuBreakdownOf` は Python の mahjong の `fu_details` の数え方（fu-detail.ts）
+ * - 守備の目安（F14、E-39。答え合わせのタブ「守備」）: `dangerBoxOf`（他家のリーチがある場面で、切れる牌ごとに、リーチした人ごと
+ *   現物・スジ・壁・字牌・無スジの 1 語と補足。形式的な分類で、AI の確率ではない）。他家 1 人 × 牌 1 種類の分類は `classifyAgainst`
+ *   （他家の種類ごとに数え方を持つ。いまはリーチだけ。副露した他家は、見本で決めてから足す）。現物は盤面の `riichiOrder`・`passedAfterRiichi`（replay.ts）から
  * - 役の調査（R10-6・R12-14。画面には使わない試作）: `evaluateWin`（和了形の役・符。HandCalculator と同じ選び方）、`settledYaku`（聴牌の手の「確定している役」）、
  *   `nearYaku`（役ごとに、あと何枚引けばその役の付く和了形になるか）。analysis/yaku/README.md
  *
@@ -78,6 +81,7 @@ export const ENGINE_PACKAGE = '@jantama/engine' as const;
 
 export * from './actions';
 export * from './center-text';
+export * from './danger';
 export * from './decision';
 export * from './decision-ref';
 export * from './default-grade-model';
