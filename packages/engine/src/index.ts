@@ -98,6 +98,7 @@ export * from './disagreement';
 export * from './discard-compare';
 export * from './fu-detail';
 export * from './grade';
+export * from './hanchan-stats';
 export * from './hanchan-summary';
 export * from './hand-rating';
 export * from './import';
