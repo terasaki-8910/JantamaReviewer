@@ -29,6 +29,8 @@ import { MemoShown } from './MemoShown';
 import { formatProbability, type RevealModel } from './reveal';
 import { Tile } from './Tile';
 import { tileName } from './tiles';
+import { AnswerTabs, type TabSpec } from './AnswerTabs';
+import { DEFAULT_TAB_LABEL, visibleRevealTabs } from './revealTabs';
 import { UkeireSection } from './UkeireSection';
 import { YakuSection } from './YakuSection';
 import { useAnswerNotes } from './useAnswerNotes';
@@ -387,6 +389,20 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
   const choice = quiz.choice;
   if (choice === null) return null;
 
+  // 既定のタブ「受け入れ・役」の中身（受け入れ枚数の欄と役の欄）。足すタブが無い場面では、タブにせず、そのまま並べる
+  const defaultSections = (
+    <>
+      {model.ukeire !== null && <UkeireSection box={model.ukeire} dora={dora} />}
+      {model.yaku !== null && <YakuSection box={model.yaku} dora={dora} />}
+    </>
+  );
+  const context = { decision, model, dora };
+  const extraTabs = visibleRevealTabs(context);
+  const tabs: TabSpec[] = [
+    { id: 'default', label: DEFAULT_TAB_LABEL, panel: () => defaultSections },
+    ...extraTabs.map((tab) => ({ id: tab.id, label: tab.label, panel: () => tab.panel(context) })),
+  ];
+
   const next = async () => {
     if (await notes.commitPrinciple()) onNext();
   };
@@ -416,8 +432,14 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
       </div>
       {memoShown !== undefined && <MemoShown memos={memoShown} />}
       <Evaluation model={model} discard={discard} dora={dora} />
-      {model.ukeire !== null && <UkeireSection box={model.ukeire} dora={dora} />}
-      {model.yaku !== null && <YakuSection box={model.yaku} dora={dora} />}
+      {extraTabs.length === 0 ? (
+        defaultSections
+      ) : (
+        // 場面に関係のあるタブがあるときだけ、タブにする（既定は「受け入れ・役」。F14）。タブの枠は、ほかの欄と同じ区切りの欄に入れる
+        <div className="q-sec">
+          <AnswerTabs label="答え合わせの内容" tabs={tabs} />
+        </div>
+      )}
       <form className="q-sec learn" noValidate data-ai="learn" onSubmit={(event) => event.preventDefault()}>
         <fieldset className="pills-set">
           <legend className="lbl">
