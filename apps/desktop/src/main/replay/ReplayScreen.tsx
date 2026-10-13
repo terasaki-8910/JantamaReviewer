@@ -89,6 +89,8 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   // 窓の高さが足りないときは、卓を小さい配置にする（操作の段・卓・手牌が、1 画面に入るように）
   const windowHeight = useWindowHeight();
   const [drafts] = useState<SceneDrafts>(() => new Map());
+  // 「他家の手牌を開く」: 手を進めても、開いたままにする（この画面を離れると、閉じに戻る）
+  const [openHands, setOpenHands] = useState(false);
 
   const answered = useMemo(
     () =>
@@ -150,9 +152,13 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
         currentKey={scene === null ? null : scene.key}
         go={go}
         onChangeKeys={(next) => settings.update({ replay_keys: next })}
+        // 答える場面（迷い・不一致）は、答えたあとだけ開ける。ほかの手は、いつでも
+        openHands={{ open: openHands, available: scene === null || answered.has(scene.key), onToggle: () => setOpenHands((value) => !value) }}
       />
       {scene === null ? (
         <BrowseWork
+          game={game}
+          openHands={openHands}
           timeline={timeline}
           step={step}
           info={info}
@@ -164,6 +170,8 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
       ) : (
         <SceneWork
           key={scene.key}
+          game={game}
+          openHands={openHands}
           step={step}
           info={info}
           anyCalled={calledSomewhere}

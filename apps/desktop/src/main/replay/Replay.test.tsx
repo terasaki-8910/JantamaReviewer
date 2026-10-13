@@ -1162,7 +1162,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.type(reasonBox(), '鳴いて進める');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['受け入れ・役', '待ちと打点']);
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['受け入れ・役', '待ちと打点', '他家の手牌']);
     // 選ぶと、待ちと打点の表（ポンのあとに切る牌ごと）
     const [first, second] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement];
     first.focus();
@@ -1194,16 +1194,16 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
     await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
     const names = () => screen.getAllByRole('tab').map((tab) => tab.textContent);
-    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
-    // 守備のタブを End で選ぶ。← → Home End は、場面の移動に渡さない
-    const [first, , third] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement, HTMLElement];
+    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
+    // 守備のタブを → を 2 回で選ぶ。← → Home End は、場面の移動に渡さない
+    const [first, , third] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
     first.focus();
-    await user.keyboard('{End}');
+    await user.keyboard('{ArrowRight}{ArrowRight}');
     expect(third).toHaveAttribute('aria-selected', 'true');
     const box = document.querySelector('[data-ai="danger-box"]') as HTMLElement;
     expect(box.querySelector('.dg-line')?.textContent).toMatch(/^上家がリーチ/);
     expect(screen.getByRole('heading', { level: 1, name: '東1局 14巡目' })).toBeInTheDocument();
-    await user.keyboard('{ArrowRight}');
+    await user.keyboard('{Home}');
     expect(first).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('heading', { level: 1, name: '東1局 14巡目' })).toBeInTheDocument();
     // 場面を離れて戻ると、答え合わせのあとの形で開く（守備のタブも出る）
@@ -1213,7 +1213,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getByRole('button', { name: /^前の迷いへ/ }));
     expect(pos()).toBe(posAt(stepOf('k0h0e15')));
     expect(answeringState()).toBe('revealed');
-    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
+    expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備', '他家の手牌']);
   });
 
   it('答えの下書き（選んだ牌・理由）は、場面を離れても残り、戻ると続きから。保存できていない間は、答えていないまま', async () => {

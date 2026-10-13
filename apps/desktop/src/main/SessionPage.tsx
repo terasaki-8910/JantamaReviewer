@@ -337,6 +337,7 @@ export function SessionPage({
                 onJumpToMark={jumpToMark}
                 fit={fit}
                 refit={refit}
+                report={report ?? undefined}
               />
             </section>
           ) : readingReport ? (

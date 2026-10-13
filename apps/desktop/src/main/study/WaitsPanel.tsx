@@ -15,6 +15,7 @@ import { InfoTip } from '../InfoTip';
 import { isDoraTile } from './dora';
 import { FuTip, waitContext } from './FuTip';
 import { Tile } from './Tile';
+import { hanText, num, tsumoText } from './waitText';
 
 type Dora = ReadonlySet<number> | null;
 
@@ -22,19 +23,7 @@ type Dora = ReadonlySet<number> | null;
 export const WAIT_HINT =
   '裏ドラ・一発・海底などは数えていません（リーチの点は、立直の 1 飜と、ツモの門前清自摸和の 1 飜が付くだけ）。和了牌が赤のときの赤ドラも数えません。雀魂の規則（切り上げ満貫なし・喰いタンあり・赤ドラ各 1 枚）で計算しています。符の数にマウスを乗せると、内訳が出ます。';
 
-const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 const signed = (n: number): string => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${num(Math.abs(n))}`;
-
-function hanText(line: WaitLine): string {
-  if (line.yakuman > 0) return line.yakuman >= 2 ? `${line.yakuman}倍役満` : '役満';
-  return `${line.han}飜`;
-}
-
-/** ツモの言い方: 子のツモは「子・親」、親のツモは「オール」。 */
-function tsumoText(line: WaitLine, dealer: boolean): string {
-  if (line.tsumoPay === null) return '';
-  return dealer ? `${num(line.tsumoPay.child)}オール` : `${num(line.tsumoPay.child)}・${num(line.tsumoPay.dealer)}`;
-}
 
 function RonLine({ line, furiten, context }: { line: WaitLine; furiten: boolean; context: string }) {
   if (line.none) {

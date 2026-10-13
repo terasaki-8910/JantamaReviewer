@@ -5,8 +5,10 @@
  *   答えは、出題と同じに記録する（`record_answer`・mode は quiz。1 日後の解き直しの予定も入る）。答えた場面は、答え合わせのあとの形で開く。
  *   迷いの場面は、答える前に、その迷いの終局直後のメモ（「候補」「理由」）を書ける・直せる（迷いのカードと同じ保存先。F4、U-28）。
  *   答えたあとは、メモは書き換えられず、自分の答えの下に出る（AI の情報は、答えるまで出さない）
+ * - 「他家の手牌を開く」（F14、R15-5）を開いているとき、場面にいない手と、答えたあとの場面は、右の欄の上に他家の手牌を出す。
+ *   答える場面は、答えるまで、他家の手牌を DOM にも出さない（U-35）。開いたままの状態は、手を進めても残る（呼ぶ側が持つ）
  */
-import type { DecisionRef, ReplayScene, ReplayTimeline, TimelineStep } from '@jantama/engine';
+import type { DecisionRef, ImportedGame, ReplayScene, ReplayTimeline, TimelineStep } from '@jantama/engine';
 import { useMemo } from 'react';
 
 import type { AnswerRow, SessionRecord } from '../../api/types';
@@ -17,6 +19,7 @@ import { Board, Legend, type BoardInfo } from '../study/Board';
 import { doraKinds } from '../study/dora';
 import { Hand, type HandMark } from '../study/Hand';
 import { buildHandItems } from '../study/handMarks';
+import { OpenHandsBlock } from '../study/OpenHands';
 import { QuizWork } from '../study/QuizWork';
 import { useStudy } from '../study/StudyProvider';
 import type { QuizDraft } from '../study/useQuizAnswer';
@@ -28,6 +31,10 @@ const NO_USED: ReadonlySet<number> = new Set();
 const noop = () => undefined;
 
 interface BrowseWorkProps {
+  /** 他家の手牌を組み立てる、取り込んだ半荘。 */
+  game: ImportedGame;
+  /** 「他家の手牌を開く」を開いているか。 */
+  openHands: boolean;
   timeline: ReplayTimeline;
   step: TimelineStep;
   /** 卓の外の決まり（局の中でそろえた、河の段の数など）。 */
@@ -39,7 +46,7 @@ interface BrowseWorkProps {
   go: (g: number) => void;
 }
 
-export function BrowseWork({ timeline, step, info, anyCalled, scenes, answered, go }: BrowseWorkProps) {
+export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, scenes, answered, go }: BrowseWorkProps) {
   const study = useStudy();
   const items = useMemo(() => buildHandItems(step.board, null), [step.board]);
   const dora = useMemo(() => (study.highlightDora ? doraKinds(step.board.doraMarkers) : null), [study.highlightDora, step.board]);
@@ -64,7 +71,16 @@ export function BrowseWork({ timeline, step, info, anyCalled, scenes, answered, 
             onPick={noop}
           />
         </section>
-        <NowPanel timeline={timeline} step={step} scenes={scenes} answered={answered} go={go} />
+        <NowPanel
+          timeline={timeline}
+          step={step}
+          scenes={scenes}
+          answered={answered}
+          go={go}
+          above={
+            openHands ? <OpenHandsBlock game={game} kyokuPosition={step.kyokuPosition} eventIndex={step.eventIndex} dora={dora} /> : undefined
+          }
+        />
       </div>
     </div>
   );
@@ -74,6 +90,9 @@ export function BrowseWork({ timeline, step, info, anyCalled, scenes, answered, 
 export type SceneDrafts = Map<string, QuizDraft>;
 
 interface SceneWorkProps {
+  game: ImportedGame;
+  /** 「他家の手牌を開く」を開いているか（答えたあとだけ、欄を出す）。 */
+  openHands: boolean;
   step: TimelineStep;
   info: BoardInfo;
   anyCalled: boolean;
@@ -90,7 +109,7 @@ interface SceneWorkProps {
   onNext: () => void;
 }
 
-export function SceneWork({ step, info, anyCalled, scene, session, resolved, decisions, existing, drafts, nextLabel, onNext }: SceneWorkProps) {
+export function SceneWork({ game, openHands, step, info, anyCalled, scene, session, resolved, decisions, existing, drafts, nextLabel, onNext }: SceneWorkProps) {
   const study = useStudy();
   const reload = study.reloadSessions;
   const sessionId = session.id;
@@ -147,6 +166,12 @@ export function SceneWork({ step, info, anyCalled, scene, session, resolved, dec
         onNext={onNext}
         memoEditor={memoEditor}
         memoShown={memoShown}
+        game={game}
+        above={
+          work.revealed && openHands ? (
+            <OpenHandsBlock game={game} kyokuPosition={step.kyokuPosition} eventIndex={step.eventIndex} dora={work.dora} />
+          ) : undefined
+        }
       />
     </div>
   );

@@ -7,7 +7,7 @@ import { coreTenpaiWaits } from '../src/majiang-adapter';
 import { type OpenSeat, openHandsAt, openSeatsOf, otherSeats } from '../src/open-hands';
 import { KyokuReplayer, tableAt } from '../src/replay';
 import { buildReplayTimeline } from '../src/replay-timeline';
-import type { MjaiEvent, Seat, StartKyokuEvent } from '../src/report-types';
+import type { MjaiEvent, StartKyokuEvent } from '../src/report-types';
 import { parseTenhouNotation } from '../src/tiles';
 import { FX1_IDS, FX4_ID, FX5_ID, loadReportText } from './helpers/fixtures';
 

@@ -57,6 +57,8 @@ export type KyokuResultView =
       exhaustive: boolean;
       /** 4 人の手牌（本人、下家、対面、上家の順）。 */
       seats: OpenSeat[];
+      /** 牌譜の点の増減（席ごと。聴牌料）。 */
+      deltas: number[];
     };
 
 const WINDS: readonly Wind[] = ['E', 'S', 'W', 'N'];
@@ -83,7 +85,7 @@ function flagsOf(table: TableView, winner: Seat, tsumo: boolean, dealer: Seat): 
 }
 
 /** 和了 1 つ（`table` は、その和了の直前の卓）。 */
-function winViewOf(table: TableView, event: HoraEvent, logged: EndStatusEvent | undefined): KyokuWinView {
+function winViewOf(table: TableView, event: HoraEvent, logged: EndStatusEvent | undefined, first: boolean): KyokuWinView {
   const { board } = table;
   const winner = event.actor;
   const target = event.target;
@@ -112,7 +114,8 @@ function winViewOf(table: TableView, event: HoraEvent, logged: EndStatusEvent | 
     doraMarkers: [...board.doraMarkers],
     uraMarkers: flags.riichi ? [...(event.ura_markers ?? [])] : [],
     honba: board.honba,
-    kyotaku: board.kyotaku,
+    // 供託は、最初の和了（放銃した席から近い順。牌譜の和了の順）だけが受け取る（ダブロンの 2 つ目は受け取らない）
+    kyotaku: first ? board.kyotaku : 0,
     actor: winner,
     target,
   };
@@ -145,7 +148,7 @@ function winViewOf(table: TableView, event: HoraEvent, logged: EndStatusEvent | 
     dora: value.dora,
     line: waitLineOf(value, input),
     honba: board.honba,
-    kyotaku: board.kyotaku,
+    kyotaku: spec.kyotaku,
     deltas: logged?.deltas ?? [],
     deltasComputed: computed,
     waits: openSeatOf(table, winner, closed).waits,
@@ -169,12 +172,12 @@ export function kyokuResultOf(report: MortalReport, position: number): KyokuResu
     for (let i = 1; i < kyoku.events.length; i++) {
       const event = kyoku.events[i] as MjaiEvent;
       if (event.type === 'hora') {
-        wins.push(winViewOf(replayer.table(), event, end[wins.length]));
+        wins.push(winViewOf(replayer.table(), event, end[wins.length], wins.length === 0));
       } else if (event.type === 'ryukyoku') {
         const table = replayer.table();
         const seen = openSeenCounts(table);
         const seats = [0, 1, 2, 3].map((offset) => openSeatOf(table, ((me + offset) % 4) as Seat, undefined, seen));
-        return { kind: 'draw', exhaustive: table.board.tilesLeft === 0, seats };
+        return { kind: 'draw', exhaustive: table.board.tilesLeft === 0, seats, deltas: reported.end_status[0]?.deltas ?? [0, 0, 0, 0] };
       }
       replayer.apply(event, kyoku.startIndex + i);
     }

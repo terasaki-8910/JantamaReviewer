@@ -1,0 +1,143 @@
+/*
+  open-hands.css: 他家の手牌（F14、E-40、U-34・U-35。R15-2・R15-5。提案 5）の欄と、通して見る画面の操作の段の「他家の手牌を開く」。
+  承認済みの 15回目の見本（samples15.css の .oh-*・.s15-tiles・.s15-meld）の部品を、アプリに移した。色はすべて tokens.css のトークンから
+  （色のリテラルは書かない）。新しい色・トークンは足さない。目立たせ方は、太字・枠の形・淡い accent の塗りだけ（待ちと打点・守備の欄と同じ使い方）。
+
+  方針:
+  - 人ごとの行は、見出し（席・風・親・リーチ）・手牌の行・待ちの行の 3 段。手牌は牌の幅 20px の小さな牌で、ツモ牌・和了牌は手牌から少し離し、
+    副露は盤面と同じ並べ方（.meld）。13 枚が、答えの欄の幅 336px に収まる。狭いときは折り返す
+  - 人の行の間は、細い線で区切る（行の中より、行の間のほうが離れて見える）
+  - 「他家の手牌を開く」は、操作の段の 1 段目の右に置く。開いているときは、淡い accent の塗りと accent の枠（承認済みの見本の押した形）
+*/
+.oh-panel {
+  display: grid;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.oh-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.oh-row {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.oh-row:first-child {
+  padding-top: 2px;
+  border-top: 0;
+}
+
+.oh-hd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--s2);
+  font-size: 13px;
+}
+
+.oh-hd b {
+  font-weight: 700;
+}
+
+.oh-hd .q-tag.riichi {
+  border-color: var(--ink);
+  font-weight: 700;
+}
+
+/* 手牌・ツモ牌（または和了牌）・副露の 1 行 */
+.oh-hand {
+  --ow: 20px;
+  --mw: var(--ow);
+  --mh: calc(var(--ow) * 4 / 3);
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s1) var(--s3);
+  min-width: 0;
+}
+
+.oh-tiles {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+
+.oh-tiles .tile {
+  --tw: var(--ow);
+}
+
+.oh-tiles .tile.win {
+  box-shadow: 0 0 0 2px var(--accent);
+  z-index: 1;
+}
+
+.oh-melds {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s2);
+}
+
+/* 待ち */
+.oh-w {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s3);
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.oh-w .it {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.oh-w .it .tile {
+  --tw: 20px;
+}
+
+.oh-w .it small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.oh-no {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- 通して見る画面の操作の段: 他家の手牌を開く ---------- */
+.pb-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.pb-open .btn[data-open="1"] {
+  background: var(--accent-fill);
+  border-color: var(--accent);
+}
+
+.pb-open .btn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.pb-open .btn:disabled {
+  background: transparent;
+  border-color: var(--line);
+}
