@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "pnpm --filter @jantama/desktop tauri dev",
     "build:debug": "pnpm --filter @jantama/desktop tauri build --debug --no-bundle",
+    "build:mac": "pnpm --filter @jantama/desktop tauri build --bundles app",
     "build:helper": "cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml -p jantama-helper",
     "test": "pnpm test:ts && pnpm test:rust",
     "test:ts": "pnpm -r --if-present test",

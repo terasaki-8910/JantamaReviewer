@@ -9,6 +9,7 @@ import {
   onStateChanged,
 } from '../api/tauri';
 import type { HelperStatus, InputStatus, Orientation, Settings } from '../api/types';
+import { platform } from '../shared/platform';
 import { describeTrigger, formatClock } from './format';
 import { RecordsBlock } from './RecordsBlock';
 
@@ -74,6 +75,8 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
   const startButton = useRef<HTMLButtonElement>(null);
   const listening = useRef<HTMLParagraphElement>(null);
   const wasRegistering = useRef(false);
+  // この OS で使える機能（macOS の段階 2 では、ウィジェット・ボタンを拾うこと・撮影が無いので、その行を出さない）。
+  const features = platform().features;
 
   useEffect(() => {
     let alive = true;
@@ -246,98 +249,111 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
           </p>
         )}
         <div className="settings">
-          <fieldset className="setting pills-set capture">
-            <legend className="lbl">迷いマークのボタン</legend>
-            {registering ? (
-              <>
-                <div className="setting-row">
-                  <p
-                    className="listening"
-                    role="status"
-                    tabIndex={-1}
-                    ref={listening}
-                    aria-describedby="capture-hint"
-                  >
-                    <span className="dotc" aria-hidden="true" />
-                    登録したいボタンを押してください（マウスのボタンでもキーでも）
+          {features.button_hook ? (
+            <fieldset className="setting pills-set capture">
+              <legend className="lbl">迷いマークのボタン</legend>
+              {registering ? (
+                <>
+                  <div className="setting-row">
+                    <p
+                      className="listening"
+                      role="status"
+                      tabIndex={-1}
+                      ref={listening}
+                      aria-describedby="capture-hint"
+                    >
+                      <span className="dotc" aria-hidden="true" />
+                      登録したいボタンを押してください（マウスのボタンでもキーでも）
+                    </p>
+                    <button type="button" className="btn" onClick={() => run(api.cancelRegistration)}>
+                      キャンセル
+                    </button>
+                  </div>
+                  <p className="quiet" id="capture-hint">
+                    Esc でやめます。英字・数字・記号のキーは、Ctrl か Alt と組み合わせて押してください。左右のボタンは登録できません。
                   </p>
-                  <button type="button" className="btn" onClick={() => run(api.cancelRegistration)}>
-                    キャンセル
+                </>
+              ) : (
+                <div className="setting-row">
+                  <p className="keycap">{describeTrigger(settings.trigger)}</p>
+                  <button
+                    type="button"
+                    className="btn"
+                    ref={startButton}
+                    onClick={() => run(api.startRegistration)}
+                  >
+                    ボタンを登録
                   </button>
                 </div>
-                <p className="quiet" id="capture-hint">
-                  Esc でやめます。英字・数字・記号のキーは、Ctrl か Alt と組み合わせて押してください。左右のボタンは登録できません。
+              )}
+              {input?.message && (
+                <p className="error selectable" role="alert">
+                  {input.message}
                 </p>
-              </>
-            ) : (
-              <div className="setting-row">
-                <p className="keycap">{describeTrigger(settings.trigger)}</p>
-                <button
-                  type="button"
-                  className="btn"
-                  ref={startButton}
-                  onClick={() => run(api.startRegistration)}
+              )}
+              <div className="probe-box">
+                <span className="lbl-sm" id="probe-lbl">
+                  テスト
+                </span>
+                <p
+                  className="probe"
+                  role="status"
+                  aria-labelledby="probe-lbl"
+                  data-got={probeMs !== null}
                 >
-                  ボタンを登録
-                </button>
+                  {probeMs !== null ? (
+                    // 1 つの要素に包む（.probe は flex なので、文字と時刻が別の項目になると、間の空白が消える）。
+                    <span>
+                      受け取りました <span className="mono">{formatClock(probeMs)}</span>
+                    </span>
+                  ) : (
+                    PROBE_IDLE
+                  )}
+                </p>
               </div>
-            )}
-            {input?.message && (
-              <p className="error selectable" role="alert">
-                {input.message}
+              {helper && features.helper && <HelperRow helper={helper} run={run} />}
+            </fieldset>
+          ) : (
+            <fieldset className="setting pills-set">
+              <legend className="lbl">迷いマークのボタン</legend>
+              <p className="quiet">
+                Mac ではまだ使えません。ウィジェット・迷いマークのボタン・画面の撮影は、Mac 版の次の段階で対応します。
               </p>
-            )}
-            <div className="probe-box">
-              <span className="lbl-sm" id="probe-lbl">
-                テスト
-              </span>
-              <p
-                className="probe"
-                role="status"
-                aria-labelledby="probe-lbl"
-                data-got={probeMs !== null}
-              >
-                {probeMs !== null ? (
-                  // 1 つの要素に包む（.probe は flex なので、文字と時刻が別の項目になると、間の空白が消える）。
-                  <span>
-                    受け取りました <span className="mono">{formatClock(probeMs)}</span>
-                  </span>
-                ) : (
-                  PROBE_IDLE
-                )}
-              </p>
-            </div>
-            {helper && <HelperRow helper={helper} run={run} />}
-          </fieldset>
+            </fieldset>
+          )}
 
-          <fieldset className="setting pills-set">
-            <legend className="lbl">ウィジェットの形</legend>
-            <div className="pills">
-              {ORIENTATION_CHOICES.map((choice) => (
-                <label className="pill" key={choice.value}>
-                  <input
-                    type="radio"
-                    name="orientation"
-                    value={choice.value}
-                    checked={settings.orientation === choice.value}
-                    onChange={() => void update({ orientation: choice.value })}
-                  />
-                  <span>{choice.label}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          {features.widget && (
+            <fieldset className="setting pills-set">
+              <legend className="lbl">ウィジェットの形</legend>
+              <div className="pills">
+                {ORIENTATION_CHOICES.map((choice) => (
+                  <label className="pill" key={choice.value}>
+                    <input
+                      type="radio"
+                      name="orientation"
+                      value={choice.value}
+                      checked={settings.orientation === choice.value}
+                      onChange={() => void update({ orientation: choice.value })}
+                    />
+                    <span>{choice.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
 
-          <div className="setting">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={settings.sound}
-                onChange={(e) => void update({ sound: e.target.checked })}
-              />
-              迷いを記録したら音を鳴らす
-            </label>
-          </div>
+          {features.widget && (
+            <div className="setting">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={settings.sound}
+                  onChange={(e) => void update({ sound: e.target.checked })}
+                />
+                迷いを記録したら音を鳴らす
+              </label>
+            </div>
+          )}
 
           <div className="setting">
             <span className="lbl field-label" id="data-dir-label">
@@ -364,21 +380,23 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
             initialNotice={recordsNotice}
           />
 
-          <div className="setting field">
-            <label htmlFor="capture-keywords">雀魂の窓を探す語（1行に1つ）</label>
-            <textarea
-              id="capture-keywords"
-              className="input"
-              value={keywordsText}
-              spellCheck={false}
-              aria-describedby="capture-keywords-help"
-              onChange={(e) => setKeywordsDraft(e.target.value)}
-              onBlur={commitKeywords}
-            />
-            <p className="quiet" id="capture-keywords-help">
-              窓の題名にこの語があれば、その窓を撮ります。見つからないときは画面全体を撮ります。
-            </p>
-          </div>
+          {features.capture && (
+            <div className="setting field">
+              <label htmlFor="capture-keywords">雀魂の窓を探す語（1行に1つ）</label>
+              <textarea
+                id="capture-keywords"
+                className="input"
+                value={keywordsText}
+                spellCheck={false}
+                aria-describedby="capture-keywords-help"
+                onChange={(e) => setKeywordsDraft(e.target.value)}
+                onBlur={commitKeywords}
+              />
+              <p className="quiet" id="capture-keywords-help">
+                窓の題名にこの語があれば、その窓を撮ります。見つからないときは画面全体を撮ります。
+              </p>
+            </div>
+          )}
 
           <div className="setting field">
             <label htmlFor="daily-count">1日に出す数</label>

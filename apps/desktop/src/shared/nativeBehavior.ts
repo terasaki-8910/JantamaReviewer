@@ -12,6 +12,7 @@
  */
 
 import { api } from '../api/tauri';
+import { isMac } from './platform';
 
 /** 切り取り・コピー・貼り付けが意味を持つ入力欄の種類。 */
 const TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
@@ -95,7 +96,10 @@ export function installBrowserGuards(
     on('keydown', (event) => {
       if (!(event instanceof KeyboardEvent)) return;
       const f12 = event.key === 'F12';
-      const inspect = event.ctrlKey && event.shiftKey && event.code === 'KeyI';
+      // Ctrl+Shift+I（Windows）。macOS は Cmd+Option+I（macOS の開発者ツールの習慣）。
+      const inspect =
+        (event.ctrlKey && event.shiftKey && event.code === 'KeyI') ||
+        (isMac() && event.metaKey && event.altKey && event.code === 'KeyI');
       if (f12 || inspect) {
         event.preventDefault();
         void api.openDevtools().catch(() => {});
