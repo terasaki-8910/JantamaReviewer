@@ -222,7 +222,10 @@ impl std::fmt::Display for SettingsError {
 
 impl std::error::Error for SettingsError {}
 
-/// データの保存先の既定: `%USERPROFILE%\JantamaReviewerData`。
+/// データの保存先の既定: ユーザーのフォルダの直下の `JantamaReviewerData`（Windows は `%USERPROFILE%\JantamaReviewerData`、
+/// macOS は `~/JantamaReviewerData`）。macOS でも、`~/Library/Application Support` ではなく、ユーザーのフォルダの直下に置く:
+/// Finder で見える場所で、Windows から写す・書き出す・同期する記録のフォルダを、同じ名前・同じ置き方にそろえられる。
+/// 設定ファイルだけは、macOS の決まり（`~/Library/Application Support/<識別子>`。Tauri の設定フォルダ）に置く。
 pub fn default_data_dir() -> PathBuf {
     default_data_dir_from(std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")))
 }
@@ -756,6 +759,18 @@ mod tests {
             default_data_dir_from(None),
             PathBuf::from(DEFAULT_DATA_DIR_NAME)
         );
+    }
+
+    #[test]
+    fn default_data_dir_is_directly_under_the_home_folder_on_macos_too() {
+        // macOS: USERPROFILE は無く、HOME（`/Users/<名前>`）を使う。`~/Library/Application Support` の下には置かない。
+        let dir = default_data_dir_from(Some(OsString::from("/Users/someone")));
+        assert_eq!(dir.parent(), Some(Path::new("/Users/someone")));
+        assert_eq!(
+            dir.file_name(),
+            Some(OsString::from("JantamaReviewerData").as_os_str())
+        );
+        assert!(!dir.to_string_lossy().contains("Library"));
     }
 
     #[test]

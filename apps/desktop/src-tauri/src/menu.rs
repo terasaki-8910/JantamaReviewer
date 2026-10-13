@@ -3,8 +3,12 @@
 //! 並びは承認済みの見本（round7-samples/menu.html）どおり:
 //! 新しい半荘・縦長と横長の切り替え / 音を鳴らす（入・切の印つき）・検討画面を開く / 終了。
 //! 「音を鳴らす」は、設定のチェックと同じ設定（`Settings::sound`）を切り替える（W-12）。
+//!
+//! macOS のアプリのメニュー（メニューバー。`mac_app_menu`）も、ここで作る。Quit（Cmd+Q）と、入力欄の取り消し・切り取り・
+//! コピー・貼り付け・すべてを選択（Cmd+Z/X/C/V/A）に要る編集のメニュー、窓のメニューだけで、
+//! ブラウザの機能（再読み込み・印刷・検索）は入れない。
 
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu, WINDOW_SUBMENU_ID};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::commands;
@@ -69,6 +73,135 @@ pub fn build_menu<R: Runtime, M: Manager<R>>(
         ))
     })?;
     Ok(BuiltMenu { menu, sound })
+}
+
+/// macOS のアプリのメニューに入れる、標準の項目（動きは macOS が持っている）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacItem {
+    About,
+    Services,
+    Hide,
+    HideOthers,
+    ShowAll,
+    Quit,
+    Undo,
+    Redo,
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+    Minimize,
+    Zoom,
+    BringAllToFront,
+    CloseWindow,
+}
+
+/// macOS のアプリのメニューの 1 行。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MacEntry {
+    /// 標準の項目（表示の文字）。
+    Item(MacItem, &'static str),
+    /// 区切り線。
+    Separator,
+}
+
+/// macOS のアプリのメニューの 1 つ分（メニューバーの 1 つの項目）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MacMenu {
+    /// 題名。`None` はアプリの名前（最初のメニューは、macOS が、アプリの名前で出す）。
+    pub title: Option<&'static str>,
+    pub entries: &'static [MacEntry],
+}
+
+/// macOS のアプリのメニューの並び（左から順）。表示の文字は、アプリの文言と同じ日本語。
+pub const MAC_MENUS: [MacMenu; 3] = [
+    MacMenu {
+        title: None,
+        entries: &[
+            MacEntry::Item(MacItem::About, "JantamaReviewer について"),
+            MacEntry::Separator,
+            MacEntry::Item(MacItem::Services, "サービス"),
+            MacEntry::Separator,
+            MacEntry::Item(MacItem::Hide, "JantamaReviewer を隠す"),
+            MacEntry::Item(MacItem::HideOthers, "ほかを隠す"),
+            MacEntry::Item(MacItem::ShowAll, "すべてを表示"),
+            MacEntry::Separator,
+            MacEntry::Item(MacItem::Quit, "JantamaReviewer を終了"),
+        ],
+    },
+    MacMenu {
+        title: Some("編集"),
+        entries: &[
+            MacEntry::Item(MacItem::Undo, "取り消す"),
+            MacEntry::Item(MacItem::Redo, "やり直す"),
+            MacEntry::Separator,
+            MacEntry::Item(MacItem::Cut, "カット"),
+            MacEntry::Item(MacItem::Copy, "コピー"),
+            MacEntry::Item(MacItem::Paste, "ペースト"),
+            MacEntry::Item(MacItem::SelectAll, "すべてを選択"),
+        ],
+    },
+    MacMenu {
+        title: Some("ウインドウ"),
+        entries: &[
+            MacEntry::Item(MacItem::Minimize, "しまう"),
+            MacEntry::Item(MacItem::Zoom, "拡大/縮小"),
+            MacEntry::Separator,
+            MacEntry::Item(MacItem::BringAllToFront, "すべてを手前に移動"),
+            MacEntry::Item(MacItem::CloseWindow, "ウインドウを閉じる"),
+        ],
+    },
+];
+
+fn mac_item<R: Runtime, M: Manager<R>>(
+    manager: &M,
+    item: MacItem,
+    label: &str,
+) -> tauri::Result<PredefinedMenuItem<R>> {
+    let text = Some(label);
+    match item {
+        MacItem::About => PredefinedMenuItem::about(manager, text, None),
+        MacItem::Services => PredefinedMenuItem::services(manager, text),
+        MacItem::Hide => PredefinedMenuItem::hide(manager, text),
+        MacItem::HideOthers => PredefinedMenuItem::hide_others(manager, text),
+        MacItem::ShowAll => PredefinedMenuItem::show_all(manager, text),
+        MacItem::Quit => PredefinedMenuItem::quit(manager, text),
+        MacItem::Undo => PredefinedMenuItem::undo(manager, text),
+        MacItem::Redo => PredefinedMenuItem::redo(manager, text),
+        MacItem::Cut => PredefinedMenuItem::cut(manager, text),
+        MacItem::Copy => PredefinedMenuItem::copy(manager, text),
+        MacItem::Paste => PredefinedMenuItem::paste(manager, text),
+        MacItem::SelectAll => PredefinedMenuItem::select_all(manager, text),
+        MacItem::Minimize => PredefinedMenuItem::minimize(manager, text),
+        MacItem::Zoom => PredefinedMenuItem::maximize(manager, text),
+        MacItem::BringAllToFront => PredefinedMenuItem::bring_all_to_front(manager, text),
+        MacItem::CloseWindow => PredefinedMenuItem::close_window(manager, text),
+    }
+}
+
+/// macOS のアプリ全体のメニュー（メニューバー）を作る。
+/// Windows では使わない（メニューバーが窓ごとに付いてしまう。`platform::with_app_menu`）。
+pub fn mac_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let menu = Menu::new(app)?;
+    for (index, spec) in MAC_MENUS.iter().enumerate() {
+        let title = spec
+            .title
+            .map_or_else(|| app.package_info().name.clone(), str::to_string);
+        // 最後のメニューは、窓のメニュー。この識別子だと、macOS が開いている窓の一覧を足してくれる。
+        let submenu = if index == MAC_MENUS.len() - 1 {
+            Submenu::with_id(app, WINDOW_SUBMENU_ID, title, true)?
+        } else {
+            Submenu::new(app, title, true)?
+        };
+        for entry in spec.entries {
+            match entry {
+                MacEntry::Item(item, label) => submenu.append(&mac_item(app, *item, label)?)?,
+                MacEntry::Separator => submenu.append(&PredefinedMenuItem::separator(app)?)?,
+            }
+        }
+        menu.append(&submenu)?;
+    }
+    Ok(menu)
 }
 
 /// メニューの項目が選ばれたときの動き。
@@ -147,6 +280,84 @@ mod tests {
             kinds,
             vec!["item", "item", "sep", "check", "item", "sep", "item"]
         );
+    }
+
+    fn mac_items(menu: &MacMenu) -> Vec<MacItem> {
+        menu.entries
+            .iter()
+            .filter_map(|entry| match entry {
+                MacEntry::Item(item, _) => Some(*item),
+                MacEntry::Separator => None,
+            })
+            .collect()
+    }
+
+    fn mac_labels() -> Vec<&'static str> {
+        let mut labels = Vec::new();
+        for menu in &MAC_MENUS {
+            labels.extend(menu.title);
+            for entry in menu.entries {
+                if let MacEntry::Item(_, label) = entry {
+                    labels.push(*label);
+                }
+            }
+        }
+        labels
+    }
+
+    #[test]
+    fn the_macos_menu_has_quit_and_the_edit_commands_inputs_need() {
+        let app = mac_items(&MAC_MENUS[0]);
+        assert!(app.contains(&MacItem::Quit), "Cmd+Q で終われる");
+        assert!(app.contains(&MacItem::Hide));
+        let edit = mac_items(&MAC_MENUS[1]);
+        for needed in [
+            MacItem::Undo,
+            MacItem::Redo,
+            MacItem::Cut,
+            MacItem::Copy,
+            MacItem::Paste,
+            MacItem::SelectAll,
+        ] {
+            assert!(
+                edit.contains(&needed),
+                "{needed:?}: 入力欄の Cmd+Z/X/C/V/A に要る"
+            );
+        }
+        assert!(mac_items(&MAC_MENUS[2]).contains(&MacItem::CloseWindow));
+    }
+
+    #[test]
+    fn the_macos_menu_is_japanese_and_offers_no_browser_commands() {
+        for label in mac_labels() {
+            assert!(
+                label
+                    .chars()
+                    .any(|c| matches!(c, '\u{3040}'..='\u{30FF}' | '\u{4E00}'..='\u{9FFF}')),
+                "日本語の文言: {label}"
+            );
+            for browser in [
+                "再読み込み",
+                "印刷",
+                "検索",
+                "ズーム",
+                "開発者",
+                "Reload",
+                "Print",
+                "Find",
+            ] {
+                assert!(
+                    !label.contains(browser),
+                    "ブラウザの機能は入れない（N-1）: {label}"
+                );
+            }
+        }
+        // 標準の項目は、どれも 1 回ずつ（同じ項目が 2 つあると、ショートカットが取り合いになる）。
+        let mut all: Vec<MacItem> = MAC_MENUS.iter().flat_map(mac_items).collect();
+        let total = all.len();
+        all.sort_by_key(|item| format!("{item:?}"));
+        all.dedup();
+        assert_eq!(all.len(), total);
     }
 
     #[test]
