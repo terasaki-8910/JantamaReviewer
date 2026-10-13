@@ -507,7 +507,7 @@ export interface WinEvaluation {
 }
 
 /** 分解 1 つについて、和了牌の入り方をすべて挙げる。 */
-function interpretations(blocks: readonly Block[], winKind: number): WinInterpretation[] {
+export function interpretations(blocks: readonly Block[], winKind: number): WinInterpretation[] {
   const out: WinInterpretation[] = [];
   const seen = new Set<string>();
   for (const [index, b] of blocks.entries()) {
@@ -527,14 +527,52 @@ function interpretations(blocks: readonly Block[], winKind: number): WinInterpre
   return out;
 }
 
+const TYPE_RANK: Readonly<Record<Block['type'], number>> = { kan: 0, tri: 1, pair: 2, seq: 3 };
+
+/**
+ * 飜数も符も同じ解釈が複数あるときの、符の内訳に使う解釈の決め方。Python の mahjong は、分解を (牌の種類, 塊の種類（槓子・刻子・雀頭・順子の順）) の
+ * 並びの小さいほうから、和了牌を含む塊も同じ並びの前のほうから数え、同点なら先に数えたものを選ぶ。それと同じ順の鍵（小さいほうが先）。
+ */
+function mahjongOrderKey(blocks: readonly Block[], interp: WinInterpretation | null): number[] {
+  const code = (b: Block): number => b.kind * 4 + TYPE_RANK[b.type];
+  const sorted = blocks.map(code).sort((a, b) => a - b);
+  const win = interp === null ? undefined : blocks[interp.index];
+  return [...sorted, win === undefined ? -1 : sorted.indexOf(code(win))];
+}
+
+function compareKeys(a: readonly number[], b: readonly number[]): number {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const d = (a[i] as number) - (b[i] as number);
+    if (d !== 0) return d;
+  }
+  return a.length - b.length;
+}
+
+/** 和了の評価で選ばれた解釈（分解と、和了牌の入り方）。符の内訳（fu-detail.ts）を求めるのに使う。七対子は `interp` が null。 */
+export interface ChosenWin {
+  blocks: readonly Block[];
+  interp: WinInterpretation | null;
+  ctx: HitContext;
+}
+
 /** 和了の役を数える。点（飜数、同じなら符）がいちばん高い解釈（和了牌の入り方を含む）を選ぶ。HandCalculator と同じ選び方。 */
 export function evaluateWin(input: WinInput): WinEvaluation {
+  return evaluateWinChosen(input).evaluation;
+}
+
+/** `evaluateWin` と同じ評価に、選ばれた解釈を添えて返す（和了形でない・国士無双のときの `chosen` は null）。 */
+export function evaluateWinChosen(input: WinInput): { evaluation: WinEvaluation; chosen: ChosenWin | null } {
   const ctx: HitContext = { seatKind: windKind(input.seatWind), roundKind: windKind(input.roundWind), tsumo: input.tsumo, riichi: input.riichi };
   interface Candidate {
     hits: YakuHit[];
     yakuman: YakumanId[];
+    blocks: readonly Block[];
+    interp: WinInterpretation | null;
   }
   let best: Candidate[] = [];
+  /** 符の内訳に使う解釈（`best` のうち、Python の mahjong が先に数える並びのもの）と、その並びの鍵。 */
+  let chosen: Candidate | null = null;
+  let chosenKey: number[] | null = null;
   let bestHan = -1;
   let bestFu = -1;
   let bestRaw = -1;
@@ -551,32 +589,46 @@ export function evaluateWin(input: WinInput): WinEvaluation {
       bestFu = fu.fu;
       bestRaw = fu.raw;
       best = [c];
+      chosen = c;
+      chosenKey = null;
       kind = k;
-    } else if (han === bestHan && fu.fu === bestFu && fu.raw === bestRaw && !best.some((b) => sameCandidate(b, c))) {
-      best.push(c);
+    } else if (han === bestHan && fu.fu === bestFu && fu.raw === bestRaw) {
+      if (!best.some((b) => sameCandidate(b, c))) best.push(c);
+      if (chosen !== null) {
+        const key = mahjongOrderKey(c.blocks, c.interp);
+        chosenKey ??= mahjongOrderKey(chosen.blocks, chosen.interp);
+        if (compareKeys(key, chosenKey) < 0) {
+          chosen = c;
+          chosenKey = key;
+        }
+      }
     }
   };
 
   for (const blocks of decompose(input.counts, input.melds)) {
     for (const interp of interpretations(blocks, input.winKind)) {
       const yakuman = yakumanOfDecomposition(blocks, ctx, interp);
-      consider({ hits: yakuman.length > 0 ? [] : hitsOfDecomposition(blocks, ctx, interp), yakuman }, fuOfDecomposition(blocks, ctx, interp), 'regular');
+      consider({ hits: yakuman.length > 0 ? [] : hitsOfDecomposition(blocks, ctx, interp), yakuman, blocks, interp }, fuOfDecomposition(blocks, ctx, interp), 'regular');
     }
   }
   if (input.melds.length === 0 && isChiitoitsuCounts(input.counts)) {
     const pairs: Block[] = [];
     for (let k = 0; k < TILE_KIND_COUNT; k++) if (input.counts[k] === 2) pairs.push({ type: 'pair', kind: k, open: false, meld: false });
     const yakuman = yakumanOfDecomposition(pairs, ctx, null);
-    consider({ hits: yakuman.length > 0 ? [] : hitsOfDecomposition(pairs, ctx, null), yakuman }, { raw: 25, fu: 25 }, 'chiitoitsu');
+    consider({ hits: yakuman.length > 0 ? [] : hitsOfDecomposition(pairs, ctx, null), yakuman, blocks: pairs, interp: null }, { raw: 25, fu: 25 }, 'chiitoitsu');
   }
   if (kind === 'none' && input.melds.length === 0 && isKokushiCounts(input.counts)) {
-    return { kind: 'kokushi', yakuman: ['kokushi'], hits: [], han: 13, fu: 0, ties: 1 };
+    return { evaluation: { kind: 'kokushi', yakuman: ['kokushi'], hits: [], han: 13, fu: 0, ties: 1 }, chosen: null };
   }
-  if (kind === 'none') return { kind: 'none', yakuman: [], hits: [], han: 0, fu: 0, ties: 0 };
+  if (kind === 'none') return { evaluation: { kind: 'none', yakuman: [], hits: [], han: 0, fu: 0, ties: 0 }, chosen: null };
   // 点が最大のうち、同点が複数あれば、そのすべてに共通する役だけを返す（どれが選ばれても付く役）
   const first = best[0] as Candidate;
   const common = first.hits.filter((h) => best.every((b) => b.hits.some((x) => x.id === h.id)));
-  return { kind, yakuman: first.yakuman, hits: common, han: bestHan, fu: bestFu, ties: best.length };
+  const pick = (chosen ?? first) as Candidate;
+  return {
+    evaluation: { kind, yakuman: first.yakuman, hits: common, han: bestHan, fu: bestFu, ties: best.length },
+    chosen: { blocks: pick.blocks, interp: pick.interp, ctx },
+  };
 }
 
 function sameIds(a: readonly YakuHit[], b: readonly YakuHit[]): boolean {

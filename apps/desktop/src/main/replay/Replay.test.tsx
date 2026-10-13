@@ -1150,6 +1150,34 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     expect(study.rows[0]).toMatchObject({ decision_key: 'k1h1e10', mode: 'quiz', choice: { type: 'option', id: 'pon' } });
   });
 
+  it('U-34 答えた場面（迷い4。東をポン、聴牌になる）にタブが出る。答える前は出ない。タブの矢印は、場面の移動（← →）に渡さない', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い4）' }));
+    expect(await screen.findByRole('heading', { level: 1, name: '東2局1本場 8巡目' })).toBeInTheDocument();
+    // 答える前: タブも、待ちと打点も、DOM に無い（U-1）
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/待ちと打点|受け入れ・役|双碰|嵌張/);
+    await user.click(screen.getAllByRole('radio')[0] as HTMLElement);
+    await user.type(reasonBox(), '鳴いて進める');
+    await user.click(screen.getByRole('button', { name: '答え合わせ' }));
+    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['受け入れ・役', '待ちと打点']);
+    // 選ぶと、待ちと打点の表（ポンのあとに切る牌ごと）
+    const [first, second] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement];
+    first.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(second).toHaveAttribute('aria-selected', 'true');
+    expect(second).toHaveFocus();
+    expect(document.querySelectorAll('[data-ai="waits"]').length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelector('[data-ai="waits"] .wt-h')?.textContent).toMatch(/^ポン/);
+    // ← → は、前・次の自分の判断への移動にも割り当てられている。タブが受けたキーは、場面を動かさない
+    expect(screen.getByRole('heading', { level: 1, name: '東2局1本場 8巡目' })).toBeInTheDocument();
+    await user.keyboard('{Home}');
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { level: 1, name: '東2局1本場 8巡目' })).toBeInTheDocument();
+  });
+
   it('答えの下書き（選んだ牌・理由）は、場面を離れても残り、戻ると続きから。保存できていない間は、答えていないまま', async () => {
     const { user, study } = setup({ links: USER_LINKS });
     await loaded('5');
