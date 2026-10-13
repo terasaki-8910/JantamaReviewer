@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { OcrCache } from '../../src/api/types';
 import { REPORT_TEXTS, local } from '../fake-sessions';
+import { contrast, parseCssColor } from '../color-math';
 import { OCR_GEOMETRY, fx4Ocr, fx4Session } from '../import-fixtures';
 import {
   TINY_PNG,
@@ -250,6 +251,22 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
       await (await reveal(page, page.getByRole('button', { name: label, exact: true }))).click();
     }
     await page.locator('tr.hx-exp').first().waitFor();
+  },
+  // 向聴数の推移（U-36）: 印のある局（東2局1本場）を開き、折れ線の最後の点（聴牌になった打牌と鳴きの迷い）を矢印キーで選んで、吹き出しを出したところ
+  rowOpenTrackTip: async (page) => {
+    await (await reveal(page, page.getByRole('button', { name: '東2局1本場', exact: true }))).click();
+    const chart = page.getByRole('group', { name: '東2局1本場の向聴数の推移（矢印キーで点を選ぶ）' });
+    await chart.scrollIntoViewIfNeeded();
+    await chart.focus();
+    await page.keyboard.press('End');
+    await page.waitForFunction(() => document.querySelector('.wk-tip:not([hidden])') !== null);
+  },
+  // 「表で見る」を開いたところ（東3局1本場。最後の点が大きな不一致）
+  rowOpenTrackTable: async (page) => {
+    await (await reveal(page, page.getByRole('button', { name: '東3局1本場', exact: true }))).click();
+    const toggle = page.locator('.hx-trk').getByRole('button', { name: '表で見る' });
+    await (await reveal(page, toggle)).click();
+    await page.locator('.hx-trk').getByRole('table', { name: '東3局1本場の向聴数の推移（表）' }).waitFor();
   },
 };
 
@@ -557,6 +574,215 @@ describe('F10 局の評価の表の形（実ブラウザ）', () => {
       expect(await isFocused(menu.getByRole('menuitemradio', { name: 'E', exact: true }))).toBe(true);
     } finally {
       await context.close();
+    }
+  });
+});
+
+describe('U-36 向聴数の推移（実ブラウザ。局の評価の行を開いたとき）', () => {
+  const OPEN_ALL = ['東1局', '東2局', '東2局1本場', '東3局', '東3局1本場'];
+
+  it('390px: 全部の行を開いて「表で見る」も開いても、閉じた行の高さは変わらず、横スクロールが無い。折れ線・輪・菱形・三角は、図の中に収まる（最後の点の菱形も）', async () => {
+    const { context, page } = await open({ width: 390 });
+    try {
+      const heights = () => page.locator('.tbl tbody tr:not(.hx-exp)').evaluateAll((rows) => rows.map((row) => Math.round(row.getBoundingClientRect().height)));
+      const before = await heights();
+      expect(before).toHaveLength(5);
+      for (const label of OPEN_ALL) await page.getByRole('button', { name: label, exact: true }).click();
+      await page.locator('.hx-trk').nth(4).waitFor();
+      for (const toggle of await page.locator('.hx-trk').getByRole('button', { name: '表で見る' }).all()) await toggle.click();
+      expect(await heights()).toEqual(before);
+      const m = await overflow(page);
+      expect(m.scroll).toBeLessThanOrEqual(m.client);
+      expect(m.body).toBeLessThanOrEqual(m.client);
+      for (const extra of m.table) expect(extra).toBeLessThanOrEqual(0);
+      const fit = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('.hx-trk')].map((block) => {
+          const cell = block.closest('td') as HTMLElement;
+          const cellBox = cell.getBoundingClientRect();
+          const svg = (block.querySelector('.shchart-svg') as SVGSVGElement).getBoundingClientRect();
+          const marks = [...block.querySelectorAll('.shchart-svg .dbt, .shchart-svg .bgm, .shchart-svg .tpm, .shchart-svg .nd')].map((el) => el.getBoundingClientRect());
+          return {
+            svgInCell: svg.left >= cellBox.left - 0.5 && svg.right <= cellBox.right + 0.5,
+            marksInSvg: marks.every((box) => box.left >= svg.left - 2 && box.right <= svg.right + 2),
+            blockScroll: block.scrollWidth - block.clientWidth,
+            tableInCell: [...block.querySelectorAll<HTMLElement>('.hx-sptbl')].every((el) => el.getBoundingClientRect().right <= cellBox.right + 0.5 && el.scrollWidth <= el.clientWidth),
+            marks: marks.length,
+          };
+        }),
+      );
+      expect(fit).toHaveLength(5);
+      for (const [index, item] of fit.entries()) {
+        expect(item.svgInCell, `局 ${index}: 図が表の欄に収まる`).toBe(true);
+        expect(item.marksInSvg, `局 ${index}: 印が図に収まる`).toBe(true);
+        expect(item.blockScroll, `局 ${index}`).toBeLessThanOrEqual(0);
+        expect(item.tableInCell, `局 ${index}: 表が収まる`).toBe(true);
+        expect(item.marks).toBeGreaterThan(5);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('1280px: 折れ線は 440px 以内で、局の結果の手の下に出る（右に回り込まない）。表で見ると、折れ線の下に出て、表の欄をはみ出さない', async () => {
+    const { context, page } = await open({ width: 1280 });
+    try {
+      await page.getByRole('button', { name: '東3局', exact: true }).click();
+      await page.locator('.hx-trk').waitFor();
+      await page.locator('.hx-trk').getByRole('button', { name: '表で見る' }).click();
+      const m = await page.evaluate(() => {
+        const block = document.querySelector('.hx-trk') as HTMLElement;
+        const result = document.querySelector('[data-kyoku-result]') as HTMLElement;
+        const chart = block.querySelector('.shchart') as HTMLElement;
+        const grid = block.querySelector('.hx-sptbl') as HTMLElement;
+        const cell = block.closest('td') as HTMLElement;
+        return {
+          chartWidth: chart.getBoundingClientRect().width,
+          below: block.getBoundingClientRect().top >= result.getBoundingClientRect().bottom - 1,
+          sameLeft: Math.abs(block.getBoundingClientRect().left - result.getBoundingClientRect().left) <= 1,
+          gridBelowChart: grid.getBoundingClientRect().top >= chart.getBoundingClientRect().bottom,
+          gridRight: grid.getBoundingClientRect().right,
+          cellRight: cell.getBoundingClientRect().right,
+          rows: grid.querySelectorAll('[role="row"]').length,
+        };
+      });
+      expect(m.chartWidth).toBeLessThanOrEqual(441);
+      expect(m.below).toBe(true);
+      expect(m.sameLeft).toBe(true);
+      expect(m.gridBelowChart).toBe(true);
+      expect(m.gridRight).toBeLessThanOrEqual(m.cellRight + 0.5);
+      expect(m.rows).toBe(7);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('Tab の順: 折れ線は 1 つの止まり場所（点ごとの止まり場所は無い）。局の結果の手 → 説明のアイコン → 折れ線 → 「表で見る」 → 次の行', async () => {
+    const { context, page } = await open({ width: 1280 });
+    try {
+      await page.getByRole('button', { name: '東2局1本場', exact: true }).click();
+      await page.locator('.hx-trk').waitFor();
+      expect(await page.locator('.hx-trk [tabindex]').count()).toBe(1);
+      expect(await page.locator('.hx-trk svg [tabindex], .hx-trk svg a, .hx-trk svg button').count()).toBe(0);
+      await page.getByRole('button', { name: '東2局1本場', exact: true }).focus();
+      const names: string[] = [];
+      for (let i = 0; i < 30; i += 1) {
+        await page.keyboard.press('Tab');
+        const name = await page.evaluate(() => {
+          const el = document.activeElement as HTMLElement;
+          return (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 40);
+        });
+        names.push(name);
+        if (name === '表で見る') break;
+      }
+      const at = (name: string) => names.findIndex((entry) => entry.startsWith(name));
+      expect(at('向聴数の推移の説明')).toBeGreaterThan(-1);
+      expect(at('東2局1本場の向聴数の推移（矢印キーで点を選ぶ）')).toBe(at('向聴数の推移の説明') + 1);
+      expect(at('表で見る')).toBe(at('東2局1本場の向聴数の推移（矢印キーで点を選ぶ）') + 1);
+      // 局の結果の手の符の内訳（50符のようなボタン）は、折れ線より前
+      expect(names.findIndex((entry) => /符の内訳/.test(entry))).toBeLessThan(at('向聴数の推移の説明'));
+      // 表で見るを閉じたまま、次の行（東3局）の操作へ進む
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => (document.activeElement as HTMLElement).textContent ?? '')).toBe('東3局');
+    } finally {
+      await context.close();
+    }
+  });
+
+  for (const width of [390, 768, 1280] as const) {
+    it(`幅 ${width}px: 折れ線を矢印キーで選ぶと、吹き出しが窓の中に収まる。印のある点の吹き出しに、迷いと大きな不一致の文字が出る`, async () => {
+      const { context, page } = await open({ width });
+      try {
+        await page.getByRole('button', { name: '東2局', exact: true }).click();
+        const chart = page.getByRole('group', { name: '東2局の向聴数の推移（矢印キーで点を選ぶ）' });
+        await chart.scrollIntoViewIfNeeded();
+        await chart.focus();
+        const read = () =>
+          page.evaluate(() => {
+            const tip = document.querySelector<HTMLElement>('.wk-tip:not([hidden])');
+            if (tip === null) return null;
+            const rect = tip.getBoundingClientRect();
+            return {
+              value: tip.querySelector('.wk-tip-v')?.textContent ?? '',
+              label: tip.querySelector('.wk-tip-l')?.textContent ?? '',
+              inside: rect.left >= 0 && rect.top >= 0 && rect.right <= window.innerWidth && rect.bottom <= window.innerHeight,
+            };
+          });
+        await page.keyboard.press('Home');
+        expect(await read()).toMatchObject({ value: '2向聴', label: '配牌', inside: true });
+        for (let i = 0; i < 11; i += 1) await page.keyboard.press('ArrowRight');
+        expect(await read()).toMatchObject({ value: '1向聴・迷い2・大きな不一致', label: '11巡目 打8p', inside: true });
+        await page.keyboard.press('End');
+        expect(await read()).toMatchObject({ value: '1向聴', label: '13巡目 打8s', inside: true });
+        await page.keyboard.press('Escape');
+        expect(await read()).toBeNull();
+        // マウスを乗せても同じ（いちばん近い点）
+        const box = (await page.locator('.hx-trk .shchart-plot').boundingBox()) as { x: number; y: number; width: number; height: number };
+        await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2);
+        expect((await read())?.label).toMatch(/^(配牌|\d+巡目 打)/);
+        await page.mouse.move(2, 2);
+        expect(await read()).toBeNull();
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  for (const scheme of SCHEMES) {
+    it(`${scheme}: 印は色だけに頼らない（輪・菱形・三角は別の図形で、凡例と同じ形）。輪は accent、菱形は ink、三角は accent の色で、面の色との差が 3:1 以上`, async () => {
+      const { context, page } = await open({ scheme });
+      try {
+        await page.getByRole('button', { name: '東2局1本場', exact: true }).click();
+        await page.locator('.hx-trk').waitFor();
+        const m = await page.evaluate(() => {
+          const token = (name: string) => {
+            const el = document.createElement('i');
+            el.style.color = `var(${name})`;
+            document.body.appendChild(el);
+            const color = getComputedStyle(el).color;
+            el.remove();
+            return color;
+          };
+          const block = document.querySelector('.hx-trk') as HTMLElement;
+          const style = (selector: string, prop: 'stroke' | 'fill') => getComputedStyle(block.querySelector(selector) as Element)[prop];
+          return {
+            accent: token('--accent'),
+            ink: token('--ink'),
+            surface: token('--surface'),
+            ring: { chart: style('.shchart-svg .dbt', 'stroke'), legend: style('.hx-leg .dbt', 'stroke') },
+            diamond: { chart: style('.shchart-svg .bgm', 'fill'), legend: style('.hx-leg .bgm', 'fill') },
+            triangle: { chart: style('.shchart-svg .tpm', 'fill'), legend: style('.hx-leg .tpm', 'fill') },
+            tags: ['.shchart-svg .dbt', '.shchart-svg .bgm', '.shchart-svg .tpm'].map((selector) => (block.querySelector(selector) as Element).tagName.toLowerCase()),
+            diamondPath: (block.querySelector('.shchart-svg .bgm') as Element).getAttribute('d'),
+            trianglePath: (block.querySelector('.shchart-svg .tpm') as Element).getAttribute('d'),
+          };
+        });
+        expect(m.ring).toEqual({ chart: m.accent, legend: m.accent });
+        expect(m.diamond).toEqual({ chart: m.ink, legend: m.ink });
+        expect(m.triangle).toEqual({ chart: m.accent, legend: m.accent });
+        // 形が違う: 輪は circle、菱形と三角は path（4 点と 3 点）
+        expect(m.tags).toEqual(['circle', 'path', 'path']);
+        expect((m.diamondPath ?? '').match(/L/g)).toHaveLength(3);
+        expect((m.trianglePath ?? '').match(/L/g)).toHaveLength(2);
+        const surface = parseCssColor(m.surface);
+        for (const color of [m.accent, m.ink]) expect(contrast(parseCssColor(color), surface)).toBeGreaterThanOrEqual(3);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  it('開く前は、折れ線も凡例も表も DOM に無い。取り込む前の半荘には、開くボタンも折れ線も無い', async () => {
+    const { context, page } = await open();
+    try {
+      expect(await page.locator('.hx-trk, .shchart, .hx-leg, .hx-sptbl').count()).toBe(0);
+    } finally {
+      await context.close();
+    }
+    const older = await open({ session: 'older' });
+    try {
+      expect(await older.page.locator('.hx-trk, .shchart, .hx-open').count()).toBe(0);
+    } finally {
+      await older.context.close();
     }
   });
 });
