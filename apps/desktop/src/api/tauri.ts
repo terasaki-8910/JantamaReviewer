@@ -17,6 +17,7 @@ import type {
   OcrProgress,
   Orientation,
   PageKeyEvent,
+  PlatformInfo,
   Rating,
   RecordsExported,
   RecordsOverview,
@@ -45,6 +46,8 @@ export const EVENT_OCR_PROGRESS = 'ocr-progress';
 export const EVENT_MAIN_FOCUSED = 'main-window-focused';
 
 export const api = {
+  /** 動いている OS の名前と、使える機能（macOS の段階 2）。起動のとき 1 回だけ呼ぶ（`shared/platform.ts`）。 */
+  getPlatformInfo: () => invoke<PlatformInfo>('get_platform_info'),
   getState: () => invoke<AppState>('get_state'),
   /** ウィジェットの「迷い」ボタン。割り当てたボタンと同じ記録をつくる。 */
   addMark: () => invoke<AppState>('add_mark'),

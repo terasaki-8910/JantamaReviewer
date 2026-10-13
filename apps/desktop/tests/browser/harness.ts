@@ -183,6 +183,8 @@ export interface Scenario {
   settings: unknown;
   /** `get_input_status` が返す、ボタンの登録・テスト・補助プログラムの状態。無ければ null。 */
   inputStatus?: unknown;
+  /** `get_platform_info` が返す、OS の名前と使える機能。無ければ null（Windows として扱われる）。 */
+  platform?: unknown;
   /** 半荘の一覧。`delete_sessions`・`restore_sessions` で、消す・戻すと、`list_sessions` の答えが変わる（Rust 側と同じ決まり）。 */
   sessions: unknown[];
   /** 取り込んだ結果（半荘の名前 → 結果の JSON の文字）。`read_report` が返す。無い半荘は null。 */
@@ -388,6 +390,7 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'set_settings': return args.settings;
       case 'set_orientation': return Object.assign({}, scenario.settings, { orientation: args.orientation });
       case 'get_input_status': return scenario.inputStatus === undefined ? null : scenario.inputStatus;
+      case 'get_platform_info': return scenario.platform === undefined ? null : scenario.platform;
       case 'list_sessions': return sortedSessions();
       case 'get_startup_note': return null;
       default: return null;

@@ -330,9 +330,17 @@ mod tests {
     fn w9_the_task_runs_the_installed_copy_with_the_highest_run_level_and_no_trigger() {
         let exe = installed_exe(Path::new("C:\\Program Files"));
         let exe = exe.to_string_lossy();
+        // 区切りの `\` は Windows のパスの決まり。補助プログラムは Windows だけなので、ほかの OS では、区切り以外の部分だけを確かめる。
+        #[cfg(windows)]
         assert_eq!(
             exe,
             "C:\\Program Files\\JantamaReviewer\\jantama-helper.exe"
+        );
+        #[cfg(not(windows))]
+        assert!(
+            exe.starts_with("C:\\Program Files")
+                && exe.ends_with("JantamaReviewer/jantama-helper.exe"),
+            "{exe}"
         );
         let xml = task_xml(SID, &exe);
         assert!(xml.contains("<RunLevel>HighestAvailable</RunLevel>"));

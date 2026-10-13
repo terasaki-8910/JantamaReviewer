@@ -29,6 +29,12 @@ import {
 const SCHEMES = ['light', 'dark'] as const;
 type Scheme = (typeof SCHEMES)[number];
 
+/** `get_platform_info` の答え（macOS の段階 2: 検討画面だけ。Rust の `platform/mac/mod.rs` と同じ）。 */
+const MAC_STAGE_2_PLATFORM = {
+  os: 'macos',
+  features: { widget: false, button_hook: false, capture: false, ocr: false, helper: false },
+};
+
 const baseState = {
   status: 'recording',
   session_id: '20261009-161200',
@@ -298,6 +304,13 @@ describe('検討画面（メインの窓）', () => {
       },
       ready: '設定しています',
     },
+    {
+      // macOS の段階 2: ウィジェット・迷いマークのボタン・撮影・補助プログラムの行は出さず、「まだ使えません」と書く。
+      name: 'macOS（段階 2。ボタンの行は「まだ使えません」）',
+      input: inputStatus,
+      platform: MAC_STAGE_2_PLATFORM,
+      ready: 'Mac ではまだ使えません',
+    },
   ] as const;
 
   for (const scheme of SCHEMES) {
@@ -311,6 +324,7 @@ describe('検討画面（メインの窓）', () => {
             scenario('main', {
               inputStatus: variant.input,
               settings: 'settings' in variant ? variant.settings : settings,
+              ...('platform' in variant ? { platform: variant.platform } : {}),
             }),
           );
           try {
