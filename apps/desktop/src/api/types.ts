@@ -426,6 +426,33 @@ export interface RecordsPreview {
   held: number;
 }
 
+/** 同期の状態（Rust の `SyncState`）。 */
+export type SyncState = 'off' | 'idle' | 'syncing' | 'offline' | 'attention' | 'error';
+
+/**
+ * 設定の「同期」の欄に出す、同期の状態（Rust の `SyncStatus`。F15）。
+ * トークンは含まない（OS の資格情報の保管庫にだけある。ここには、入っているかどうかだけ）。
+ */
+export interface SyncStatus {
+  /** この端末で、同期を使っているか。 */
+  enabled: boolean;
+  /** 同期先のホスト名（未設定なら空）。 */
+  url_host: string;
+  /** トークンが、この PC の資格情報の保管庫に入っているか。 */
+  has_token: boolean;
+  state: SyncState;
+  /** 最後に同期が成功した時刻（ミリ秒）。 */
+  last_ok_ms: number | null;
+  /** 状態の説明（失敗・つながらない・要確認のとき）。 */
+  message: string | null;
+  /** 注意（入れられなかった記録など）。 */
+  warnings: string[];
+  /** 大量の消去を止めているとき true（「削除をそのまま同期する」を出す）。 */
+  can_allow_mass_delete: boolean;
+  /** この端末の名前（読み物）。 */
+  device_id: string;
+}
+
 // ---- OS ごとの違い（macOS 対応の段階 2。Rust の `platform::PlatformInfo`） ----
 
 /** 動いている OS の名前。 */

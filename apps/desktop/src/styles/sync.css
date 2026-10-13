@@ -1,0 +1,45 @@
+/*
+  sync.css: 設定の「同期」の欄（F15、D-4）。設定のページ（app.css の .settings・.setting）と、「記録の書き出し」の欄
+  （export.css の .ex-*）に足す。色は、すべて tokens.css のトークンから。
+*/
+.sync-fields {
+  display: grid;
+  gap: var(--s3);
+}
+
+.sync-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sync-field > label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 貼る欄は、細い窓では幅いっぱい、広い窓では読みやすい長さで止める */
+.sync-field .input {
+  max-width: 40rem;
+}
+
+.sync-enable {
+  display: grid;
+  gap: 2px;
+}
+
+.sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+}
+
+.sync-warn {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 1.2em;
+  list-style: disc;
+  word-break: auto-phrase;
+  text-wrap: pretty;
+}
