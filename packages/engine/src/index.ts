@@ -25,6 +25,9 @@
  * - クリップボードの牌譜リンク（E-15）: `detectPaipuLink(text)` は `PaipuLink | null`。同じ牌譜 ID を一度だけ知らせるのは
  *   `detectNewPaipuLink(text, announced)`（純粋な関数）か `new PaipuLinkAnnouncer(ids).announce(text)`
  *
+ * - 待ちと打点・待ちの形・符の内訳（F14、E-36〜E-38。答え合わせのタブ「待ちと打点」）: `waitBoxOf`（聴牌になる行動ごとに、待ち牌ごとの役・飜・符・点数を
+ *   ダマ・リーチ × ロン・ツモで。待ちの形は両面・嵌張・辺張・双碰・単騎、3 種類以上は多面張）。点数の計算は majiang-core（受け口は majiang-adapter.ts。
+ *   エンジンで majiang-core を読み込むのはそのファイルだけ）、符の内訳 `fuBreakdownOf` は Python の mahjong の `fu_details` の数え方（fu-detail.ts）
  * - 役の調査（R10-6・R12-14。画面には使わない試作）: `evaluateWin`（和了形の役・符。HandCalculator と同じ選び方）、`settledYaku`（聴牌の手の「確定している役」）、
  *   `nearYaku`（役ごとに、あと何枚引けばその役の付く和了形になるか）。analysis/yaku/README.md
  *
@@ -80,6 +83,7 @@ export * from './decision-ref';
 export * from './default-grade-model';
 export * from './disagreement';
 export * from './discard-compare';
+export * from './fu-detail';
 export * from './grade';
 export * from './hanchan-summary';
 export * from './hand-rating';
@@ -113,6 +117,7 @@ export * from './timeline-link';
 export * from './tiles';
 export * from './two-shanten-follow';
 export * from './ukeire-remaining';
+export * from './wait-value';
 export * from './yaku';
 export * from './yaku-near';
 export * from './yaku-view';
