@@ -40,23 +40,23 @@ node -v && pnpm -v           # pnpm は 11.9.0
 
 いちばん簡単なのは `git bundle`（履歴ごと 1 つのファイルにする。GitHub に上げない）。
 
-Windows 側（PowerShell。どの worktree でもよい。ブランチ名は、いま確認したいもの。`feature/mac2` が `main` に入ったあとは `main`）:
+Windows 側（PowerShell。リポジトリの本体のフォルダで。段階 2 は `main` に入っている）:
 
 ```
-cd C:\Users\e8910\Documents\project\JantamaReviewer.worktrees\mac2
-git bundle create "$env:USERPROFILE\Desktop\jantama.bundle" feature/mac2
+cd "$env:USERPROFILE\Documents\project\JantamaReviewer"
+git bundle create "$env:USERPROFILE\Desktop\jantama.bundle" main
 ```
 
 `jantama.bundle` を Mac に写す（AirDrop・iCloud Drive・USB・`scp` のどれでも）。Mac 側:
 
 ```
 mkdir -p ~/dev && cd ~/dev
-git clone -b feature/mac2 ~/Downloads/jantama.bundle JantamaReviewer     # bundle を置いた場所に合わせる
+git clone -b main ~/Downloads/jantama.bundle JantamaReviewer             # bundle を置いた場所に合わせる
 cd JantamaReviewer
 git log --oneline | head -3                                             # 先頭の 3 つが、Windows の側と同じ
 ```
 
-直したあとの更新は、新しい bundle を作って写し、`git pull ~/Downloads/jantama.bundle feature/mac2`。
+直したあとの更新は、新しい bundle を作って写し、`git pull ~/Downloads/jantama.bundle main`。
 フォルダごとの複写（`node_modules`・`target` を除く）でも動くが、版の食い違いが起きやすいので、bundle を勧める。
 
 ### A-3. 自分用の署名の証明書を作る（1 回だけ。5 分）
@@ -121,7 +121,7 @@ JANTAMA_CONFIG_DIR="$HOME/jantama-trial" "$APP/Contents/MacOS/jantama-reviewer"
 起動の直後に出る「ボタンのフックを起こせませんでした: macOS のボタンのフックは、まだ対応していません」は、段階 2 では正常（ボタンを拾う部分が、まだ無い）。
 `/var/folders/...`（`mktemp -d`）より、上のようにホームの下のフォルダが安全（`/var` は `/private/var` への別名で、画像の許可の判定が紛らわしくなる）。
 
-試しの保存先に Windows のデータの写しを置くと、項目 14 を見られる: Windows の `C:\Users\e8910\JantamaReviewerData` を、zip にして
+試しの保存先に Windows のデータの写しを置くと、項目 14 を見られる: Windows の `%USERPROFILE%\JantamaReviewerData` を、zip にして
 コピーし（元は動かさない）、Mac で `~/jantama-trial/data` に展開する。中に `games/`・`study.sqlite` が並ぶ形にする。
 
 ### A-6. 確かめる 14 項目と、知らせてほしいこと
