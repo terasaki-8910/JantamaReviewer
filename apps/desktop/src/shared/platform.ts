@@ -82,13 +82,11 @@ export function ariaModShortcut(key: string): string {
   return `${isMac() ? 'Meta' : 'Control'}+${key}`;
 }
 
-/** 画面の戻る・進むのショートカット（表示と読み上げ）。Windows は Alt+← →、macOS は Cmd+[ ]（Alt+← → も使える）。 */
+/** 画面の戻る・進むのショートカット（表示と読み上げ）。Windows は Alt+← →、macOS は Cmd+[ ]。 */
 export function historyShortcut(direction: 'back' | 'forward'): { label: string; aria: string } {
   const back = direction === 'back';
   if (isMac()) {
-    return back
-      ? { label: 'Cmd+[', aria: 'Meta+[ Alt+ArrowLeft' }
-      : { label: 'Cmd+]', aria: 'Meta+] Alt+ArrowRight' };
+    return back ? { label: 'Cmd+[', aria: 'Meta+[' } : { label: 'Cmd+]', aria: 'Meta+]' };
   }
   return back
     ? { label: 'Alt+←', aria: 'Alt+ArrowLeft' }
@@ -97,19 +95,23 @@ export function historyShortcut(direction: 'back' | 'forward'): { label: string;
 
 /**
  * 画面の戻る・進むのキーか（押したキーの向きを返す。違えば null）。Windows は Alt+← →（これまでどおり）。
- * macOS は、それに加えて Cmd+[ と Cmd+]（macOS の「戻る」「進む」の習慣）。Shift・Ctrl・Option が付いたものは別の操作。
+ * macOS は Cmd+[ と Cmd+]（macOS の「戻る」「進む」の習慣）。Alt+← → は使わない: macOS では Option+← → が、
+ * 入力欄の中の「単語ごとの移動」なので、奪うと、メモを書いている最中に画面が戻ってしまう。
+ * Shift・Ctrl・Option が付いたものは別の操作。
  */
 export function historyKeyDirection(
   event: Pick<KeyboardEvent, 'key' | 'altKey' | 'ctrlKey' | 'metaKey' | 'shiftKey'>,
 ): 'back' | 'forward' | null {
+  if (isMac()) {
+    if (event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey) {
+      if (event.key === '[') return 'back';
+      if (event.key === ']') return 'forward';
+    }
+    return null;
+  }
   if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
     if (event.key === 'ArrowLeft') return 'back';
     if (event.key === 'ArrowRight') return 'forward';
-    return null;
-  }
-  if (isMac() && event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey) {
-    if (event.key === '[') return 'back';
-    if (event.key === ']') return 'forward';
   }
   return null;
 }

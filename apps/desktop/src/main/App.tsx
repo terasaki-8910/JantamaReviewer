@@ -248,7 +248,7 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
   );
 
   const onHistoryKey = useEffectEvent((event: KeyboardEvent) => {
-    // Alt+← → （macOS は、それに加えて Cmd+[ ]）。
+    // Windows は Alt+← →、macOS は Cmd+[ ]（Option+← → は、入力欄の単語の移動なので使わない）。
     const direction = historyKeyDirection(event);
     if (direction === null) return;
     // メニューやダイアログが開いている間は、そこに任せる。マウスの戻る・進むのボタンには、何も割り当てない（SPEC 3a）。

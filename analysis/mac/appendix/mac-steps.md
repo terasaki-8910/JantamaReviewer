@@ -136,7 +136,7 @@ JANTAMA_CONFIG_DIR="$HOME/jantama-trial" "$APP/Contents/MacOS/jantama-reviewer"
 | 3 | 起動すると、検討画面が開く。ウィジェットとメニューバーのアイコンは出ない。Dock にアイコンが出る。日本語の文字が読みやすい（字体） |
 | 4 | 検討画面を閉じる（左上の赤いボタン、または Cmd+W）と、窓が隠れて、アプリは Dock に残る。Dock のアイコンを押すと、また開く |
 | 5 | Cmd+Q で終わる。メニューバーに「編集」「ウインドウ」があり、日本語で出ている |
-| 6 | 入力欄（検索・メモ・設定の数の欄）で Cmd+C・V・X・A・Z が効く。入力欄の外で、半荘を消したあとの Cmd+Z が「元に戻す」になる。Cmd+K で検索が開閉する。Cmd+[ と Cmd+] で、画面の戻る・進む |
+| 6 | 入力欄（検索・メモ・設定の数の欄）で Cmd+C・V・X・A・Z が効く。入力欄の外で、半荘を消したあとの Cmd+Z が「元に戻す」になる。Cmd+K で検索が開閉する。Cmd+[ と Cmd+] で、画面の戻る・進む。メモ欄で Option+← → が単語の移動になり、画面は戻らない |
 | 7 | 入力欄以外で、右クリックのメニューが出ない（N-3）。トラックパッドのピンチで拡大しない・2 本指のスワイプで戻らない（N-2）。Cmd+R・Cmd+P・Cmd+F など、ブラウザの機能が働かない（N-1） |
 | 8 | 外部へのリンク（天鳳牌理など）を押すと、いつものブラウザで開き、アプリの窓は動かない（N-5） |
 | 9 | 起動のとき、白いちらつきが出ない（N-7）。ライト・ダークの切り替えが効く |
@@ -175,7 +175,7 @@ Rust だけ・画面だけで動かすときは `pnpm test:rust`・`pnpm test:ts
 - ウィジェットの窓・右クリックのメニュー・タスクトレイは作らない。起動と同時に検討画面を開く。
 - 保存先の既定は `~/JantamaReviewerData`（Windows の `%USERPROFILE%\JantamaReviewerData` と同じ名前・同じ置き方。Finder で見え、Windows から写す・書き出す・同期するのが楽）。設定ファイルだけが `~/Library/Application Support/`。
 - キーの読み替え（Windows は変えない）: 取り消し・やり直し Cmd+Z・Cmd+Shift+Z（Ctrl+Z・Ctrl+Y も使える）、検索 Cmd+K（Ctrl+K も）、一覧のすべて選択 Cmd+A、
-  画面の戻る・進む Cmd+[ と Cmd+]（Alt+← → も使える）、検索の先頭・末尾の行 Cmd+↑・Cmd+↓、開発者ツール（`pnpm dev` のときだけ）Cmd+Option+I。
+  画面の戻る・進む Cmd+[ と Cmd+]（Windows の Alt+← → は、Mac では使わない: Option+← → は入力欄の単語の移動なので）、検索の先頭・末尾の行 Cmd+↑・Cmd+↓、開発者ツール（`pnpm dev` のときだけ）Cmd+Option+I。
   メニューバー: アプリ名のメニュー（Cmd+Q で終了・Cmd+H で隠す）・編集（取り消す・やり直す・カット・コピー・ペースト・すべてを選択）・ウインドウ（しまう・拡大/縮小・閉じる）。
 - ごみ箱・クリップボードの文字は、macOS の標準の API（`NSFileManager.trashItemAtURL`・`NSPasteboard` の文字）。
 - 画面を配るオリジンは `tauri://localhost`（Windows は `http://tauri.localhost`）。mjai の窓と試しの起動の保存領域は、WKWebView の識別子で分ける（macOS 14 以降）。

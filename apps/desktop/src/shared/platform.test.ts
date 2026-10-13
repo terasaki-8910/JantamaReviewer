@@ -91,14 +91,14 @@ describe('ショートカットの表示', () => {
     expect(historyShortcut('forward')).toEqual({ label: 'Alt+→', aria: 'Alt+ArrowRight' });
   });
 
-  it('macOS: Cmd・Meta・Cmd+[ ]（Alt+← → も使える）', () => {
+  it('macOS: Cmd・Meta・Cmd+[ ]', () => {
     setPlatform(MAC_STAGE_2_PLATFORM);
     expect(modKeyName()).toBe('Cmd');
     expect(modShortcut('K')).toBe('Cmd+K');
     expect(ariaModShortcut('Z')).toBe('Meta+Z');
     expect(historyShortcut('back').label).toBe('Cmd+[');
     expect(historyShortcut('forward').label).toBe('Cmd+]');
-    expect(historyShortcut('back').aria).toContain('Alt+ArrowLeft');
+    expect(historyShortcut('back').aria).toBe('Meta+[');
   });
 });
 
@@ -115,9 +115,10 @@ describe('画面の戻る・進むのキー', () => {
     expect(historyKeyDirection(key('ArrowUp', { altKey: true }))).toBeNull();
   });
 
-  it('macOS: Alt+← → に加えて Cmd+[ ]。Shift・Ctrl・Option が付いたものは別の操作', () => {
+  it('macOS: Cmd+[ ] だけ。Option+← → は、入力欄の単語の移動なので奪わない。Shift・Ctrl・Option が付いたものは別の操作', () => {
     setPlatform(MAC_STAGE_2_PLATFORM);
-    expect(historyKeyDirection(key('ArrowLeft', { altKey: true }))).toBe('back');
+    expect(historyKeyDirection(key('ArrowLeft', { altKey: true }))).toBeNull();
+    expect(historyKeyDirection(key('ArrowRight', { altKey: true }))).toBeNull();
     expect(historyKeyDirection(key('[', { metaKey: true }))).toBe('back');
     expect(historyKeyDirection(key(']', { metaKey: true }))).toBe('forward');
     expect(historyKeyDirection(key('[', { metaKey: true, shiftKey: true }))).toBeNull();
