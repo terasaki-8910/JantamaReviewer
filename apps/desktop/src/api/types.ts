@@ -36,6 +36,11 @@ export interface Settings {
   orientation: Orientation;
   widget_position: WidgetPosition | null;
   sound: boolean;
+  /**
+   * 迷いだけを記録する（既定は入。F0、W-15）。入のとき、ウィジェットは形（`orientation`）によらず 48px 角の「迷い」ボタン 1 つになり、
+   * 〇△✕（局の自己評価）と終局直後メモの画面の部品を出さない。記録は消さず、切れば元どおり出る。
+   */
+  doubt_only: boolean;
   capture_keywords: string[];
   data_dir: string;
   /** 1 日に出す問題の数（今日の出題。1〜50。既定 5）。 */

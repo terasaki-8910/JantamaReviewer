@@ -1,5 +1,8 @@
+import { useId } from 'react';
+
 import type { AppState, Orientation, Rating, Status } from '../api/types';
 import { RATING_GLYPH, RatingShape } from '../shared/RatingShape';
+import { useDoubtPress } from './useDoubtPress';
 
 const RATINGS: readonly Rating[] = ['good', 'fair', 'bad'];
 
@@ -11,6 +14,8 @@ const STATUS_LABEL: Record<Status, string> = {
 
 export interface WidgetProps {
   orientation: Orientation;
+  /** 迷いだけを記録する（設定）。入なら、形によらず 48px 角の「迷い」ボタン 1 つ（F0、W-15）。 */
+  doubtOnly: boolean;
   state: AppState;
   /** 押した直後の光り（キーは `doubt`・`rate-good` など）。 */
   flashing: Readonly<Record<string, boolean>>;
@@ -19,6 +24,8 @@ export interface WidgetProps {
   onRate: (rating: Rating) => void;
   onMark: () => void;
   onUndo: () => void;
+  /** 迷いだけのボタンを、押したまま動かした（窓を動かし始める）。 */
+  onDrag: () => void;
 }
 
 function classNames(...names: Array<string | false | undefined>): string {
@@ -28,16 +35,30 @@ function classNames(...names: Array<string | false | undefined>): string {
 /**
  * ウィジェット（表示だけ）。承認済みのサンプルの縦長・横長をそのまま再現する。
  * 見た目の優先順は 評価 > 迷い > 取り消し。ボタンはすべて 40px 以上。
+ * 迷いだけを記録する設定が入のときは、形によらず、窓いっぱいの「迷い」ボタン 1 つ（`DoubtOnlyWidget`）。
  */
 export function Widget({
   orientation,
+  doubtOnly,
   state,
   flashing,
   announcement,
   onRate,
   onMark,
   onUndo,
+  onDrag,
 }: WidgetProps) {
+  if (doubtOnly) {
+    return (
+      <DoubtOnlyWidget
+        state={state}
+        flashing={flashing}
+        announcement={announcement}
+        onMark={onMark}
+        onDrag={onDrag}
+      />
+    );
+  }
   const vertical = orientation === 'vertical';
   const blocked = state.status === 'error';
 
@@ -111,6 +132,59 @@ export function Widget({
         {doubtButton}
         {undoButton}
       </section>
+      <div className="sr-only" aria-live="polite">
+        {announcement}
+      </div>
+    </>
+  );
+}
+
+interface DoubtOnlyWidgetProps {
+  state: AppState;
+  flashing: Readonly<Record<string, boolean>>;
+  announcement: string;
+  onMark: () => void;
+  onDrag: () => void;
+}
+
+/** 状態の読み上げの文（点の意味。エラーのときは、理由も）。 */
+function statusText(state: AppState): string {
+  return state.error === null ? STATUS_LABEL[state.status] : `${STATUS_LABEL[state.status]}：${state.error}`;
+}
+
+/**
+ * 迷いだけのウィジェット（F0、W-15）。48px 角の窓いっぱいの「迷い」ボタン 1 つ。
+ * 中は「迷い」の文字と、この半荘の迷いの数。記録中かどうかは、右上の小さな点（記録中は塗り、待機中は中抜き、エラーは濃い色）。
+ * 〇△✕・「次：N局目」・取り消しのボタンは出さない（取り消しは、右クリックのメニューにある）。
+ * 押して動かさずに離すと記録し、押したまま動かすと窓を動かす（`useDoubtPress`）。
+ */
+function DoubtOnlyWidget({ state, flashing, announcement, onMark, onDrag }: DoubtOnlyWidgetProps) {
+  const statusId = useId();
+  const blocked = state.status === 'error';
+  const press = useDoubtPress({ onPress: onMark, onDrag, disabled: blocked });
+  return (
+    <>
+      <section className="widget sq" aria-label="記録ウィジェット" data-tauri-drag-region="deep">
+        <button
+          type="button"
+          className={classNames('w-btn', 'doubt', 'sq-btn', flashing.doubt && 'flash')}
+          aria-label={`迷い ${state.mark_count}（押すと印を追加）`}
+          aria-describedby={statusId}
+          disabled={blocked}
+          {...press}
+        >
+          <span className="lbl">迷い</span>
+          <span className="num">{state.mark_count}</span>
+          <span
+            className={classNames('dot', state.status !== 'recording' && state.status)}
+            aria-hidden="true"
+            title={statusText(state)}
+          />
+        </button>
+      </section>
+      <p className="sr-only" id={statusId}>
+        {statusText(state)}
+      </p>
       <div className="sr-only" aria-live="polite">
         {announcement}
       </div>
