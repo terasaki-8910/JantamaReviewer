@@ -2,13 +2,16 @@
  * 半荘をたどっているとき（場面にいないとき）の右の欄: 「いまの一手」と、「この半荘の場面」の一覧（F12）。
  * 場面を押すと、その場面へ飛ぶ。場面に着くまで、AI の答えは出さない（一覧にも、確率・順位は出さない。U-1）。
  * 局の終わりでは、「この局が終わりました」と、結果（和了・放銃・流局）と点の増減を出す。
+ * 答える場面ではない自分の判断の手番は、AI の評価をいつも出す: 打牌以外の判断は、ここに一覧（打牌の判断は、手牌の上の棒。U-43）。
  */
 import type { ReplayScene, ReplayTimeline, TimelineStep } from '@jantama/engine';
 import type { ReactNode } from 'react';
 
 import { Icon } from '../Icon';
 import { InfoTip } from '../InfoTip';
+import { Evaluation } from '../study/Evaluation';
 import { KIND_NAME } from '../study/labels';
+import type { Bar } from '../study/reveal';
 import { deltaItems, resultText, sceneSubText, sceneTags, stepText, turnLabel } from './replayModel';
 
 interface NowPanelProps {
@@ -19,9 +22,15 @@ interface NowPanelProps {
   go: (g: number) => void;
   /** 右の欄の上に出す欄（他家の手牌を開いているとき。R16-7）。 */
   above?: ReactNode;
+  /**
+   * 自分の判断の手番（答える場面ではない）の、AI の評価の一覧。打牌以外の判断（鳴き・リーチ・和了・カン）だけ。
+   * 打牌の判断は、手牌の上の棒で出すので、ここには出さない（U-43）。無ければ null。
+   */
+  evaluation?: readonly Bar[] | null;
+  dora?: ReadonlySet<number> | null;
 }
 
-export function NowPanel({ timeline, step, scenes, answered, go, above }: NowPanelProps) {
+export function NowPanel({ timeline, step, scenes, answered, go, above, evaluation = null, dora = null }: NowPanelProps) {
   const kyoku = timeline.kyokus[step.kyokuPosition];
   const me = timeline.playerId;
   const end = step.kind === 'end' && kyoku !== undefined ? kyoku.end : null;
@@ -51,6 +60,7 @@ export function NowPanel({ timeline, step, scenes, answered, go, above }: NowPan
           </div>
         )}
       </div>
+      {evaluation !== null && evaluation.length > 0 && <Evaluation bars={evaluation} discard={false} dora={dora} />}
       <div className="scenes-h">
         <div className="sec-head">
           <h2 className="sec-title">この半荘の場面</h2>

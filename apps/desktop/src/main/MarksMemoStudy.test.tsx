@@ -14,6 +14,7 @@ import { FakeStudyStore, answerRow } from '../../tests/fake-study';
 import { fx4Ocr, fx4Session } from '../../tests/import-fixtures';
 import { renderQuiz } from '../../tests/study-harness';
 import { installTauriMock } from '../../tests/tauri-mock';
+import { revealed } from '../../tests/reveal';
 import type { Links, Memos, SessionRecord } from '../api/types';
 import { App } from './App';
 
@@ -56,7 +57,7 @@ async function answer(user: ReturnType<typeof renderQuiz>['user']) {
   await user.click(drawn());
   await user.type(screen.getByLabelText('理由（1行）'), '受け入れを広く');
   await user.click(submit());
-  await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+  await revealed();
 }
 
 describe('U-28 答え合わせのあとの「終局直後のメモ」（出題）', () => {
@@ -72,13 +73,13 @@ describe('U-28 答え合わせのあとの「終局直後のメモ」（出題�
     expect(document.querySelector('[data-memo]')).toBeNull();
   });
 
-  it('答え合わせのあと、自分の答えの下・AI の評価の上に出る。「候補」と「理由」の文だけで、書き換える欄は無い', async () => {
+  it('答え合わせのあと、自分の答えの下・受け入れ枚数の上に出る。「候補」と「理由」の文だけで、書き換える欄は無い', async () => {
     const { user } = renderQuiz({ session: quizSession(MEMO) });
     await user.click(drawn());
     await user.type(screen.getByLabelText('理由（1行）'), '受け入れを広く');
     expect(memoBlock()).toBeNull();
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const block = memoBlock() as HTMLElement;
     expect(block).not.toBeNull();
     expect(within(block).getByRole('heading', { level: 2, name: '終局直後のメモ' })).toBeInTheDocument();
@@ -86,11 +87,12 @@ describe('U-28 答え合わせのあとの「終局直後のメモ」（出題�
     expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['南・6m', '東を残して形を整えたい']);
     expect(block.querySelector('input, textarea, button')).toBeNull();
     expect(block.hasAttribute('data-ai')).toBe(false);
-    // 順番: 自分の答え → 終局直後のメモ → AI の評価
+    // 順番: 自分の答え → 終局直後のメモ → 受け入れ枚数（打牌の判断の AI の評価は、手牌の上の棒。右の欄に一覧は無い）
     const mine = screen.getByRole('heading', { level: 2, name: '自分の答え' });
-    const ai = screen.getByRole('heading', { name: 'AIの評価（Mortal）' });
+    const next = screen.getByRole('heading', { name: '受け入れ枚数' });
     expect(mine.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(block.compareDocumentPosition(ai) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(block.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'AIの評価（Mortal）' })).toBeNull();
   });
 
   it('その問題に結びつく迷いのメモだけを出す。ほかの迷いのメモ・結びついていない迷いのメモは出ない', async () => {
@@ -303,7 +305,7 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     expect(within(card).getByLabelText('理由（1行）')).toHaveValue('速さ');
   });
 
-  it('答えると、メモは書き換えられなくなり、自分の答えの下に読むだけで出る。AI の評価は、そのあとに出る', async () => {
+  it('答えると、メモは書き換えられなくなり、自分の答えの下に読むだけで出る。受け入れ枚数は、そのあとに出る（AI の評価は、手牌の上の棒）', async () => {
     const { user } = replaySetup({ marks: { '3': { candidates: '南・6m', reason: '東を残したい' } }, extras: [] });
     await loaded();
     await openScene(user, 3);
@@ -311,7 +313,7 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(screen.getByLabelText('理由（1行）'), '形を崩さないほうを残す');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     // 書く欄は消え、読むだけの欄に替わる
     expect(memoEditor()).toBeNull();
     expect(screen.queryByLabelText('候補')).toBeNull();
@@ -319,9 +321,9 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['南・6m', '東を残したい']);
     expect(block.querySelector('input, textarea')).toBeNull();
     const mine = screen.getByRole('heading', { level: 2, name: '自分の答え' });
-    const ai = screen.getByRole('heading', { name: 'AIの評価（Mortal）' });
+    const next = screen.getByRole('heading', { name: '受け入れ枚数' });
     expect(mine.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(block.compareDocumentPosition(ai) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(block.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('答える直前に書いたメモも、答えたあとに出る（欄の外へ出る前に答え合わせを押しても、落とさない）', async () => {
@@ -333,7 +335,7 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(screen.getByLabelText('理由（1行）'), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     await waitFor(() => expect(sessions.session(FX4_ID).memos.marks['3']).toEqual({ candidates: '打3m', reason: '' }));
     await waitFor(() => {
       const block = document.querySelector('[data-memo="shown"]') as HTMLElement | null;
@@ -348,7 +350,7 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(screen.getByLabelText('理由（1行）'), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(document.querySelector('[data-memo]')).toBeNull();
   });
 
@@ -363,7 +365,7 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(screen.getByLabelText('理由（1行）'), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const block = document.querySelector('[data-memo="shown"]') as HTMLElement;
     expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['位置から', '速さ']);
   });
@@ -391,7 +393,7 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(screen.getByLabelText('理由（1行）'), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const block = document.querySelector('[data-memo="shown"]') as HTMLElement;
     expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['位置から', '速さ']);
     expect(document.body.textContent).not.toContain('2つある');

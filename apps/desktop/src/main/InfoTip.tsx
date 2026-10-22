@@ -24,6 +24,8 @@ interface InfoTipProps {
   children: ReactNode;
   /** 説明の文の id。ほかの物の aria-describedby から指すとき。無ければ、自動。 */
   id?: string;
+  /** 重なりに足す class（中身が文でなく、並べた部品のとき。例: 盤面の見方）。 */
+  popClassName?: string;
 }
 
 /**
@@ -65,9 +67,16 @@ function focusVisible(element: HTMLElement): boolean {
   }
 }
 
-export function InfoTip({ label, children, id }: InfoTipProps) {
+export function InfoTip({ label, children, id, popClassName }: InfoTipProps) {
   return (
-    <Tip id={id} wrapperClassName="infotip" triggerClassName="infotip-btn" triggerLabel={label} triggerContent={<Icon name="info" />}>
+    <Tip
+      id={id}
+      wrapperClassName="infotip"
+      triggerClassName="infotip-btn"
+      triggerLabel={label}
+      triggerContent={<Icon name="info" />}
+      popClassName={popClassName}
+    >
       {children}
     </Tip>
   );

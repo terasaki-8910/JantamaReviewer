@@ -23,6 +23,7 @@ import { FakeSessionStore, local, seedSession } from '../../../tests/fake-sessio
 import { FakeStudyStore, gameOf } from '../../../tests/fake-study';
 import { fx4Ocr, fx4Session } from '../../../tests/import-fixtures';
 import { baseSettings, installTauriMock } from '../../../tests/tauri-mock';
+import { revealed } from '../../../tests/reveal';
 import type { Links, Settings } from '../../api/types';
 import { App } from '../App';
 import { doraKinds } from '../study/dora';
@@ -1038,7 +1039,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.type(reasonBox(), '形を崩さないほうを残す');
     expect(submit()).toBeEnabled();
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(answeringState()).toBe('revealed');
     expect(study.rows).toHaveLength(1);
     expect(study.rows[0]).toMatchObject({
@@ -1050,7 +1051,11 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
       due_date: '2026-10-10',
     });
     expect(study.rows[0]?.shown_at).toBeGreaterThan(0);
-    expect(document.querySelectorAll('[data-ai="candidate"]').length).toBeGreaterThanOrEqual(3);
+    // AI の評価: 打牌の判断は、手牌の上の棒（右の欄に一覧は出さない。U-43）
+    expect(document.querySelectorAll('.hand [data-ai="bar"]').length).toBeGreaterThanOrEqual(13);
+    expect(document.querySelectorAll('.ai-bar .ai-num').length).toBeGreaterThanOrEqual(3);
+    expect(document.querySelector('[data-ai="eval"]')).toBeNull();
+    expect(document.querySelectorAll('[data-ai="candidate"]')).toHaveLength(0);
     expect(document.querySelectorAll('.uk-open').length).toBeGreaterThanOrEqual(2);
     // 役の欄（U-33）: 出題と同じ部品が、受け入れ枚数の欄の下に出る
     expect(screen.getByRole('heading', { name: '役' })).toBeInTheDocument();
@@ -1073,7 +1078,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(reasonBox(), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const here = pos();
     press({ code: 'KeyZ', key: 'z', ctrlKey: true });
     press({ code: 'KeyY', key: 'y', ctrlKey: true });
@@ -1092,7 +1097,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(reasonBox(), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     press(PERIOD);
     expect(answeringState()).toBe('browse');
     expect(document.querySelector('[data-ai]')).toBeNull();
@@ -1102,7 +1107,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     press(COMMA);
     expect(answeringState()).toBe('revealed');
     expect(screen.getByText('形を崩さない')).toBeInTheDocument();
-    expect(document.querySelectorAll('[data-ai="candidate"]').length).toBeGreaterThanOrEqual(3);
+    expect(document.querySelectorAll('.hand [data-ai="bar"]').length).toBeGreaterThanOrEqual(13);
     // 戻ると、役の欄も出る（ほかの手を見ている間は、欄が DOM に無い）
     expect(screen.getByRole('heading', { name: '役' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '答え合わせ' })).toBeNull();
@@ -1116,7 +1121,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(reasonBox(), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     // 前の迷い（迷い 2）→ 次の迷い（迷い 3。答えた場面）
     await user.click(screen.getByRole('button', { name: '前の迷いへ' }));
     expect(pos()).toBe(posAt(stepOf('k1h0e12')));
@@ -1149,7 +1154,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('radio')[0] as HTMLElement);
     await user.type(reasonBox(), '鳴いて進める');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(study.rows[0]).toMatchObject({ decision_key: 'k1h1e10', mode: 'quiz', choice: { type: 'option', id: 'pon' } });
   });
 
@@ -1164,7 +1169,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('radio')[0] as HTMLElement);
     await user.type(reasonBox(), '鳴いて進める');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['受け入れ・役', '待ちと打点']);
     // 選ぶと、待ちと打点の表（ポンのあとに切る牌ごと）
     const [first, second] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement];
@@ -1195,7 +1200,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
     await user.type(reasonBox(), '現物を切る');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const names = () => screen.getAllByRole('tab').map((tab) => tab.textContent);
     expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
     // 守備のタブを → を 2 回で選ぶ。← → Home End は、場面の移動に渡さない
@@ -1254,7 +1259,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getByRole('button', { name: '1手進む' }));
     await user.type(reasonBox(), '理由');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(study.rows[0]!.duration_ms).toBeGreaterThanOrEqual(90_000);
   });
 });
@@ -1492,7 +1497,7 @@ describe('U-35 他家の手牌（通して見る画面。R15-5・R16-7: 盤面�
     for (const button of handButtons()) expect(button).toBeDisabled();
     noFaceUp();
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(study.rows).toHaveLength(1);
     // 答えたあと: 押せる。開いたままなので、盤面に表向きで出て、欄が出る（答えの欄の上）。タブには出ない
     for (const button of handButtons()) {
@@ -1527,7 +1532,7 @@ describe('U-35 他家の手牌（通して見る画面。R15-5・R16-7: 盤面�
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
     await user.type(reasonBox(), '孤立牌を切る');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(block()).toBeNull();
     await press1(user);
     expect(shown()).toEqual(expected(stepOf('k1h1e7')));
@@ -1632,7 +1637,7 @@ describe('U-38 他家が聴牌した巡目（通して見る画面。R16-7 の A
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
     await user.type(reasonBox(), '孤立牌を切る');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(ticks().length).toBe(allMarks().length);
     expect(document.querySelectorAll('.oh-row .tp-line')).toHaveLength(3);
   });

@@ -250,7 +250,7 @@
 
 /*
   --rows: 河の段の数、--ri: リーチ宣言牌（横向き）の分の余白を取るか（0 か 1）。どちらも JS が入れる。
-  牌の幅 --rw は、列の幅と、窓の高さ（見出し・凡例・手牌の分を引いた残り）の小さいほうから決める。
+  牌の幅 --rw は、列の幅と、窓の高さ（見出し・手牌・手牌の上の棒の帯・手牌の下の印の行の分を引いた残り）の小さいほうから決める。
   河は持ち主の向きで作り、まるごと回す。左右の置き場は、幅と高さを入れ替えて取るので、回しても中央の箱に重ならない。
   他家の手牌（R16-7）は、他家の河の外側に置く: 対面は河の上の 1 段、上家・下家は左右の 1 列（--hh。手牌の牌の高さ）。
   手牌の牌の幅 --hw は、河の牌の幅の --hf 倍。卓の幅は、左右の列の分（2 × --hh）、高さは上の段の分（1 × --hh）だけ大きくなる。
@@ -275,7 +275,7 @@
   --kwx: calc(var(--kw) + 2 * var(--g));
   --kwy: calc(var(--kw) + var(--g));
   --rw-w: calc((100cqw - var(--kwx)) / var(--cwx));
-  --rw-h: calc((100vh - var(--chrome-h, 276px) - var(--chrome-extra, 0px) - var(--kwy)) / var(--cwy));
+  --rw-h: calc((100vh - var(--chrome-h, 324px) - var(--kwy)) / var(--cwy));
   --rw: max(14px, min(46px, var(--rw-w), var(--rw-h)));
   --rh: calc(var(--rw) * 4 / 3);
   --hw: calc(var(--rw) * var(--hf));
@@ -524,7 +524,7 @@
   grid-area: center;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   padding: 6px;
   background: var(--bg);
   border: 1px solid var(--line-strong);
@@ -607,7 +607,7 @@
 
 .score.bottom {
   grid-column: 2;
-  grid-row: 3;
+  grid-row: 4;
   padding: 6px 0 4px;
 }
 
@@ -644,11 +644,32 @@
   font-size: 13px;
 }
 
+/*
+  ドラ表示牌とそれが指すドラ（U-44）: 局の名前の下の 1 行「表示 [4m] → ドラ [5m]」。中央の箱の幅いっぱい（左右の点数の下）に置く。
+  幅が足りないときは、「表示」と「→ ドラ」の 2 かたまりで折り返す。牌は、広い卓で 24px（ドラ表示牌が 3 枚以上なら 18px）、狭い卓で 18px（同じく 16px）。
+*/
 .dora {
-  display: grid;
-  justify-items: center;
-  gap: 3px;
-  margin-top: 3px;
+  --dtw: 24px;
+
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px 8px;
+  padding: 3px 0 0;
+}
+
+.dora[data-many] {
+  --dtw: 18px;
+}
+
+.dora-from,
+.dora-to {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .dora-l {
@@ -657,13 +678,19 @@
   white-space: nowrap;
 }
 
+.dora-arrow {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+}
+
 .dora-t {
   display: flex;
   gap: 2px;
 }
 
 .dora .tile {
-  --tw: 22px;
+  --tw: var(--dtw);
 }
 
 @container board (width <= 639px) {
@@ -716,14 +743,14 @@
     color: var(--ink);
   }
 
-  .is-dora-strip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
+  .dora {
+    --dtw: 18px;
+
+    padding-top: 1px;
   }
 
-  .is-dora-strip .tile {
-    --tw: 16px;
+  .dora[data-many] {
+    --dtw: 16px;
   }
 
   .score .rel {
@@ -797,23 +824,59 @@
   transform: translate(-50%, -50%) rotate(-90deg);
 }
 
-.legend .past-flag {
-  display: none;
+/*
+  卓のすぐ上の右端の 1 行（盤面の見方）: 過去の盤面を見ているときの旗（文字のまま）と、凡例を出す説明のアイコン。
+  凡例は、説明のアイコンの重なり（body の下に描く）に入るので、色の付いた見本の牌も、ここで定める。
+*/
+.board-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s2);
+  min-height: 18px;
+
+  /* 卓との間は、列の隙間（12px）より詰める（高さは、手牌の上の棒の帯に回す） */
+  margin-bottom: -6px;
+}
+
+.board-tools .past-flag {
+  font-size: 12px;
   font-weight: 700;
   color: var(--ink);
 }
 
-.qz [data-view="past"] .legend .past-flag {
-  display: inline-flex;
+.legend-pop {
+  max-width: min(320px, calc(100vw - 16px));
+}
+
+.legend-pop .legend {
+  justify-content: flex-start;
+  gap: 8px var(--s4);
+  color: var(--ink);
+}
+
+.legend-pop .hands-hint {
+  margin-top: var(--s2);
+  text-align: left;
 }
 
 /* ---------- 手牌 ---------- */
+
+/*
+  手牌の上には、AI の評価の棒の帯（--band）を、いつも取る。棒は、打牌の判断の答え合わせのあと（と、通して見る画面の自分の打牌の手番）だけに出るが、
+  帯は空のままでも取って、答える前と答えたあと・手を進めたときに、卓や手牌が動かないようにする（U-39）。
+  打牌の判断では、手牌の下にも、印（自分・実戦・AI）の行（--marks）をいつも取る。
+*/
 .hand-wrap {
-  padding: var(--s2) 0 var(--s3);
+  --band: 56px;
+  --band-gap: 4px;
+  --marks: 46px;
+
+  padding: calc(var(--band) + var(--band-gap)) 0 var(--s3);
 }
 
-.qz[data-state="revealed"] .hand-wrap[data-kind="discard"] {
-  padding-bottom: 58px;
+.hand-wrap[data-kind="discard"] {
+  padding-bottom: calc(var(--s2) + var(--marks));
 }
 
 .hand {
@@ -917,10 +980,66 @@
 .slot[data-ring="top"] .tile-btn { box-shadow: 0 0 0 2px var(--accent); }
 .slot[data-ring="act"] .tile-btn { box-shadow: 0 0 0 2px var(--ink); }
 
+/*
+  AI の評価の棒（U-43）。牌と同じ列（幅）の上の帯に、下から立ち上げる。棒の幅は牌の 60%、高さは --h（JS が 40px × 確率として入れる）、
+  色は --accent-bar（AI の 1 位の牌は --accent）。帯の下の線は、隣の牌の線とつながるよう、牌の隙間の半分（1px）だけ外へ出す。
+  数字（確率の上位 3 つ・自分・実戦）は、棒の先の 2px 上。
+*/
+.ai-bar {
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(100% + var(--band-gap));
+  height: var(--band);
+  pointer-events: none;
+}
+
+.ai-bar::after {
+  content: "";
+  position: absolute;
+  inset-inline: -1px;
+  bottom: 0;
+  height: 1px;
+  background: var(--line);
+}
+
+.ai-fill {
+  position: absolute;
+  inset-inline: 20%;
+  bottom: 1px;
+  height: var(--h);
+  background: var(--accent-bar);
+}
+
+.ai-bar[data-top="1"] .ai-fill {
+  background: var(--accent);
+}
+
+.ai-num {
+  position: absolute;
+  left: 50%;
+  bottom: calc(1px + var(--h) + 2px);
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.ai-bar[data-top="1"] .ai-num {
+  font-weight: 700;
+  color: var(--accent);
+}
+
 .qz [data-view="past"] .hand-wrap {
   opacity: 0.4;
 }
 
+/*
+  手牌が折り返す狭い配置（列が 580px 未満）では、段ごとに、棒の帯と印の行がいる。打牌の判断の段の間は、上の段の印の行と、
+  下の段の棒の帯が入る高さにする（段が 1 つのときも同じ。答えの前後で動かない）。
+*/
 @container board (width <= 579px) {
   .hand {
     --tw: 36px;
@@ -934,12 +1053,12 @@
     margin-left: 6px;
   }
 
-  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"] {
-    padding-bottom: 12px;
+  .hand-wrap[data-kind="discard"] {
+    padding-bottom: var(--s3);
   }
 
-  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"] .hand {
-    row-gap: 48px;
+  .hand-wrap[data-kind="discard"] .hand {
+    row-gap: calc(var(--marks) + var(--band) + var(--band-gap) + 2px);
   }
 }
 
@@ -948,12 +1067,12 @@
   その 3 行が次の段・答えの欄に重ならないように、空ける。
 */
 @container board (width <= 480px) {
-  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"]:has(.mk:nth-child(3)) {
+  .hand-wrap[data-kind="discard"]:has(.mk:nth-child(3)) {
     padding-bottom: 28px;
   }
 
-  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"]:has(.mk:nth-child(3)) .hand {
-    row-gap: 56px;
+  .hand-wrap[data-kind="discard"]:has(.mk:nth-child(3)) .hand {
+    row-gap: calc(var(--marks) + var(--band) + var(--band-gap) + 10px);
   }
 }
 
@@ -1057,15 +1176,19 @@
     grid-template-rows: minmax(0, 1fr);
   }
 
+  /*
+    卓の上の 1 行（盤面の見方。18px）が、見出しと卓の間の余白を受け持つ: 見出しの下 6px・その行 18px・卓との隙間 6px。
+    右の欄の上端は、卓の上端にそろうよう、その分（6px + 18px）を下げる（高さを、手牌の上の棒の帯に回すため、余白を 18px から詰めた）。
+  */
+  .work {
+    padding-top: 6px;
+  }
+
   .work > .answer {
     align-self: stretch;
     max-height: 100%;
     min-height: 0;
-  }
-
-  /* 打牌の答え合わせのあとは、手牌の下に印（自分・実戦・AI）の行が増える（.hand-wrap の下の余白 12px → 58px）。その分だけ卓を小さくして、文書を窓に収める */
-  .qz[data-state="revealed"]:has(.hand-wrap[data-kind="discard"]) {
-    --chrome-extra: 46px;
+    margin-top: 24px;
   }
 
   .answer-scroll {
@@ -1082,6 +1205,19 @@
 
 .qz[data-state="revealed"] .only-answering {
   display: none !important;
+}
+
+/* 答える前の、場面の情報の 1 行（U-47）: 静かな色で、数と人の名前だけ濃く。答えの見出しのすぐ上 */
+.scene-line {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.scene-line b {
+  font-weight: 700;
+  color: var(--ink);
 }
 
 .pick {
@@ -1919,11 +2055,11 @@ li:has(> .qrow.next) + li > .qrow {
     margin-left: 12px;
   }
 
-  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"] {
-    padding-bottom: 58px;
+  .hand-wrap[data-kind="discard"] {
+    padding-bottom: calc(var(--s2) + var(--marks));
   }
 
-  .qz[data-state="revealed"] .hand-wrap[data-kind="discard"] .hand {
+  .hand-wrap[data-kind="discard"] .hand {
     row-gap: 0;
   }
 }
@@ -2343,7 +2479,8 @@ li:has(> .qrow.next) + li > .qrow {
   牌の面に --dora-fill を multiply で重ねる（図柄は暗くならず、面だけが黄色くなる）。付けるのは、ドラ表示牌が指す牌の
   手牌・河・副露だけ（赤五は、指される牌でもあるときだけ。鳴かれて薄くなった牌と、ドラ表示牌そのものには付けない）。
   どの牌に is-dora を付けるかは、画面の部品が決める（ドラの決まりは dora.ts）。 */
-.qz[data-dora="on"] .tile.is-dora::after {
+.qz[data-dora="on"] .tile.is-dora::after,
+.legend .tile.is-dora::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -2351,10 +2488,6 @@ li:has(> .qrow.next) + li > .qrow {
   background: var(--dora-fill);
   mix-blend-mode: multiply;
   pointer-events: none;
-}
-
-.qz:not([data-dora="on"]) .lg-dora {
-  display: none;
 }
 
 /* ---------- 今日の出題の行は、押すと開く（ボタン） ---------- */

@@ -12,6 +12,7 @@ import { FakeSessionStore, local, seedSession } from '../../../tests/fake-sessio
 import { FakeStudyStore, answerRow, gameOf } from '../../../tests/fake-study';
 import { fx4Ocr, fx4Session } from '../../../tests/import-fixtures';
 import { baseSettings, installTauriMock } from '../../../tests/tauri-mock';
+import { revealed } from '../../../tests/reveal';
 import { App } from '../App';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -299,7 +300,7 @@ describe('U-22: 開く（半荘・問題）と、画面の履歴', () => {
     expect(options()[0]).toHaveTextContent('原則: 受け入れを数えてから切る');
     await user.keyboard('{Enter}');
     expect(await screen.findByRole('heading', { level: 1, name: '東4局 13巡目' })).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'AIの評価（Mortal）' })).toBeInTheDocument();
+    expect(await revealed()).toBeInTheDocument();
     expect(screen.getByText('孤立牌を切って受け入れを広く')).toBeInTheDocument();
     expect(screen.getByLabelText('学んだ原則（1行）')).toHaveValue('受け入れを数えてから切る');
     expect(screen.queryByRole('button', { name: '答え合わせ' })).toBeNull();

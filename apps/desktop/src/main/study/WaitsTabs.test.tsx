@@ -3,6 +3,7 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderQuiz } from '../../../tests/study-harness';
+import { revealed } from '../../../tests/reveal';
 
 // 答え合わせのタブの枠と、タブ「待ちと打点」・待ちの形・符の内訳（F14、E-36〜E-38、U-34。R15-2・R15-3）の画面の試験。
 // 中身の正しさ（役・飜・符・点数・待ちの形）は、エンジンの試験（win-value-oracle.test.ts・wait-value.test.ts）が正解表と照らして固定している。
@@ -41,7 +42,7 @@ async function reveal(user: ReturnType<typeof renderQuiz>['user'], pick: () => H
   await user.click(pick());
   await user.type(screen.getByLabelText('理由（1行）'), '待ちを見て選んだ');
   await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-  await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+  await revealed();
 }
 
 const tile = (name: string) => () => screen.getAllByRole('button', { name: `${name}を切る` })[0] as HTMLElement;

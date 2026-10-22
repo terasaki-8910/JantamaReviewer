@@ -18,6 +18,7 @@ import {
 import { useCallback, useMemo, useState } from 'react';
 
 import type { AnswerMode, AnswerRow } from '../../api/types';
+import { handBars, type HandBars } from './aiBars';
 import { doraKinds } from './dora';
 import type { HandItem, HandMark } from './Hand';
 import { buildHandItems, handMarks, usedIndices } from './handMarks';
@@ -57,6 +58,8 @@ export interface QuizWorkState {
   dora: ReadonlySet<number> | null;
   revealed: boolean;
   marks: ReadonlyMap<number, HandMark>;
+  /** 手牌の上の AI の評価の棒。打牌の判断の答え合わせのあと（過去の盤面を除く）だけ。それまでは null（U-1）。 */
+  bars: HandBars | null;
   used: ReadonlySet<number>;
   /** 手牌の中で選んでいる牌の位置。 */
   selected: number | null;
@@ -110,6 +113,13 @@ export function useQuizWork({ decision, sessionId, mode, board, past, existing, 
     });
   }, [revealed, past, decision, items, quiz]);
 
+  const answered = quiz.choice;
+  const bars = useMemo(() => {
+    if (!revealed || past || decision.kind !== 'discard') return null;
+    if (answered === null || answered.type !== 'dahai') return null;
+    return handBars(items, decision.entry, answered.tile);
+  }, [revealed, past, decision, items, answered]);
+
   const used = useMemo(() => {
     const { choice } = quiz;
     if (past || choice === null || choice.type !== 'option') return NO_USED;
@@ -148,6 +158,7 @@ export function useQuizWork({ decision, sessionId, mode, board, past, existing, 
     dora,
     revealed,
     marks,
+    bars,
     used,
     selected,
     onPick,

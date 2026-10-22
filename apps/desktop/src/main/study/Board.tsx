@@ -1,7 +1,8 @@
-import type { BoardState, OpenSeat, RiverTile, Seat, Tile as TileCode, Wind } from '@jantama/engine';
+import { tileLabel, type BoardState, type OpenSeat, type RiverTile, type Seat, type Tile as TileCode, type Wind } from '@jantama/engine';
 import { useId, type CSSProperties } from 'react';
 
-import { isDoraTile } from './dora';
+import { InfoTip } from '../InfoTip';
+import { doraOfMarker, isDoraTile } from './dora';
 import { layoutMeld, MELD_NAME } from './meldLayout';
 import { BackTile, Tile } from './Tile';
 import { tableExtent } from './steps';
@@ -252,6 +253,53 @@ function OpponentHand({
   );
 }
 
+/** 牌の名前を並べた言い方（読み上げ用）。例: 4m・北。 */
+function tilesText(tiles: readonly TileCode[]): string {
+  return tiles.map((tile) => tileLabel(tile)).join('・');
+}
+
+/**
+ * 中央の箱の、ドラ表示牌とそれが指すドラ（U-44）。「表示 [4m] → ドラ [5m]」。カンでドラ表示牌が増えれば、並べて出す（ドラは 1 枚ずつ対応）。
+ * 窓が狭く卓が小さいときも、中央の箱に出す。設定「ドラを目立たせる」の黄色は、この牌には付けない（手牌・河・副露の牌だけ）。
+ * 牌の画像は飾り（名前は、まとめて 1 つの文で読み上げる）。
+ */
+function DoraRow({ markers }: { markers: readonly TileCode[] }) {
+  if (markers.length === 0) return null;
+  const doras = markers.map((marker) => doraOfMarker(marker));
+  return (
+    <span
+      className="dora"
+      role="group"
+      aria-label={`ドラ表示牌 ${tilesText(markers)}、ドラ ${tilesText(doras)}`}
+      data-many={markers.length >= 3 ? '1' : undefined}
+    >
+      <span className="dora-from">
+        <span className="dora-l" aria-hidden="true">
+          表示
+        </span>
+        <span className="dora-t">
+          {markers.map((marker, index) => (
+            <Tile key={`${index}${marker}`} tile={marker} alt="" />
+          ))}
+        </span>
+      </span>
+      <span className="dora-to">
+        <span className="dora-arrow" aria-hidden="true">
+          →
+        </span>
+        <span className="dora-l" aria-hidden="true">
+          ドラ
+        </span>
+        <span className="dora-t">
+          {doras.map((tile, index) => (
+            <Tile key={`${index}${tile}`} tile={tile} alt="" />
+          ))}
+        </span>
+      </span>
+    </span>
+  );
+}
+
 /** 卓の配置（雀魂と同じ並び。河を四方に置く。副露は持ち主の右手側の角。他家の手牌は、他家の河の外側）。 */
 export function Board({ info, step, dora, target = null, latest = null, hands, tenpai }: BoardProps) {
   const me = info.me;
@@ -318,19 +366,17 @@ export function Board({ info, step, dora, target = null, latest = null, hands, t
   };
 
   const honba = `${info.honba}本場${step.kyotaku > 0 ? ` · 供託${step.kyotaku}` : ''}`;
-  const doraTiles = step.doraMarkers.map((marker, index) => <Tile key={`${index}${marker}`} tile={marker} />);
   const tableStyle = { '--rows': info.rows, '--ri': info.riichiAny ? 1 : 0 } as CSSProperties;
 
   return (
     <div className="table-wrap">
-      {/* 狭いときは、局・本場・残り・ドラ表示牌を、中央の箱の外（卓の上）の 1 行にまとめる */}
+      {/* 狭いときは、局・本場・残りを、中央の箱の外（卓の上）の 1 行にまとめる。ドラ表示牌は、どの幅でも中央の箱に出す */}
       <div className="info-strip">
         <span className="is-round">{info.round}</span>
         <span>{honba}</span>
         <span>
           残り<b>{step.tilesLeft}</b>枚
         </span>
-        <span className="is-dora-strip">ドラ表示牌{doraTiles}</span>
       </div>
       <div className="table" role="group" aria-label="卓（4人の河・副露・点数）" style={tableStyle}>
         {corner('top', 'tl')}
@@ -346,14 +392,11 @@ export function Board({ info, step, dora, target = null, latest = null, hands, t
             <span className="rest">
               残り<b>{step.tilesLeft}</b>枚
             </span>
-            <span className="dora">
-              <span className="dora-l">ドラ表示牌</span>
-              <span className="dora-t">{doraTiles}</span>
-            </span>
           </div>
           <span className="round-s" aria-hidden="true">
             {info.round}
           </span>
+          <DoraRow markers={step.doraMarkers} />
           {score('right')}
           {score('bottom')}
         </div>
@@ -369,32 +412,26 @@ export function Board({ info, step, dora, target = null, latest = null, hands, t
   );
 }
 
-/** 凡例（盤面の見方）。 */
-/** 他家の手牌を開けるときに、盤面の凡例の下に出す 1 行（R16-7）。 */
+/** 他家の手牌を開けるときに、凡例に添える 1 行（R16-7）。 */
 export const HANDS_HINT = '他家の手牌は、押すと3人とも開きます（もう一度押すと閉じます）';
 
-export function Legend({
-  riichi,
-  called,
-  call,
-  pastView,
-  latest = false,
-  tenpai = false,
-  handsHint = false,
-}: {
+interface LegendProps {
   riichi: boolean;
   called: boolean;
   /** 鳴ける牌の印を出すか（鳴きの判断）。 */
   call: boolean;
-  /** 過去の盤面を見ているか（印を出す）。 */
-  pastView: boolean;
   /** 直前の打牌の印を出すか（半荘を通して見る画面）。 */
   latest?: boolean;
   /** 「聴牌になった打牌」の印を出すか（他家の手牌を開いているとき。F14、R16-7）。 */
   tenpai?: boolean;
+  /** 「ドラ」の印を出すか（設定「ドラを目立たせる」が入のとき）。 */
+  dora?: boolean;
   /** 「他家の手牌は、押すと…」の 1 行を出すか（他家の手牌を開けるとき）。 */
   handsHint?: boolean;
-}) {
+}
+
+/** 凡例（盤面の見方）の中身。説明のアイコン（`BoardTools`）の重なりに入る。 */
+export function Legend({ riichi, called, call, latest = false, tenpai = false, dora = false, handsHint = false }: LegendProps) {
   const face = <img src="/tiles/Chun.svg" alt="" draggable={false} />;
   return (
     <>
@@ -430,13 +467,29 @@ export function Legend({
             <span className="tile tp">{face}</span>聴牌になった打牌
           </li>
         )}
-        <li className="lg-dora">
-          <span className="tile is-dora">{face}</span>ドラ
-        </li>
-        {pastView && <li className="past-flag">過去の盤面</li>}
+        {dora && (
+          <li className="lg-dora">
+            <span className="tile is-dora">{face}</span>ドラ
+          </li>
+        )}
       </ul>
       {handsHint && <p className="hands-hint">{HANDS_HINT}</p>}
     </>
+  );
+}
+
+/**
+ * 卓のすぐ上の右端の 1 行: 過去の盤面を見ているときの旗（文字のまま。説明の外）と、盤面の見方（凡例と、他家の手牌の一言）を出す説明のアイコン。
+ * 凡例を卓の下に並べていたぶんの高さを、手牌の上の棒の帯（`--band`）に回すため、アイコンの中に入れた。
+ */
+export function BoardTools({ pastView, ...legend }: LegendProps & { pastView: boolean }) {
+  return (
+    <div className="board-tools">
+      {pastView && <span className="past-flag">過去の盤面</span>}
+      <InfoTip label="盤面の見方" popClassName="legend-pop">
+        <Legend {...legend} />
+      </InfoTip>
+    </div>
   );
 }
 
