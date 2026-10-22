@@ -131,6 +131,14 @@ export function useStudy(): StudyValue {
   return value;
 }
 
+/**
+ * 設定の「迷いだけを記録する」（F0）。〇△✕ の数を出すかどうかだけを知りたい部品が使う。`StudyProvider` の外では false（出す）。
+ * 出題のデータ全体（`useStudy`）は、無いと投げるので、そこまで要らない部品は、こちらを使う。
+ */
+export function useDoubtOnly(): boolean {
+  return useContext(StudyContext)?.doubtOnly ?? false;
+}
+
 /** 設定の「大きな不一致の基準」（%）を、確率にする。 */
 export function thresholdOf(percent: number): number {
   return percent / 100;

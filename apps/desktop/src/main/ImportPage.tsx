@@ -4,6 +4,7 @@ import { formatSessionShort } from './format';
 import { paipuDateText, shortenMiddle, type ImportSummary } from './importFlow';
 import { Icon } from './Icon';
 import { marksText, problemText, stepText } from './importText';
+import { useDoubtOnly } from './study/StudyProvider';
 import { TargetConfirm } from './TargetImport';
 import type { ChooseOption, ImportFlow, ImportState } from './useImportFlow';
 
@@ -248,11 +249,19 @@ function MortalNote() {
 }
 
 function ChoiceRow({ option, onChoose }: { option: ChooseOption; onChoose: () => void }) {
+  // 迷いだけを記録する設定が入のときは、〇△✕ の数を出さない（F0）
+  const doubtOnly = useDoubtOnly();
   return (
     <button type="button" className="choice" onClick={onChoose}>
       <span className="choice-when">{formatSessionShort(option.startedMs)}</span>
       <span className="choice-counts">
-        迷い <b>{option.markCount}</b> · 評価 <b>{option.ratingCount}</b>
+        迷い <b>{option.markCount}</b>
+        {!doubtOnly && (
+          <>
+            {' '}
+            · 評価 <b>{option.ratingCount}</b>
+          </>
+        )}
       </span>
       {option.matching && <span className="tag">画面が合う</span>}
     </button>
@@ -269,6 +278,7 @@ function DonePanel({
   onOpenSession: (sessionId: string) => void;
 }) {
   const marks = marksText(summary);
+  const doubtOnly = useDoubtOnly();
   return (
     <section className="panel" aria-labelledby="import-heading">
       <h2 id="import-heading" ref={heading} tabIndex={-1}>
@@ -299,9 +309,11 @@ function DonePanel({
         {marks && <span className="quiet">{marks}</span>}
       </p>
       {!summary.linkedToRecording && (
-        <p className="quiet">記録の無い半荘として取り込みました。迷いマークと評価は、ありません。</p>
+        <p className="quiet">
+          {doubtOnly ? '記録の無い半荘として取り込みました。迷いマークは、ありません。' : '記録の無い半荘として取り込みました。迷いマークと評価は、ありません。'}
+        </p>
       )}
-      {summary.linkedToRecording && summary.ratingCount > 0 && (
+      {!doubtOnly && summary.linkedToRecording && summary.ratingCount > 0 && (
         <p className="quiet">
           局の評価 {summary.ratingCount} 件のうち、{summary.placedRatings} 件を局に当てはめました。
         </p>

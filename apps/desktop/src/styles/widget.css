@@ -276,3 +276,8 @@ body {
 .sq-btn:focus-visible {
   outline-offset: -4px;
 }
+
+/* 記録できない間（保存先を開けない）は、ボタンは押せない。押しを、後ろの窓（つかんで動かせる面。data-tauri-drag-region）に通して、窓は動かせるままにする */
+.sq-btn:disabled {
+  pointer-events: none;
+}

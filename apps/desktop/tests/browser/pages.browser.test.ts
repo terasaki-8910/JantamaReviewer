@@ -862,8 +862,15 @@ describe('ウィジェット（迷いだけ。48px 角の「迷い」ボタン 1
           expect(seriousViolations(axe)).toEqual([]);
           if (st.state.status !== 'error') expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThanOrEqual(1);
           const reach = await unreachableByTab(page);
-          if (st.state.status === 'error') expect(reach.total).toBe(0);
-          else {
+          if (st.state.status === 'error') {
+            expect(reach.total).toBe(0);
+            // 記録できない間も、窓はつかんで動かせる: ボタンは押しを通し、下はつかめる面（data-tauri-drag-region）
+            const hit = await page.evaluate(() => {
+              const el = document.elementFromPoint(24, 24);
+              return { cls: el?.className, drag: el?.getAttribute('data-tauri-drag-region') };
+            });
+            expect(hit).toEqual({ cls: 'widget sq', drag: 'deep' });
+          } else {
             expect(reach.total).toBe(1);
             expect(reach.missed).toEqual([]);
           }
