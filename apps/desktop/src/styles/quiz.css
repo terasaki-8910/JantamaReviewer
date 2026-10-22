@@ -275,7 +275,7 @@
   --kwx: calc(var(--kw) + 2 * var(--g));
   --kwy: calc(var(--kw) + var(--g));
   --rw-w: calc((100cqw - var(--kwx)) / var(--cwx));
-  --rw-h: calc((100vh - var(--chrome-h, 276px) - var(--kwy)) / var(--cwy));
+  --rw-h: calc((100vh - var(--chrome-h, 276px) - var(--chrome-extra, 0px) - var(--kwy)) / var(--cwy));
   --rw: max(14px, min(46px, var(--rw-w), var(--rw-h)));
   --rh: calc(var(--rw) * 4 / 3);
   --hw: calc(var(--rw) * var(--hf));
@@ -1025,10 +1025,20 @@
 }
 
 @container main (width >= 840px) {
+  /* 高さは、窓から .main の上下の余白（18px + 28px）を引いたもの。文書全体がスクロールしないように（U-39） */
   .qz:has(> .head) {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
-    height: calc(100vh - 42px);
+    height: calc(100vh - 46px);
+  }
+
+  /* 格子の中では、左右の余白が auto の要素は中身の幅まで縮む（盤面の列がつぶれる）ので、枠いっぱいにしてから最大幅で止める */
+  .qz:has(> .head) > .head,
+  .qz:has(> .head) > .work,
+  .rp > .head,
+  .rp > .pbar {
+    width: 100%;
   }
 
   .qz:has(> .head) > .work,
@@ -1041,12 +1051,25 @@
     height: 100%;
   }
 
+  /* 盤面と答えの欄の行は、作業の面の高さに固定する（中身に合わせて伸びると、答えの欄の上限が効かない） */
+  .qz:has(> .head) > .work,
+  .rp > .qz > .work {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
   .work > .answer {
     align-self: stretch;
     max-height: 100%;
+    min-height: 0;
+  }
+
+  /* 打牌の答え合わせのあとは、手牌の下に印（自分・実戦・AI）の行が増える（.hand-wrap の下の余白 12px → 58px）。その分だけ卓を小さくして、文書を窓に収める */
+  .qz[data-state="revealed"]:has(.hand-wrap[data-kind="discard"]) {
+    --chrome-extra: 46px;
   }
 
   .answer-scroll {
+    flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;

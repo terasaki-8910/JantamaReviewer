@@ -509,6 +509,8 @@ describe('U-39: 広い窓は右の答えの欄だけをスクロールする', (
         }));
         expect(before.documentHeight).toBeLessThanOrEqual(before.windowHeight);
         await answerCurrent(page);
+        // 大きな窓では、閉じた役の欄のままだと中身が欄に収まる。役の欄を開いて、欄の中がスクロールする長さにしてから確かめる
+        await openYaku(page);
         const panel = page.locator('.answer-scroll');
         const bar = page.locator('.answer-bar');
         const next = page.locator('#next');
@@ -1094,6 +1096,8 @@ describe('U-33: 役の欄（答え合わせのあと。受け入れ枚数の欄�
         try {
           const icon = page.locator('[data-ai="yaku-box"] .sec-head').getByRole('button', { name: '役の欄の説明' });
           expect(await page.locator('[data-ai="yaku-box"]').innerText()).not.toContain('どう和了っても付く役です');
+          // 役の欄は既定で閉じている（U-40）。開いてから、説明が中身にかからないことを確かめる
+          await openYaku(page);
           await icon.evaluate((el) => el.scrollIntoView({ block: 'center' }));
           await icon.hover();
           await page.getByRole('tooltip').waitFor();
@@ -1646,8 +1650,10 @@ describe('U-35・U-38: 出題・解き直しの盤面の他家の手牌（実ブ
       expect(await page.locator('[data-open-hands="block"] .oh-row').count()).toBe(3);
       expect(await page.locator('.ohand img').count()).toBeGreaterThan(20);
       expect(await page.locator('.ohand .tile.back').count()).toBe(0);
-      // 欄は、答えの欄の先頭（答えのタブ・差の原因より上）
-      expect(await page.evaluate(() => document.querySelector('section.answer')?.firstElementChild?.getAttribute('data-open-hands'))).toBe('block');
+      // 欄は、答えの欄の上の段（次へ進むボタン）のすぐ下、スクロールする部分の先頭（答えのタブ・差の原因より上）
+      expect(
+        await page.evaluate(() => document.querySelector('section.answer .answer-scroll')?.firstElementChild?.getAttribute('data-open-hands')),
+      ).toBe('block');
       await page.locator('.ohand').first().click();
       expect(await faceUpInDom(page)).toBe(1);
     } finally {
