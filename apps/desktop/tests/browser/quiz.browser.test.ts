@@ -437,6 +437,34 @@ const STATES: StateDef[] = [
       await selectDangerTab(page);
     },
   },
+  // ---- 盤面の作業（U-43〜U-47）。ほかの試験が番号で引くので、ここより後ろに足す ----
+  {
+    name: '出題（打牌・答える前。盤面の見方を開いた）',
+    run: async (page) => {
+      await openRow(page, 1);
+      await page.getByRole('button', { name: '盤面の見方' }).click();
+      await page.locator('.legend-pop:not([hidden])').waitFor();
+    },
+  },
+  {
+    name: '出題（打牌・答え合わせのあと。前の巡目を見ている）',
+    run: async (page) => {
+      await openRow(page, 1);
+      await answerCurrent(page);
+      await page.getByRole('button', { name: /前の巡目/ }).click();
+      await page.locator('.past-flag').waitFor();
+    },
+  },
+  {
+    name: '出題（打牌・答え合わせのあと。2 向聴。ドラを目立たせる・棒の数字が複数）',
+    scenario: { dora: true },
+    run: async (page) => {
+      await openRow(page, 3);
+      await answerCurrent(page);
+      await page.getByRole('button', { name: '盤面の見方' }).click();
+      await page.locator('.legend-pop:not([hidden])').waitFor();
+    },
+  },
 ];
 
 async function openState(state: StateDef, options: Omit<OpenOptions, 'scenario'> = {}): Promise<Opened> {
@@ -564,6 +592,20 @@ describe('U-39: 広い窓は右の答えの欄だけをスクロールする', (
   }
 });
 
+/**
+ * 手牌から Tab で、理由の欄まで進む。迷いマークを結びつけた問題は、答えの欄のいちばん上の「迷いのスクショ」の操作（写真・前の手・次の手）を
+ * 先に通る（欄は答えのフォームより前。U-45）。途中の止まり場所は、すべてその欄の中。
+ */
+async function tabToReason(page: Page): Promise<void> {
+  for (let i = 0; i < 8; i += 1) {
+    await page.keyboard.press('Tab');
+    const at = await page.evaluate(() => ({ id: document.activeElement?.id ?? '', inShots: document.activeElement?.closest('[data-shots="block"]') != null }));
+    if (at.id === 'reason') return;
+    expect(at.inShots, '理由の前の止まり場所は、迷いのスクショの欄の中').toBe(true);
+  }
+  throw new Error('Tab で理由の欄に届きません');
+}
+
 describe('U-5: Tab ですべての操作に届く', () => {
   const ROVING = '.hand .tile-btn, [role="radio"], [role="tab"]';
   for (const state of STATES.filter((s) => !s.name.includes('小窓') && !s.name.includes('2 向聴'))) {
@@ -599,8 +641,7 @@ describe('U-5: Tab ですべての操作に届く', () => {
       await expect.poll(() => page.locator('.hand .tile-btn[aria-pressed="true"]').count()).toBe(1);
       // 選んだ牌が、Tab の止まり場所
       expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-pressed'))).toBe('true');
-      await page.keyboard.press('Tab');
-      expect(await page.evaluate(() => document.activeElement?.id)).toBe('reason');
+      await tabToReason(page);
       await page.keyboard.type('キーボードだけで答える');
       await page.keyboard.press('Tab');
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('submit');
@@ -989,6 +1030,8 @@ describe('U-33: 役の欄（答え合わせのあと。受け入れ枚数の欄�
         const { context, page, problems } = await openState(state, { width });
         try {
           await openYaku(page);
+          // 開いて初めて出る牌の画像（打牌の判断の評価は、手牌の上の棒になったので、ここで初めて読み込む牌がある）も、読み込み終わるまで待つ
+          await page.waitForFunction(() => Array.from(document.images).every((img) => img.complete));
           const found = await page.evaluate(() => {
             const box = document.querySelector<HTMLElement>('[data-ai="yaku-box"]');
             if (box === null) return null;
@@ -1650,10 +1693,16 @@ describe('U-35・U-38: 出題・解き直しの盤面の他家の手牌（実ブ
       expect(await page.locator('[data-open-hands="block"] .oh-row').count()).toBe(3);
       expect(await page.locator('.ohand img').count()).toBeGreaterThan(20);
       expect(await page.locator('.ohand .tile.back').count()).toBe(0);
-      // 欄は、答えの欄の上の段（次へ進むボタン）のすぐ下、スクロールする部分の先頭（答えのタブ・差の原因より上）
+      // 欄は、答えの欄の上の段（次へ進むボタン）のすぐ下、スクロールする部分の先頭（答えのタブ・差の原因より上。迷いのスクショの欄があれば、その次）
       expect(
-        await page.evaluate(() => document.querySelector('section.answer .answer-scroll')?.firstElementChild?.getAttribute('data-open-hands')),
-      ).toBe('block');
+        await page.evaluate(() => {
+          const scroll = document.querySelector('section.answer .answer-scroll') as Element;
+          const block = scroll.querySelector(':scope > [data-open-hands="block"]');
+          const first = scroll.firstElementChild;
+          const shots = first?.getAttribute('data-shots') === 'block';
+          return { block: block !== null, first: shots ? first?.nextElementSibling === block : first === block };
+        }),
+      ).toEqual({ block: true, first: true });
       await page.locator('.ohand').first().click();
       expect(await faceUpInDom(page)).toBe(1);
     } finally {
@@ -1702,4 +1751,497 @@ describe('U-35・U-38: 出題・解き直しの盤面の他家の手牌（実ブ
       }
     });
   }
+});
+
+// ---- 盤面の作業（U-43 棒・U-44 ドラ表示牌・U-45 迷いのスクショ・U-47 場面の 1 行・盤面の見方）----
+
+interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+/** 手牌の棒と牌の位置・大きさ・色（ページの中で測る）。 */
+async function barMetrics(page: Page) {
+  return page.evaluate(() => {
+    const box = (el: Element): Box => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    // トークンの色を、描かれる形（rgb・rgba）で読む
+    const colorOf = (css: string) => {
+      const probe = document.createElement('i');
+      probe.style.backgroundColor = css;
+      document.body.append(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    };
+    const slots = Array.from(document.querySelectorAll<HTMLElement>('.hand .slot')).filter((slot) => slot.querySelector('.ai-bar') !== null);
+    return {
+      colors: { accent: colorOf('var(--accent)'), accentBar: colorOf('var(--accent-bar)'), line: colorOf('var(--line)'), ink: colorOf('var(--ink)') },
+      slots: slots.map((slot) => {
+        const tile = slot.querySelector('.tile') as HTMLElement;
+        const bar = slot.querySelector('.ai-bar') as HTMLElement;
+        const fill = slot.querySelector<HTMLElement>('.ai-fill');
+        const num = slot.querySelector<HTMLElement>('.ai-num');
+        const after = getComputedStyle(bar, '::after');
+        const numStyle = num === null ? null : getComputedStyle(num);
+        return {
+          tile: box(tile),
+          bar: box(bar),
+          fill: fill === null ? null : box(fill),
+          num: num === null ? null : box(num),
+          h: Number.parseFloat(bar.style.getPropertyValue('--h')),
+          top: bar.classList.contains('is-top'),
+          fillColor: fill === null ? null : getComputedStyle(fill).backgroundColor,
+          numStyle: numStyle === null ? null : { size: numStyle.fontSize, family: numStyle.fontFamily, color: numStyle.color, weight: numStyle.fontWeight, text: num?.textContent ?? '' },
+          baseline: { height: after.height, color: after.backgroundColor },
+        };
+      }),
+    };
+  });
+}
+
+/** 盤面の外側の高さと位置（答える前と答えたあとで、動かないことを確かめる）。 */
+async function boardBoxes(page: Page) {
+  return page.evaluate(() => {
+    const box = (selector: string) => {
+      const r = (document.querySelector(selector) as Element).getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height };
+    };
+    return { column: box('.board-col'), table: box('.table'), hand: box('.hand'), handWrap: box('.hand-wrap'), tile: box('.hand .slot .tile') };
+  });
+}
+
+function expectSameBoxes(a: Awaited<ReturnType<typeof boardBoxes>>, b: Awaited<ReturnType<typeof boardBoxes>>, message: string): void {
+  for (const name of ['column', 'table', 'hand', 'handWrap', 'tile'] as const) {
+    for (const key of ['left', 'top', 'width', 'height'] as const) {
+      expect(Math.abs(a[name][key] - b[name][key]), `${message}: ${name}.${key}（${a[name][key]} → ${b[name][key]}）`).toBeLessThanOrEqual(0.5);
+    }
+  }
+}
+
+describe('U-43: 手牌の上の AI の評価の棒（実ブラウザ）', () => {
+  for (const [width, height] of [
+    [1440, 900],
+    [1280, 800],
+  ] as const) {
+    for (const scheme of SCHEMES) {
+      it(`${width}×${height}・${scheme}: 棒は牌と同じ列・同じ幅で、帯は 56px。棒の幅は牌の 60%・高さは 40px × 確率・色はトークン。数字は 11px の等幅。下の線は 1px`, { timeout: 90_000 }, async () => {
+        const { context, page } = await open({ width, height, scheme });
+        try {
+          await openRow(page, 3);
+          expect((await barMetrics(page)).slots).toHaveLength(0);
+          await answerCurrent(page);
+          const m = await barMetrics(page);
+          // 手牌 13 枚 + ツモ牌（鳴く牌には、棒が無い）
+          expect(m.slots.length).toBeGreaterThanOrEqual(13);
+          let labelled = 0;
+          for (const [index, slot] of m.slots.entries()) {
+            const where = `${index} 枚目`;
+            // 牌と同じ列（左端・幅）。帯は 56px。牌の上 4px に置く
+            expect(Math.abs(slot.bar.left - slot.tile.left), `${where} 左`).toBeLessThanOrEqual(0.6);
+            expect(Math.abs(slot.bar.width - slot.tile.width), `${where} 幅`).toBeLessThanOrEqual(0.6);
+            expect(Math.abs(slot.bar.height - 56), `${where} 帯の高さ`).toBeLessThanOrEqual(0.6);
+            expect(Math.abs(slot.bar.bottom - (slot.tile.top - 4)), `${where} 牌との間`).toBeLessThanOrEqual(1);
+            // 下の線: 1px の --line
+            expect(slot.baseline, where).toEqual({ height: '1px', color: m.colors.line });
+            if (slot.fill !== null) {
+              // 棒: 幅は牌の 60%、真ん中。高さは --h（40px 以内）。線の上から立ち上がる
+              expect(Math.abs(slot.fill.width - slot.tile.width * 0.6), `${where} 棒の幅`).toBeLessThanOrEqual(1);
+              expect(Math.abs(slot.fill.left - (slot.tile.left + slot.tile.width * 0.2)), `${where} 棒の位置`).toBeLessThanOrEqual(1);
+              expect(Math.abs(slot.fill.height - slot.h), `${where} 棒の高さ`).toBeLessThanOrEqual(0.6);
+              expect(slot.h, where).toBeLessThanOrEqual(40);
+              expect(slot.h, where).toBeGreaterThanOrEqual(2);
+              expect(Math.abs(slot.fill.bottom - (slot.bar.bottom - 1)), `${where} 線の上`).toBeLessThanOrEqual(0.6);
+              expect(slot.fillColor, `${where} 棒の色`).toBe(slot.top ? m.colors.accent : m.colors.accentBar);
+            }
+            if (slot.num !== null && slot.numStyle !== null) {
+              labelled += 1;
+              expect(slot.numStyle.size, `${where} 数字の大きさ`).toBe('11px');
+              expect(slot.numStyle.family, `${where} 数字の字体`).toContain('IBM Plex Mono');
+              expect(slot.numStyle.color, `${where} 数字の色`).toBe(slot.top ? m.colors.accent : m.colors.ink);
+              expect(slot.numStyle.text, where).toMatch(/^(\d+\.\d%|<0\.1%)$/);
+              // 数字は、棒の先の 2px 上（棒が無い牌は、線の 2px 上）。帯の中
+              const base = slot.fill === null ? slot.bar.bottom - 1 : slot.fill.top;
+              expect(Math.abs(slot.num.bottom - (base - 2)), `${where} 数字の位置`).toBeLessThanOrEqual(1);
+              expect(slot.num.top, `${where} 帯の上`).toBeGreaterThanOrEqual(slot.bar.top - 1);
+            }
+          }
+          // 数字は、確率の上位 3 つ・自分・実戦（同じ牌は 1 枚）。多くても 5 つ
+          expect(labelled).toBeGreaterThanOrEqual(2);
+          expect(labelled).toBeLessThanOrEqual(5);
+          // 棒の確率の合計は、1 を超えない（同じ牌の棒は、同じ高さ）
+          expect(m.slots.some((slot) => slot.top)).toBe(true);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('帯と印の行は、答える前から取ってある: 答え合わせの前後で、卓・手牌・帯の位置も大きさも変わらない（出題・解き直し。1280×800・1440×900）', { timeout: 120_000 }, async () => {
+    for (const [width, height] of [
+      [1280, 800],
+      [1440, 900],
+    ] as const) {
+      const quiz = await open({ width, height });
+      try {
+        await openRow(quiz.page, 1);
+        const before = await boardBoxes(quiz.page);
+        await answerCurrent(quiz.page);
+        expectSameBoxes(before, await boardBoxes(quiz.page), `出題 ${width}×${height}`);
+      } finally {
+        await quiz.context.close();
+      }
+      const review = await open({ width, height, scenario: scenario({ due: true }) });
+      try {
+        await openReview(review.page);
+        const before = await boardBoxes(review.page);
+        await answerCurrent(review.page);
+        expectSameBoxes(before, await boardBoxes(review.page), `解き直し ${width}×${height}`);
+      } finally {
+        await review.context.close();
+      }
+    }
+  });
+
+  it('鳴きの判断: 手牌の上の帯は同じように取ってある（棒は無い）。答え合わせの前後で、卓は動かない', { timeout: 90_000 }, async () => {
+    const { context, page } = await open({ width: 1280, height: 800 });
+    try {
+      await openRow(page, 4);
+      const before = await boardBoxes(page);
+      await answerCurrent(page);
+      expect((await barMetrics(page)).slots).toHaveLength(0);
+      expectSameBoxes(before, await boardBoxes(page), '鳴きの判断');
+      // 右の欄に評価の一覧（ボタンごとの棒）
+      expect(await page.locator('[data-ai="eval"] [data-ai="candidate"]').count()).toBeGreaterThanOrEqual(2);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('U-39: 棒の帯と印の行を取ったあとも、文書はスクロールしない（出題・解き直し。答える前後）', () => {
+  for (const [width, height] of [
+    [1280, 800],
+    [1440, 900],
+    [1920, 1080],
+  ] as const) {
+    it(`${width}×${height}: 解き直し・鳴きの判断を含め、答える前後とも、文書の高さが窓の高さ以下。卓の大きさは、答える前後で同じ`, { timeout: 120_000 }, async () => {
+      const heightOf = (page: Page) =>
+        page.evaluate(() => ({ document: document.documentElement.scrollHeight, window: window.innerHeight, handBottom: (document.querySelector('.hand-wrap') as Element).getBoundingClientRect().bottom }));
+      const quiz = await open({ width, height });
+      try {
+        await openRow(quiz.page, 1);
+        const a = await heightOf(quiz.page);
+        expect(a.document, '出題 答える前').toBeLessThanOrEqual(a.window);
+        const tableBefore = (await boardBoxes(quiz.page)).table;
+        await answerCurrent(quiz.page);
+        const b = await heightOf(quiz.page);
+        expect(b.document, '出題 答えたあと').toBeLessThanOrEqual(b.window);
+        expect(b.handBottom, '出題 手牌（印の行の前）が窓に入る').toBeLessThanOrEqual(b.window);
+        expect((await boardBoxes(quiz.page)).table.height).toBe(tableBefore.height);
+      } finally {
+        await quiz.context.close();
+      }
+      const call = await open({ width, height });
+      try {
+        await openRow(call.page, 4);
+        const a = await heightOf(call.page);
+        expect(a.document, '鳴き 答える前').toBeLessThanOrEqual(a.window);
+        await answerCurrent(call.page);
+        const b = await heightOf(call.page);
+        expect(b.document, '鳴き 答えたあと').toBeLessThanOrEqual(b.window);
+      } finally {
+        await call.context.close();
+      }
+      const review = await open({ width, height, scenario: scenario({ due: true }) });
+      try {
+        await openReview(review.page);
+        const a = await heightOf(review.page);
+        expect(a.document, '解き直し 答える前').toBeLessThanOrEqual(a.window);
+        const tableBefore = (await boardBoxes(review.page)).table;
+        await answerCurrent(review.page);
+        const b = await heightOf(review.page);
+        expect(b.document, '解き直し 答えたあと').toBeLessThanOrEqual(b.window);
+        expect((await boardBoxes(review.page)).table.height).toBe(tableBefore.height);
+      } finally {
+        await review.context.close();
+      }
+    });
+  }
+});
+
+describe('U-44: ドラ表示牌（卓の中央の箱。実ブラウザ）', () => {
+  /** 中央の箱の「表示 → ドラ」の行の位置・牌の幅・文字（ページの中で測る）。 */
+  async function doraMetrics(page: Page) {
+    return page.evaluate(() => {
+      const box = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+      };
+      const colorOf = (css: string) => {
+        const probe = document.createElement('i');
+        probe.style.color = css;
+        document.body.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
+      const row = document.querySelector('.center .dora') as HTMLElement | null;
+      const center = document.querySelector('.table .center') as HTMLElement;
+      const strip = document.querySelector('.info-strip') as HTMLElement;
+      const label = row?.querySelector('.dora-l') as HTMLElement | null;
+      return {
+        row: row === null ? null : box(row),
+        center: box(center),
+        visible: row !== null && row.checkVisibility(),
+        scores: Array.from(document.querySelectorAll('.table .center .score')).map(box),
+        info: box(document.querySelector('.table .center .info') as Element),
+        infoShown: getComputedStyle(document.querySelector('.table .center .info') as Element).display !== 'none',
+        tiles: Array.from(row?.querySelectorAll('.tile') ?? []).map((tile) => box(tile).width),
+        label: label === null ? null : { size: getComputedStyle(label).fontSize, color: getComputedStyle(label).color, text: label.textContent },
+        muted: colorOf('var(--muted)'),
+        aria: row?.getAttribute('aria-label') ?? '',
+        stripText: strip.textContent ?? '',
+        stripHasDora: strip.querySelector('.dora, .dora-t, .tile') !== null,
+        stripShown: getComputedStyle(strip).display !== 'none',
+        scroll: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+      };
+    });
+  }
+
+  for (const [width, height, wide] of [
+    [1440, 900, true],
+    [1280, 800, false],
+    [768, 900, false],
+    [390, 900, false],
+  ] as const) {
+    it(`幅 ${width}px: 局の名前の下の「表示 → ドラ」が中央の箱に出る。牌は ${wide ? '24px（広い卓）' : '18px（狭い卓）'}。点数・箱の外にはみ出さない。卓の上の 1 行には無い`, { timeout: 90_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const { context, page } = await open({ width, height, scheme });
+        try {
+          await openRow(page, 1);
+          const m = await doraMetrics(page);
+          expect(m.visible, `${width} ${scheme}`).toBe(true);
+          expect(m.row, `${width} ${scheme}`).not.toBeNull();
+          const row = m.row as Box;
+          // 中央の箱の中。左右・上下の点数と重ならない
+          expect(row.left, `${width} ${scheme} 箱の左`).toBeGreaterThanOrEqual(m.center.left - 0.5);
+          expect(row.right, `${width} ${scheme} 箱の右`).toBeLessThanOrEqual(m.center.right + 0.5);
+          expect(row.top, `${width} ${scheme} 箱の上`).toBeGreaterThanOrEqual(m.center.top - 0.5);
+          expect(row.bottom, `${width} ${scheme} 箱の下`).toBeLessThanOrEqual(m.center.bottom + 0.5);
+          for (const score of m.scores) expect(boxesOverlap(row, score), `${width} ${scheme} 点数と重なる`).toBe(false);
+          if (m.infoShown) expect(boxesOverlap(row, m.info), `${width} ${scheme} 局の名前と重なる`).toBe(false);
+          // 牌の幅（ドラ表示牌 1 枚 + ドラ 1 枚）
+          expect(m.tiles).toHaveLength(2);
+          for (const tileWidth of m.tiles) expect(Math.abs(tileWidth - (wide ? 24 : 18)), `${width} ${scheme} 牌の幅`).toBeLessThanOrEqual(0.6);
+          // 文字: 10.5px の静かな色
+          expect(m.label).toEqual({ size: '10.5px', color: m.muted, text: '表示' });
+          expect(m.aria).toMatch(/^ドラ表示牌 .+、ドラ .+$/);
+          // 狭い卓は、局の名前（短い）と、この行だけ。広い卓は、局・本場・残りの組（.info）の下
+          expect(m.infoShown).toBe(wide);
+          // 卓の上の 1 行（狭いときだけ出る）には、ドラ表示牌が無い
+          expect(m.stripHasDora).toBe(false);
+          expect(m.stripText).not.toContain('ドラ');
+          expect(m.stripShown).toBe(!wide);
+          expect(m.scroll[0]).toBeLessThanOrEqual(m.scroll[1] as number);
+        } finally {
+          await context.close();
+        }
+      }
+    });
+  }
+});
+
+describe('盤面の見方（卓の上の右端の説明のアイコン。実ブラウザ）と、U-47 場面の 1 行', () => {
+  it('アイコンは卓の上の右端。押すと凡例が重なりに出て、窓に収まる。Esc で閉じる。「過去の盤面」の旗は、アイコンの左に文字で出る', { timeout: 90_000 }, async () => {
+    for (const width of [1440, 390]) {
+      const { context, page } = await open({ width, height: 900 });
+      try {
+        await openRow(page, 1);
+        const tools = page.locator('.board-col > .board-tools');
+        const button = tools.getByRole('button', { name: '盤面の見方' });
+        const place = await page.evaluate(() => {
+          const box = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+          };
+          const icon = document.querySelector('.board-tools .infotip-btn') as Element;
+          return { icon: box(icon), column: box(document.querySelector('.board-col') as Element), table: box(document.querySelector('.table') as Element), legendInColumn: document.querySelector('.board-col > .legend') !== null };
+        });
+        // 列の右端（押せる範囲の余白を含めて 28px）にあり、卓より上
+        expect(place.icon.right, `@${width} 右端`).toBeLessThanOrEqual(place.column.right + 1);
+        expect(place.icon.right, `@${width} 右端`).toBeGreaterThanOrEqual(place.column.right - 8);
+        expect(place.icon.bottom, `@${width} 卓の上`).toBeLessThanOrEqual(place.table.top + 1);
+        expect(place.legendInColumn).toBe(false);
+        await button.click();
+        const pop = page.locator('.legend-pop:not([hidden])');
+        await pop.waitFor();
+        const m = await measureInfoTip(page, '.board-col .table');
+        expect(m, `@${width}`).not.toBeNull();
+        expect(m!.tip.left).toBeGreaterThanOrEqual(0);
+        expect(m!.tip.right).toBeLessThanOrEqual(m!.innerWidth);
+        expect(m!.tip.top).toBeGreaterThanOrEqual(0);
+        expect(m!.tip.bottom).toBeLessThanOrEqual(m!.innerHeight);
+        expect(m!.text).toContain('ツモ切り');
+        await page.keyboard.press('Escape');
+        await expect.poll(() => page.locator('.legend-pop:not([hidden])').count()).toBe(0);
+        // 過去の盤面の旗
+        expect(await page.locator('.past-flag').count()).toBe(0);
+        await page.getByRole('button', { name: /前の巡目/ }).click();
+        const flag = page.locator('.board-tools > .past-flag');
+        await flag.waitFor();
+        const flagBox = await flag.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const icon = (document.querySelector('.board-tools .infotip-btn') as Element).getBoundingClientRect();
+          return { right: r.right, iconLeft: icon.left, width: r.width, text: el.textContent, visible: (el as HTMLElement).checkVisibility() };
+        });
+        expect(flagBox.visible).toBe(true);
+        expect(flagBox.text).toBe('過去の盤面');
+        expect(flagBox.right).toBeLessThanOrEqual(flagBox.iconLeft + 1);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('場面の 1 行: 13px の静かな色。数は濃い色。「自分の答え」のすぐ上。答え合わせのあとは無い', { timeout: 90_000 }, async () => {
+    for (const scheme of SCHEMES) {
+      const { context, page } = await open({ width: 1440, height: 900, scheme });
+      try {
+        await openRow(page, 1);
+        const m = await page.evaluate(() => {
+          const colorOf = (css: string) => {
+            const probe = document.createElement('i');
+            probe.style.color = css;
+            document.body.append(probe);
+            const color = getComputedStyle(probe).color;
+            probe.remove();
+            return color;
+          };
+          const line = document.querySelector('.scene-line') as HTMLElement;
+          const heading = Array.from(document.querySelectorAll('#answer-form h2')).find((h) => h.textContent === '自分の答え') as HTMLElement;
+          const bold = line.querySelector('b') as HTMLElement;
+          return {
+            text: line.textContent,
+            size: getComputedStyle(line).fontSize,
+            color: getComputedStyle(line).color,
+            boldColor: getComputedStyle(bold).color,
+            muted: colorOf('var(--muted)'),
+            ink: colorOf('var(--ink)'),
+            lineBottom: line.getBoundingClientRect().bottom,
+            headingTop: heading.getBoundingClientRect().top,
+          };
+        });
+        expect(m.text).toMatch(/^\d+巡目 · .+ · 他家の立直なし$/);
+        expect(m.size).toBe('13px');
+        expect(m.color).toBe(m.muted);
+        expect(m.boldColor).toBe(m.ink);
+        expect(m.headingTop).toBeGreaterThanOrEqual(m.lineBottom);
+        expect(m.headingTop - m.lineBottom).toBeLessThanOrEqual(24);
+        await answerCurrent(page);
+        expect(await page.locator('.scene-line').count()).toBe(0);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+});
+
+describe('U-45: 迷いのスクショの欄（出題。実ブラウザ）', () => {
+  it('答えの欄のいちばん上。写真は幅 112px。値・付け替えのボタンは、欄からはみ出さない。写真は Enter で大きく見られ、Esc・外の押下で閉じて写真に戻る', { timeout: 120_000 }, async () => {
+    for (const width of [1440, 768, 390]) {
+      const { context, page } = await open({ width, height: 900 });
+      try {
+        await openRow(page, 1);
+        const block = page.locator('[data-shots="block"]');
+        await block.waitFor();
+        const m = await page.evaluate(() => {
+          const box = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+          };
+          const panel = document.querySelector('.answer') as Element;
+          const scroll = document.querySelector('.answer-scroll') as Element;
+          const shots = document.querySelector('[data-shots="block"]') as Element;
+          return {
+            panel: box(panel),
+            first: scroll.firstElementChild === shots,
+            thumb: box(shots.querySelector('.mthumb') as Element),
+            buttons: Array.from(shots.querySelectorAll('.shot-actions .btn')).map(box),
+            read: box(shots.querySelector('.shot-read') as Element),
+            heading: shots.querySelector('h2')?.textContent,
+            scrollWidth: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+          };
+        });
+        expect(m.first, `@${width}`).toBe(true);
+        expect(m.heading).toBe('迷いのスクショ');
+        expect(Math.abs(m.thumb.width - 112), `@${width} 写真の幅`).toBeLessThanOrEqual(0.6);
+        expect(m.buttons).toHaveLength(2);
+        for (const button of [...m.buttons, m.read, m.thumb]) {
+          expect(button.right, `@${width} 欄の右`).toBeLessThanOrEqual(m.panel.right + 0.5);
+          expect(button.left, `@${width} 欄の左`).toBeGreaterThanOrEqual(m.panel.left - 0.5);
+        }
+        expect(m.scrollWidth[0]).toBeLessThanOrEqual(m.scrollWidth[1] as number);
+        if (width !== 1440) continue;
+        // 写真: Enter で開き、Esc で閉じて、写真に戻る。Space で開き、外の押下で閉じる
+        const thumb = block.locator('.mthumb').first();
+        await thumb.focus();
+        await page.keyboard.press('Enter');
+        const dialog = page.getByRole('dialog', { name: '迷いの画像' });
+        await dialog.waitFor();
+        expect(await page.evaluate(() => (document.querySelector('.app') as HTMLElement).inert)).toBe(true);
+        await page.keyboard.press('Escape');
+        await dialog.waitFor({ state: 'detached' });
+        expect(await thumb.evaluate((el) => el === document.activeElement)).toBe(true);
+        await page.keyboard.press('Space');
+        await dialog.waitFor();
+        await page.locator('.lb-backdrop').click({ force: true, position: { x: 4, y: 4 } });
+        await dialog.waitFor({ state: 'detached' });
+        expect(await thumb.evaluate((el) => el === document.activeElement)).toBe(true);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('付け替え: 次の手に付け替えると、その問題のまま、読み上げの文が出る。盤面は動かない。Ctrl+Z で戻る', { timeout: 90_000 }, async () => {
+    const { context, page } = await open({ width: 1440, height: 900 });
+    try {
+      await openRow(page, 1);
+      const before = await boardBoxes(page);
+      const title = await page.getByRole('heading', { level: 1 }).textContent();
+      await page.getByRole('button', { name: /を次の手に付け替える$/ }).first().click();
+      await expect.poll(() => page.locator('[data-live="relinked"]').textContent()).toMatch(/^迷い\d+を.+に付け替えました$/);
+      expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe(title);
+      expectSameBoxes(before, await boardBoxes(page), '付け替えたあと');
+      const calls = await page.evaluate(() => (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.filter((c) => c.cmd === 'set_mark_link').length);
+      expect(calls).toBe(1);
+      await page.keyboard.press('Control+z');
+      await expect
+        .poll(() => page.evaluate(() => (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.filter((c) => c.cmd === 'clear_mark_link').length))
+        .toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('解き直しでは、答える前に DOM に無く、答え合わせのあとに出る', { timeout: 90_000 }, async () => {
+    const { context, page } = await open({ width: 1440, height: 900, scenario: scenario({ due: true }) });
+    try {
+      await openReview(page);
+      expect(await page.locator('[data-shots="block"]').count()).toBe(0);
+      await answerCurrent(page);
+      await page.locator('[data-shots="block"]').waitFor();
+      expect(await page.locator('.answer-scroll').evaluate((el) => el.firstElementChild?.getAttribute('data-shots'))).toBe('block');
+    } finally {
+      await context.close();
+    }
+  });
 });

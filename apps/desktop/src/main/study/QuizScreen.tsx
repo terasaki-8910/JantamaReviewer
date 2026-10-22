@@ -91,12 +91,12 @@ export function QuizScreen({
       work.revealed
         ? memosForDecision({
             memos: session.memos,
-            resolved: session.marks.length === 0 ? resolveMarks(game.report, session) : resolved,
+            resolved,
             decisionKey,
             decisions: decisionRefs,
           })
         : undefined,
-    [work.revealed, session, game.report, resolved, decisionKey, decisionRefs],
+    [work.revealed, session.memos, resolved, decisionKey, decisionRefs],
   );
 
   // 迷いのスクショの付け替え: 迷いは、この問題から外れる。問題はそのままにして、読み上げの文を出し、

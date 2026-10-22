@@ -73,7 +73,7 @@ describe('U-43 AI の評価の棒（打牌の判断。手牌の上）', () => {
     expect(heights.slice(11, 13)).toEqual(['39px', '39px']);
     expect(heights[13]).toBe('2px');
     expect(heights.slice(0, 11).every((height) => height === '2px')).toBe(true);
-    expect(bars().map((bar) => bar.getAttribute('data-top'))).toEqual([...Array(11).fill(null), '1', '1', null]);
+    expect(bars().map((bar) => bar.classList.contains('is-top'))).toEqual([...Array(11).fill(false), true, true, false]);
     // ツモ牌の列は、手牌から少し離れている（.slot.draw）。棒も、その列の中
     expect(bars()[13]?.closest('.slot')?.className).toContain('draw');
   });

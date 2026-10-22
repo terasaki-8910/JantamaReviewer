@@ -1664,7 +1664,7 @@ describe('U-43 AI の評価（通して見る画面）: 答える場面でない
       expect(bar.getAttribute('data-ai')).toBe('bar');
     }
     expect(bars().filter((bar) => bar.querySelector('.ai-num')).length).toBeGreaterThanOrEqual(1);
-    expect(bars().some((bar) => bar.getAttribute('data-top') === '1')).toBe(true);
+    expect(bars().some((bar) => bar.classList.contains('is-top'))).toBe(true);
     const list = screen.getByRole('list', { name: 'AIの評価' });
     expect(list.querySelectorAll('li').length).toBeGreaterThanOrEqual(5);
     expect(list.querySelector('li')?.textContent).toMatch(/^打.+ \d+\.\d%$/);

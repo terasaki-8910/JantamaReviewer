@@ -323,6 +323,32 @@ const STATES: StateDef[] = [
       await page.locator('[data-ai="danger-box"]').waitFor();
     },
   },
+  // ---- 盤面の作業（U-43〜U-45）----
+  {
+    name: '自分の判断の手番（打牌。手牌の上に棒）',
+    run: async (page) => {
+      await openReplay(page);
+      await nextDecision(page);
+      await page.locator('.hand .ai-bar').first().waitFor();
+    },
+  },
+  {
+    name: '自分の判断の手番（鳴き。右の欄に評価の一覧）',
+    run: async (page) => {
+      await openReplay(page);
+      await nextDecision(page, 3);
+      await page.locator('section.answer [data-ai="eval"]').waitFor();
+    },
+  },
+  {
+    name: '迷いの場面（答える前。盤面の見方を開いた）',
+    run: async (page) => {
+      await openReplay(page);
+      await gotoScene(page, 'k1h1e7');
+      await page.getByRole('button', { name: '盤面の見方' }).click();
+      await page.locator('.legend-pop:not([hidden])').waitFor();
+    },
+  },
 ];
 
 async function openState(state: StateDef, options: Omit<OpenOptions, 'scenario'> = {}): Promise<Opened> {
@@ -565,6 +591,20 @@ describe('U-4: 盤面（卓・手牌）と、右の答えの欄が、重なら�
   }
 });
 
+/**
+ * 手牌から Tab で、理由の欄まで進む。迷いの場面は、答えの欄のいちばん上の「迷いのスクショ」の操作（写真・前の手・次の手）を
+ * 先に通る（欄は答えのフォームより前。U-45）。途中の止まり場所は、すべてその欄の中。
+ */
+async function tabToReason(page: Page): Promise<void> {
+  for (let i = 0; i < 8; i += 1) {
+    await page.keyboard.press('Tab');
+    const at = await page.evaluate(() => ({ id: document.activeElement?.id ?? '', inShots: document.activeElement?.closest('[data-shots="block"]') != null }));
+    if (at.id === 'reason') return;
+    expect(at.inShots, '理由の前の止まり場所は、迷いのスクショの欄の中').toBe(true);
+  }
+  throw new Error('Tab で理由の欄に届きません');
+}
+
 describe('U-5: Tab ですべての操作に届く', () => {
   const ROVING = '.hand .tile-btn, [role="radio"], [role="tab"]';
   const REACH = [
@@ -624,8 +664,7 @@ describe('U-5: Tab ですべての操作に届く', () => {
       await page.keyboard.press('End');
       await page.keyboard.press('Space');
       await expect.poll(() => page.locator('.hand .tile-btn[aria-pressed="true"]').count()).toBe(1);
-      await page.keyboard.press('Tab');
-      expect(await page.evaluate(() => document.activeElement?.id)).toBe('reason');
+      await tabToReason(page);
       await page.keyboard.type('キーボードだけで答える');
       await page.keyboard.press('Tab');
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('submit');
@@ -1233,4 +1272,327 @@ describe('U-25: 説明のアイコン（通して見る画面の「場面を押�
       }
     });
   }
+});
+
+// ---- 盤面の作業（U-43 棒・U-44 ドラ表示牌・U-45 迷いのスクショ・盤面の見方。通して見る画面）----
+
+/** 次の自分の判断へ（→）。`times` 回。 */
+async function nextDecision(page: Page, times = 1): Promise<void> {
+  for (let i = 0; i < times; i += 1) await page.keyboard.press('ArrowRight');
+}
+
+/** 手牌の棒と牌の位置・大きさ（ページの中で測る）。 */
+async function replayBars(page: Page) {
+  return page.evaluate(() => {
+    const box = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    const slots = Array.from(document.querySelectorAll<HTMLElement>('.hand .slot')).filter((slot) => slot.querySelector('.ai-bar') !== null);
+    return slots.map((slot) => {
+      const tile = slot.querySelector('.tile') as HTMLElement;
+      const bar = slot.querySelector('.ai-bar') as HTMLElement;
+      const fill = slot.querySelector<HTMLElement>('.ai-fill');
+      return { tile: box(tile), bar: box(bar), fill: fill === null ? null : box(fill), h: Number.parseFloat(bar.style.getPropertyValue('--h')), labelled: slot.querySelector('.ai-num') !== null };
+    });
+  });
+}
+
+/** 盤面の外側の位置と大きさ（動かないことを確かめる）。 */
+async function replayBoxes(page: Page) {
+  return page.evaluate(() => {
+    const box = (selector: string) => {
+      const r = (document.querySelector(selector) as Element).getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height };
+    };
+    return { column: box('.board-col'), table: box('.table'), hand: box('.hand'), handWrap: box('.hand-wrap') };
+  });
+}
+
+describe('U-43: 通して見る画面の AI の評価の棒（実ブラウザ）', () => {
+  for (const [width, height] of [
+    [1280, 800],
+    [1440, 900],
+    [1920, 1080],
+  ] as const) {
+    it(`${width}×${height}: 自分の打牌の手番で、手牌の上に棒が出る（牌と同じ列・帯 56px）。卓・手牌は、手を進めても・場面に着いても・答えても動かない。文書はスクロールしない`, { timeout: 120_000 }, async () => {
+      const { context, page } = await open({ width, height });
+      try {
+        await openReplay(page);
+        const fit = () => page.evaluate(() => ({ document: document.documentElement.scrollHeight, window: window.innerHeight }));
+        const start = await replayBoxes(page);
+        expect((await fit()).document).toBeLessThanOrEqual(height);
+        // 次の自分の判断（東1局 1巡目。場面ではない）
+        await nextDecision(page);
+        await page.locator('.hand .ai-bar').first().waitFor();
+        const bars = await replayBars(page);
+        expect(bars.length).toBeGreaterThanOrEqual(13);
+        for (const [index, slot] of bars.entries()) {
+          expect(Math.abs(slot.bar.left - slot.tile.left), `${index} 枚目 左`).toBeLessThanOrEqual(0.6);
+          expect(Math.abs(slot.bar.width - slot.tile.width), `${index} 枚目 幅`).toBeLessThanOrEqual(0.6);
+          expect(Math.abs(slot.bar.height - 56), `${index} 枚目 帯`).toBeLessThanOrEqual(0.6);
+          if (slot.fill !== null) {
+            expect(Math.abs(slot.fill.width - slot.tile.width * 0.6), `${index} 枚目 棒の幅`).toBeLessThanOrEqual(1);
+            expect(Math.abs(slot.fill.height - slot.h), `${index} 枚目 棒の高さ`).toBeLessThanOrEqual(0.6);
+          }
+        }
+        expect(bars.some((slot) => slot.labelled)).toBe(true);
+        expect((await fit()).document).toBeLessThanOrEqual(height);
+        const browseBoxes = await replayBoxes(page);
+        // 同じ局の中では、卓も手牌も、手を進めても動かない
+        for (const name of ['column', 'table', 'hand', 'handWrap'] as const) {
+          for (const key of ['left', 'top', 'width', 'height'] as const) {
+            expect(Math.abs(start[name][key] - browseBoxes[name][key]), `手を進めたあと ${name}.${key}`).toBeLessThanOrEqual(0.5);
+          }
+        }
+        // 打牌のあとの手: 棒は無い（帯は、そのまま）
+        await page.keyboard.press('.');
+        expect(await page.locator('.hand .ai-bar').count()).toBe(0);
+        expect((await replayBoxes(page)).hand.top).toBe(browseBoxes.hand.top);
+        // 迷いの場面（東2局1本場。別の局）: 答える前後で、卓・手牌が動かず、文書もスクロールしない
+        await gotoScene(page, 'k1h1e7');
+        expect(await page.locator('.hand .ai-bar').count()).toBe(0);
+        const before = await replayBoxes(page);
+        expect((await fit()).document).toBeLessThanOrEqual(height);
+        await answerCurrent(page);
+        expect(await page.locator('.hand .ai-bar').count()).toBeGreaterThanOrEqual(13);
+        const after = await replayBoxes(page);
+        for (const name of ['column', 'table', 'hand', 'handWrap'] as const) {
+          for (const key of ['left', 'top', 'width', 'height'] as const) {
+            expect(Math.abs(before[name][key] - after[name][key]), `答えたあと ${name}.${key}`).toBeLessThanOrEqual(0.5);
+          }
+        }
+        expect((await fit()).document).toBeLessThanOrEqual(height);
+      } finally {
+        await context.close();
+      }
+    });
+
+    it(`${width}×${height}: 自分の鳴きの判断の手番は、右の欄に評価の一覧（棒は無い）。文書はスクロールせず、欄は窓の下からはみ出さない`, { timeout: 90_000 }, async () => {
+      const { context, page } = await open({ width, height });
+      try {
+        await openReplay(page);
+        await nextDecision(page, 3);
+        await page.locator('section.answer [data-ai="eval"]').waitFor();
+        expect(await page.locator('.hand .ai-bar').count()).toBe(0);
+        const m = await page.evaluate(() => {
+          const panel = document.querySelector('section.answer') as HTMLElement;
+          const scroll = panel.querySelector<HTMLElement>('.answer-scroll');
+          const r = panel.getBoundingClientRect();
+          return {
+            document: document.documentElement.scrollHeight,
+            window: window.innerHeight,
+            panelBottom: r.bottom,
+            content: scroll === null ? 0 : scroll.scrollHeight - scroll.clientHeight,
+            rows: panel.querySelectorAll('[data-ai="candidate"]').length,
+            tags: Array.from(panel.querySelectorAll('[data-ai="candidate"] .btag')).map((tag) => tag.textContent ?? ''),
+          };
+        });
+        expect(m.document).toBeLessThanOrEqual(m.window);
+        expect(m.panelBottom).toBeLessThanOrEqual(m.window);
+        expect(m.rows).toBeGreaterThanOrEqual(2);
+        expect(m.tags.some((tag) => tag.includes('実戦'))).toBe(true);
+        expect(m.tags.some((tag) => tag.includes('自分'))).toBe(false);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  it('色: 棒は --accent-bar、AI の 1 位は --accent（ダークで違う色）。数字は等幅の 11px', { timeout: 90_000 }, async () => {
+    const { context, page } = await open({ width: 1440, height: 900, scheme: 'dark' });
+    try {
+      await openReplay(page);
+      await nextDecision(page);
+      await page.locator('.hand .ai-bar').first().waitFor();
+      const m = await page.evaluate(() => {
+        const colorOf = (css: string) => {
+          const probe = document.createElement('i');
+          probe.style.backgroundColor = css;
+          document.body.append(probe);
+          const color = getComputedStyle(probe).backgroundColor;
+          probe.remove();
+          return color;
+        };
+        const fills = Array.from(document.querySelectorAll<HTMLElement>('.hand .ai-bar')).map((bar) => ({
+          top: bar.classList.contains('is-top'),
+          color: bar.querySelector('.ai-fill') === null ? null : getComputedStyle(bar.querySelector('.ai-fill') as Element).backgroundColor,
+          num: bar.querySelector('.ai-num') === null ? null : { size: getComputedStyle(bar.querySelector('.ai-num') as Element).fontSize, family: getComputedStyle(bar.querySelector('.ai-num') as Element).fontFamily },
+        }));
+        return { accent: colorOf('var(--accent)'), accentBar: colorOf('var(--accent-bar)'), fills };
+      });
+      expect(m.accent).not.toBe(m.accentBar);
+      for (const fill of m.fills) {
+        if (fill.color !== null) expect(fill.color).toBe(fill.top ? m.accent : m.accentBar);
+        if (fill.num !== null) {
+          expect(fill.num.size).toBe('11px');
+          expect(fill.num.family).toContain('IBM Plex Mono');
+        }
+      }
+      expect(m.fills.some((fill) => fill.top)).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('U-44・盤面の見方: 通して見る画面（実ブラウザ）', () => {
+  for (const [width, height] of [
+    [1440, 900],
+    [1280, 800],
+    [768, 900],
+    [390, 900],
+  ] as const) {
+    it(`幅 ${width}px: ドラ表示牌の行が中央の箱に出る（卓の上の 1 行には無い）。盤面の見方のアイコンは卓の上の右端。凡例は重なりの中`, { timeout: 90_000 }, async () => {
+      const { context, page } = await open({ width, height });
+      try {
+        await openReplay(page);
+        const m = await page.evaluate(() => {
+          const box = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width };
+          };
+          const row = document.querySelector('.center .dora') as HTMLElement | null;
+          const center = document.querySelector('.table .center') as Element;
+          const strip = document.querySelector('.info-strip') as HTMLElement;
+          const icon = document.querySelector('.board-tools .infotip-btn') as Element;
+          return {
+            row: row === null ? null : box(row),
+            visible: row !== null && row.checkVisibility(),
+            center: box(center),
+            scores: Array.from(document.querySelectorAll('.table .center .score')).map(box),
+            tiles: Array.from(row?.querySelectorAll('.tile') ?? []).map((tile) => tile.getBoundingClientRect().width),
+            aria: row?.getAttribute('aria-label') ?? '',
+            stripHasDora: strip.querySelector('.dora, .tile') !== null || (strip.textContent ?? '').includes('ドラ'),
+            icon: box(icon),
+            column: box(document.querySelector('.board-col') as Element),
+            table: box(document.querySelector('.table') as Element),
+            legendOutside: document.querySelector('.board-col > .legend, .board-col > .hands-hint') === null,
+            scroll: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+          };
+        });
+        expect(m.visible).toBe(true);
+        const row = m.row as { left: number; right: number; top: number; bottom: number };
+        expect(row.left).toBeGreaterThanOrEqual(m.center.left - 0.5);
+        expect(row.right).toBeLessThanOrEqual(m.center.right + 0.5);
+        expect(row.top).toBeGreaterThanOrEqual(m.center.top - 0.5);
+        expect(row.bottom).toBeLessThanOrEqual(m.center.bottom + 0.5);
+        for (const score of m.scores) expect(boxesOverlap(row, score)).toBe(false);
+        expect(m.tiles).toHaveLength(2);
+        // 通して見る画面の卓は、窓の高さが足りないと小さい配置（狭い卓）になる: 18px、広い卓は 24px
+        for (const tile of m.tiles) expect([18, 24].some((size) => Math.abs(tile - size) <= 0.6)).toBe(true);
+        expect(m.aria).toMatch(/^ドラ表示牌 .+、ドラ .+$/);
+        expect(m.stripHasDora).toBe(false);
+        expect(m.icon.right).toBeLessThanOrEqual(m.column.right + 1);
+        expect(m.icon.right).toBeGreaterThanOrEqual(m.column.right - 8);
+        expect(m.icon.bottom).toBeLessThanOrEqual(m.table.top + 1);
+        expect(m.legendOutside).toBe(true);
+        expect(m.scroll[0]).toBeLessThanOrEqual(m.scroll[1] as number);
+        // 凡例（と、他家の手牌の一言）は、アイコンの重なりの中。窓に収まる
+        await page.getByRole('button', { name: '盤面の見方' }).click();
+        await page.locator('.legend-pop:not([hidden])').waitFor();
+        const tip = await measureInfoTip(page, '.board-col .table');
+        expect(tip).not.toBeNull();
+        expect(tip!.tip.left).toBeGreaterThanOrEqual(0);
+        expect(tip!.tip.right).toBeLessThanOrEqual(tip!.innerWidth);
+        expect(tip!.tip.bottom).toBeLessThanOrEqual(tip!.innerHeight);
+        expect(tip!.text).toContain('ツモ切り');
+        expect(tip!.text).toContain('他家の手牌は、押すと3人とも開きます');
+        await page.keyboard.press('Escape');
+        await expect.poll(() => page.locator('.legend-pop:not([hidden])').count()).toBe(0);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+});
+
+describe('U-45: 迷いのスクショ（通して見る画面。実ブラウザ）', () => {
+  it('迷いの場面: 答えの欄のいちばん上。写真は幅 112px、値・ボタンは欄の中。ほかの場面（不一致だけ）・見ているだけの手には無い。幅 390・768・1280 で横スクロールが無い', { timeout: 120_000 }, async () => {
+    for (const width of [1280, 768, 390]) {
+      const { context, page } = await open({ width, height: 900 });
+      try {
+        await openReplay(page);
+        expect(await page.locator('[data-shots="block"]').count()).toBe(0);
+        await gotoScene(page, 'k1h1e7');
+        const m = await page.evaluate(() => {
+          const box = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return { left: r.left, right: r.right, width: r.width };
+          };
+          const panel = document.querySelector('section.answer') as Element;
+          const shots = document.querySelector('[data-shots="block"]') as Element;
+          return {
+            panel: box(panel),
+            first: document.querySelector('.answer-scroll')?.firstElementChild === shots,
+            thumb: box(shots.querySelector('.mthumb') as Element),
+            buttons: Array.from(shots.querySelectorAll('.shot-actions .btn')).map(box),
+            scroll: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
+          };
+        });
+        expect(m.first, `@${width}`).toBe(true);
+        expect(Math.abs(m.thumb.width - 112), `@${width}`).toBeLessThanOrEqual(0.6);
+        expect(m.buttons).toHaveLength(2);
+        for (const button of m.buttons) {
+          expect(button.right, `@${width}`).toBeLessThanOrEqual(m.panel.right + 0.5);
+          expect(button.left, `@${width}`).toBeGreaterThanOrEqual(m.panel.left - 0.5);
+        }
+        expect(m.scroll[0], `@${width}`).toBeLessThanOrEqual(m.scroll[1] as number);
+        // 不一致だけの場面と、見ているだけの手には無い
+        await page.locator('.pin[data-key="k1h1e6"]').first().click();
+        await page.locator('.qz[data-state="answering"]').waitFor();
+        expect(await page.locator('[data-shots="block"]').count()).toBe(0);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('「次の手に付け替える」: 付け替えた先の場面へ移り、その迷いの写真にキーボードの位置が移る。取り消すと、結びつけが戻る', { timeout: 90_000 }, async () => {
+    const { context, page } = await open({ width: 1440, height: 900 });
+    try {
+      await openReplay(page);
+      await gotoScene(page, 'k1h1e7');
+      expect(await titleText(page)).toBe('東2局1本場 6巡目');
+      await page.getByRole('button', { name: '迷い3を次の手に付け替える' }).click();
+      await expect.poll(() => titleText(page)).not.toBe('東2局1本場 6巡目');
+      await page.locator('.qz[data-state="answering"]').waitFor();
+      await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('迷い3の画像を大きく見る');
+      // 付け替えた先の場面の見出しに、迷い 3 の札
+      expect(await page.locator('.q-chips .q-chip.is-doubt').allTextContents()).toEqual(['迷い3']);
+      // Ctrl+Z: 付け替える前の結びつけに戻る（見ている手は、そのまま。迷いの場面ではなくなる）
+      await page.keyboard.press('Control+z');
+      await expect.poll(() => page.locator('[data-shots="block"]').count()).toBe(0);
+      const calls = await page.evaluate(() =>
+        (window as unknown as { __jrCalls: Array<{ cmd: string; args: { decision?: string } }> }).__jrCalls.filter((c) => c.cmd === 'set_mark_link').map((c) => c.args.decision),
+      );
+      expect(calls).toHaveLength(2);
+      expect(calls[1]).toBe('k1h1e7');
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('写真: Enter で大きく見られ、Esc で閉じて写真に戻る。Space で開き、外の押下で閉じて写真に戻る', { timeout: 90_000 }, async () => {
+    const { context, page } = await open({ width: 1440, height: 900 });
+    try {
+      await openReplay(page);
+      await gotoScene(page, 'k1h1e7');
+      const thumb = page.locator('[data-shots="block"] .mthumb').first();
+      await thumb.focus();
+      await page.keyboard.press('Enter');
+      const dialog = page.getByRole('dialog', { name: '迷いの画像' });
+      await dialog.waitFor();
+      await page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'detached' });
+      expect(await thumb.evaluate((el) => el === document.activeElement)).toBe(true);
+      await page.keyboard.press('Space');
+      await dialog.waitFor();
+      await page.locator('.lb-backdrop').click({ force: true, position: { x: 4, y: 4 } });
+      await dialog.waitFor({ state: 'detached' });
+      expect(await thumb.evaluate((el) => el === document.activeElement)).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
 });

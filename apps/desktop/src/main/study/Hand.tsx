@@ -57,7 +57,7 @@ interface HandProps {
 function BarColumn({ bar }: { bar: HandBar | undefined }) {
   if (bar === undefined) return null;
   return (
-    <span className="ai-bar" aria-hidden="true" data-ai="bar" data-top={bar.top ? '1' : undefined} style={{ '--h': `${bar.height}px` } as CSSProperties}>
+    <span className={`ai-bar${bar.top ? ' is-top' : ''}`} aria-hidden="true" data-ai="bar" style={{ '--h': `${bar.height}px` } as CSSProperties}>
       {bar.height > 0 && <span className="ai-fill" />}
       {bar.label !== null && <span className="ai-num">{bar.label}</span>}
     </span>
