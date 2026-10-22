@@ -119,6 +119,7 @@ const STATES: StateDef[] = [
       await page.getByRole('table', { name: /値ともとの数/ }).waitFor({ timeout: 30_000 });
       await page.getByRole('button', { name: /^半荘ごとに見る/ }).click();
       await page.getByRole('table', { name: '取り込んだ半荘ごとの成績' }).waitFor();
+      await waitGamesRegionSettled(page);
     },
   },
   {
@@ -594,6 +595,21 @@ async function waitImported(page: Page): Promise<void> {
   await page.getByText('2半荘 / 7半荘').waitFor({ timeout: 30_000 });
 }
 
+/**
+ * 「半荘ごとに見る」を開いた直後は、半荘ごとの表の入れ物が、はみ出しを測り終えるのが少し遅れる（表が見えてから、名前つきの領域になるまでに、
+ * 1 回分の描画の間がある）。測り終えるまで待つ: はみ出しているなら名前つきの領域（role="region"）、はみ出していないなら何も付かない。
+ * 待ったあとの確かめ（領域の名前・Tab で止まれる・はみ出さない）は、そのまま厳しく行う。
+ */
+async function waitGamesRegionSettled(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const table = [...document.querySelectorAll('table')].find((t) => t.querySelector('caption')?.textContent === '取り込んだ半荘ごとの成績');
+    const wrap = table?.closest('.wk-tablewrap') ?? null;
+    if (wrap === null) return false;
+    const overflowing = wrap.scrollWidth > wrap.clientWidth + 1;
+    return overflowing === (wrap.getAttribute('role') === 'region');
+  });
+}
+
 describe('U-37: 取り込んだ半荘から数えた値（手入力の成績の下の別の表）', () => {
   for (const width of [390, 768, 1280]) {
     for (const scheme of SCHEMES) {
@@ -644,6 +660,7 @@ describe('U-37: 取り込んだ半荘から数えた値（手入力の成績の�
           // 「半荘ごとに見る」を開く。8 列の表は、はみ出すときだけ、名前つきの領域（キーボードで止まれる）にする
           await page.getByRole('button', { name: '半荘ごとに見る（7半荘）' }).click();
           await page.getByRole('table', { name: '取り込んだ半荘ごとの成績' }).waitFor();
+          await waitGamesRegionSettled(page);
           const games = await page.evaluate((heading) => {
             const imported = [...document.querySelectorAll('section')].find((el) => el.querySelector('h2')?.textContent === heading) as HTMLElement;
             const table = [...imported.querySelectorAll('table')].find((t) => t.querySelector('caption')?.textContent === '取り込んだ半荘ごとの成績') as HTMLElement;
@@ -726,6 +743,7 @@ describe('U-37: 取り込んだ半荘から数えた値（手入力の成績の�
         await waitImported(page);
         await page.getByRole('button', { name: '半荘ごとに見る（7半荘）' }).click();
         await page.getByRole('table', { name: '取り込んだ半荘ごとの成績' }).waitFor();
+        await waitGamesRegionSettled(page);
         const reach = await unreachableByTab(page);
         expect(reach.total, `@${width}`).toBeGreaterThan(30);
         expect(reach.missed, `@${width}`).toEqual([]);
