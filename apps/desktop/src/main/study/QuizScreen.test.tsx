@@ -63,19 +63,20 @@ describe('U-1 答える前は、AI の候補・確率・順位を DOM に出さ�
   });
 });
 
-describe('U-2 答え合わせは、答えと理由がそろうまで押せない', () => {
-  it('牌・理由の順にそろうと押せる。足りないものを、押せない理由として文で出す', async () => {
+describe('U-2 答え合わせは、答えを選ぶまで押せない（理由は任意）', () => {
+  it('牌を選ぶと理由が空でも押せる。足りない答えを、押せない理由として文で出す', async () => {
     const { user, probe } = renderQuiz();
     expect(submit()).toBeDisabled();
-    expect(gate()).toBe('切る牌を選び、理由を1行書くと押せます');
+    expect(gate()).toBe('切る牌を選ぶと押せます');
+    expect(screen.getByText('任意')).toBeInTheDocument();
     await user.click(drawn());
-    expect(submit()).toBeDisabled();
-    expect(gate()).toBe('理由を1行書くと押せます');
+    expect(submit()).toBeEnabled();
+    expect(gate()).toBe('AIの評価が出ます。出したあとは答えを変えられません');
     await user.type(reasonBox(), '   ');
-    expect(submit()).toBeDisabled();
+    expect(submit()).toBeEnabled();
     await user.clear(reasonBox());
     await user.click(drawn());
-    expect(gate()).toBe('切る牌を選び、理由を1行書くと押せます');
+    expect(gate()).toBe('切る牌を選ぶと押せます');
     await user.type(reasonBox(), 'まず理由');
     expect(submit()).toBeDisabled();
     expect(gate()).toBe('切る牌を選ぶと押せます');
@@ -85,6 +86,15 @@ describe('U-2 答え合わせは、答えと理由がそろうまで押せない
     await user.click(drawn());
     expect(submit()).toBeEnabled();
     expect(gate()).toBe('AIの評価が出ます。出したあとは答えを変えられません');
+  });
+
+  it('理由を空のまま答え合わせでき、保存と答えの要約に空の段落を作らない', async () => {
+    const { user, probe } = renderQuiz();
+    await user.click(drawn());
+    await user.click(submit());
+    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    expect(probe.recorded[0]?.reason).toBe('');
+    expect(document.querySelector('.summary .why')).toBeNull();
   });
 
   it('手牌は、Tab の止まり場所が 1 つ。矢印キー・Home・End で牌の間を動き、Space で選ぶ・もう一度で外す', async () => {
@@ -120,7 +130,7 @@ describe('U-2 答え合わせは、答えと理由がそろうまで押せない
 });
 
 describe('U-3 答え合わせ（打牌の判断）', () => {
-  it('答えを保存し、AI の評価・受け入れ枚数・差の原因・学んだ原則・MAKA・次へ を、この順に出す。キーボードの位置は答えの見出しへ', async () => {
+  it('答えを保存し、次へを上段、その下に AI の評価・受け入れ枚数・差の原因・学んだ原則・MAKA の順で出す。キーボードの位置は答えの見出しへ', async () => {
     const { user, probe } = renderQuiz();
     vi.setSystemTime(new Date(2026, 9, 9, 22, 0, 38));
     await answer(user, drawn);
@@ -137,13 +147,18 @@ describe('U-3 答え合わせ（打牌の判断）', () => {
     });
     expect(screen.getByRole('heading', { level: 2, name: '自分の答え' })).toHaveFocus();
     // 順番
+    const panel = document.getElementById('answer') as HTMLElement;
     const review = document.getElementById('review') as HTMLElement;
-    const text = review.textContent ?? '';
-    const order = ['自分の答え', 'AIの評価（Mortal）', '受け入れ枚数', '差の原因', '学んだ原則（1行）', 'MAKA の推した打牌', '次の問題へ'].map((title) =>
+    const text = panel.textContent ?? '';
+    const order = ['次の問題へ', '自分の答え', 'AIの評価（Mortal）', '受け入れ枚数', '差の原因', '学んだ原則（1行）', 'MAKA の推した打牌'].map((title) =>
       text.indexOf(title),
     );
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(panel.firstElementChild).toHaveClass('answer-bar');
+    expect(panel.firstElementChild?.querySelector('#next')).toBe(screen.getByRole('button', { name: '次の問題へ' }));
+    expect(review.querySelector('#next')).toBeNull();
+    expect(document.querySelector('.learn #next')).toBeNull();
     // 自分の答え・理由・答えるまでの時間・選び直し
     expect(within(review).getByText('受け入れを広く')).toBeInTheDocument();
     expect(review.querySelector('.meta')?.textContent).toMatch(/^答えるまで \d:\d\d · 選び直し 0回$/);
@@ -510,7 +525,7 @@ describe('U-16 鳴き（チー・ポン・スルー）の判断', () => {
     expect(screen.getAllByRole('img', { name: '東（対面の打牌）' })).toHaveLength(2);
     expect(screen.getByText('鳴ける牌')).toBeInTheDocument();
     expect(document.querySelector('[data-ai]')).toBeNull();
-    expect(gate()).toBe('ポン・スルーのどちらかを選び、理由を1行書くと押せます');
+    expect(gate()).toBe('ポン・スルーのどちらかを選ぶと押せます');
   });
 
   it('1 つの radiogroup。矢印キーは動かすだけ（選ぶのは Space）で、通り道で選び直しの回数を増やさない。Tab の止まり場所は 1 つ', async () => {
@@ -570,7 +585,7 @@ describe('U-16 リーチ・和了・カンの判断も、雀魂と同じ並び�
     renderQuiz({ report: 'fx1a', key: 'k1h0e10' });
     expect(labelsOf()).toEqual(['リーチ', 'しない']);
     expect(screen.getByText(/^実戦：リーチ$/)).toBeInTheDocument();
-    expect(gate()).toBe('リーチ・しないのどちらかを選び、理由を1行書くと押せます');
+    expect(gate()).toBe('リーチ・しないのどちらかを選ぶと押せます');
     // 鳴く牌は無い（自分の手番）。ツモ牌は右端
     expect(document.querySelector('.cap-top')).toBeNull();
   });
@@ -612,7 +627,7 @@ describe('U-17 解き直し', () => {
     expect(document.querySelector('[data-ai]')).toBeNull();
     expect(document.body.innerHTML).not.toMatch(/data-ai|data-mark/);
     expect(document.body.textContent).not.toMatch(/\d\s*%|Mortal|実戦/);
-    // 理由が必須
+    // 答えを選ぶまでは押せない（理由は任意）
     expect(submit()).toBeDisabled();
   });
 

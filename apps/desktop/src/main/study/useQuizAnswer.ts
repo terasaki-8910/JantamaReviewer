@@ -136,7 +136,7 @@ export function useQuizAnswer(options: QuizAnswerOptions): QuizAnswer {
     setChoice(next);
   }, []);
 
-  const canReveal = stage === 'answering' && choice !== null && reason.trim().length > 0;
+  const canReveal = stage === 'answering' && choice !== null;
 
   const reveal = useCallback(async (): Promise<boolean> => {
     if (!canReveal || choice === null) return false;

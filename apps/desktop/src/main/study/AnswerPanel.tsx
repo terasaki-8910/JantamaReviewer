@@ -1,8 +1,8 @@
 /**
  * 答えの欄（出題・解き直し、あとで半荘を通して見る画面も使う）。
  *
- * 答える前: 打牌の判断は選んだ牌の表示、ほかの判断（鳴き・リーチ・和了・カン）は雀魂と同じ並びのボタン。理由（1 行・必須）。
- *   答えと理由がそろうまで「答え合わせ」は押せない（U-2）。この間、AI の候補・確率・順位は、DOM のどこにも出さない（U-1）。
+ * 答える前: 打牌の判断は選んだ牌の表示、ほかの判断（鳴き・リーチ・和了・カン）は雀魂と同じ並びのボタン。理由（1 行・任意）。
+ *   答えを選ぶまで「答え合わせ」は押せない（U-2）。この間、AI の候補・確率・順位は、DOM のどこにも出さない（U-1）。
  * 答え合わせのあと: 自分の答え・（解き直しは）正解か次の予定・AI の評価・受け入れ枚数（打牌の判断）・差の原因・学んだ原則・MAKA・次へ。
  *   AI の情報を持つ要素には `data-ai` を付ける（答える前の画面に無いことを、試験が確かめる）。
  */
@@ -63,15 +63,13 @@ export interface AnswerPanelProps {
 }
 
 /** 「答え合わせ」を押せない理由（何を選ぶと押せるか）。 */
-function gateText(decision: Decision, options: readonly AnswerOption[], hasChoice: boolean, hasReason: boolean): string {
+function gateText(decision: Decision, options: readonly AnswerOption[], hasChoice: boolean): string {
   let which = '切る牌を選';
   if (decision.kind !== 'discard') {
     const names = [...new Set(options.map((option) => option.label))];
     which = `${names.join('・')}${names.length > 2 ? 'のどれか' : 'のどちらか'}を選`;
   }
-  if (!hasChoice && !hasReason) return `${which}び、理由を1行書くと押せます`;
   if (!hasChoice) return `${which}ぶと押せます`;
-  if (!hasReason) return '理由を1行書くと押せます';
   return 'AIの評価が出ます。出したあとは答えを変えられません';
 }
 
@@ -179,8 +177,7 @@ function AnsweringForm({ decision, quiz, pickedTile, options, calledFrom, dora }
   }, [quiz.error]);
 
   const hasChoice = quiz.choice !== null;
-  const hasReason = quiz.reason.trim().length > 0;
-  const message = quiz.error ?? gateText(decision, options, hasChoice, hasReason);
+  const message = quiz.error ?? gateText(decision, options, hasChoice);
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -208,7 +205,7 @@ function AnsweringForm({ decision, quiz, pickedTile, options, calledFrom, dora }
       <div className="field">
         <div className="field-h">
           <label htmlFor="reason">理由（1行）</label>
-          <span className="req">必須</span>
+          <span className="req">任意</span>
         </div>
         <input
           className="input"
@@ -380,7 +377,7 @@ interface RevealProps extends AnswerPanelProps {
   focusOnMount: boolean;
 }
 
-function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown }: RevealProps) {
+function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, above }: RevealProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
@@ -410,7 +407,15 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
   };
 
   return (
-    <div className="only-revealed q-review" id="review">
+    <>
+      <div className="answer-bar">
+        <button type="button" className="btn primary lg block" id="next" onClick={() => void next()}>
+          {nextLabel}
+        </button>
+      </div>
+      <div className="answer-scroll">
+        {above}
+        <div className="only-revealed q-review" id="review">
       {mode === 'review' && <Verdict decision={decision} quiz={quiz} model={model} threshold={threshold} />}
       <div className="q-sec">
         <h2 className="sec-title sr-only" id="reveal-h" tabIndex={-1} ref={headingRef}>
@@ -426,7 +431,7 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
             <span className="who">自分</span>
             {choiceText(decision, choice)}
           </span>
-          <p className="why">{row.reason}</p>
+          {row.reason !== '' && <p className="why">{row.reason}</p>}
           <p className="meta">
             答えるまで {formatElapsed(quiz.elapsedSec ?? row.duration_ms / 1000)} · 選び直し {quiz.reselects}回
           </p>
@@ -496,11 +501,10 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
           )}
         </div>
         {discard && <Maka decision={decision} model={model} move={notes.makaMove} onChange={notes.setMakaMove} />}
-        <button type="button" className="btn primary lg block" id="next" onClick={() => void next()}>
-          {nextLabel}
-        </button>
       </form>
-    </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -512,13 +516,17 @@ export function AnswerPanel(props: AnswerPanelProps) {
   const revealed = quiz.stage === 'revealed' && quiz.model !== null && quiz.row !== null;
   return (
     <section className="answer" aria-label="答え" id="answer">
-      {props.above}
-      {quiz.stage !== 'revealed' && <AnsweringForm {...props} />}
-      {/* 答えのフォームのあとに置く（手牌から Tab で、理由・答え合わせへ続く順を変えない）。答えを出す前なら、いつでも書ける・直せる */}
-      {quiz.stage !== 'revealed' && props.memoEditor !== undefined && (
-        <div className="q-sec memo-editor" data-memo="editor">
-          <h2 className="sec-title">終局直後のメモ</h2>
-          {props.memoEditor}
+      {quiz.stage !== 'revealed' && (
+        <div className="answer-scroll">
+          {props.above}
+          <AnsweringForm {...props} />
+          {/* 答えのフォームのあとに置く（手牌から Tab で、理由・答え合わせへ続く順を変えない）。答えを出す前なら、いつでも書ける・直せる */}
+          {props.memoEditor !== undefined && (
+            <div className="q-sec memo-editor" data-memo="editor">
+              <h2 className="sec-title">終局直後のメモ</h2>
+              {props.memoEditor}
+            </div>
+          )}
         </div>
       )}
       {revealed && quiz.model !== null && quiz.row !== null && (

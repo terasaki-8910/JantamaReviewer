@@ -10,8 +10,9 @@
  * 説明の文は、見出しのそばの説明のアイコン（InfoTip。R11-1）に置く。見た目は styles/yaku.css（承認済みの見本の部品。色はトークンだけ）。
  */
 import { sortTiles, tileLabel, type YakuBlock, type YakuBox, type YakuPart, type YakuSummary } from '@jantama/engine';
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useId, useState, type ReactNode } from 'react';
 
+import { Icon } from '../Icon';
 import { InfoTip } from '../InfoTip';
 import { isDoraTile } from './dora';
 import { Tile } from './Tile';
@@ -230,19 +231,48 @@ interface SectionProps {
 /** 役の欄。 */
 export function YakuSection({ box, dora }: SectionProps) {
   const blocks = box.merged ? box.blocks.slice(0, 1) : box.blocks;
+  const detailsId = useId();
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem('jantama.yakuOpen') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const summaryBlock = box.merged ? blocks[0] : blocks.find((block) => block.tags.includes('自分'));
+  const settled = summaryBlock?.text.settled.map((line) => line.name) ?? [];
+  const hasDanger = box.blocks.some((block) => block.text.warning?.level === 'danger');
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    try {
+      localStorage.setItem('jantama.yakuOpen', next ? '1' : '0');
+    } catch {
+      // 保存領域が使えなくても、この画面での開け閉めは続ける
+    }
+  };
   return (
     <div className="q-sec" data-ai="yaku-box">
       <div className="sec-head">
-        <h2 className="sec-title">役</h2>
+        <h2 className="sec-title">
+          <button type="button" className="yk-toggle" aria-expanded={open} aria-controls={detailsId} onClick={toggle}>
+            <Icon name="chevronRight" className="chev" />
+            役
+          </button>
+        </h2>
         <InfoTip label="役の欄の説明" id="yk-hint">
           確定している役は、その行動のあとの手が、どう和了っても付く役です（聴牌なら、どの待ちでも付く役）。近い役は、あと3枚以内で付く役（いちばん早い和了より、遠回りは1枚まで）です。立直・門前清自摸和・ドラは数えません。
         </InfoTip>
       </div>
-      <ul className="yk">
-        {blocks.map((block) => (
-          <Row block={block} merged={box.merged} dora={dora} key={block.key} />
-        ))}
-      </ul>
+      <p className="yk-summary">{settled.length > 0 ? `確定している役: ${settled.join('・')}` : '確定している役なし'}</p>
+      {hasDanger && <p className="yk-summary yk-summary-danger">役無しの警告があります（開くと詳しく出ます）</p>}
+      {open && (
+        <ul className="yk" id={detailsId}>
+          {blocks.map((block) => (
+            <Row block={block} merged={box.merged} dora={dora} key={block.key} />
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

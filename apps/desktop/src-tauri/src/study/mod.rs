@@ -403,9 +403,6 @@ fn validate(answer: &NewAnswer) -> Result<(), StudyError> {
             answer.decision_key
         )));
     }
-    if answer.reason.trim().is_empty() {
-        return Err(invalid("理由が空です"));
-    }
     if answer.reason.chars().count() > TEXT_LIMIT {
         return Err(invalid("理由が長すぎます"));
     }
@@ -1324,6 +1321,18 @@ mod tests {
     }
 
     #[test]
+    fn u2_blank_reason_is_saved_as_an_empty_string() {
+        let (_tmp, _data, mut db) = open();
+        let answer = NewAnswer {
+            reason: "  \t".to_string(),
+            ..sample("20261009-190953", "k0h0e4", 5_000)
+        };
+        let row = db.record_answer(answer).unwrap();
+        assert_eq!(row.answer.reason, "");
+        assert_eq!(db.answer(row.id).unwrap().answer.reason, "");
+    }
+
+    #[test]
     fn u20_causes_the_principle_and_the_maka_move_can_be_replaced_after_the_reveal() {
         let (_tmp, _data, mut db) = open();
         let row = db
@@ -1376,13 +1385,6 @@ mod tests {
         let (_tmp, _data, mut db) = open();
         let base = sample("20261009-190953", "k2h1e14", 1_000);
         let cases: Vec<(&str, NewAnswer)> = vec![
-            (
-                "理由が空",
-                NewAnswer {
-                    reason: "  ".to_string(),
-                    ..base.clone()
-                },
-            ),
             (
                 "半荘の名前",
                 NewAnswer {
@@ -2092,7 +2094,7 @@ mod tests {
         assert_eq!(db.list_answers().unwrap().len(), 2);
         // 正しくない値は断る
         let mut bad = edited.clone();
-        bad.reason = " ".to_string();
+        bad.choice = json!("1s");
         assert!(db.put_answer_by_uid(&uid, &bad).is_err());
         assert!(db.put_answer_by_uid("bad uid!", &edited).is_err());
         // 消す

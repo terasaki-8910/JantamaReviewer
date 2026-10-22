@@ -1263,11 +1263,6 @@ mod tests {
                 "形",
             ),
             (
-                "理由が空の答え",
-                edited(&base, |v| v["answers"][0]["reason"] = json!("  ")),
-                "理由",
-            ),
-            (
                 "判断の鍵が違う答え",
                 edited(&base, |v| v["answers"][0]["decision_key"] = json!("bad")),
                 "判断の鍵",
