@@ -52,6 +52,8 @@ const baseSettings = {
   orientation: 'vertical',
   widget_position: null,
   sound: true,
+  // 迷いだけ（F0、U-46）は切: 迷いの場面のメモの欄を検査する。入の検査は、下の「U-46」
+  doubt_only: false,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
   daily_count: 5,
@@ -86,6 +88,8 @@ interface ScenarioOptions {
   dora?: boolean;
   showAll?: boolean;
   keys?: Record<string, string | null>;
+  /** 設定の「迷いだけを記録する」を入にする（迷いの場面の、答える前のメモの欄が出なくなる。U-46）。 */
+  doubtOnly?: boolean;
 }
 
 function scenario(options: ScenarioOptions = {}): Scenario {
@@ -97,6 +101,7 @@ function scenario(options: ScenarioOptions = {}): Scenario {
       highlight_dora: options.dora === true,
       show_all_mismatches: options.showAll === true,
       replay_keys: options.keys ?? defaultReplayKeys(),
+      doubt_only: options.doubtOnly === true,
     },
     inputStatus: null,
     sessions: sessions(),
@@ -1165,3 +1170,96 @@ describe('U-25: 説明のアイコン（通して見る画面の「場面を押�
     });
   }
 });
+
+describe('U-46: 迷いだけを記録する設定が入のとき、迷いの場面に、答える前のメモの欄を出さない（実ブラウザ）', () => {
+  /** 迷い 3（東2局1本場 6巡目の打牌）に、メモを書いてある半荘。迷いだけでも、答えたあとには出る。 */
+  function doubtScenario(doubtOnly: boolean): Scenario {
+    const base = scenario({ doubtOnly });
+    const withMemo = fx4Session(FX4_ID, local(2026, 10, 9, 19, 9), {
+      report_path: `C:\\data\\games\\${FX4_ID}\\report.json`,
+      ocr: fx4Ocr(),
+      links: USER_LINKS,
+      memos: { marks: { '3': { candidates: '南・6m', reason: '東を残したい' } }, extras: [] },
+    });
+    return { ...base, sessions: [withMemo, ...base.sessions.slice(1)] };
+  }
+
+  const DOUBT_SCENES = ['k0h0e4', 'k1h0e12', 'k1h1e7', 'k1h1e10', 'k2h1e6', 'k2h1e14'];
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 1280] as const) {
+      it(`迷いの場面（全 6 つ） 幅${width}px ${scheme}: 答える前に、メモの欄（候補・理由）が無い。横スクロールが無く、重大な a11y 違反が無い。AI の情報は無い`, { timeout: 240_000 }, async () => {
+        const { context, page, problems, external } = await open({ width, scheme, scenario: doubtScenario(true) });
+        try {
+          await openReplay(page);
+          for (const key of DOUBT_SCENES) {
+            await gotoScene(page, key);
+            const where = `${key} @${width} ${scheme}`;
+            expect(await page.locator('.q-chips .is-doubt').count(), `${where} 迷いの場面`).toBeGreaterThan(0);
+            expect(await page.locator('[data-memo]').count(), where).toBe(0);
+            expect(await page.getByLabel('候補').count(), where).toBe(0);
+            expect(await page.getByRole('group', { name: /^迷い\d+のメモ$/ }).count(), where).toBe(0);
+            expect(await page.getByLabel('理由（1行）').count(), where).toBe(1);
+            expect(await page.locator('[data-ai]').count(), where).toBe(0);
+            const f = await page.evaluate(() => ({
+              scroll: document.documentElement.scrollWidth,
+              client: document.documentElement.clientWidth,
+              text: document.body.innerText,
+            }));
+            expect(f.scroll, where).toBeLessThanOrEqual(f.client);
+            expect(f.text, where).not.toContain('東を残したい');
+          }
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('答えると、書いてあるメモが、自分の答えの下に出る（迷いだけでも）。答える前は出ない', { timeout: 120_000 }, async () => {
+    const { context, page } = await open({ width: 1280, scenario: doubtScenario(true) });
+    try {
+      await openReplay(page);
+      await gotoScene(page, 'k1h1e7');
+      expect(await page.locator('[data-memo]').count()).toBe(0);
+      await answerCurrent(page);
+      const shown = page.locator('[data-memo="shown"]');
+      await shown.waitFor();
+      expect(await shown.locator('dd').allTextContents()).toEqual(['南・6m', '東を残したい']);
+      expect(await shown.locator('input, textarea').count()).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('設定を切ると（settings-changed）、答える前の迷いの場面に、メモの欄が出る。書いてあったメモが入っている。入れ直すと消える', { timeout: 120_000 }, async () => {
+    const { context, page } = await open({ width: 1280, scenario: doubtScenario(true) });
+    try {
+      await openReplay(page);
+      await gotoScene(page, 'k1h1e7');
+      const flip = (doubtOnly: boolean) =>
+        page.evaluate(async (value) => {
+          const w = window as unknown as {
+            __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<Record<string, unknown>> };
+            __jrEmit: (event: string, payload: unknown) => void;
+          };
+          const current = await w.__TAURI_INTERNALS__.invoke('get_settings');
+          w.__jrEmit('settings-changed', { ...current, doubt_only: value });
+        }, doubtOnly);
+      expect(await page.locator('[data-memo="editor"]').count()).toBe(0);
+      await flip(false);
+      const editor = page.locator('[data-memo="editor"]');
+      await editor.waitFor();
+      expect(await editor.getByLabel('候補').inputValue()).toBe('南・6m');
+      await flip(true);
+      await page.waitForFunction(() => document.querySelector('[data-memo="editor"]') === null);
+    } finally {
+      await context.close();
+    }
+  });
+});
+

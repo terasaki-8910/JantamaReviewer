@@ -38,6 +38,8 @@ const settings = {
   orientation: 'vertical',
   widget_position: null,
   sound: true,
+  // 迷いだけ（F0、W-15）は切: これまでの縦長（〇△✕ のボタンつき）を検査する。48px 角の検査は、pages.browser.test.ts と、下のエラー画面
+  doubt_only: false,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
 };
@@ -588,10 +590,11 @@ describe('N-5: エラー画面（ブラウザのエラーページの代わり�
     }
   });
 
-  it('ウィジェット: 最初の設定を受け取れなかったら、小さい窓向けのエラー画面になる（縦・横のどちらの大きさでも、はみ出さない）', async () => {
+  it('ウィジェット: 最初の設定を受け取れなかったら、小さい窓向けのエラー画面になる（縦・横・48px 角のどの大きさでも、はみ出さない）', async () => {
     for (const size of [
       { width: 76, height: 336 },
       { width: 340, height: 64 },
+      { width: 48, height: 48 },
     ]) {
       const { context, page } = await open('widget.html', size, scenario('widget', { settings: null }));
       try {

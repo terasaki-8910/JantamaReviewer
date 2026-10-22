@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { COPIED_LINK, FX4_ID, FX4_TEXT, fx4Ocr, fx4Session } from '../import-fixtures';
 import {
   TINY_PNG,
+  boxesOverlap,
   launchBrowser,
   runAxe,
   seriousViolations,
@@ -59,6 +60,8 @@ const settings = {
   orientation: 'vertical',
   widget_position: null,
   sound: true,
+  // 迷いだけ（F0、W-15）は切: これまでの縦長・横長（〇△✕ のボタンつき）と、〇△✕ を持つ画面を検査する。入の検査は、下の「迷いだけ」
+  doubt_only: false,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData\\very\\long\\folder\\name\\for\\wrapping\\check',
 };
@@ -742,3 +745,243 @@ describe('ウィジェット', () => {
     }
   });
 });
+
+// ---- 迷いだけを記録する（F0、W-15）: 48px 角の「迷い」ボタン 1 つ ----
+
+const SQUARE_STATES = [
+  { name: '記録中（迷い 2）', state: baseState },
+  {
+    name: '待機中（迷い 0）',
+    state: { ...baseState, status: 'idle', session_id: null, mark_count: 0, ratings: [], next_hand: 1, can_undo: false },
+  },
+  {
+    name: 'エラー',
+    state: {
+      ...baseState,
+      status: 'error',
+      session_id: null,
+      mark_count: 0,
+      ratings: [],
+      next_hand: 1,
+      can_undo: false,
+      error: '保存先がリポジトリの中です',
+    },
+  },
+  { name: '迷い 15', state: { ...baseState, mark_count: 15 } },
+  // 3 桁でも、窓からはみ出さず、右上の点と重ならない
+  { name: '迷い 100', state: { ...baseState, mark_count: 100 } },
+] as const;
+
+const squareScenario = (state: unknown = baseState) =>
+  scenario('widget', { state, settings: { ...settings, doubt_only: true } });
+
+const jrCalls = (page: Page, cmd: string) =>
+  page.evaluate(
+    (name) =>
+      (window as unknown as { __jrCalls: Array<{ cmd: string; args: unknown }> }).__jrCalls
+        .filter((c) => c.cmd === name)
+        .map((c) => c.args),
+    cmd,
+  );
+
+describe('ウィジェット（迷いだけ。48px 角の「迷い」ボタン 1 つ）', () => {
+  for (const scheme of SCHEMES) {
+    for (const st of SQUARE_STATES) {
+      it(`${scheme} ${st.name}: 窓（48x48）にぴったりの 1 つのボタン。文字は切れず、右上の 6px の点と重ならない。a11y 違反なし。Tab で届く`, async () => {
+        const { context, page, problems, external } = await open(
+          'widget.html',
+          { width: 48, height: 48 },
+          scheme,
+          squareScenario(st.state),
+        );
+        try {
+          const button = page.getByRole('button', { name: /^迷い/ });
+          await button.waitFor();
+          // 窓の中には、このボタンだけ（〇△✕・次の局・取り消しは無い）
+          expect(await page.getByRole('button').count()).toBe(1);
+          expect(await page.locator('.rate, .rate-btn, .undo, .next, .info, .status').count()).toBe(0);
+          expect(await page.locator('.widget').boundingBox()).toMatchObject({ x: 0, y: 0, width: 48, height: 48 });
+          expect(await button.boundingBox()).toMatchObject({ x: 0, y: 0, width: 48, height: 48 });
+
+          const m = await page.evaluate(() => {
+            const rect = (el: Element) => {
+              const r = el.getBoundingClientRect();
+              return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+            };
+            // 文字の見える範囲（箱ではなく、文字そのもの）
+            const textRect = (el: Element) => {
+              const range = document.createRange();
+              range.selectNodeContents(el);
+              return rect({ getBoundingClientRect: () => range.getBoundingClientRect() } as Element);
+            };
+            const button = document.querySelector('button') as HTMLElement;
+            const lbl = button.querySelector('.lbl') as HTMLElement;
+            const num = button.querySelector('.num') as HTMLElement;
+            const dot = button.querySelector('.dot') as HTMLElement;
+            const style = (el: Element) => getComputedStyle(el);
+            return {
+              button: rect(button),
+              lbl: textRect(lbl),
+              num: textRect(num),
+              dot: rect(dot),
+              lblSize: style(lbl).fontSize,
+              numSize: style(num).fontSize,
+              numFamily: style(num).fontFamily,
+              dotClass: dot.className,
+              buttonRadius: style(button).borderTopLeftRadius,
+              docScroll: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
+              clipped: [lbl, num].filter((el) => el.scrollWidth > el.clientWidth + 1).length,
+            };
+          });
+          // 文字の大きさ: 「迷い」11px、数 18px の等幅
+          expect(m.lblSize).toBe('11px');
+          expect(m.numSize).toBe('18px');
+          expect(m.numFamily).toMatch(/mono|monospace/i);
+          // 点: 6px、ボタンの右上の角（端から 8px 以内）
+          expect(m.dot.width).toBeCloseTo(6, 0);
+          expect(m.dot.height).toBeCloseTo(6, 0);
+          expect(m.button.right - m.dot.right).toBeLessThanOrEqual(8);
+          expect(m.dot.top - m.button.top).toBeLessThanOrEqual(8);
+          expect(m.dot.left).toBeGreaterThan(m.button.left + 24);
+          // 文字は、ボタンの中に収まり、切れず、点と重ならない
+          for (const box of [m.lbl, m.num]) {
+            expect(box.left).toBeGreaterThanOrEqual(m.button.left);
+            expect(box.right).toBeLessThanOrEqual(m.button.right);
+            expect(box.top).toBeGreaterThanOrEqual(m.button.top);
+            expect(box.bottom).toBeLessThanOrEqual(m.button.bottom);
+            expect(boxesOverlap(box, m.dot), '点と文字の重なり').toBe(false);
+          }
+          expect(m.clipped).toBe(0);
+          expect(m.lbl.bottom).toBeLessThanOrEqual(m.num.top + 1);
+          expect(m.docScroll).toEqual([48, 48]);
+          // 状態の点: 記録中は塗り、待機中は中抜き、エラーは濃い色
+          const expected = st.state.status === 'recording' ? 'dot' : `dot ${st.state.status}`;
+          expect(m.dotClass).toBe(expected);
+
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          if (st.state.status !== 'error') expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThanOrEqual(1);
+          const reach = await unreachableByTab(page);
+          if (st.state.status === 'error') expect(reach.total).toBe(0);
+          else {
+            expect(reach.total).toBe(1);
+            expect(reach.missed).toEqual([]);
+          }
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('見た目は .doubt のまま: 淡い accent の面・accent の縁・角丸 8px。押した直後は accent の面（flash）になり、すぐ戻る。縁や影を二重にしない', async () => {
+    for (const scheme of SCHEMES) {
+      const { context, page } = await open('widget.html', { width: 48, height: 48 }, scheme, squareScenario());
+      try {
+        const button = page.getByRole('button', { name: /^迷い/ });
+        await button.waitFor();
+        const colorOf = (token: string) =>
+          page.evaluate((name) => {
+            const probe = document.createElement('i');
+            probe.style.color = `var(${name})`;
+            document.body.append(probe);
+            const color = getComputedStyle(probe).color;
+            probe.remove();
+            return color;
+          }, token);
+        const paint = () =>
+          button.evaluate((el) => {
+            const style = getComputedStyle(el);
+            return { background: style.backgroundColor, border: style.borderTopColor, width: style.borderTopWidth, radius: style.borderTopLeftRadius };
+          });
+        const rest = await paint();
+        expect(rest.border, scheme).toBe(await colorOf('--accent'));
+        expect(rest.width).toBe('1px');
+        expect(rest.radius).toBe('8px');
+        expect(rest.background, scheme).not.toBe(await colorOf('--accent'));
+        expect(rest.background, scheme).not.toBe('rgba(0, 0, 0, 0)');
+        // 窓の枠線は無い（ボタンの縁が窓の縁）
+        expect(await page.locator('.widget').evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('0px');
+        // 押した直後
+        await button.click();
+        await page.waitForFunction(() => document.querySelector('button')?.classList.contains('flash') === true);
+        expect((await paint()).background, scheme).toBe(await colorOf('--accent'));
+        await page.waitForFunction(() => document.querySelector('button')?.classList.contains('flash') === false);
+        expect((await paint()).background, scheme).toBe(rest.background);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('実際のマウス: 押して離すと記録が 1 件。3px 動かしても記録。5px 動かすと窓を動かし始めて記録しない。右クリックはメニュー', async () => {
+    const { context, page, problems } = await open('widget.html', { width: 48, height: 48 }, 'light', squareScenario());
+    try {
+      await page.getByRole('button', { name: /^迷い/ }).waitFor();
+      await page.mouse.move(24, 24);
+      await page.mouse.down();
+      await page.mouse.up();
+      await page.waitForFunction(() => (window as unknown as { __jrCalls: unknown[] }).__jrCalls.some((c) => (c as { cmd: string }).cmd === 'add_mark'));
+      expect(await jrCalls(page, 'add_mark')).toHaveLength(1);
+      expect(await jrCalls(page, 'plugin:window|start_dragging')).toHaveLength(0);
+      // 押したまま 3px（4px 以内）動かして離す: 記録
+      await page.mouse.move(20, 24);
+      await page.mouse.down();
+      await page.mouse.move(23, 24);
+      await page.mouse.up();
+      await page.waitForFunction(() => (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.filter((c) => c.cmd === 'add_mark').length === 2);
+      expect(await jrCalls(page, 'plugin:window|start_dragging')).toHaveLength(0);
+      // 押したまま 5px より大きく動かす: 窓を動かし始める（1 回だけ）。離しても記録しない
+      await page.mouse.move(14, 24);
+      await page.mouse.down();
+      await page.mouse.move(20, 24);
+      await page.mouse.move(36, 30);
+      await page.mouse.up();
+      await page.waitForFunction(() => (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.some((c) => c.cmd === 'plugin:window|start_dragging'));
+      expect(await jrCalls(page, 'plugin:window|start_dragging')).toHaveLength(1);
+      expect(await jrCalls(page, 'add_mark')).toHaveLength(2);
+      // 右クリック: ネイティブのメニュー。記録はしない
+      await page.mouse.click(24, 24, { button: 'right' });
+      await page.waitForFunction(() => (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.some((c) => c.cmd === 'show_widget_menu'));
+      expect(await jrCalls(page, 'add_mark')).toHaveLength(2);
+      expect(problems).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('実際のキー: Tab で届き、Enter・Space で記録が 1 件ずつ。押し続けた繰り返しは数えない。焦点の枠は窓の中（内側）に描かれる', async () => {
+    const { context, page, problems } = await open('widget.html', { width: 48, height: 48 }, 'light', squareScenario());
+    try {
+      const button = page.getByRole('button', { name: /^迷い/ });
+      await button.waitFor();
+      await page.keyboard.press('Tab');
+      expect(await button.evaluate((el) => el === document.activeElement)).toBe(true);
+      // 焦点の枠は、内側（窓の外に描くと切れる）
+      const ring = await button.evaluate((el) => {
+        const style = getComputedStyle(el);
+        return { width: style.outlineWidth, offset: style.outlineOffset, style: style.outlineStyle };
+      });
+      expect(ring.style).toBe('solid');
+      expect(Number.parseFloat(ring.offset)).toBeLessThan(0);
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(() => (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.filter((c) => c.cmd === 'add_mark').length === 1);
+      await page.keyboard.press('Space');
+      await page.waitForFunction(() => (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.filter((c) => c.cmd === 'add_mark').length === 2);
+      // 押し続ける（繰り返しのキーが続く）と、最初の 1 回だけ
+      await page.keyboard.down('Enter');
+      await page.keyboard.down('Enter');
+      await page.keyboard.down('Enter');
+      await page.keyboard.up('Enter');
+      await page.waitForFunction(() => (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.filter((c) => c.cmd === 'add_mark').length === 3);
+      await page.waitForTimeout(200);
+      expect(await jrCalls(page, 'add_mark')).toHaveLength(3);
+      expect(problems).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+});
+

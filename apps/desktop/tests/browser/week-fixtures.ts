@@ -20,6 +20,8 @@ const baseSettings = {
   orientation: 'vertical',
   widget_position: null,
   sound: true,
+  // 迷いだけ（F0、U-46）は切: 一致率とずれ（〇△✕）を見る検査が多い。入の検査は、`doubtOnly` で入にする
+  doubt_only: false,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
   daily_count: 5,
@@ -122,6 +124,8 @@ export interface ScenarioOptions {
   /** 今週だけの記録（答え・半荘が今週のものだけ。先週は、答えの無い週）。 */
   sparse?: boolean;
   weeks?: boolean;
+  /** 設定の「迷いだけを記録する」を入にする（一致率とずれの区画が出なくなる。U-46）。 */
+  doubtOnly?: boolean;
 }
 
 export function scenario(options: ScenarioOptions = {}): Scenario {
@@ -137,7 +141,7 @@ export function scenario(options: ScenarioOptions = {}): Scenario {
   return {
     label: 'main',
     state: baseState,
-    settings: baseSettings,
+    settings: { ...baseSettings, doubt_only: options.doubtOnly === true },
     inputStatus: null,
     sessions,
     reports,

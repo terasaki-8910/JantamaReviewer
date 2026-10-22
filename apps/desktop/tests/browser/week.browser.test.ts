@@ -355,6 +355,75 @@ describe('図の約束（dataviz）: 色・線・点・棒・格子（ライト�
   }
 });
 
+describe('U-46: 迷いだけを記録する設定が入のとき、一致率と結果ごとのずれの区画を出さない（実ブラウザ）', () => {
+  it('幅 390・768・1280px（ライト・ダーク）: 「局の評価」の区画・一致率・ずれの図・それぞれの「表で見る」が無い。横スクロールが無く、axe の重大な違反が 0 件。Tab で全部に届く', { timeout: 240_000 }, async () => {
+    for (const width of [390, 768, 1280]) {
+      for (const scheme of SCHEMES) {
+        const { context, page, problems, external } = await open({ width, scheme, doubtOnly: true });
+        const where = `@${width} ${scheme}`;
+        try {
+          await openWeek(page);
+          expect(await page.getByRole('heading', { level: 2, name: '局の評価' }).count(), where).toBe(0);
+          expect(await page.locator('figure[data-fig="agree"], figure[data-fig="dots"]').count(), where).toBe(0);
+          expect(await page.getByRole('button', { name: '一致率とずれの説明' }).count(), where).toBe(0);
+          expect(await page.getByRole('button', { name: '表で見る' }).count(), where).toBe(3);
+          const f = await page.evaluate(() => ({
+            scroll: document.documentElement.scrollWidth,
+            client: document.documentElement.clientWidth,
+            // 区画の並び（見出し）と、区画どうしの縦の間隔
+            heads: [...document.querySelectorAll('.page .wk-sec')].map((s) => (s.querySelector('h2')?.textContent ?? '').trim()),
+            gaps: [...document.querySelectorAll('.page .wk-sec')].slice(0, -1).map((s, i, all) => {
+              const next = [...document.querySelectorAll('.page .wk-sec')][i + 1] as HTMLElement;
+              return Math.round(next.getBoundingClientRect().top - (all[i] as HTMLElement).getBoundingClientRect().bottom);
+            }),
+          }));
+          expect(f.scroll, where).toBeLessThanOrEqual(f.client);
+          expect(f.heads.slice(0, 3), where).toEqual(['今週の数', '差の原因', '局面の種類']);
+          expect(f.heads, where).not.toContain('局の評価');
+          // 今週の数・差の原因・局面の種類・成績の間隔は、そろっている（局の評価が抜けた所だけ、広い・狭いにならない。
+          // 成績の下の「取り込んだ半荘から数えた値」は、成績に続く別の表なので、もともと狭い）
+          expect(f.heads[3], where).toBe('成績（手入力）');
+          expect(new Set(f.gaps.slice(0, 3)).size, `${where} ${JSON.stringify(f.gaps)}`).toBe(1);
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe), where).toEqual([]);
+          const reach = await unreachableByTab(page);
+          expect(reach.total, where).toBeGreaterThan(20);
+          expect(reach.missed, where).toEqual([]);
+          expect(problems, where).toEqual([]);
+          expect(external, where).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      }
+    }
+  });
+
+  it('設定を切ると（settings-changed）、その場で「局の評価」の区画が元どおり出る。入れ直すとまた隠れる', { timeout: 60_000 }, async () => {
+    const { context, page } = await open({ width: 1280, doubtOnly: true });
+    try {
+      await openWeek(page);
+      const flip = (doubtOnly: boolean) =>
+        page.evaluate(async (value) => {
+          const w = window as unknown as {
+            __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<Record<string, unknown>> };
+            __jrEmit: (event: string, payload: unknown) => void;
+          };
+          const current = await w.__TAURI_INTERNALS__.invoke('get_settings');
+          w.__jrEmit('settings-changed', { ...current, doubt_only: value });
+        }, doubtOnly);
+      expect(await page.locator('figure[data-fig="agree"]').count()).toBe(0);
+      await flip(false);
+      await page.locator('figure[data-fig="agree"]').waitFor();
+      expect(await text(page, 'figure[data-fig="agree"] .wk-big .v')).toBe('20%');
+      expect(await page.getByRole('heading', { level: 2, name: '局の評価' }).count()).toBe(1);
+      await flip(true);
+      await page.waitForFunction(() => document.querySelector('figure[data-fig="agree"]') === null);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
 describe('U-30: 吹き出し（マウス・キーボード）。窓の中に収まる', () => {
   for (const width of [1280, 390]) {
     it(`幅 ${width}px: 折れ線を Tab で選ぶと、今週の吹き出し。← で前の週。窓の中に収まる。Esc で消える`, { timeout: 60_000 }, async () => {

@@ -262,7 +262,17 @@ body {
   border-width: 1px;
 }
 
-/* 窓いっぱいのボタンなので、枠は内側に描く（外側に描くと、窓の外になって切れる） */
+/* 押した直後は、ボタンの面が accent になるので、点は面の上の文字の色にする（そのままだと、面と同じ色で消える） */
+.sq-btn.flash .dot {
+  background: var(--on-accent);
+}
+
+.sq-btn.flash .dot.idle {
+  background: transparent;
+  border-color: var(--on-accent);
+}
+
+/* 窓いっぱいのボタンなので、焦点の枠は内側に描く（外側に描くと、窓の外になって切れる）。ボタンの縁（1px）から 1px 離して、縁と区別する */
 .sq-btn:focus-visible {
-  outline-offset: -3px;
+  outline-offset: -4px;
 }
