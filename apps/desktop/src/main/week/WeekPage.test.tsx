@@ -12,8 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSessionStore, local, seedSession, type ReportKey } from '../../../tests/fake-sessions';
 import { FakeStudyStore, answerRow, gameOf } from '../../../tests/fake-study';
 import { fx4Ocr, fx4Session } from '../../../tests/import-fixtures';
-import { installTauriMock } from '../../../tests/tauri-mock';
-import type { AnswerRow, Links, SessionRecord } from '../../api/types';
+import { baseSettings, installTauriMock } from '../../../tests/tauri-mock';
+import type { AnswerRow, Links, SessionRecord, Settings } from '../../api/types';
 import { App } from '../App';
 import { phasesOf } from '../log/logModel';
 
@@ -98,15 +98,20 @@ interface Options {
   answers?: AnswerRow[];
   study?: FakeStudyStore;
   handlers?: Record<string, (args: unknown) => unknown>;
+  /** 設定の上書き（迷いだけを記録する設定を入にするときなど）。 */
+  settings?: Partial<Settings>;
 }
 
 function setup(options: Options = {}) {
   const store = new FakeSessionStore(options.sessions ?? [{ session: fx4(), report: 'fx4' }, fx1a()]);
   const study = options.study ?? new FakeStudyStore(options.answers ?? answers());
-  installTauriMock({ handlers: { ...store.handlers, ...study.handlers, ...options.handlers } });
+  const mock = installTauriMock({
+    settings: { ...baseSettings, ...options.settings },
+    handlers: { ...store.handlers, ...study.handlers, ...options.handlers },
+  });
   const user = userEvent.setup();
   render(<App />);
-  return { store, study, user };
+  return { store, study, user, mock };
 }
 
 /** サイドバーの「週の集計」を押して、ページが数を出すまで待つ。 */
@@ -349,6 +354,59 @@ describe('U-30 局の評価: 一致率と、結果ごとのずれ', () => {
     expect(textOf(figure('agree').querySelector('.wk-big .v'))).toBe('—');
     expect(textOf(figure('agree').querySelector('.wk-big .s'))).toBe('この週は評価を付けた局がありません');
     expect(document.querySelector('figure[data-fig="dots"]')).toBeNull();
+  });
+});
+
+describe('U-46 迷いだけを記録する設定が入のとき、一致率と結果ごとのずれを出さない', () => {
+  it('「局の評価」の区画（一致率・結果ごとのずれ・説明のアイコン・それぞれの「表で見る」）が無い。ほかの区画は、そのまま出る', async () => {
+    const { user } = setup({ settings: { doubt_only: true } });
+    await openWeek(user);
+    expect(screen.queryByRole('heading', { level: 2, name: '局の評価' })).toBeNull();
+    expect(document.querySelector('figure[data-fig="agree"]')).toBeNull();
+    expect(document.querySelector('figure[data-fig="dots"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: '一致率とずれの説明' })).toBeNull();
+    expect(screen.queryByText('自分の〇△✕が AI 基準と合った割合')).toBeNull();
+    expect(screen.queryByText(/AIより低く付けた/)).toBeNull();
+    // 残るのは 3 つの図（差の原因の横棒と推移・成績）。「表で見る」も 3 つ
+    const figs = [...document.querySelectorAll('figure[data-fig]')].map((f) => f.getAttribute('data-fig'));
+    expect(figs.sort()).toEqual(['bars', 'multi', 'rec']);
+    expect(screen.getAllByRole('button', { name: '表で見る' })).toHaveLength(3);
+    expect(tiles()).toHaveLength(4);
+    expect(screen.getByRole('heading', { level: 2, name: '局面の種類' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: '成績（手入力）' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: '来週の重点' })).toBeInTheDocument();
+    // 区画の順は、今週の数・差の原因・局面の種類・成績・来週の重点（局の評価が抜けるだけ）
+    const headings = [...document.querySelectorAll('.page h2.sec-title')].map((h) => textOf(h));
+    expect(headings).toEqual(['今週の数', '差の原因', '局面の種類', '成績（手入力）', '取り込んだ半荘から数えた値（参考）', '来週の重点']);
+  });
+
+  it('設定を切ると、元どおり出る（付け直した評価も、一致率に反映されたまま）。入れ直すと、また隠れる', async () => {
+    const edited: SessionRecord = { ...fx4(), self_ratings: { kyokus: { k0h0: 'good', k2h0: 'good' } } };
+    const { user, mock } = setup({ sessions: [{ session: edited, report: 'fx4' }, fx1a()], settings: { doubt_only: true } });
+    await openWeek(user);
+    expect(document.querySelector('figure[data-fig="agree"]')).toBeNull();
+    act(() => {
+      mock.emit('settings-changed', { ...baseSettings, doubt_only: false } satisfies Settings);
+    });
+    await waitFor(() => expect(document.querySelector('figure[data-fig="agree"]')).not.toBeNull());
+    expect(textOf(figure('agree').querySelector('.wk-big .v'))).toBe('60%');
+    expect(textOf(figure('dots').querySelector('.dp-dir'))).toBe('AIより低く付けた ← → AIより高く付けた');
+    expect(screen.getByRole('heading', { level: 2, name: '局の評価' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '表で見る' })).toHaveLength(5);
+    act(() => {
+      mock.emit('settings-changed', { ...baseSettings, doubt_only: true } satisfies Settings);
+    });
+    await waitFor(() => expect(document.querySelector('figure[data-fig="agree"]')).toBeNull());
+    expect(screen.queryByRole('heading', { level: 2, name: '局の評価' })).toBeNull();
+  });
+
+  it('週を替えても（評価を付けた局が無い先週でも）、局の評価の区画は出ない', async () => {
+    const { user } = setup({ settings: { doubt_only: true } });
+    await openWeek(user);
+    await user.click(prevButton());
+    expect(screen.queryByText('この週は、評価を付けた局がありません。')).toBeNull();
+    expect(document.querySelector('figure[data-fig="agree"]')).toBeNull();
+    expect(range()).toBe('9月28日（月）〜10月4日（日）');
   });
 });
 

@@ -49,6 +49,16 @@ describe('macOS（段階 2）の設定ページ', () => {
     expect(screen.getByRole('checkbox', { name: 'ドラを目立たせる' })).toBeInTheDocument();
   });
 
+  it('「迷いだけを記録する」は、ウィジェットの無い Mac でも出す（半荘・週の集計の画面の部品の出し入れも決めるため）', async () => {
+    setPlatform(MAC_STAGE_2_PLATFORM);
+    installTauriMock();
+    render(<SettingsPage />);
+    await screen.findByText('データの保存先');
+    expect(screen.getByRole('checkbox', { name: '迷いだけを記録する' })).toBeInTheDocument();
+    // ウィジェットの形は Mac には無い（迷いだけを切っても出さない）
+    expect(screen.queryByRole('group', { name: 'ウィジェットの形' })).toBeNull();
+  });
+
   it('Windows では、これまでどおり全部の行が出る（「まだ使えません」は出ない）', async () => {
     installTauriMock();
     render(<SettingsPage />);

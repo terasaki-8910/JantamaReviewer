@@ -66,6 +66,12 @@ interface SessionPageProps {
    * 大きな不一致の印（菱形）に使う（U-36）。渡さなければ、既定の 5%。
    */
   threshold?: number;
+  /**
+   * 設定の「迷いだけを記録する」（F0、U-46。検討画面のシェルが渡す）。入なら、〇△✕ を使う部品（局の評価の表の自分の列・付け直し・食い違いの印、
+   * 取り込む前の評価の一覧、見出しの下の評価の数）と、終局直後のメモの欄（迷いのカードの「候補」「理由」、迷いマークの無い迷いを足す）を出さない。
+   * 記録は消さず、切れば元どおり出る。渡さなければ、切（出す）。
+   */
+  doubtOnly?: boolean;
 }
 
 const noop = () => Promise.resolve();
@@ -91,6 +97,7 @@ export function SessionPage({
   onOpenReplay,
   fit = BASE_FIT_STATE,
   threshold = DEFAULT_DISAGREEMENT_THRESHOLD,
+  doubtOnly = false,
 }: SessionPageProps) {
   const titleId = useId();
   const marksId = useId();
@@ -259,7 +266,7 @@ export function SessionPage({
               </>
             ) : null}
           </h1>
-          <p className="quiet">{subtitle(session, summary)}</p>
+          <p className="quiet">{subtitle(session, summary, doubtOnly)}</p>
         </div>
         {(replayable || (ready !== null && ready.grade !== null)) && (
           <div className="head-actions">
@@ -294,7 +301,7 @@ export function SessionPage({
               <h2 className="sec-title" id={marksId}>
                 迷い（{session.marks.length}）
               </h2>
-              <InfoTip label="終局直後のメモの説明">{MEMO_INTRO}</InfoTip>
+              {!doubtOnly && <InfoTip label="終局直後のメモの説明">{MEMO_INTRO}</InfoTip>}
               {rereading && (
                 <p className="quiet" role="status">
                   スクショを新しい読み取りで読み直しています
@@ -321,20 +328,22 @@ export function SessionPage({
                         else cards.current.set(mark.id, element);
                       }}
                       memo={
-                        <MarkMemoFields
-                          sessionId={session.id}
-                          markId={mark.id}
-                          number={index + 1}
-                          saved={memoOfMark(session.memos, mark.id)}
-                          reload={onChanged}
-                        />
+                        doubtOnly ? undefined : (
+                          <MarkMemoFields
+                            sessionId={session.id}
+                            markId={mark.id}
+                            number={index + 1}
+                            saved={memoOfMark(session.memos, mark.id)}
+                            reload={onChanged}
+                          />
+                        )
                       }
                     />
                   </li>
                 ))}
               </ul>
             )}
-            <ExtraMemos session={session} decisions={decisions} reload={onChanged} />
+            {!doubtOnly && <ExtraMemos session={session} decisions={decisions} reload={onChanged} />}
           </section>
           {table !== null ? (
             <section aria-labelledby={handsId}>
@@ -358,6 +367,7 @@ export function SessionPage({
                 refit={refit}
                 report={report ?? undefined}
                 detailBelow={myTrackBelow}
+                showSelf={!doubtOnly}
               />
             </section>
           ) : readingReport ? (
@@ -367,7 +377,7 @@ export function SessionPage({
               </h2>
               <p className="empty">読み込んでいます。</p>
             </section>
-          ) : (
+          ) : doubtOnly ? null : (
             <section aria-labelledby={handsId}>
               <h2 className="sec-title" id={handsId}>
                 評価（{session.ratings.length}）
@@ -392,9 +402,11 @@ export function SessionPage({
 }
 
 /** 見出しの下の 1 行: 取り込み済みは「5局 · 東3局1本場で終了」、取り込み前は「取り込み前」と、記録の数。 */
-function subtitle(session: SessionRecord, summary: SummaryState | undefined): string {
+function subtitle(session: SessionRecord, summary: SummaryState | undefined, doubtOnly: boolean): string {
+  // 迷いだけのときは、〇△✕ の数を出さない
+  const counts = doubtOnly ? `迷い ${session.mark_count}` : `迷い ${session.mark_count} · 評価 ${session.rating_count}`;
   if (session.report_path === null) {
-    return `取り込み前 · 迷い ${session.mark_count} · 評価 ${session.rating_count}`;
+    return `取り込み前 · ${counts}`;
   }
   if (summary?.status === 'ready') {
     const last = summary.summary.kyokus.at(-1);
@@ -404,7 +416,7 @@ function subtitle(session: SessionRecord, summary: SummaryState | undefined): st
   if (summary?.status === 'unavailable') {
     return `取り込んだ結果を読めませんでした（${summary.reason}）`;
   }
-  return `迷い ${session.mark_count} · 評価 ${session.rating_count}`;
+  return counts;
 }
 
 function RatingRow({ rating }: { rating: RatingEntry }) {

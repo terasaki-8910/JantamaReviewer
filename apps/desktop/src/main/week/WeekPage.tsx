@@ -42,7 +42,7 @@ interface WeekPageProps {
 
 export function WeekPage({ sessions, summaries }: WeekPageProps) {
   const study = useStudy();
-  const { ready, error, studyDay, answers, locate, gameState } = study;
+  const { ready, error, studyDay, answers, locate, gameState, doubtOnly } = study;
   const { problems } = study.model;
   const records = useWeekRecords();
 
@@ -148,7 +148,8 @@ export function WeekPage({ sessions, summaries }: WeekPageProps) {
         <TilesSection summary={summary} isCurrent={isCurrent} />
         <CausesSection {...windowProps} week={week} />
         <PhaseSection summary={summary} />
-        <EvaluationSection {...windowProps} />
+        {/* 迷いだけを記録する設定が入のときは、〇△✕ を使う区画（一致率と、結果ごとのずれ。表で見る、も）を出さない（F0、U-46） */}
+        {!doubtOnly && <EvaluationSection {...windowProps} />}
         {records.error !== null && (
           // 読めなかったときは、入力欄を出さない（読めていない保存済みの値を、空の欄から上書きしてしまわないため）
           <>

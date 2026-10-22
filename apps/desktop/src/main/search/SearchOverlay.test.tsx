@@ -40,6 +40,7 @@ function studyValue(fixture: SearchFixture, options: Options): StudyValue {
     threshold: 0.05,
     dailyCount: 5,
     highlightDora: false,
+    doubtOnly: false,
     answers: options.answers ?? [],
     model: {
       problems: fixture.problems,

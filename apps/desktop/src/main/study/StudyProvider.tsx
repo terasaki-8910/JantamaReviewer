@@ -84,6 +84,11 @@ export interface StudyValue {
   dailyCount: number;
   /** 設定の「ドラを目立たせる」。 */
   highlightDora: boolean;
+  /**
+   * 設定の「迷いだけを記録する」（F0、W-15）。入なら、〇△✕（局の自己評価）と終局直後メモの画面の部品を出さない（記録は消さない）。
+   * 設定を読み込むまでは false（出す。読めなかったときも、記録を隠さない）。
+   */
+  doubtOnly: boolean;
   answers: readonly AnswerRow[];
   model: StudyModel;
   /** サイドバーの数。読み終えるまでは null（出さない）。 */
@@ -264,6 +269,7 @@ export function useStudyData(sessions: readonly SessionRecord[] | null, reloadSe
   const session = useCallback((sessionId: string) => sessionList.find((s) => s.id === sessionId), [sessionList]);
 
   const highlightDora = settings?.highlight_dora ?? false;
+  const doubtOnly = settings?.doubt_only === true;
   const answerList = answers ?? NO_ANSWERS;
   // 描き直しのたびに別の値にならないよう、中身が変わったときだけ作り直す（配った先の画面が、無駄に描き直されない）
   return useMemo(
@@ -274,6 +280,7 @@ export function useStudyData(sessions: readonly SessionRecord[] | null, reloadSe
       threshold,
       dailyCount,
       highlightDora,
+      doubtOnly,
       answers: answerList,
       model,
       todayUnanswered: ready ? model.today.unanswered : null,
@@ -292,6 +299,7 @@ export function useStudyData(sessions: readonly SessionRecord[] | null, reloadSe
       threshold,
       dailyCount,
       highlightDora,
+      doubtOnly,
       answerList,
       model,
       locate,

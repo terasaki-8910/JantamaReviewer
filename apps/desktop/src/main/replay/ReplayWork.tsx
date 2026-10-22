@@ -135,8 +135,9 @@ export function SceneWork({ game, openHands, step, info, anyCalled, scene, sessi
     draft,
   });
   // 答える前: この場面の迷い（`scene.doubts`は迷いの番号）ごとのメモの欄。答えたあと: 結びついたメモを、書き換えずに出す
+  // 迷いだけを記録する設定が入のときは、答える前のメモの欄を出さない（答えたあとの、書いてあるメモは出す。F0、U-46）
   const memoEditor =
-    scene.doubts.length === 0 ? undefined : (
+    study.doubtOnly || scene.doubts.length === 0 ? undefined : (
       <>
         {scene.doubts.map((number) => {
           const mark = session.marks[number - 1];

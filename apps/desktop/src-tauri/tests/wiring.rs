@@ -249,14 +249,7 @@ fn w15_the_widget_window_the_two_menus_and_undo_follow_the_doubt_only_setting() 
     let side_effects = commands
         .split("fn apply_side_effects")
         .nth(1)
-        .and_then(|rest| {
-            rest.split(
-                "
-}
-",
-            )
-            .next()
-        })
+        .and_then(|rest| rest.split("\n}\n").next())
         .expect("apply_side_effects がある");
     // 設定のチェックから変えたときも、同期で変わったときも（どちらも set_settings_now を通る）、窓とメニューを合わせる。
     assert!(
@@ -279,14 +272,7 @@ fn w15_the_widget_window_the_two_menus_and_undo_follow_the_doubt_only_setting() 
     let emit = commands
         .split("pub fn emit_state")
         .nth(1)
-        .and_then(|rest| {
-            rest.split(
-                "
-}
-",
-            )
-            .next()
-        })
+        .and_then(|rest| rest.split("\n}\n").next())
         .expect("emit_state がある");
     assert!(emit.contains("sync_undo_menus(app, state.can_undo)"));
     // 「取り消し」を選ぶと、ウィジェットの取り消しのボタンと同じ動き（最後の記録を 1 つ消す）をする。
@@ -296,14 +282,7 @@ fn w15_the_widget_window_the_two_menus_and_undo_follow_the_doubt_only_setting() 
     let undo_command = commands
         .split("pub async fn undo(")
         .nth(1)
-        .and_then(|rest| {
-            rest.split(
-                "
-}
-",
-            )
-            .next()
-        })
+        .and_then(|rest| rest.split("\n}\n").next())
         .expect("undo がある");
     assert!(undo_command.contains("undo_now(&app)"));
 }
