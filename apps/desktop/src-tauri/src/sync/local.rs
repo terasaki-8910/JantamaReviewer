@@ -33,10 +33,11 @@ use crate::study::{
 };
 
 /// 同期する設定の項目の名前（データの保存先と窓の位置は入れない）。
-pub const SETTING_NAMES: [&str; 9] = [
+pub const SETTING_NAMES: [&str; 10] = [
     "trigger",
     "orientation",
     "sound",
+    "doubt_only",
     "capture_keywords",
     "daily_count",
     "disagreement_percent",
@@ -473,6 +474,7 @@ fn setting_value(settings: &Settings, name: &str) -> Option<serde_json::Value> {
         "trigger" => serde_json::to_value(&settings.trigger),
         "orientation" => serde_json::to_value(settings.orientation),
         "sound" => serde_json::to_value(settings.sound),
+        "doubt_only" => serde_json::to_value(settings.doubt_only),
         "capture_keywords" => serde_json::to_value(&settings.capture_keywords),
         "daily_count" => serde_json::to_value(settings.daily_count),
         "disagreement_percent" => serde_json::to_value(settings.disagreement_percent),
@@ -490,6 +492,7 @@ fn set_setting(settings: &mut Settings, name: &str, text: &str) -> Result<(), St
         "trigger" => settings.trigger = serde_json::from_str(text).map_err(bad)?,
         "orientation" => settings.orientation = serde_json::from_str(text).map_err(bad)?,
         "sound" => settings.sound = serde_json::from_str(text).map_err(bad)?,
+        "doubt_only" => settings.doubt_only = serde_json::from_str(text).map_err(bad)?,
         "capture_keywords" => {
             settings.capture_keywords = serde_json::from_str(text).map_err(bad)?
         }

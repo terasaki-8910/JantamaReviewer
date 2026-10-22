@@ -51,6 +51,9 @@ pub struct PortableSettings {
     pub trigger: Trigger,
     pub orientation: Orientation,
     pub sound: bool,
+    /// 迷いだけを記録する（W-15）。この項目が無い昔の書き出しは、入（既定）として読む。
+    #[serde(default = "default_doubt_only")]
+    pub doubt_only: bool,
     pub capture_keywords: Vec<String>,
     pub daily_count: u32,
     pub disagreement_percent: u32,
@@ -60,6 +63,11 @@ pub struct PortableSettings {
     pub replay_keys_revision: u32,
 }
 
+/// 迷いだけの既定（入）。この項目が無い昔の書き出しを読むときに使う。
+fn default_doubt_only() -> bool {
+    Settings::default().doubt_only
+}
+
 impl PortableSettings {
     /// いまの設定から、書き出す値を取り出す。
     pub fn from_settings(settings: &Settings) -> PortableSettings {
@@ -67,6 +75,7 @@ impl PortableSettings {
             trigger: settings.trigger.clone(),
             orientation: settings.orientation,
             sound: settings.sound,
+            doubt_only: settings.doubt_only,
             capture_keywords: settings.capture_keywords.clone(),
             daily_count: settings.daily_count,
             disagreement_percent: settings.disagreement_percent,
@@ -85,6 +94,7 @@ impl PortableSettings {
             orientation: self.orientation,
             widget_position: current.widget_position,
             sound: self.sound,
+            doubt_only: self.doubt_only,
             capture_keywords: self.capture_keywords.clone(),
             data_dir: current.data_dir.clone(),
             daily_count: self.daily_count,
@@ -701,6 +711,8 @@ mod tests {
             orientation: Orientation::Horizontal,
             widget_position: Some(WidgetPosition { x: 12, y: 34 }),
             sound: false,
+            // 既定（入）とは違う値にして、書き出し・読み込みで落ちないことを確かめる
+            doubt_only: false,
             capture_keywords: vec![
                 "雀魂".into(),
                 "Mahjong Soul".into(),
@@ -981,6 +993,7 @@ mod tests {
         assert_eq!(a.memos.extras.len(), 3);
         assert!(a.memos.extras[0].decision.is_none() && a.memos.extras[0].position.is_some());
         assert_eq!(exported.settings.daily_count, 9);
+        assert!(!exported.settings.doubt_only);
 
         // ファイルに書いて、読み戻す（ファイルを通っても、同じ）
         let text = to_text(&exported).unwrap();
@@ -1069,6 +1082,7 @@ mod tests {
                 "capture_keywords",
                 "daily_count",
                 "disagreement_percent",
+                "doubt_only",
                 "highlight_dora",
                 "orientation",
                 "replay_keys",
@@ -1312,6 +1326,11 @@ mod tests {
                 "形",
             ),
             (
+                "迷いだけの型が違う",
+                edited(&base, |v| v["settings"]["doubt_only"] = json!("yes")),
+                "形",
+            ),
+            (
                 "結びつけの値が ASCII ではない",
                 edited(&base, |v| {
                     v["sessions"][a.as_str()]["links"]["marks"]["1"] = json!("全角");
@@ -1414,6 +1433,35 @@ mod tests {
         ));
         // 正しいファイルは、通る（ここまでで、何も変わっていない）
         assert_eq!(fx.import(&base).unwrap().answers, 4);
+    }
+
+    #[test]
+    fn w15_doubt_only_goes_into_the_file_and_a_file_without_it_reads_as_on() {
+        let fx = fixture();
+        let base = fx.export();
+        // 書き出した設定に、迷いだけが入っている（fixture は切）。読み戻しても同じ
+        assert!(!base.settings.doubt_only);
+        let text = to_text(&base).unwrap();
+        let value: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(value["settings"]["doubt_only"], json!(false));
+        assert!(!parse_records(text.as_bytes()).unwrap().settings.doubt_only);
+        // 入のとき
+        let mut on = base.clone();
+        on.settings.doubt_only = true;
+        let reread = parse_records(to_text(&on).unwrap().as_bytes()).unwrap();
+        assert!(reread.settings.doubt_only);
+        // この項目が無い昔の書き出しは、断らずに、入（既定）として読む。ほかの設定は守る
+        let old = edited(&base, |v| {
+            v["settings"].as_object_mut().unwrap().remove("doubt_only");
+        });
+        let file = parse_records(old.as_bytes()).unwrap();
+        assert!(file.settings.doubt_only);
+        assert_eq!(file.settings.daily_count, base.settings.daily_count);
+        assert!(!file.settings.sound);
+        // 重ねると、いまの設定に入が入る（保存先と窓の位置は、いまのまま）
+        let applied = file.settings.applied_to(&Settings::default());
+        assert!(applied.doubt_only);
+        assert_eq!(applied.validate(), Ok(()));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! 設定。JSON で保存し、欠けた項目は既定値で補う（W-5）。
 //!
 //! 保存する項目: 迷いマークのボタン（マウスのボタン、または修飾キー付きのキー）、ウィジェットの形と位置、音、
+//! 迷いだけを記録する（既定は入。ウィジェットが 48px 角の「迷い」ボタン 1 つになり、〇△✕ と終局直後メモの画面の部品を出さない）、
 //! 雀魂の窓を探す語、データの保存先、出題の設定（1 日に出す数・大きな不一致の基準・ドラを目立たせる）、
 //! 半荘を通して見る画面の設定（AI の1位と違う判断も不一致として出す・キーの割り当て）。
 
@@ -149,6 +150,9 @@ pub struct Settings {
     pub orientation: Orientation,
     pub widget_position: Option<WidgetPosition>,
     pub sound: bool,
+    /// 迷いだけを記録する（既定は入。F0、W-15）。入のとき、ウィジェットは形（`orientation`）によらず 48px 角の「迷い」ボタン 1 つになり、
+    /// 〇△✕（局の自己評価）と終局直後メモの画面の部品を出さない。記録は消さず、切れば元どおり出る。
+    pub doubt_only: bool,
     pub capture_keywords: Vec<String>,
     pub data_dir: PathBuf,
     /// 1 日に出す問題の数（今日の出題。既定 5）。
@@ -173,6 +177,7 @@ impl Default for Settings {
             orientation: Orientation::default(),
             widget_position: None,
             sound: true,
+            doubt_only: true,
             capture_keywords: DEFAULT_CAPTURE_KEYWORDS
                 .iter()
                 .map(|s| s.to_string())
@@ -258,6 +263,7 @@ impl Settings {
             orientation: field(value, "orientation").unwrap_or(defaults.orientation),
             widget_position: field(value, "widget_position").unwrap_or(defaults.widget_position),
             sound: field(value, "sound").unwrap_or(defaults.sound),
+            doubt_only: field(value, "doubt_only").unwrap_or(defaults.doubt_only),
             capture_keywords: field(value, "capture_keywords").unwrap_or(defaults.capture_keywords),
             data_dir: data_dir.unwrap_or(defaults.data_dir),
             // 範囲の外の値（手で書き換えた設定ファイル）は、既定値にする。
@@ -390,6 +396,70 @@ mod tests {
         assert_eq!(s.capture_keywords, vec!["雀魂", "Mahjong Soul"]);
         assert_eq!(s.widget_position, None);
         assert!(s.data_dir.ends_with(DEFAULT_DATA_DIR_NAME));
+    }
+
+    #[test]
+    fn w15_doubt_only_is_on_by_default_and_a_file_without_it_reads_as_on() {
+        assert!(Settings::default().doubt_only);
+        // 昔の設定ファイル（この項目が無い）は、入として読む。ほかの項目は守る。
+        let old =
+            Settings::from_json_str(r#"{ "sound": false, "orientation": "horizontal" }"#).unwrap();
+        assert!(old.doubt_only);
+        assert!(!old.sound);
+        assert_eq!(old.orientation, Orientation::Horizontal);
+        assert!(Settings::from_json_str("{}").unwrap().doubt_only);
+        // 画面から届く設定にこの項目が無くても（`#[serde(default)]`）、入になる。
+        let from_page: Settings = serde_json::from_str(r#"{ "sound": false }"#).unwrap();
+        assert!(from_page.doubt_only);
+    }
+
+    #[test]
+    fn w15_doubt_only_is_saved_and_read_back_in_both_states() {
+        let dir = temp_dir();
+        let path = settings_path(dir.path());
+        for value in [false, true] {
+            let saved = Settings {
+                doubt_only: value,
+                ..Settings::default()
+            };
+            saved.save(&path).unwrap();
+            let loaded = Settings::load(&path).unwrap();
+            assert_eq!(loaded, saved);
+            assert_eq!(loaded.doubt_only, value);
+            let text = fs::read_to_string(&path).unwrap();
+            assert!(text.contains(&format!("\"doubt_only\": {value}")), "{text}");
+        }
+        // 切にして、形と窓の位置を選んであれば、次の起動で残る（切にすると、選んでいた形に戻るため）。
+        let saved = Settings {
+            doubt_only: false,
+            orientation: Orientation::Horizontal,
+            widget_position: Some(WidgetPosition { x: 10, y: 20 }),
+            ..Settings::default()
+        };
+        saved.save(&path).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert!(!loaded.doubt_only);
+        assert_eq!(loaded.orientation, Orientation::Horizontal);
+        assert_eq!(
+            loaded.widget_position,
+            Some(WidgetPosition { x: 10, y: 20 })
+        );
+    }
+
+    #[test]
+    fn w15_an_unreadable_doubt_only_falls_back_to_on_without_discarding_the_others() {
+        for bad in [r#""yes""#, "1", "null", r#"{ "on": true }"#] {
+            let s = Settings::from_json_str(&format!(
+                r#"{{ "doubt_only": {bad}, "sound": false, "daily_count": 8 }}"#
+            ))
+            .unwrap();
+            assert!(s.doubt_only, "{bad}");
+            assert!(!s.sound, "{bad}");
+            assert_eq!(s.daily_count, 8, "{bad}");
+        }
+        let off = Settings::from_json_str(r#"{ "doubt_only": false }"#).unwrap();
+        assert!(!off.doubt_only);
+        assert_eq!(off.validate(), Ok(()));
     }
 
     #[test]

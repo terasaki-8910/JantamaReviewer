@@ -27,9 +27,16 @@ pub const MAIN_TITLE: &str = "JantamaReviewer 検討画面";
 pub const WIDGET_VERTICAL_SIZE: (f64, f64) = (76.0, 336.0);
 /// 横長のウィジェットの大きさ（論理ピクセル）。
 pub const WIDGET_HORIZONTAL_SIZE: (f64, f64) = (340.0, 64.0);
+/// 迷いだけ（`Settings::doubt_only`）のウィジェットの大きさ（論理ピクセル）。形（縦長・横長）によらず 48px 角（W-15）。
+pub const WIDGET_DOUBT_ONLY_SIZE: (f64, f64) = (48.0, 48.0);
+/// ウィジェットの窓の大きさの下限（論理ピクセル）。3 つの大きさのどれより小さく、Windows の既定の下限（幅 136px）より小さい。
+pub const WIDGET_MIN_SIZE: (f64, f64) = (40.0, 40.0);
 
-/// ウィジェットの大きさ（W-5）。
-pub fn widget_size(orientation: Orientation) -> (f64, f64) {
+/// ウィジェットの大きさ（W-5、W-15）。迷いだけが入なら、形によらず 48px 角。切なら、選んだ形の大きさ。
+pub fn widget_size(orientation: Orientation, doubt_only: bool) -> (f64, f64) {
+    if doubt_only {
+        return WIDGET_DOUBT_ONLY_SIZE;
+    }
     match orientation {
         Orientation::Vertical => WIDGET_VERTICAL_SIZE,
         Orientation::Horizontal => WIDGET_HORIZONTAL_SIZE,
@@ -47,7 +54,7 @@ pub struct WindowSpec {
     pub width: f64,
     pub height: f64,
     /// 窓の大きさの下限（論理ピクセル）。`None` なら Windows の既定の下限（幅 136px など）になり、
-    /// 幅 76px のウィジェットがそれより広く作られてしまう。
+    /// 幅 76px のウィジェットや 48px 角の迷いだけのウィジェットが、それより広く作られてしまう。
     pub min_size: Option<(f64, f64)>,
     pub decorations: bool,
     pub always_on_top: bool,
@@ -64,16 +71,17 @@ pub struct WindowSpec {
 }
 
 /// ウィジェットの窓。常に手前・枠なし・大きさ固定・タスクバーに出さず、クリックしても雀魂からフォーカスを奪わない。
-pub fn widget_window_spec(orientation: Orientation) -> WindowSpec {
-    let (width, height) = widget_size(orientation);
+/// 迷いだけ（`doubt_only`）が入なら 48px 角、切なら選んだ形（`orientation`）の大きさ。
+pub fn widget_window_spec(orientation: Orientation, doubt_only: bool) -> WindowSpec {
+    let (width, height) = widget_size(orientation, doubt_only);
     WindowSpec {
         label: WIDGET_LABEL,
         url: "widget.html",
         title: WIDGET_TITLE,
         width,
         height,
-        // どちらの形にも収まる小さな下限にして、Windows の既定の下限（幅 136px）を外す。
-        min_size: Some((40.0, 40.0)),
+        // どの大きさにも収まる小さな下限にして、Windows の既定の下限（幅 136px）を外す。
+        min_size: Some(WIDGET_MIN_SIZE),
         decorations: false,
         always_on_top: true,
         resizable: false,
@@ -270,10 +278,19 @@ mod tests {
         height: 1080,
     };
 
+    /// 迷いだけの入・切と、形の組み合わせ（ウィジェットの窓の大きさが決まる 4 通り）。
+    const MODES: [(Orientation, bool); 4] = [
+        (Orientation::Vertical, false),
+        (Orientation::Horizontal, false),
+        (Orientation::Vertical, true),
+        (Orientation::Horizontal, true),
+    ];
+
     #[test]
     fn w4_the_widget_window_is_created_without_taking_focus() {
-        for orientation in [Orientation::Vertical, Orientation::Horizontal] {
-            let spec = widget_window_spec(orientation);
+        // 迷いだけの 48px 角も、これまでの縦長・横長も、同じ作り方（常に手前・フォーカスを奪わない）。
+        for (orientation, doubt_only) in MODES {
+            let spec = widget_window_spec(orientation, doubt_only);
             assert!(
                 !spec.focusable,
                 "クリックしても有効にならない（WS_EX_NOACTIVATE）"
@@ -291,21 +308,61 @@ mod tests {
 
     #[test]
     fn w5_the_vertical_widget_is_76px_wide_and_the_horizontal_one_is_340_by_64() {
-        let v = widget_window_spec(Orientation::Vertical);
+        let v = widget_window_spec(Orientation::Vertical, false);
         assert_eq!((v.width, v.height), (76.0, 336.0));
-        let h = widget_window_spec(Orientation::Horizontal);
+        let h = widget_window_spec(Orientation::Horizontal, false);
         assert_eq!((h.width, h.height), (340.0, 64.0));
-        assert_eq!(widget_size(Orientation::default()), (76.0, 336.0));
+        assert_eq!(
+            widget_size(Orientation::default(), false),
+            (76.0, 336.0),
+            "既定の形は縦長"
+        );
     }
 
     #[test]
-    fn w5_the_widget_minimum_size_is_below_both_shapes_so_windows_does_not_widen_it() {
-        let spec = widget_window_spec(Orientation::Vertical);
-        let (min_w, min_h) = spec.min_size.expect("下限を明示する");
+    fn w15_with_doubt_only_the_widget_is_a_48px_square_whatever_the_chosen_shape() {
         for orientation in [Orientation::Vertical, Orientation::Horizontal] {
-            let (w, h) = widget_size(orientation);
-            assert!(min_w <= w && min_h <= h, "{orientation:?}");
+            assert_eq!(
+                widget_size(orientation, true),
+                (48.0, 48.0),
+                "{orientation:?}"
+            );
+            let spec = widget_window_spec(orientation, true);
+            assert_eq!((spec.width, spec.height), (48.0, 48.0), "{orientation:?}");
         }
+        assert_eq!(WIDGET_DOUBT_ONLY_SIZE, (48.0, 48.0));
+    }
+
+    #[test]
+    fn w15_turning_doubt_only_off_returns_to_the_chosen_shape_and_its_size() {
+        // 切にすると、選んでいた形と大きさに戻る（形の設定は、迷いだけを入れても書き換えない）。
+        assert_eq!(
+            widget_size(Orientation::Vertical, false),
+            WIDGET_VERTICAL_SIZE
+        );
+        assert_eq!(
+            widget_size(Orientation::Horizontal, false),
+            WIDGET_HORIZONTAL_SIZE
+        );
+        for orientation in [Orientation::Vertical, Orientation::Horizontal] {
+            assert_ne!(
+                widget_size(orientation, true),
+                widget_size(orientation, false)
+            );
+        }
+    }
+
+    #[test]
+    fn w5_the_widget_minimum_size_is_below_every_size_so_windows_does_not_widen_it() {
+        let (min_w, min_h) = WIDGET_MIN_SIZE;
+        for (orientation, doubt_only) in MODES {
+            let spec = widget_window_spec(orientation, doubt_only);
+            assert_eq!(spec.min_size, Some(WIDGET_MIN_SIZE), "下限を明示する");
+            let (w, h) = widget_size(orientation, doubt_only);
+            assert!(min_w <= w && min_h <= h, "{orientation:?} {doubt_only}");
+        }
+        // 48px 角は、下限より大きい（下限に当たって広げられない）。
+        assert!(min_w < 48.0 && min_h < 48.0);
         // Windows の既定の下限（幅 136px）より小さい。
         assert!(min_w < 136.0);
     }
@@ -313,8 +370,9 @@ mod tests {
     #[test]
     fn n7_both_windows_are_created_hidden_so_they_can_be_shown_after_the_first_paint() {
         for spec in [
-            widget_window_spec(Orientation::Vertical),
-            widget_window_spec(Orientation::Horizontal),
+            widget_window_spec(Orientation::Vertical, false),
+            widget_window_spec(Orientation::Horizontal, false),
+            widget_window_spec(Orientation::Vertical, true),
             main_window_spec(),
         ] {
             assert!(!spec.visible, "{}: 隠したまま作る", spec.label);
@@ -324,7 +382,7 @@ mod tests {
     #[test]
     fn n13_window_titles_are_japanese_app_names_and_never_a_url() {
         let specs = [
-            widget_window_spec(Orientation::Vertical),
+            widget_window_spec(Orientation::Vertical, false),
             main_window_spec(),
         ];
         assert_eq!(specs[0].title, WIDGET_TITLE);
@@ -373,6 +431,30 @@ mod tests {
             (2560 - 76, 1400 - 336)
         );
         assert_eq!(clamp_to_monitors((-30, -30), (76, 336), &[SCREEN]), (0, 0));
+    }
+
+    #[test]
+    fn w15_a_widget_that_shrinks_to_the_square_keeps_its_top_left_and_one_that_grows_is_pulled_inside(
+    ) {
+        // 縦長（76×336）から 48px 角に縮める: 左上はそのまま（画面の中なので動かさない）
+        assert_eq!(
+            clamp_to_monitors((2400, 100), (48, 48), &[SCREEN]),
+            (2400, 100)
+        );
+        // 48px 角から縦長・横長に戻す: 画面の下・右にはみ出すなら内側に寄せる
+        assert_eq!(
+            clamp_to_monitors((2400, 1380), (76, 336), &[SCREEN]),
+            (2400, 1400 - 336)
+        );
+        assert_eq!(
+            clamp_to_monitors((2500, 100), (340, 64), &[SCREEN]),
+            (2560 - 340, 100)
+        );
+        // 角の位置の 48px 角は、画面の端に収まる
+        assert_eq!(
+            clamp_to_monitors((2540, 1390), (48, 48), &[SCREEN]),
+            (2560 - 48, 1400 - 48)
+        );
     }
 
     #[test]

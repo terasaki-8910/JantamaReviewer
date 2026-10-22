@@ -164,6 +164,8 @@ fn populate(dev: &Dev) -> (String, String) {
     {
         let mut s = dev.ports.settings.lock().unwrap();
         s.sound = false;
+        // 既定（入）とは違う値にして、設定の行で届くことを確かめる（W-15）
+        s.doubt_only = false;
         s.daily_count = 9;
         s.orientation = Orientation::Horizontal;
         s.trigger = Trigger::Key {
@@ -314,6 +316,7 @@ fn d4_records_round_trip_through_the_sync_rows_into_another_local_db_identically
     assert_eq!(b.ports.settings().widget_position, None);
     assert_eq!(b.ports.settings().data_dir, b.data());
     assert!(!b.ports.settings().sound);
+    assert!(!b.ports.settings().doubt_only, "迷いだけの設定も届く");
     assert_eq!(b.ports.settings().daily_count, 9);
     // 同期しない: スクショ・ウィジェットの記録・文字認識の写し
     let folder = session_dir(&b, &sa);
@@ -920,11 +923,12 @@ fn d4_a_new_device_takes_the_existing_settings_and_never_overwrites_them_with_it
     b.cycle(1_100_000).unwrap();
     let s = b.ports.settings();
     assert!(!s.sound && s.daily_count == 9 && s.orientation == Orientation::Horizontal);
+    assert!(!s.doubt_only, "既定（入）の B が、A の切を上書きしない");
     assert!(matches!(s.trigger, Trigger::Key { .. }));
     // A に、B の既定値が戻ってこない
     a.cycle(1_200_000).unwrap();
     let sa = a.ports.settings();
-    assert!(!sa.sound && sa.daily_count == 9);
+    assert!(!sa.sound && sa.daily_count == 9 && !sa.doubt_only);
     // 保存先と窓の位置は、同期しない
     assert_eq!(
         sa.widget_position,
