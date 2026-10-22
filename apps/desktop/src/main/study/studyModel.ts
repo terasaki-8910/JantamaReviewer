@@ -124,6 +124,8 @@ function problemOf(session: SessionRecord, game: ImportedGame, key: string): Pro
     markNumber: null,
     startedMs: session.started_ms,
     probability: actualProbability(decision.entry),
+    fineMiss: false,
+    contestGap: null,
     decision,
   };
 }

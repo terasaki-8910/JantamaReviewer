@@ -1,5 +1,5 @@
 /**
- * 半荘を通して見る画面（F12）の「場面」: 迷いの場面と不一致の場面（E-26、R10-4）。
+ * 半荘を通して見る画面（F12）の「場面」: 迷い、不一致、拮抗の場面（E-26・E-47、R10-4）。
  *
  * - 不一致の場面: 既定は、実戦の行動の確率が基準（設定の「大きな不一致の基準」。既定 5%）未満の判断（`big`。F2 の大きな不一致と同じ）。
  *   設定「AI の1位と違う判断も、不一致として出す」を入れると、AI の1位と違う判断（結果の `is_equal` が偽のもの）もすべて出す（`other`）。
@@ -8,7 +8,9 @@
  * 場面は、半荘の順に並べる（確率の順には並べない。答える前に、AI の情報を画面に出さないため）。
  */
 import type { Decision } from './decision';
+import { type ContestOptions, contestOf } from './contest';
 import { actualProbability, DEFAULT_DISAGREEMENT_THRESHOLD } from './disagreement';
+import { isFineMiss } from './fine-miss';
 import { keyOfDecision } from './problems';
 import type { ReplayTimeline } from './replay-timeline';
 
@@ -56,6 +58,12 @@ export interface ReplayScene {
   doubts: number[];
   /** 不一致の種類。不一致でなければ null。 */
   mismatch: MismatchKind | null;
+  /** 迷いの場面で、実戦の行動が AI の1位と違うか。 */
+  fineMiss: boolean;
+  /** 拮抗した場面なら、AI の上位2候補の確率差。 */
+  contest: { gap: number } | null;
+  /** このセッションで解決済みか。 */
+  resolved: boolean;
 }
 
 export interface ReplaySceneOptions extends ReplayMismatchOptions {
@@ -64,6 +72,10 @@ export interface ReplaySceneOptions extends ReplayMismatchOptions {
    * 結びつけが決まっていないものは null。
    */
   markKeys: ReadonlyArray<string | null>;
+  /** 拮抗した場面を出す設定。省略時は出さない。 */
+  contest?: ContestOptions;
+  /** このセッションで解決済みの判断の鍵。 */
+  resolvedKeys?: ReadonlySet<string>;
 }
 
 /** 場面の一覧（時間軸の順）。 */
@@ -80,10 +92,20 @@ export function listReplayScenes(timeline: ReplayTimeline, decisions: readonly D
     const key = keyOfDecision(decision);
     const doubts = doubtsOf.get(key) ?? [];
     const mismatch = mismatchKindOf(decision, options);
-    if (doubts.length === 0 && mismatch === null) continue;
+    const contest = options.contest === undefined ? null : contestOf(decision, options.contest);
+    if (doubts.length === 0 && mismatch === null && contest === null) continue;
     const step = timeline.stepOfDecision.get(decision.index);
     if (step === undefined) continue;
-    scenes.push({ key, decision, step, doubts, mismatch });
+    scenes.push({
+      key,
+      decision,
+      step,
+      doubts,
+      mismatch,
+      fineMiss: doubts.length > 0 && isFineMiss(decision),
+      contest,
+      resolved: options.resolvedKeys?.has(key) ?? false,
+    });
   }
   return scenes.sort((a, b) => a.step - b.step);
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_CONTEST_OPTIONS } from '../src/contest';
 import { listDisagreements } from '../src/disagreement';
 import { type ImportedGame, importReportText } from '../src/import';
 import { keyOfDecision, listProblems } from '../src/problems';
@@ -154,5 +155,25 @@ describe('F12 場面の一覧（迷いと不一致）', () => {
     expect(all.filter((scene) => scene.doubts.length > 0)).toHaveLength(6);
     expect(all.filter((scene) => scene.mismatch === 'other')).toHaveLength(3);
     for (const scene of base) expect(all.find((s) => s.key === scene.key)?.mismatch).toBe(scene.mismatch);
+  });
+
+  it('E-45〜E-47 細かいミス・拮抗・解決済みを場面に付け、拮抗だけの場面も入れる', () => {
+    const resolvedKeys = new Set(['k0h0e4']);
+    const scenes = listReplayScenes(timeline, fx4.decisions, {
+      markKeys: FX4_MARKS,
+      contest: { ...DEFAULT_CONTEST_OPTIONS, maxGap: 1, minJunme: 0 },
+      resolvedKeys,
+    });
+    expect(scenes.find((scene) => scene.key === 'k1h0e12')?.fineMiss).toBe(true);
+    expect(scenes.filter((scene) => scene.doubts.length > 0 && scene.key !== 'k1h0e12').every((scene) => !scene.fineMiss)).toBe(true);
+    expect(scenes.find((scene) => scene.key === 'k0h0e4')?.resolved).toBe(true);
+    expect(scenes.filter((scene) => scene.key !== 'k0h0e4').every((scene) => !scene.resolved)).toBe(true);
+    const contested = scenes.filter((scene) => scene.contest !== null);
+    expect(contested.length).toBeGreaterThan(0);
+    expect(contested.some((scene) => scene.doubts.length === 0 && scene.mismatch === null)).toBe(true);
+
+    const withoutContest = listReplayScenes(timeline, fx4.decisions, { markKeys: FX4_MARKS });
+    expect(withoutContest.every((scene) => scene.contest === null)).toBe(true);
+    expect(withoutContest.every((scene) => !scene.resolved)).toBe(true);
   });
 });
