@@ -1220,6 +1220,86 @@
   color: var(--ink);
 }
 
+/*
+  迷いのスクショの欄（U-45）: 答えの欄のいちばん上。迷いごとに、小さな写真（幅 112px。迷いのカードと同じ .mthumb）・迷いの番号と状態の札・読んだ値、
+  その下に、前・次の手に付け替えるボタン。欄の下には、罫線を引く。
+*/
+.shots {
+  margin-bottom: var(--s4);
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+.shot-list {
+  display: grid;
+  gap: var(--s4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shot {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--s2) var(--s3);
+  align-items: start;
+}
+
+.shot .mthumb,
+.shot .mthumb-empty {
+  width: 112px;
+}
+
+.shot .mthumb .zoom {
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+}
+
+.shot .mthumb .zoom .ic {
+  width: 12px;
+  height: 12px;
+}
+
+.shot-body {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.shot-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s2);
+  margin: 0;
+}
+
+.shot-n {
+  font-size: 13.5px;
+}
+
+.shot-read {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.shot-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s2);
+}
+
+.shot-actions .btn {
+  padding-inline: var(--s2);
+}
+
 .pick {
   display: flex;
   align-items: center;

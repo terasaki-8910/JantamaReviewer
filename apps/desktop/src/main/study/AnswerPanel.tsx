@@ -523,7 +523,7 @@ export function AnswerPanel(props: AnswerPanelProps) {
   const [startedAnswering] = useState(quiz.stage !== 'revealed');
   const revealed = quiz.stage === 'revealed' && quiz.model !== null && quiz.row !== null;
   return (
-    <section className="answer" aria-label="答え" id="answer">
+    <section className="answer" aria-label="答え" id="answer" tabIndex={-1}>
       {quiz.stage !== 'revealed' && (
         <div className="answer-scroll">
           {props.shots}

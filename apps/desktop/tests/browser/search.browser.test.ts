@@ -598,7 +598,7 @@ describe('U-22: Ctrl+K・Esc・↑ ↓・Enter（本物のキー）', () => {
       await page.keyboard.press('Enter');
       await page.getByRole('heading', { level: 1, name: '東4局 13巡目' }).waitFor();
       // f9da の東4局 13巡目は、答えた問題（保存してある答えで開く）
-      await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).waitFor();
+      await page.locator('#reveal-h').waitFor({ state: 'attached' });
       await page.keyboard.press('Alt+ArrowLeft');
       await page.getByRole('heading', { level: 1, name: /10月9日\(金\) 19:09/ }).waitFor();
       // 答えていない問題: 答える前の画面。手牌にキーボードの位置。AI の情報は DOM に無い（U-1）

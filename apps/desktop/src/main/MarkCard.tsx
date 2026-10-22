@@ -1,4 +1,3 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react';
 
 import type { DecisionRef } from '@jantama/engine';
@@ -20,6 +19,7 @@ import {
   readingLine,
   type ResolvedMark,
 } from './markCards';
+import { MarkThumb } from './MarkThumb';
 import { MenuSelect } from './MenuSelect';
 import { ReplayIcon } from './replay/ReplayIcons';
 
@@ -92,30 +92,7 @@ export function MarkCard({ mark, number, resolved, decisions, onOpenImage, onCho
       tabIndex={-1}
       aria-labelledby={labelId}
     >
-      {mark.screenshot_path ? (
-        <button
-          type="button"
-          className="mthumb"
-          aria-label={`迷い${number}の画像を大きく見る`}
-          onClick={(event) => onOpenImage(event.currentTarget)}
-        >
-          <img
-            className="thumb"
-            src={convertFileSrc(mark.screenshot_path)}
-            alt={`迷い${number}のスクリーンショット`}
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-          />
-          <span className="zoom" aria-hidden="true">
-            <Icon name="expand" />
-          </span>
-        </button>
-      ) : (
-        <div className="mthumb-empty" title={mark.capture_error ?? undefined}>
-          画像なし
-        </div>
-      )}
+      <MarkThumb mark={mark} number={number} onOpen={onOpenImage} />
       <div className="mbody">
         <div className="mtop">
           <h3 className="mlabel" id={labelId}>

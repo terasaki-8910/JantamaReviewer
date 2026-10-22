@@ -193,7 +193,7 @@ async function answerCurrent(page: Page): Promise<void> {
   else await page.getByRole('radio').first().click();
   await page.getByLabel('理由（1行）').fill('孤立牌を切って、受け入れを広く');
   await page.getByRole('button', { name: '答え合わせ' }).click();
-  await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).waitFor();
+  await page.locator('#reveal-h').waitFor({ state: 'attached' });
 }
 
 const posText = async (page: Page) => ((await page.locator('#pos').textContent()) ?? '').replace(/\s+/g, ' ').trim();
@@ -630,7 +630,7 @@ describe('U-5: Tab ですべての操作に届く', () => {
       await page.keyboard.press('Tab');
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('submit');
       await page.keyboard.press('Enter');
-      await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).waitFor();
+      await page.locator('#reveal-h').waitFor({ state: 'attached' });
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('reveal-h');
     } finally {
       await context.close();

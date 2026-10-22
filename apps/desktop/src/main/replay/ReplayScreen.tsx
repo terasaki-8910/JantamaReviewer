@@ -16,12 +16,13 @@ import {
   listDecisionRefs,
   listReplayScenes,
   shantenTag,
+  type DecisionRef,
   type ImportedGame,
 } from '@jantama/engine';
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 
 import type { SessionRecord } from '../../api/types';
-import { resolveMarks } from '../markCards';
+import { resolveMarks, type ResolvedMark } from '../markCards';
 import { anyCalled, boardInfoOf } from '../study/Board';
 import { useGameTracks } from '../study/OpenHands';
 import { latestAnswerFor } from '../study/QuizPage';
@@ -122,6 +123,19 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
     return out.sort((a, b) => a.g - b.g);
   }, [gameTracks, timeline]);
 
+  // 迷いのスクショの欄で、迷いを前・次の手に付け替えたら、付け替えた先の場面へ移る（その場面の、その迷いの写真へ、キーボードの位置を渡す）
+  const [focusMark, setFocusMark] = useState<number | null>(null);
+  const onFocusDone = useCallback(() => setFocusMark(null), []);
+  const onRelinked = useCallback(
+    (mark: ResolvedMark, to: DecisionRef) => {
+      const decision = findDecisionByKey(game, to.key);
+      const at = decision === undefined ? undefined : timeline.stepOfDecision.get(decision.index);
+      setFocusMark(mark.markId);
+      if (at !== undefined) go(at);
+    },
+    [game, timeline, go],
+  );
+
   const handlers = useMemo(() => {
     const table = {} as ReplayHandlers;
     for (const action of REPLAY_ACTIONS) {
@@ -204,6 +218,9 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
           drafts={drafts}
           nextLabel={nextScene === undefined ? '続きを見る' : '次の場面へ'}
           onNext={afterReveal}
+          onRelinked={onRelinked}
+          focusMarkId={focusMark}
+          onFocusDone={onFocusDone}
         />
       )}
     </div>

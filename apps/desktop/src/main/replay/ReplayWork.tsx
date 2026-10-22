@@ -6,6 +6,7 @@
  *   答えは、出題と同じに記録する（`record_answer`・mode は quiz。1 日後の解き直しの予定も入る）。答えた場面は、答え合わせのあとの形で開く。
  *   迷いの場面は、答える前に、その迷いの終局直後のメモ（「候補」「理由」）を書ける・直せる（迷いのカードと同じ保存先。F4、U-28）。
  *   答えたあとは、メモは書き換えられず、自分の答えの下に出る（AI の情報は、答えるまで出さない）
+ *   迷いの場面は、答えの欄のいちばん上に、その迷いのスクショの欄（前・次の手に付け替えられる。付け替えた先の場面へは、呼ぶ側が移る。U-45）
  * - 他家の手牌（F14、R15-5、R16-7）は、盤面に裏向きで置く。どれか 1 人の手牌を押すと 3 人分が開き、もう一度押すと閉じる。場面にいない手は、いつでも押せる。
  *   開いているあいだ、場面にいない手と、答えたあとの場面は、右の欄の上に「他家の手牌」の欄（聴牌の 1 行・向聴数の折れ線・待ちと点）を出し、
  *   盤面の河に聴牌になった打牌の枠を付ける。答える場面は、答えるまで、押せず、表の牌も DOM に出さない（U-35）。
@@ -23,6 +24,7 @@ import { Board, BoardTools, type BoardInfo } from '../study/Board';
 import { doraKinds } from '../study/dora';
 import { Hand, type HandMark } from '../study/Hand';
 import { buildHandItems } from '../study/handMarks';
+import { HesitationShots } from '../study/HesitationShots';
 import { OpenHandsBlock, useOpenHandsView, type OpenHandsControl } from '../study/OpenHands';
 import { QuizWork } from '../study/QuizWork';
 import { browseBars } from '../study/reveal';
@@ -135,9 +137,31 @@ interface SceneWorkProps {
   drafts: SceneDrafts;
   nextLabel: string;
   onNext: () => void;
+  /** 迷いのスクショの欄で、迷いを前・次の手に付け替えて、保存できたあと（付け替えた先の場面へ移る）。 */
+  onRelinked: (mark: ResolvedMark, to: DecisionRef) => void;
+  /** 付け替えたあと、キーボードの位置を渡す迷いの記録の番号（付け替えた先の場面の、その迷いの写真へ）。 */
+  focusMarkId: number | null;
+  onFocusDone: () => void;
 }
 
-export function SceneWork({ game, openHands, step, info, anyCalled, scene, session, resolved, decisions, existing, drafts, nextLabel, onNext }: SceneWorkProps) {
+export function SceneWork({
+  game,
+  openHands,
+  step,
+  info,
+  anyCalled,
+  scene,
+  session,
+  resolved,
+  decisions,
+  existing,
+  drafts,
+  nextLabel,
+  onNext,
+  onRelinked,
+  focusMarkId,
+  onFocusDone,
+}: SceneWorkProps) {
   const study = useStudy();
   const reload = study.reloadSessions;
   const sessionId = session.id;
@@ -194,6 +218,19 @@ export function SceneWork({ game, openHands, step, info, anyCalled, scene, sessi
         onNext={onNext}
         memoEditor={memoEditor}
         memoShown={memoShown}
+        shots={
+          scene.doubts.length === 0 ? undefined : (
+            <HesitationShots
+              decisionKey={key}
+              session={session}
+              resolved={resolved}
+              decisions={decisions}
+              onRelinked={onRelinked}
+              focusMarkId={focusMarkId}
+              onFocusDone={onFocusDone}
+            />
+          )
+        }
         game={game}
         eventIndex={step.eventIndex}
         openHands={openHands}

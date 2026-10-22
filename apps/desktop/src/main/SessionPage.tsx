@@ -1,4 +1,3 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { DEFAULT_DISAGREEMENT_THRESHOLD, listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
@@ -11,12 +10,12 @@ import { GradeBadge } from './GradeBadge';
 import { ExtraMemos } from './ExtraMemos';
 import { buildHandTable, type HandRow } from './handRows';
 import { HandTable, MARK_CHIPS_HINT, MARK_CHIPS_HINT_ID } from './HandTable';
-import { makaCommand, markLinkCommand, selfRatingCommand } from './hanchanEdits';
+import { makaCommand, selfRatingCommand } from './hanchanEdits';
 import { initialFitState, type MakaFitState } from './makaFit';
 import { useSessionReport } from './hanchanReport';
 import type { ViewerItem, ViewerRequest } from './Lightbox';
 import { chipsByKyoku } from './markChips';
-import { markCaptionParts, resolveMarks, type ResolvedMark } from './markCards';
+import { resolveMarks } from './markCards';
 import { MarkCard } from './MarkCard';
 import { MarkMemoFields } from './MarkMemoFields';
 import { MyShantenTrack } from './MyShantenTrack';
@@ -28,6 +27,8 @@ import { InfoTip } from './InfoTip';
 import { ImportHereButton, TargetImportPanel } from './TargetImport';
 import { useUndo } from './undo/UndoProvider';
 import type { ImportFlow } from './useImportFlow';
+import { useMarkLink } from './useMarkLink';
+import { viewerItemOf } from './viewerItems';
 
 interface SessionPageProps {
   session: SessionRecord;
@@ -167,18 +168,8 @@ export function SessionPage({
     flashTimer.current = window.setTimeout(() => setFlash(null), FLASH_MS);
   }, []);
 
-  // 保存して、取り消せる命令にする。失敗は、取り消しの積み重ねの知らせが通知に出す（ここでは握りつぶさず、呼び出し元へ返す）。
-  const chooseDecision = (item: ResolvedMark, ref: DecisionRef): Promise<void> =>
-    undo.run(
-      markLinkCommand(api, onChanged, {
-        sessionId: session.id,
-        markId: item.markId,
-        number: item.number,
-        before: item.stored,
-        after: ref.key,
-        where: `${ref.kyokuLabel} ${ref.junme}巡目`,
-      }),
-    );
+  // 保存して、取り消せる命令にする（出題・通して見る画面の「迷いのスクショ」の付け替えと同じ操作）
+  const chooseDecision = useMarkLink(session.id, onChanged);
 
   const changeSelfRating = (row: HandRow, value: SelfRatingValue) => {
     if (value === (row.self ?? 'none')) return;
@@ -222,16 +213,10 @@ export function SessionPage({
     const items: ViewerItem[] = [];
     const indexOf = new Map<number, number>();
     session.marks.forEach((mark, i) => {
-      if (!mark.screenshot_path) return;
-      const number = i + 1;
-      const parts = [`迷い${number}`, ...markCaptionParts(resolved?.[i] ?? null)];
+      const item = viewerItemOf(mark, i + 1, resolved?.[i] ?? null);
+      if (item === null) return;
       indexOf.set(mark.id, items.length);
-      items.push({
-        src: convertFileSrc(mark.screenshot_path),
-        alt: `迷い${number}のスクリーンショット`,
-        caption: parts.join(' · '),
-        time: formatClock(mark.t_ms),
-      });
+      items.push(item);
     });
     return { items, indexOf };
   }, [session.marks, resolved]);

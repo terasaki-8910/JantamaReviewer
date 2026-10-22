@@ -213,7 +213,7 @@ async function answerCurrent(page: Page, pick: 'last' | 'first' = 'last'): Promi
   else await page.getByRole('radio').first().click();
   await page.getByLabel('理由（1行）').fill('孤立牌を切って、受け入れを広く');
   await page.getByRole('button', { name: '答え合わせ' }).click();
-  await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).waitFor();
+  await page.locator('#reveal-h').waitFor({ state: 'attached' });
 }
 
 /** 受け入れ枚数の n 行目（0 から）を開く。 */
@@ -243,7 +243,7 @@ async function answerWith(page: Page, pick: () => Promise<void>): Promise<void> 
   await pick();
   await page.getByLabel('理由（1行）').fill('役を見て選んだ');
   await page.getByRole('button', { name: '答え合わせ' }).click();
-  await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).waitFor();
+  await page.locator('#reveal-h').waitFor({ state: 'attached' });
 }
 
 /** 役の欄の見本の場面（FX-4）。東2局1本場 8巡目の打牌（実戦 4p・AI 7p）と、東3局1本場 11巡目のチー（5s 7s は役無し聴牌）。 */
@@ -605,7 +605,7 @@ describe('U-5: Tab ですべての操作に届く', () => {
       await page.keyboard.press('Tab');
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('submit');
       await page.keyboard.press('Enter');
-      await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).waitFor();
+      await page.locator('#reveal-h').waitFor({ state: 'attached' });
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('reveal-h');
       // 答え合わせのあと: 次の問題へ（キーボードの位置は、次の問題の手牌へ）。1 問目が細かいミス（迷い2）なので、2 問目は迷い1
       await page.getByRole('button', { name: '次の問題へ' }).focus();
@@ -720,7 +720,7 @@ describe('U-18: 受け入れ枚数の小窓', () => {
     const { context, page } = await openState(STATES[2] as StateDef);
     try {
       let row = await openUkeire(page, 0);
-      await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).click();
+      await page.getByRole('heading', { name: '受け入れ枚数' }).first().click();
       await expect.poll(() => page.locator('#ukpop').count()).toBe(0);
       // Tab で小窓の中を進み、端を出ると閉じる
       row = await openUkeire(page, 0);

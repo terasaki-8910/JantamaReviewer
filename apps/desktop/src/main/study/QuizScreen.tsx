@@ -6,14 +6,18 @@
  * - 見出しの実戦の行動（「実戦：打3m」）は、出題だけ。解き直しは、答え合わせまで実戦の行動も AI の答えも出さない（U-1・U-17）
  * - 問題ごとに作り直す（呼ぶ側が `key` に問題の識別を入れる）。答えるまでの時間は、この画面を出した時刻から数える
  * - 答え合わせのあと、自分の答えの下に「終局直後のメモ」（その問題に結びつく迷いのメモ・追加のメモ。F4、U-28）。答える前は、DOM にも無い
+ * - 迷いマークを結びつけた問題は、答えの欄のいちばん上に「迷いのスクショ」（F12、U-45）。出題は答える前から、解き直しは答え合わせのあとだけ
+ *   （打牌の直後に押したスクショには、実戦の打牌が写るため）。前・次の手に付け替えたら、その問題のまま、読み上げの文を出す（迷いはこの問題から外れる）
  */
-import { actualText, keyOfDecision, listDecisionRefs, shantenTag } from '@jantama/engine';
+import { actualText, keyOfDecision, listDecisionRefs, shantenTag, type DecisionRef } from '@jantama/engine';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { AnswerMode, AnswerRow } from '../../api/types';
-import { resolveMarks } from '../markCards';
+import { resolveMarks, type ResolvedMark } from '../markCards';
 import { memosForDecision } from '../memos';
 import { anyCalled, boardInfoOf } from './Board';
+import { HesitationShots } from './HesitationShots';
+import { relinkedText } from './shotMarks';
 import { QuizWork } from './QuizWork';
 import { replayStepFrames } from './steps';
 import { useStudy, type Located } from './StudyProvider';
@@ -77,19 +81,35 @@ export function QuizScreen({
   const past = step < last;
   const work = useQuizWork({ decision, sessionId: session.id, mode, board, past, existing, previousIntervalDays });
   const info = useMemo(() => boardInfoOf(decision.board, steps), [decision.board, steps]);
+  // 迷いマークの結びつけ（迷いのスクショの欄と、答え合わせのあとのメモが使う）。迷いマークの無い半荘では、探さない
+  const resolved = useMemo(() => (session.marks.length === 0 ? [] : resolveMarks(game.report, session)), [game.report, session]);
+  const decisionRefs = useMemo(() => listDecisionRefs(game.report), [game.report]);
+  const decisionKey = keyOfDecision(decision);
   // 答え合わせのあとにだけ、その問題に結びつくメモを探す（答える前は、探しも、出しもしない）
   const memoShown = useMemo(
     () =>
       work.revealed
         ? memosForDecision({
             memos: session.memos,
-            resolved: resolveMarks(game.report, session),
-            decisionKey: keyOfDecision(decision),
-            decisions: listDecisionRefs(game.report),
+            resolved: session.marks.length === 0 ? resolveMarks(game.report, session) : resolved,
+            decisionKey,
+            decisions: decisionRefs,
           })
         : undefined,
-    [work.revealed, session, game.report, decision],
+    [work.revealed, session, game.report, resolved, decisionKey, decisionRefs],
   );
+
+  // 迷いのスクショの付け替え: 迷いは、この問題から外れる。問題はそのままにして、読み上げの文を出し、
+  // 押したボタンが消えるので、キーボードの位置は答えの欄へ移す
+  const [relinked, setRelinked] = useState('');
+  const onRelinked = (mark: ResolvedMark, to: DecisionRef) => {
+    setRelinked(relinkedText(mark.number, to));
+    rootRef.current?.querySelector<HTMLElement>('#answer')?.focus({ preventScroll: true });
+  };
+  const shots =
+    mode === 'review' && !work.revealed ? undefined : (
+      <HesitationShots decisionKey={decisionKey} session={session} resolved={resolved} decisions={decisionRefs} onRelinked={onRelinked} />
+    );
 
   // 巡目の行き来。押したボタンが端で押せなくなったとき、キーボードの位置が消えないよう、もう一方へ移す
   const prevRef = useRef<HTMLButtonElement>(null);
@@ -184,10 +204,14 @@ export function QuizScreen({
         nextLabel={nextLabel}
         onNext={onNext}
         memoShown={memoShown}
+        shots={shots}
         game={game}
         eventIndex={frames[step]?.eventIndex ?? decision.eventIndex}
         openHands={openHands}
       />
+      <p className="sr-only" aria-live="polite" data-live="relinked">
+        {relinked}
+      </p>
     </div>
   );
 }

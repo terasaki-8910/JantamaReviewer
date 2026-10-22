@@ -33,6 +33,8 @@ export interface QuizWorkProps {
   memoEditor?: ReactNode;
   /** 答え合わせのあとに、自分の答えの下へ出す「終局直後のメモ」。 */
   memoShown?: readonly ShownMemo[];
+  /** 答えの欄のいちばん上に出す、迷いのスクショの欄（迷いマークを結びつけた場面。U-45）。 */
+  shots?: ReactNode;
   /** 取り込んだ半荘（他家の手牌を、牌譜から組み立てる）。 */
   game: ImportedGame;
   /** 見せている盤面の、牌譜の位置（他家の手牌を、その時点で開く。過去の盤面は、その時点の手牌）。 */
@@ -41,7 +43,7 @@ export interface QuizWorkProps {
   openHands: OpenHandsControl;
 }
 
-export function QuizWork({ work, decision, mode, info, board, past, anyCalled, nextLabel, onNext, memoEditor, memoShown, game, eventIndex, openHands }: QuizWorkProps) {
+export function QuizWork({ work, decision, mode, info, board, past, anyCalled, nextLabel, onNext, memoEditor, memoShown, shots, game, eventIndex, openHands }: QuizWorkProps) {
   // 答えるまでは押せない（表の牌は作らない）。答えたあとは、過去の盤面でも押せる（その時点の他家の手牌）
   const view = useOpenHandsView(game, decision.kyokuPosition, eventIndex, openHands, work.revealed);
   return (
@@ -84,6 +86,7 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
         onNext={onNext}
         memoEditor={memoEditor}
         memoShown={memoShown}
+        shots={shots}
         above={
           view.showing && view.seats !== null ? (
             <OpenHandsBlock me={game.playerId} seats={view.seats} eventIndex={eventIndex} dora={work.dora} tracks={view.tracks} />
