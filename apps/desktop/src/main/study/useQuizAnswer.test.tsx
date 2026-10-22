@@ -62,14 +62,14 @@ function later(ms: number) {
   vi.setSystemTime(new Date(Date.now() + ms));
 }
 
-describe('U-2 答え合わせは、答えと理由がそろうまで押せない', () => {
-  it('答えだけ・理由だけ・空白だけの理由では、押せない', () => {
+describe('U-2 答え合わせは、答えを選ぶまで押せない（理由は任意）', () => {
+  it('答えを選ぶと、理由が空または空白だけでも押せる。答えを外すと押せない', () => {
     const { result } = setup();
     expect(result.current.canReveal).toBe(false);
     act(() => result.current.choose(dahai('1s')));
-    expect(result.current.canReveal).toBe(false);
+    expect(result.current.canReveal).toBe(true);
     act(() => result.current.setReason('   '));
-    expect(result.current.canReveal).toBe(false);
+    expect(result.current.canReveal).toBe(true);
     act(() => result.current.setReason('孤立牌を切る'));
     expect(result.current.canReveal).toBe(true);
     // 答えを外すと、また押せない
@@ -77,9 +77,19 @@ describe('U-2 答え合わせは、答えと理由がそろうまで押せない
     expect(result.current.canReveal).toBe(false);
   });
 
-  it('押せないときに答え合わせを呼んでも、何も保存しない', async () => {
+  it('空白だけの理由は、空文字にして保存する', async () => {
     const { result, recorded } = setup();
     act(() => result.current.choose(dahai('1s')));
+    act(() => result.current.setReason('   '));
+    await act(async () => {
+      await result.current.reveal();
+    });
+    expect(recorded[0]?.reason).toBe('');
+    expect(result.current.stage).toBe('revealed');
+  });
+
+  it('押せないときに答え合わせを呼んでも、何も保存しない', async () => {
+    const { result, recorded } = setup();
     let ok = true;
     await act(async () => {
       ok = await result.current.reveal();

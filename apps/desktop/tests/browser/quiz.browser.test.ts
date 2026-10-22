@@ -225,6 +225,13 @@ async function openUkeire(page: Page, n = 0): Promise<Locator> {
   return row;
 }
 
+/** 閉じている役の欄を開く。 */
+async function openYaku(page: Page): Promise<void> {
+  const toggle = page.locator('[data-ai="yaku-box"]').getByRole('button', { name: '役', exact: true });
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+  await page.locator('[data-ai="yaku-box"] .yk').waitFor();
+}
+
 interface StateDef {
   name: string;
   scenario?: Partial<Scenario> & { dora?: boolean; due?: boolean; dueKeys?: readonly string[]; dueSession?: string };
@@ -480,6 +487,76 @@ describe('U-4・U-5・U-6: 各状態の、幅・アクセシビリティ・テ�
         } finally {
           await context.close();
         }
+      }
+    });
+  }
+});
+
+describe('U-39: 広い窓は右の答えの欄だけをスクロールする', () => {
+  for (const [width, height] of [
+    [1280, 800],
+    [1440, 900],
+    [1920, 1080],
+  ] as const) {
+    it(`${width}×${height}: 答える前後とも文書はスクロールせず、答えの本文だけが動き、上段と盤面は動かない`, { timeout: 90_000 }, async () => {
+      const { context, page } = await open({ width, height });
+      try {
+        await openRow(page, 1);
+        const before = await page.evaluate(() => ({
+          documentHeight: document.documentElement.scrollHeight,
+          windowHeight: window.innerHeight,
+          boardTop: document.querySelector('.board-col')?.getBoundingClientRect().top ?? 0,
+        }));
+        expect(before.documentHeight).toBeLessThanOrEqual(before.windowHeight);
+        await answerCurrent(page);
+        const panel = page.locator('.answer-scroll');
+        const bar = page.locator('.answer-bar');
+        const next = page.locator('#next');
+        const revealed = await page.evaluate(() => ({
+          documentHeight: document.documentElement.scrollHeight,
+          windowHeight: window.innerHeight,
+          panelScrollHeight: document.querySelector<HTMLElement>('.answer-scroll')?.scrollHeight ?? 0,
+          panelClientHeight: document.querySelector<HTMLElement>('.answer-scroll')?.clientHeight ?? 0,
+          boardTop: document.querySelector('.board-col')?.getBoundingClientRect().top ?? 0,
+        }));
+        expect(revealed.documentHeight).toBeLessThanOrEqual(revealed.windowHeight);
+        expect(revealed.panelScrollHeight).toBeGreaterThan(revealed.panelClientHeight);
+        expect(revealed.boardTop).toBe(before.boardTop);
+        const barBefore = await bar.boundingBox();
+        const boardBefore = await page.locator('.board-col').boundingBox();
+        await panel.hover();
+        await page.mouse.wheel(0, 100_000);
+        await expect
+          .poll(() => panel.evaluate((element) => Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop)))
+          .toBeLessThanOrEqual(1);
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        expect(await bar.boundingBox()).toEqual(barBefore);
+        expect(await page.locator('.board-col').boundingBox()).toEqual(boardBefore);
+        expect(await next.isVisible()).toBe(true);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  for (const width of [768, 390]) {
+    it(`幅 ${width}: 答えの欄は内部スクロールせず、横スクロールが出ない`, { timeout: 60_000 }, async () => {
+      const { context, page } = await open({ width, height: 800 });
+      try {
+        await openRow(page, 1);
+        await answerCurrent(page);
+        const layout = await page.evaluate(() => {
+          const panel = document.querySelector<HTMLElement>('.answer-scroll');
+          return {
+            overflowY: panel === null ? '' : getComputedStyle(panel).overflowY,
+            documentWidth: document.documentElement.scrollWidth,
+            windowWidth: window.innerWidth,
+          };
+        });
+        expect(layout.overflowY).not.toBe('auto');
+        expect(layout.documentWidth).toBeLessThanOrEqual(layout.windowWidth);
+      } finally {
+        await context.close();
       }
     });
   }
@@ -909,6 +986,7 @@ describe('U-33: 役の欄（答え合わせのあと。受け入れ枚数の欄�
       for (const state of YAKU_STATES) {
         const { context, page, problems } = await openState(state, { width });
         try {
+          await openYaku(page);
           const found = await page.evaluate(() => {
             const box = document.querySelector<HTMLElement>('[data-ai="yaku-box"]');
             if (box === null) return null;
@@ -954,6 +1032,7 @@ describe('U-33: 役の欄（答え合わせのあと。受け入れ枚数の欄�
     it(`警告（札「役無し」・太字の文）は、色以外（濃い枠・字の太さ）でも見分けられる。近い役の札とも違う（${scheme}）`, { timeout: 60_000 }, async () => {
       const { context, page } = await openState(STATES[11] as StateDef, { scheme });
       try {
+        await openYaku(page);
         const style = await page.evaluate(() => {
           const read = (el: Element) => {
             const s = getComputedStyle(el);
@@ -986,7 +1065,7 @@ describe('U-33: 役の欄（答え合わせのあと。受け入れ枚数の欄�
     });
   }
 
-  it('Tab の順番: 受け入れ枚数の行 → 天鳳牌理 → 役の説明のアイコン → 差の原因。欄の中の止まり場所は、説明のアイコンだけ', { timeout: 60_000 }, async () => {
+  it('Tab の順番: 受け入れ枚数の行 → 天鳳牌理 → 役の開閉 → 役の説明のアイコン → 差の原因', { timeout: 60_000 }, async () => {
     const { context, page } = await openState(STATES[10] as StateDef);
     try {
       await page.locator('.uk-open').last().focus();
@@ -999,9 +1078,10 @@ describe('U-33: 役の欄（答え合わせのあと。受け入れ枚数の欄�
         });
       };
       expect(await step()).toContain('天鳳牌理で見る');
+      expect(await step()).toBe('役');
       expect(await step()).toBe('役の欄の説明');
       expect(await step()).toContain('受け入れ枚数');
-      expect(await page.locator('[data-ai="yaku-box"] :is(button, a, input, select, textarea, [tabindex]:not([tabindex="-1"]))').count()).toBe(1);
+      expect(await page.locator('[data-ai="yaku-box"] :is(button, a, input, select, textarea, [tabindex]:not([tabindex="-1"]))').count()).toBe(2);
     } finally {
       await context.close();
     }

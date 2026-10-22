@@ -376,7 +376,7 @@ describe('U-17 解き直し', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(`${decision?.kyokuLabel} ${decision?.junme}巡目`);
   });
 
-  it('実戦の行動と AI の答えは、答え合わせまで画面にも DOM にも出さない。理由は必須', async () => {
+  it('実戦の行動と AI の答えは、答え合わせまで画面にも DOM にも出さない。選択後は理由なしで答え合わせできる', async () => {
     const { study } = dueStudy();
     const { user } = setup({ study, only: 'fx4' });
     await waitFor(() => expect(sideCount(/^解き直し/)).toBe('3'), LOAD);
@@ -388,8 +388,10 @@ describe('U-17 解き直し', () => {
     expect(document.body.textContent).not.toMatch(/\d\s*%|Mortal|実戦/);
     expect(screen.getByRole('button', { name: '答え合わせ' })).toBeDisabled();
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
-    expect(screen.getByRole('button', { name: '答え合わせ' })).toBeDisabled();
-    expect(document.getElementById('gate')?.textContent).toBe('理由を1行書くと押せます');
+    expect(screen.getByRole('button', { name: '答え合わせ' })).toBeEnabled();
+    expect(document.getElementById('gate')?.textContent).toBe(
+      'AIの評価が出ます。出したあとは答えを変えられません',
+    );
   });
 
   it('答え合わせで、正解かと、次の解き直しの日・間隔を出す。解き直しの答えも保存される（mode は review）', async () => {

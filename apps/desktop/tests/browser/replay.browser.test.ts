@@ -430,6 +430,75 @@ describe('U-4: 1280×800 で、操作の段・卓・手牌が、ページをス�
   }
 });
 
+describe('U-39: 通して見る画面は、広い窓で右の答えの欄だけをスクロールする', () => {
+  for (const [width, height] of [
+    [1280, 800],
+    [1440, 900],
+    [1920, 1080],
+  ] as const) {
+    it(`${width}×${height}: 答える前後とも文書はスクロールせず、答えの本文だけが動き、上段と盤面は動かない`, { timeout: 90_000 }, async () => {
+      const { context, page } = await open({ width, height });
+      try {
+        await openReplay(page);
+        await gotoScene(page, 'k1h1e7');
+        const before = await page.evaluate(() => ({
+          documentHeight: document.documentElement.scrollHeight,
+          windowHeight: window.innerHeight,
+          boardTop: document.querySelector('.board-col')?.getBoundingClientRect().top ?? 0,
+        }));
+        expect(before.documentHeight).toBeLessThanOrEqual(before.windowHeight);
+        await answerCurrent(page);
+        const panel = page.locator('.answer-scroll');
+        const bar = page.locator('.answer-bar');
+        const revealed = await page.evaluate(() => ({
+          documentHeight: document.documentElement.scrollHeight,
+          windowHeight: window.innerHeight,
+          panelScrollHeight: document.querySelector<HTMLElement>('.answer-scroll')?.scrollHeight ?? 0,
+          panelClientHeight: document.querySelector<HTMLElement>('.answer-scroll')?.clientHeight ?? 0,
+        }));
+        expect(revealed.documentHeight).toBeLessThanOrEqual(revealed.windowHeight);
+        expect(revealed.panelScrollHeight).toBeGreaterThan(revealed.panelClientHeight);
+        const barBefore = await bar.boundingBox();
+        const boardBefore = await page.locator('.board-col').boundingBox();
+        await panel.hover();
+        await page.mouse.wheel(0, 100_000);
+        await expect
+          .poll(() => panel.evaluate((element) => Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop)))
+          .toBeLessThanOrEqual(1);
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        expect(await bar.boundingBox()).toEqual(barBefore);
+        expect(await page.locator('.board-col').boundingBox()).toEqual(boardBefore);
+        expect(await page.locator('#next').isVisible()).toBe(true);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  for (const width of [768, 390]) {
+    it(`幅 ${width}: 答えの欄は内部スクロールせず、横スクロールが出ない`, { timeout: 60_000 }, async () => {
+      const { context, page } = await open({ width, height: 800 });
+      try {
+        await openReplay(page);
+        await gotoScene(page, 'k1h1e7');
+        await answerCurrent(page);
+        const layout = await page.evaluate(() => {
+          const panel = document.querySelector<HTMLElement>('.answer-scroll');
+          return {
+            overflowY: panel === null ? '' : getComputedStyle(panel).overflowY,
+            documentWidth: document.documentElement.scrollWidth,
+            windowWidth: window.innerWidth,
+          };
+        });
+        expect(layout.overflowY).not.toBe('auto');
+        expect(layout.documentWidth).toBeLessThanOrEqual(layout.windowWidth);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+});
+
 describe('U-4: 盤面（卓・手牌）と、右の答えの欄が、重ならない（1024・1280・1440px。河の長い局・答え合わせのあと）', () => {
   /** 卓の牌・卓・手牌・凡例の箱が、右の欄（いまの一手・答えの欄）の箱と重なっているものを、名前で返す。 */
   async function overlaps(page: Page): Promise<string[]> {

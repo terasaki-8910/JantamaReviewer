@@ -12,10 +12,12 @@ import { decisionOf, renderQuiz } from '../../../tests/study-harness';
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 9, 9, 22, 0, 0));
+  localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -52,11 +54,12 @@ const groupOf = (row: HTMLElement, title: string): HTMLElement => {
   return dd;
 };
 
-async function reveal(user: ReturnType<typeof renderQuiz>['user'], pick: () => HTMLElement) {
+async function reveal(user: ReturnType<typeof renderQuiz>['user'], pick: () => HTMLElement, open = true) {
   await user.click(pick());
   await user.type(screen.getByLabelText('理由（1行）'), '役を見て選んだ');
   await user.click(screen.getByRole('button', { name: '答え合わせ' }));
   await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+  if (open) await user.click(within(yakuBox()).getByRole('button', { name: /^役$/ }));
 }
 
 const tile = (name: string) => () => screen.getAllByRole('button', { name: `${name}を切る` })[0] as HTMLElement;
@@ -101,6 +104,59 @@ describe('U-33 欄「役」は、答え合わせのあとにだけ出る（U-1�
     expect(screen.getByRole('tooltip')).toHaveTextContent('立直・門前清自摸和・ドラは数えません');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+});
+
+describe('U-40 欄「役」の開閉と要約', () => {
+  it('既定は閉じ、見出しのボタンと自分の確定役の要約だけを出す。押すと開く', async () => {
+    const { user } = renderQuiz(PON);
+    await reveal(user, option('pon'), false);
+    const toggle = within(yakuBox()).getByRole('button', { name: /^役$/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(yakuBox()).getByText('確定している役: 役牌 東（場風）')).toBeInTheDocument();
+    expect(rows()).toEqual([]);
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(rows().length).toBeGreaterThan(0);
+  });
+
+  it('自分に確定役が無ければ「確定している役なし」。閉じていても、危険な警告を文字と既存の強い形で出す', async () => {
+    const { user } = renderQuiz(CHI);
+    await reveal(user, option('chi:5s+7s'), false);
+    expect(within(yakuBox()).getByText('確定している役なし')).toBeInTheDocument();
+    const warning = within(yakuBox()).getByText('役無しの警告があります（開くと詳しく出ます）');
+    expect(warning).toHaveClass('yk-summary-danger');
+    expect(rows()).toEqual([]);
+  });
+
+  it('開け閉めを localStorage に保存し、次の表示でも復元する', async () => {
+    const first = renderQuiz(DISCARD);
+    await reveal(first.user, tile('四筒'), false);
+    await first.user.click(within(yakuBox()).getByRole('button', { name: /^役$/ }));
+    expect(localStorage.getItem('jantama.yakuOpen')).toBe('1');
+    cleanup();
+    const key = keyOfDecision(decisionOf(DISCARD.report, { find: DISCARD.find }));
+    renderQuiz({
+      ...DISCARD,
+      existing: answerRow({ session_id: 'sess', decision_key: key, choice: { type: 'dahai', tile: '4p' }, reason: '' }),
+    });
+    expect(within(yakuBox()).getByRole('button', { name: /^役$/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(rows().length).toBeGreaterThan(0);
+  });
+
+  it('localStorage を使えなくても、閉じた状態で表示し、その場では開け閉めできる', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('使えません');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('使えません');
+    });
+    const { user } = renderQuiz(DISCARD);
+    await reveal(user, tile('四筒'), false);
+    const toggle = within(yakuBox()).getByRole('button', { name: /^役$/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 });
 
@@ -209,13 +265,14 @@ describe('U-33 出題・解き直し・保存済みの答えを開いたとき',
     expect(rows().length).toBeGreaterThanOrEqual(1);
   });
 
-  it('保存してある答えを開くと、はじめから答え合わせのあとの形で、欄が出る', () => {
+  it('保存してある答えを開くと、はじめから答え合わせのあとの形で、欄が出る', async () => {
     const key = keyOfDecision(decisionOf(DISCARD.report, { find: DISCARD.find }));
-    renderQuiz({
+    const { user } = renderQuiz({
       ...DISCARD,
       existing: answerRow({ session_id: 'sess', decision_key: key, choice: { type: 'dahai', tile: '4p' }, reason: '保存済み' }),
     });
     expect(yakuBox()).toBeInTheDocument();
+    await user.click(within(yakuBox()).getByRole('button', { name: /^役$/ }));
     expect(tagsOf(rows()[0] as HTMLElement)).toBe('どの行動でも同じ');
   });
 });

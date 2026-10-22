@@ -1026,14 +1026,14 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     }
   });
 
-  it('打牌の場面（迷い3）: 牌を選び、理由を書くと答え合わせが押せる。答え合わせで、AI の評価・受け入れ枚数・原因・MAKA が出る。答えは出題と同じに保存される', async () => {
+  it('打牌の場面（迷い3）: 牌を選ぶと答え合わせが押せる。答え合わせで、AI の評価・受け入れ枚数・原因・MAKA が出る。答えは出題と同じに保存される', async () => {
     const { user, study } = setup({ links: USER_LINKS });
     await loaded('5');
     await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
     await screen.findByLabelText('理由（1行）');
     const submit = () => screen.getByRole('button', { name: '答え合わせ' });
     expect(submit()).toBeDisabled();
-    expect(document.getElementById('gate')?.textContent).toBe('切る牌を選び、理由を1行書くと押せます');
+    expect(document.getElementById('gate')?.textContent).toBe('切る牌を選ぶと押せます');
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(reasonBox(), '形を崩さないほうを残す');
     expect(submit()).toBeEnabled();
@@ -1055,6 +1055,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     // 役の欄（U-33）: 出題と同じ部品が、受け入れ枚数の欄の下に出る
     expect(screen.getByRole('heading', { name: '役' })).toBeInTheDocument();
     expect(document.querySelector('[data-ai="ukeire-box"] + [data-ai="yaku-box"]')).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: /^役$/ }));
     expect(document.querySelectorAll('[data-ai="yaku-box"] li.yk-row').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole('button', { name: '次の場面へ' })).toBeInTheDocument();
     // 今日の出題でも、答えたことになる（サイドバーの数が減る）

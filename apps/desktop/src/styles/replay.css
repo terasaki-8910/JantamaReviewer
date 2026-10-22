@@ -47,6 +47,14 @@
   --chrome-h: 426px;
 }
 
+@container main (width >= 840px) {
+  .rp {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    height: calc(100vh - 42px);
+  }
+}
+
 .rp .work {
   padding-top: 14px;
 }

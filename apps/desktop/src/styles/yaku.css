@@ -17,6 +17,47 @@
   list-style: none;
 }
 
+.yk-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  margin: -4px 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.yk-toggle .chev {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.yk-toggle[aria-expanded="true"] .chev {
+  transform: rotate(90deg);
+}
+
+.yk-toggle:hover .chev {
+  color: var(--ink);
+}
+
+.yk-summary {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.yk-summary-danger {
+  padding-left: var(--s2);
+  border-left: 2px solid var(--ink);
+  font-weight: 700;
+}
+
 .yk-row {
   display: grid;
   gap: 6px;
