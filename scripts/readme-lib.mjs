@@ -536,9 +536,10 @@ export function createHarness({ marksArg, outArg, prefix }) {
   mkdirSync(join(DATA, 'games'), { recursive: true });
   // 設定（UTF-8、BOM なし）。ウィジェットは画面の左下の隅（画面の外を指すと、いちばん近いモニターの内側に引き戻される）、音は切、
   // ボタンは押されないキー（F23）。本物のサイドボタン（既定の「戻る」）を奪わない。
+  // 迷いだけ（F0、W-15。既定は入）は切: README の写真と GIF は、〇△✕ のボタンつきのウィジェット・自分の評価の列・メモの欄を写す。
   writeFileSync(
     join(CONFIG, 'settings.json'),
-    JSON.stringify({ data_dir: DATA, trigger: { kind: 'key', code: 'F23' }, sound: false, widget_position: { x: 0, y: 100000 } }),
+    JSON.stringify({ data_dir: DATA, trigger: { kind: 'key', code: 'F23' }, sound: false, doubt_only: false, widget_position: { x: 0, y: 100000 } }),
     'utf8',
   );
 
