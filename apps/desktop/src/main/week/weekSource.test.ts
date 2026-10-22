@@ -180,6 +180,8 @@ describe('U-30 週の元の数（答え・半荘から）', () => {
       markNumber,
       startedMs: 0,
       probability: 0.5,
+      fineMiss: false,
+      contestGap: null,
       decision,
     });
     // 迷い 1 は A、迷い 2 は B、迷い 3 は答えの無い判断。迷い 1・2 に答えがある

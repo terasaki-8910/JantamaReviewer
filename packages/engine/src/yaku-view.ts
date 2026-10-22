@@ -2,7 +2,7 @@
  * 出題の答え合わせの欄「役」の中身の組み立てと言い方（F13。R10-6・R11-16・R12-14・R14-1）。
  *
  * 比べる行動（打牌・チー・ポン・スルー・リーチ・しない）ごとに、その行動のあとの手（`yakuShapeOfChoice`）を役の判定の入力にして、
- *   - 確定している役: yaku.ts の `settledYaku`（聴牌なら、全ての待ちで付く役。そうでなければ副露で決まる役）
+ *   - 確定している役: yaku.ts の `settledYaku`（聴牌なら、全ての待ちで付く役。そうでなければ副露か手の中の役牌で決まる役）
  *   - 近い役: yaku-near.ts の `nearYaku`（最短の和了より 1 枚までの遠回り、引く枚数 3 枚まで。`NEAR_POLICY`）
  * を求め（`yakuViewOf`）、行の言い方にする（`describeYakuView`）。欄の全体は `yakuBoxOf`（自分・実戦・AI の行動を並べ、中身が全部同じなら 1 つにまとめる）。
  *
@@ -24,6 +24,7 @@ import {
   type YakuMeld,
   type YakuShape,
   YAKU_NAMES,
+  heldYakuhai,
   meldYaku,
   settledYaku,
   windKind,
@@ -206,7 +207,15 @@ export function yakuViewOf(shape: YakuShape, options: YakuViewOptions = {}): Yak
   const settled: SettledYaku =
     total % 3 === 1
       ? settledYaku(shape, riichi)
-      : { closed, tenpai: false, waits: [], settled: meldYaku(shape), partial: [], deadWaits: [], yakumanWaits: [] };
+      : {
+          closed,
+          tenpai: false,
+          waits: [],
+          settled: [...meldYaku(shape), ...heldYakuhai(shape)].filter((hit, index, hits) => hits.findIndex((other) => other.id === hit.id) === index),
+          partial: [],
+          deadWaits: [],
+          yakumanWaits: [],
+        };
   // 立直は役の行に出さない（14回目の聞かずに決めたこと 4、SPEC F13）。リーチの行動でも、立直のほかの確定している役だけを出す
   settled.settled = settled.settled.filter((h) => h.id !== 'riichi');
   // 確定している役・一部の待ちで付く役は、近い役に出さない（同じ役を 2 度出さない）

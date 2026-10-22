@@ -30,7 +30,8 @@ describe('E-24 問題と今日の組（画面が使う組み立て）', () => {
   it('問題 = 迷いに結びついた判断と、大きな不一致。両方に当たるものは 1 問（迷いのほう）', () => {
     const marks = collected.problems.filter((problem) => problem.kind === 'mark');
     // FX-4: 迷い 1〜5 が推定で結びつく。迷い 6 は読めない（決まっていない）
-    expect(marks.map((problem) => problem.markNumber)).toEqual([1, 2, 3, 4, 5]);
+    // 並びは、細かいミス（迷い 2。実戦は打8p、AI の1位は打9p）が先頭で、あとは迷いの順（E-46）
+    expect(marks.map((problem) => problem.markNumber)).toEqual([2, 1, 3, 4, 5]);
     expect(collected.undecided).toBe(1);
     const ids = collected.problems.map((problem) => problemId(problem));
     expect(new Set(ids).size).toBe(ids.length);
@@ -38,7 +39,7 @@ describe('E-24 問題と今日の組（画面が使う組み立て）', () => {
     expect(collected.problems.filter((problem) => problem.kind === 'disagreement')).toHaveLength(4 + 19);
   });
 
-  it('今日の組: 迷いの問題を先に（迷いの順）。1 日に出す数まで', () => {
+  it('今日の組: 迷いの問題を先に（細かいミス、ほかの迷いの順）。1 日に出す数まで', () => {
     const planned = plannedSet(collected.problems, [], 5);
     expect(planned).toHaveLength(5);
     expect(planned.every((ref) => ref.session_id === FX4_ID)).toBe(true);
@@ -182,7 +183,8 @@ describe('E-24 問題の数え方（局だけ分かった迷い・崩れた読�
     const collected = collectProblems([fx5()], fx5Games(), 0.05);
     const marks = collected.problems.filter((problem) => problem.kind === 'mark');
     // 迷い 13 のうち、局だけ分かった 2 つ（迷いの番号 3・5）を除いた 11 が、問題になる
-    expect(marks.map((problem) => problem.markNumber)).toEqual([1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 13]);
+    // 並びは、細かいミス（迷い 1・4・7・8・9・11・12）が先、ほかの迷い（迷い 2・6・10・13）があと。それぞれ迷いの順（E-46）
+    expect(marks.map((problem) => problem.markNumber)).toEqual([1, 4, 7, 8, 9, 11, 12, 2, 6, 10, 13]);
     expect(collected.undecided).toBe(2);
     // 崩れた読み取りの推定（15:37:02 の 5巡目の打6s、15:50:36 の 3巡目の打1s、16:03:19 の 6巡目のリーチ）も、問題になる
     expect(marks.filter((problem) => [1, 8, 13].includes(problem.markNumber ?? 0)).map((problem) => problem.key)).toEqual(['k1h0e5', 'k4h2e2', 'k7h0e6']);

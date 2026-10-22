@@ -273,7 +273,7 @@ async function selectDangerTab(page: Page): Promise<void> {
   await page.locator('[data-ai="danger-box"]').waitFor();
 }
 
-/** 検査する状態。FX-4 の今日の組は、迷い 1〜5（1 行目: 打牌・1 向聴、3 行目: 打牌・2 向聴、4 行目: 鳴き）。 */
+/** 検査する状態。FX-4 の今日の組は、迷い 2・1・3・4・5 の順（細かいミス（迷い 2）が先頭。1 行目: 打牌・1 向聴、3 行目: 打牌・2 向聴、4 行目: 鳴き）。 */
 const STATES: StateDef[] = [
   { name: '今日の出題の一覧', run: openToday },
   { name: '出題（打牌・答える前）', run: (page) => openRow(page, 1) },
@@ -528,10 +528,10 @@ describe('U-5: Tab ですべての操作に届く', () => {
       await page.keyboard.press('Enter');
       await page.getByRole('heading', { name: 'AIの評価（Mortal）' }).waitFor();
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('reveal-h');
-      // 答え合わせのあと: 次の問題へ（キーボードの位置は、次の問題の手牌へ）
+      // 答え合わせのあと: 次の問題へ（キーボードの位置は、次の問題の手牌へ）。1 問目が細かいミス（迷い2）なので、2 問目は迷い1
       await page.getByRole('button', { name: '次の問題へ' }).focus();
       await page.keyboard.press('Enter');
-      await page.getByRole('heading', { level: 1, name: '東2局 11巡目' }).waitFor();
+      await page.getByRole('heading', { level: 1, name: '東1局 4巡目' }).waitFor();
       await expect
         .poll(() => page.evaluate(() => document.activeElement?.closest('.hand') !== null))
         .toBe(true);

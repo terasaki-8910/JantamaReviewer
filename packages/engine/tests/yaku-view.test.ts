@@ -4,7 +4,7 @@ import type { Decision } from '../src/decision';
 import { type ImportedGame, importReportText } from '../src/import';
 import { type QuizChoice, answerOptions, discardCandidates } from '../src/quiz-choice';
 import { shantenOfCounts } from '../src/shanten';
-import { TILE_KIND_COUNT, kindToTile } from '../src/tiles';
+import { TILE_KIND_COUNT, countTiles, kindToTile, parseTenhouNotation } from '../src/tiles';
 import { evaluateWin, waitsOf } from '../src/yaku';
 import {
   MAX_COMPARED_ACTIONS,
@@ -59,6 +59,67 @@ function comparedChoices(d: Decision): QuizChoice[] {
 }
 
 describe('役の表示の見立て（出題の選択肢ごとの、確定している役・近い役・役無しの警告）', () => {
+  it('E-44 手の中の役牌の刻子を、聴牌していない手でも確定している役にする', () => {
+    const base = load(FX1_IDS[1]).decisions.find((decision) => decision.kind === 'riichi');
+    expect(base).toBeDefined();
+    if (base === undefined) return;
+    const tiles = parseTenhouNotation('34579m123456p444z');
+    const reach = { type: 'reach', actor: 3 } as const;
+    const pass = { type: 'none' } as const;
+    const decision: Decision = {
+      ...base,
+      kind: 'riichi',
+      board: {
+        ...base.board,
+        playerId: 3,
+        roundWind: 'E',
+        seatWinds: ['E', 'S', 'W', 'N'],
+        hand: tiles.slice(0, 13),
+        drawn: tiles[13] ?? null,
+        melds: [[], [], [], []],
+      },
+      entry: {
+        ...base.entry,
+        actual: reach,
+        expected: reach,
+        actual_index: 0,
+        details: [
+          { action: reach, q_value: 1, prob: 0.6 },
+          { action: pass, q_value: 0, prob: 0.4 },
+        ],
+      },
+    };
+    const box = yakuBoxOf(decision, { type: 'option', id: 'reach' });
+    expect(box?.blocks.map((block) => block.key)).toEqual(['option:reach', 'option:pass']);
+    for (const block of box?.blocks ?? []) {
+      expect(block.text.settled.map((line) => [line.name, line.han])).toEqual([['役牌 北（自風）', 1]]);
+      expect(block.text.near).toEqual([]);
+      expect(block.afterDiscard).toEqual([
+        { tile: '7m', waits: [{ tile: '9m', dead: false }] },
+        { tile: '9m', waits: [{ tile: '7m', dead: false }] },
+        { tile: 'N', waits: [{ tile: '8m', dead: block.key === 'option:pass' }] },
+      ]);
+    }
+
+    const closed = yakuViewOf({ counts: countTiles(parseTenhouNotation('147m258p369s777z1z')), melds: [], seatWind: 'S', roundWind: 'E' });
+    expect(closed.tenpai).toBe(false);
+    expect(closed.settled.settled).toContainEqual({ id: 'yakuhai-chun', han: 1 });
+
+    const open = yakuViewOf({
+      counts: countTiles(parseTenhouNotation('147m258p777z1z')),
+      melds: [{ type: 'seq', first: 0, open: true }],
+      seatWind: 'S',
+      roundWind: 'E',
+    });
+    expect(open.tenpai).toBe(false);
+    expect(open.state).toBe('open-ok');
+    expect(describeYakuView(open, { counts: countTiles(parseTenhouNotation('147m258p777z1z')), melds: [{ type: 'seq', first: 0, open: true }], seatWind: 'S', roundWind: 'E' }).warning).toBeNull();
+
+    const doubleWind = yakuViewOf({ counts: countTiles(parseTenhouNotation('147m258p369s111z1z')), melds: [], seatWind: 'E', roundWind: 'E' });
+    expect(describeYakuView(doubleWind, { counts: countTiles(parseTenhouNotation('147m258p369s111z1z')), melds: [], seatWind: 'E', roundWind: 'E' }).settled.map((line) => [line.name, line.han])).toEqual([
+      ['役牌 東（場風・自風）', 2],
+    ]);
+  });
   it('行動のあとの手: 打牌は 1 枚切る、スルーは手牌のまま、ポン・チーは 2 枚を出して副露を足す、リーチは立直の旗が立つ', () => {
     // FX-4 東2局1本場 8巡目 打牌（手牌 13 + ツモ 8p。実戦は打4p）
     const discard = scene(FX4_ID, '東2局1本場', 9);

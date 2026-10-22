@@ -42,7 +42,7 @@
  *   聴牌になった打牌、その局の迷い・大きな不一致の場面（`listReplayScenes`）が横軸のどこにあるか。チー・ポンは点を作らず、鳴いたあとの打牌が点になる）
  * - 局の結果の手（F14、E-40。局の評価の表の行を開いたとき）: `kyokuResultOf`（牌譜から和了者の手牌・和了牌・和了の状況を組み立てて majiang-core で役・飜・符・点数を計算し直す。
  *   他家のツモ・ロンも、ダブロンも。計算し直した点の増減は牌譜と一致する。放銃した局は相手の手牌と待ち。流局は 4 人の手牌（荒牌平局は聴牌・ノーテン））
- * - 役の調査（R10-6・R12-14。画面には使わない試作）: `evaluateWin`（和了形の役・符。HandCalculator と同じ選び方）、`settledYaku`（聴牌の手の「確定している役」）、
+ * - 役の調査（R10-6・R12-14。画面には使わない試作）: `evaluateWin`（和了形の役・符。HandCalculator と同じ選び方）、`settledYaku`（聴牌、または副露・手の中の役牌で決まる「確定している役」）、
  *   `nearYaku`（役ごとに、あと何枚引けばその役の付く和了形になるか）。analysis/yaku/README.md
  *
  * 取り込みのあとの結びつけ（F9〜F11。スクショの中央から読んだ局・残りの牌の数・点数を使う）。
@@ -92,6 +92,7 @@ export const ENGINE_PACKAGE = '@jantama/engine' as const;
 
 export * from './actions';
 export * from './center-text';
+export * from './contest';
 export * from './danger';
 export * from './decision';
 export * from './decision-ref';
@@ -99,6 +100,7 @@ export * from './default-grade-model';
 export * from './disagreement';
 export * from './discard-compare';
 export * from './fu-detail';
+export * from './fine-miss';
 export * from './grade';
 export * from './hanchan-stats';
 export * from './hanchan-summary';

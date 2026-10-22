@@ -695,6 +695,19 @@ export function meldYaku(shape: Pick<YakuShape, 'melds' | 'seatWind' | 'roundWin
   return hits;
 }
 
+/** 閉じた手牌の中だけで決まる役牌の刻子。自風と場風は別の役として数える。 */
+export function heldYakuhai(shape: Pick<YakuShape, 'counts' | 'seatWind' | 'roundWind'>): YakuHit[] {
+  const seat = windKind(shape.seatWind);
+  const round = windKind(shape.roundWind);
+  const hits: YakuHit[] = [];
+  if ((shape.counts[31] as number) >= 3) hits.push({ id: 'yakuhai-haku', han: 1 });
+  if ((shape.counts[32] as number) >= 3) hits.push({ id: 'yakuhai-hatsu', han: 1 });
+  if ((shape.counts[33] as number) >= 3) hits.push({ id: 'yakuhai-chun', han: 1 });
+  if ((shape.counts[seat] as number) >= 3) hits.push({ id: 'yakuhai-seat', han: 1 });
+  if ((shape.counts[round] as number) >= 3) hits.push({ id: 'yakuhai-round', han: 1 });
+  return hits;
+}
+
 /** 一部の待ちだけで付く役。 */
 export interface PartialYaku {
   id: YakuId;
@@ -706,11 +719,11 @@ export interface PartialYaku {
 export interface SettledYaku {
   /** 門前か（暗槓だけの副露は門前）。 */
   closed: boolean;
-  /** 聴牌か。聴牌でなければ `waits` は空で、`settled` は副露で決まる役だけ。 */
+  /** 聴牌か。聴牌でなければ `waits` は空で、`settled` は副露か手の中の役牌で決まる役だけ。 */
   tenpai: boolean;
   /** 待ちごとの役（役満になる待ちは含めない）。 */
   waits: WaitYaku[];
-  /** 確定している役。聴牌なら全ての待ちで付く役（副露で決まる役を含む）、そうでなければ副露で決まる役。 */
+  /** 確定している役。聴牌なら全ての待ちで付く役（副露で決まる役を含む）、そうでなければ副露か手の中の役牌で決まる役。 */
   settled: YakuHit[];
   /** 一部の待ちでしか付かない役（聴牌のとき）。 */
   partial: PartialYaku[];
@@ -722,7 +735,7 @@ export interface SettledYaku {
 
 /**
  * 閉じた手牌が 3n+1 枚の手の、確定している役。
- * 聴牌のときは、待ちごとに役を数え、全ての待ちで付く役を確定とする。聴牌でなければ、副露で決まる役だけ。
+ * 聴牌のときは、待ちごとに役を数え、全ての待ちで付く役を確定とする。聴牌でなければ、副露か手の中の役牌で決まる役だけ。
  * 手牌が 3n+2 枚（鳴いた直後など、まだ切っていない手）には使えない（RangeError）。
  */
 export function settledYaku(shape: YakuShape, riichi = false): SettledYaku {
@@ -734,7 +747,12 @@ export function settledYaku(shape: YakuShape, riichi = false): SettledYaku {
   const yakumanWaits = all.filter((w) => w.yakuman.length > 0).map((w) => w.kind);
   const waits = all.filter((w) => w.yakuman.length === 0);
   if (waits.length === 0) {
-    return { closed, tenpai: all.length > 0, waits: [], settled: fromMelds, partial: [], deadWaits: [], yakumanWaits };
+    const settled = [...fromMelds];
+    const ids = new Set(settled.map((h) => h.id));
+    for (const held of heldYakuhai(shape)) {
+      if (!ids.has(held.id)) settled.push(held);
+    }
+    return { closed, tenpai: all.length > 0, waits: [], settled, partial: [], deadWaits: [], yakumanWaits };
   }
   const ids = new Set<YakuId>();
   for (const w of waits) for (const h of w.hits) ids.add(h.id);

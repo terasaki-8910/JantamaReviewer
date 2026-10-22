@@ -134,11 +134,11 @@ describe('U-15 今日の出題の一覧', () => {
     expect(screen.getByRole('button', { name: '出題を始める' })).toBeInTheDocument();
     const rows = todayRows();
     expect(rows).toHaveLength(5);
-    // FX-4 の迷い 1〜5（推定で結びついたもの）。局・巡目の順は、迷いの順
+    // FX-4 の迷い 1〜5（推定で結びついたもの）。細かいミス（迷い2）が先頭で、あとは迷いの順
     const texts = rows.map((row) => row.textContent);
     expect(texts).toEqual([
-      expect.stringMatching(/^1東1局 4巡目迷い1打牌 · 1向聴 · 10月9日 19:09 の半荘$/),
-      expect.stringMatching(/^2東2局 11巡目迷い2打牌 · 1向聴 · 10月9日 19:09 の半荘$/),
+      expect.stringMatching(/^1東2局 11巡目迷い2打牌 · 1向聴 · 10月9日 19:09 の半荘$/),
+      expect.stringMatching(/^2東1局 4巡目迷い1打牌 · 1向聴 · 10月9日 19:09 の半荘$/),
       expect.stringMatching(/^3東2局1本場 6巡目迷い3打牌 · 2向聴 · 10月9日 19:09 の半荘$/),
       expect.stringMatching(/^4東2局1本場 8巡目迷い4鳴き · 1向聴 · 10月9日 19:09 の半荘$/),
       expect.stringMatching(/^5東3局1本場 6巡目迷い5打牌 · 2向聴 · 10月9日 19:09 の半荘$/),
@@ -195,10 +195,11 @@ describe('U-16 出題と答え合わせ（今日の出題を順に解く）', ()
     await loaded();
     await openToday(user);
     await user.click(screen.getByRole('button', { name: '出題を始める' }));
-    expect(await screen.findByRole('heading', { level: 1, name: '東1局 4巡目' })).toBeInTheDocument();
+    // 1 問目は、細かいミス（迷い2。実戦は打8p）
+    expect(await screen.findByRole('heading', { level: 1, name: '東2局 11巡目' })).toBeInTheDocument();
     expect(document.querySelector('.progress')?.textContent).toBe('1 / 5');
     const chips = [...document.querySelectorAll('.q-chips .q-chip')].map((chip) => chip.textContent);
-    expect(chips).toEqual(['1向聴', '実戦：打5p', '迷い1']);
+    expect(chips).toEqual(['1向聴', '実戦：打8p', '迷い2']);
     // サイドバーは、今日の出題に印
     expect(sideButton(/^今日の出題/)).toHaveAttribute('aria-current', 'page');
   });
@@ -214,7 +215,8 @@ describe('U-16 出題と答え合わせ（今日の出題を順に解く）', ()
     expect(study.rows[0]?.shown_at).toBeGreaterThan(0);
     await waitFor(() => expect(sideCount(/^今日の出題/)).toBe('4'));
     await user.click(screen.getByRole('button', { name: '次の問題へ' }));
-    expect(await screen.findByRole('heading', { level: 1, name: '東2局 11巡目' })).toBeInTheDocument();
+    // 1 問目が細かいミス（迷い2）なので、2 問目は迷い1
+    expect(await screen.findByRole('heading', { level: 1, name: '東1局 4巡目' })).toBeInTheDocument();
     expect(document.querySelector('.progress')?.textContent).toBe('2 / 5');
     // 新しい問題は、答える前の画面（AI の情報は無い。理由の欄は空）
     expect(document.querySelector('[data-ai]')).toBeNull();
@@ -257,7 +259,8 @@ describe('U-16 出題と答え合わせ（今日の出題を順に解く）', ()
     expect(todayRows()[1]).toHaveClass('done');
     expect(todayRows()[0]).toHaveClass('next');
     await user.click(screen.getByRole('button', { name: '続きから（1問目）' }));
-    expect(await screen.findByRole('heading', { level: 1, name: '東1局 4巡目' })).toBeInTheDocument();
+    // 1 問目は、細かいミス（迷い2）
+    expect(await screen.findByRole('heading', { level: 1, name: '東2局 11巡目' })).toBeInTheDocument();
   });
 
   it('5 問とも解くと、最後の問題の次は「今日の出題に戻る」。一覧は 5 / 5 で、始めるボタンは無い', async () => {
@@ -291,9 +294,9 @@ describe('U-16 出題と答え合わせ（今日の出題を順に解く）', ()
     await solve(user);
     expect(study.rows).toHaveLength(1);
     expect(study.rows[0]?.mode).toBe('quiz');
-    // 今日の組に答えていない問題が残っているので、「次の問題へ」は、その先頭へ
+    // 今日の組に答えていない問題が残っているので、「次の問題へ」は、その先頭（細かいミスの迷い2）へ
     await user.click(screen.getByRole('button', { name: '次の問題へ' }));
-    expect(await screen.findByRole('heading', { level: 1, name: '東1局 4巡目' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: '東2局 11巡目' })).toBeInTheDocument();
     expect(document.querySelector('.progress')?.textContent).toBe('1 / 5');
     await user.click(sideButton(/^今日の出題/));
     await screen.findByRole('heading', { level: 1, name: '今日の出題' });
@@ -498,11 +501,12 @@ describe('U-10 戻る・進む（出題の画面）', () => {
     await user.click(sideButton(/^解き直し/));
     expect(await screen.findByText(/今日が期限の解き直しはありません。/)).toBeInTheDocument();
     await user.keyboard('{Alt>}{ArrowLeft}{/Alt}');
-    expect(await screen.findByRole('heading', { level: 1, name: '東1局 4巡目' })).toBeInTheDocument();
+    // 出題の 1 問目は、細かいミス（迷い2）
+    expect(await screen.findByRole('heading', { level: 1, name: '東2局 11巡目' })).toBeInTheDocument();
     await user.keyboard('{Alt>}{ArrowLeft}{/Alt}');
     expect(await screen.findByRole('heading', { level: 1, name: '今日の出題' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '進む' }));
-    expect(await screen.findByRole('heading', { level: 1, name: '東1局 4巡目' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: '東2局 11巡目' })).toBeInTheDocument();
     // 開き直したその問題は、また答える前の画面（答えていない）
     expect(screen.getByLabelText('理由（1行）')).toHaveValue('');
   });

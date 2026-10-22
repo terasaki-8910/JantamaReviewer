@@ -178,6 +178,11 @@ describe('E-25 出題で答えた問題は、正解かどうかにかかわら�
     // 半荘が違えば、同じ鍵でも別の問題
     expect(latestAnswers([answer('a', 1, '2026-10-10'), { ...answer('a', 2, '2026-10-11'), sessionId: 's2' }])).toHaveLength(2);
   });
+
+  it('E-45 解決した問題は期限が来ても解き直しに出さない', () => {
+    const answers = [answer('a', 1, '2026-10-10'), answer('b', 2, '2026-10-10')];
+    expect(dueAnswers(answers, '2026-10-12', new Set(['s1/a'])).map((item) => item.key)).toEqual(['b']);
+  });
 });
 
 describe('「今日」は、午前 4 時までを前の日として数える（出題・解き直しの日付を決める 1 か所）', () => {
