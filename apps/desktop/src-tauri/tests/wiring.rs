@@ -195,10 +195,10 @@ fn w12_the_widget_menu_and_the_tray_menu_both_offer_the_sound_toggle_and_stay_in
 ) {
     let lib = read(crate_dir().join("src").join("lib.rs"));
     let setup = lib.split("fn setup(").nth(1).expect("setup がある");
-    // どちらのメニューも、いまの音の設定の印つきで作る。
+    // どちらのメニューも、いまの音の設定の印つき（と、迷いだけの設定・取り消せるか）で作る。
     assert_eq!(
         setup
-            .matches("menu::build_menu(app, settings.sound)")
+            .matches("menu::build_menu(app, settings.sound, settings.doubt_only, can_undo)")
             .count(),
         2,
         "右クリックのメニューとトレイのメニューを、同じ作り方で作る"
@@ -231,6 +231,60 @@ fn w12_the_widget_menu_and_the_tray_menu_both_offer_the_sound_toggle_and_stay_in
         .expect("toggle_sound_now がある");
     assert!(toggle.contains("settings.sound = !settings.sound;"));
     assert!(toggle.contains("set_settings_now(app, settings)"));
+}
+
+#[test]
+fn w15_the_widget_window_the_two_menus_and_undo_follow_the_doubt_only_setting() {
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    let setup = lib.split("fn setup(").nth(1).expect("setup がある");
+    // 窓は、設定の迷いだけで大きさを決めて作る（入なら 48px 角）。
+    assert!(
+        setup.contains("widget_window_spec(settings.orientation, settings.doubt_only)"),
+        "ウィジェットの窓を、迷いだけの設定の大きさで作っていない"
+    );
+    // 2 つのメニューの入れ替わる項目を覚えておき、設定と記録の状態が変わったときに合わせる。
+    assert!(setup.contains("app.manage(ModeMenus(vec![widget_menu.mode, tray_menu.mode]))"));
+
+    let commands = read(crate_dir().join("src").join("commands.rs"));
+    let side_effects = commands
+        .split("fn apply_side_effects")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("apply_side_effects がある");
+    // 設定のチェックから変えたときも、同期で変わったときも（どちらも set_settings_now を通る）、窓とメニューを合わせる。
+    assert!(
+        side_effects.contains("if change.doubt_only {")
+            && side_effects.contains("sync_mode_menus(app, settings.doubt_only)"),
+        "迷いだけが変わったとき、メニューの項目を入れ替えていない"
+    );
+    assert!(
+        side_effects.contains("if change.orientation || change.doubt_only {")
+            && side_effects
+                .contains("resize_widget(app, settings.orientation, settings.doubt_only)"),
+        "迷いだけが変わったとき、ウィジェットの窓の大きさを直していない"
+    );
+    let sync_settings = read(crate_dir().join("src").join("sync").join("commands.rs"));
+    assert!(
+        sync_settings.contains("set_settings_now(&self.app, settings)"),
+        "同期で変わった設定も、設定を変える共通の経路を通す"
+    );
+    // 「取り消し」の押せる・押せないは、記録の状態を知らせるたびに合わせる。
+    let emit = commands
+        .split("pub fn emit_state")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("emit_state がある");
+    assert!(emit.contains("sync_undo_menus(app, state.can_undo)"));
+    // 「取り消し」を選ぶと、ウィジェットの取り消しのボタンと同じ動き（最後の記録を 1 つ消す）をする。
+    let menu = read(crate_dir().join("src").join("menu.rs"));
+    assert!(menu.contains("MENU_UNDO => {"));
+    assert!(menu.contains("commands::undo_now(app)"));
+    let undo_command = commands
+        .split("pub async fn undo(")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("undo がある");
+    assert!(undo_command.contains("undo_now(&app)"));
 }
 
 // ---- 取り込み（F1）: mjai の窓と、画面から呼ぶコマンドの配線 ----

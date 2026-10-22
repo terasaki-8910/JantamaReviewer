@@ -311,6 +311,9 @@ const OCR_ALLOWED_CRATES: &[&str] = &[
 
 /// ウィジェットの画面のコードが読み込んでよいもの。ウィジェットはファイル保存と記録の追記しかしない（S-4）ので、
 /// プラグインは一切読まない。`@tauri-apps/api` も、記録のコマンドとイベントの窓口に限る。
+/// （迷いだけのウィジェットが、押したまま動かされたとき、窓を動かし始める 1 つだけは、`api/tauri.ts` を通して呼ぶ。
+/// 窓の API を読み込むのはそこだけで、許してある操作は `core:window:allow-start-dragging` だけ。
+/// `s4_the_only_window_api_the_screens_call_is_start_dragging_from_one_place` が確かめる。）
 const WIDGET_ALLOWED_IMPORTS: &[&str] = &[
     "react",
     "react-dom/client",
@@ -1955,6 +1958,47 @@ fn s4_the_widget_code_imports_only_the_recording_api() {
         }
     }
     assert_no_violations(violations);
+}
+
+/// 画面（webview）が、窓の API（`@tauri-apps/api/window`）を呼んでよいのは、迷いだけのウィジェットを押したまま動かしたときに、窓を動かし始める
+/// 1 か所だけ（F0、W-15）。入口は `api/tauri.ts` の `startWindowDrag` で、ウィジェットのコードは、そこ（相対の import）を通して呼ぶ。
+/// 許している操作は `capabilities/widget.json` の `core:window:allow-start-dragging` だけ（下の試験が、ほかを許していないことを確かめる）。
+#[test]
+fn s4_the_only_window_api_the_screens_call_is_start_dragging_from_one_place() {
+    let src = repo_root().join("apps").join("desktop").join("src");
+    let files = files_under(&src, &|p| has_ext(p, &["ts", "tsx"]) && !is_test_file(p));
+    assert!(!files.is_empty(), "画面のソースが見つからない");
+    let users: Vec<String> = files
+        .iter()
+        .filter(|file| {
+            import_specifiers(&read(file))
+                .iter()
+                .any(|spec| spec == "@tauri-apps/api/window")
+        })
+        .map(|file| file.to_string_lossy().replace('\\', "/"))
+        .collect();
+    assert_eq!(users.len(), 1, "窓の API を読み込む場所: {users:?}");
+    assert!(users[0].ends_with("src/api/tauri.ts"), "{users:?}");
+    // その場所でも、窓に対して呼ぶのは startDragging だけ（窓の大きさ・位置・閉じる・隠すなどは、Rust 側の仕事）
+    let text = read(&PathBuf::from(&users[0]));
+    assert_eq!(text.matches("getCurrentWindow()").count(), 1, "{users:?}");
+    assert!(text.contains("getCurrentWindow().startDragging()"));
+    // 許している権限は、窓をつかんで動かすことだけ
+    let capability = read(&crate_dir().join("capabilities").join("widget.json"));
+    assert!(capability.contains("core:window:allow-start-dragging"));
+    for forbidden in [
+        "allow-close",
+        "allow-hide",
+        "allow-set-size",
+        "allow-set-position",
+        "allow-destroy",
+        "core:window:default",
+    ] {
+        assert!(
+            !capability.contains(forbidden),
+            "ウィジェットに許している操作が多すぎる: {forbidden}"
+        );
+    }
 }
 
 #[test]

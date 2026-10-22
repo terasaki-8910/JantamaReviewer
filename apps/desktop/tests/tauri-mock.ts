@@ -27,6 +27,8 @@ export const baseSettings: Settings = {
   orientation: 'vertical',
   widget_position: null,
   sound: true,
+  // 迷いだけ（F0、W-15）の既定は入だが、〇△✕ やメモを見る試験が多いので、試験の見本は切にしておく（入の試験は、設定を重ねる）
+  doubt_only: false,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\test\\JantamaReviewerData',
   daily_count: 5,

@@ -23,6 +23,8 @@ import { MenuSelect } from './MenuSelect';
  *   和了の局は和了者・手牌・役・符・点数、放銃した局は相手の手牌と待ち、流局は 4 人の手牌（`KyokuResult`）。自分の向聴数の推移の折れ線（`MyShantenTrack`。F14、E-41）は、その下に差し込む（`detailBelow`）
  * 表の下: 旗の説明・当てはまらなかった評価の数・MAKA の当てはめの見込みの 1 行（U-31。入れたあとは「合わせ直しました」）。
  * 付け直す・入れるたびに保存し、取り消せる（`onSelfRating`・`onMaka`）。
+ * 迷いだけを記録する設定が入のとき（`showSelf` が false。F0、U-46）は、〇△✕ を使う部品を出さない: 「自分」の列（付け直しも）・食い違いの旗・
+ *   旗の説明・当てはまらなかった評価の数。AI 基準と MAKA の列、迷いの札は、そのまま出す。記録は消さず、切れば元どおり出る
  */
 
 /**
@@ -58,15 +60,30 @@ interface HandTableProps {
   report?: MortalReport;
   /** 開いた行の、局の結果の手の下に差し込むもの（自分の向聴数の推移の折れ線）。 */
   detailBelow?: (row: HandRow) => ReactNode;
+  /** 自分の〇△✕の列（付け直し・旗・説明・当てはまらなかった評価の数）を出すか。迷いだけの設定が入のときは false。既定は出す。 */
+  showSelf?: boolean;
 }
 
 /** 局の名前の説明（行の頭のボタンの読み上げの説明）。 */
 const OPEN_ROW_HINT = '局の名前を押すと、その局の結果の手が、行の下に開きます。';
 
-export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fit, refit = false, report, detailBelow }: HandTableProps) {
+export function HandTable({
+  table,
+  onSelfRating,
+  onMaka,
+  chips,
+  onJumpToMark,
+  fit,
+  refit = false,
+  report,
+  detailBelow,
+  showSelf = true,
+}: HandTableProps) {
   const { rows, hanchan } = table;
   const withChips = chips !== undefined && chips.size > 0;
-  const columns = withChips ? 7 : 6;
+  // 列の数（行を開いたときの、結果の手の欄の幅）。自分の列を出さないときは 1 つ減る
+  const columns = (withChips ? 7 : 6) - (showSelf ? 0 : 1);
+  const wrapClass = ['tbl-wrap', withChips && 'with-marks', !showSelf && 'no-self'].filter(Boolean).join(' ');
   const hintId = useId();
   const baseId = useId();
   // 開いている行（局の添字）。いくつでも開ける
@@ -79,7 +96,7 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fi
     });
   return (
     <>
-      <div className={withChips ? 'tbl-wrap with-marks' : 'tbl-wrap'}>
+      <div className={wrapClass}>
         {report !== undefined && (
           <p className="sr-only" id={hintId}>
             {OPEN_ROW_HINT}
@@ -94,7 +111,7 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fi
               <th scope="col" className="num">
                 点
               </th>
-              <th scope="col">自分</th>
+              {showSelf && <th scope="col">自分</th>}
               <th scope="col">AI 基準</th>
               <th scope="col">MAKA</th>
               {withChips && <th scope="col">迷い</th>}
@@ -126,9 +143,11 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fi
                     </th>
                     <td>{row.resultText}</td>
                     <td className="num">{row.deltaText}</td>
-                    <td data-label="自分">
-                      <SelfCell row={row} onSelfRating={onSelfRating} />
-                    </td>
+                    {showSelf && (
+                      <td data-label="自分">
+                        <SelfCell row={row} onSelfRating={onSelfRating} />
+                      </td>
+                    )}
                     <td data-label="AI 基準">
                       <AiCell grade={row.grade} ratingText={row.ratingText} />
                     </td>
@@ -160,7 +179,7 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fi
               <th scope="row">半荘全体</th>
               <td />
               <td />
-              <td />
+              {showSelf && <td />}
               <td data-label="AI 基準">
                 <AiCell grade={hanchan.grade} ratingText={hanchan.ratingText} />
               </td>
@@ -172,7 +191,7 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fi
           </tfoot>
         </table>
       </div>
-      {table.flaggedCount > 0 && (
+      {showSelf && table.flaggedCount > 0 && (
         <p className="tbl-note">
           <span className="flag" aria-hidden="true">
             <Icon name="flag" />
@@ -180,7 +199,7 @@ export function HandTable({ table, onSelfRating, onMaka, chips, onJumpToMark, fi
           結果が悪かった局を低く付けていないか
         </p>
       )}
-      {table.unplacedRatings > 0 && (
+      {showSelf && table.unplacedRatings > 0 && (
         <p className="tbl-note">
           ウィジェットで付けた評価のうち、{table.unplacedRatings}件は、どの局にも当てはまりませんでした
         </p>

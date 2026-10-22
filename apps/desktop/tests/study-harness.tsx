@@ -33,6 +33,8 @@ export interface QuizOptions {
   existing?: AnswerRow | null;
   previousIntervalDays?: number | null;
   highlightDora?: boolean;
+  /** 設定の「迷いだけを記録する」（F0、W-15）。既定は切（昔からの画面のまま）。 */
+  doubtOnly?: boolean;
   markNumber?: number | null;
   progress?: { current: number; total: number } | null;
   nextLabel?: string;
@@ -90,6 +92,7 @@ function Harness({ decision, imported, probe, ...options }: HarnessProps) {
     threshold: 0.05,
     dailyCount: 5,
     highlightDora: options.highlightDora ?? false,
+    doubtOnly: options.doubtOnly ?? false,
     answers,
     model: EMPTY_MODEL,
     todayUnanswered: 0,

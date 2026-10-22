@@ -22,6 +22,7 @@ use crate::app_core::{AppState, Core, SettingsChange};
 use crate::appearance::{parse_css_color, Rgb};
 use crate::clock::now_ms;
 use crate::input_flow::{page_key_input, HelperOp, Input, InputService, InputStatus};
+use crate::menu::ModeItems;
 use crate::platform::{HelperHost, PlatformInfo};
 use crate::ready::ShowGate;
 use crate::settings::{Orientation, Settings, WidgetPosition};
@@ -114,11 +115,17 @@ pub struct WidgetMenu(pub Menu<Wry>);
 /// 2 つのメニュー（右クリックとトレイ）の「音を鳴らす」の項目。設定が変わったときに、印を合わせる（W-12）。
 pub struct SoundMenuItems(pub Vec<CheckMenuItem<Wry>>);
 
+/// 2 つのメニュー（右クリックとトレイ）の、迷いだけで入れ替わる項目（「取り消し」と「縦長と横長を切り替える」）。
+/// 設定が変わったときに入れ替え、記録の状態が変わったときに「取り消し」の押せる・押せないを合わせる（W-15）。
+pub struct ModeMenus(pub Vec<ModeItems<Wry>>);
+
 /// ウィジェットを動かしたときの位置を、動かし終わってから保存する担当への窓口。
 pub struct PositionSaver(pub Mutex<Sender<WidgetPosition>>);
 
 pub fn emit_state<R: Runtime>(app: &AppHandle<R>, state: &AppState) {
     let _ = app.emit(EVENT_STATE_CHANGED, state);
+    // メニューの「取り消し」は、取り消せる記録があるときだけ押せる。記録の状態が変わるたびに合わせる。
+    sync_undo_menus(app, state.can_undo);
 }
 
 fn emit_settings<R: Runtime>(app: &AppHandle<R>, settings: &Settings) {
@@ -139,8 +146,18 @@ pub fn mark_now<R: Runtime>(app: &AppHandle<R>, t_ms: i64) -> Result<AppState, S
     let result = shared.lock().mark(t_ms);
     let state = result.inspect_err(|_| {
         // 失敗しても、保存先の状態は画面に出し直す（「保存先エラー」の表示が最新になるように）。
-        emit_state(app, &shared.lock().app_state());
+        // 記録の錠は、知らせる前に放す（知らせるとき、メニューを直すために本体のスレッドを待つことがある）。
+        let state = shared.lock().app_state();
+        emit_state(app, &state);
     })?;
+    emit_state(app, &state);
+    Ok(state)
+}
+
+/// 最後の記録（迷いマークか評価）を 1 つ取り消す（ウィジェットの「取り消し」と、メニューの「取り消し」）。
+pub fn undo_now<R: Runtime>(app: &AppHandle<R>) -> Result<AppState, String> {
+    let shared = app.state::<SharedCore>();
+    let state = shared.lock().undo(now_ms())?;
     emit_state(app, &state);
     Ok(state)
 }
@@ -283,8 +300,11 @@ fn apply_side_effects<R: Runtime>(app: &AppHandle<R>, settings: &Settings, chang
     if change.sound {
         sync_sound_menus(app, settings.sound);
     }
-    if change.orientation {
-        resize_widget(app, settings.orientation);
+    if change.doubt_only {
+        sync_mode_menus(app, settings.doubt_only);
+    }
+    if change.orientation || change.doubt_only {
+        resize_widget(app, settings.orientation, settings.doubt_only);
     }
     if change.data_dir {
         allow_asset_dir(app, &settings.data_dir);
@@ -303,12 +323,37 @@ fn sync_sound_menus<R: Runtime>(app: &AppHandle<R>, on: bool) {
     }
 }
 
-/// ウィジェットの窓の大きさを形に合わせる。左上は動かさず、画面の外に出るなら内側に寄せる。
-fn resize_widget<R: Runtime>(app: &AppHandle<R>, orientation: Orientation) {
+/// 2 つのメニューの、迷いだけで入れ替わる項目を、設定に合わせる（設定のチェックから変えたときも、同期で変わったときも）。
+fn sync_mode_menus<R: Runtime>(app: &AppHandle<R>, doubt_only: bool) {
+    let Some(menus) = app.try_state::<ModeMenus>() else {
+        return;
+    };
+    for menu in &menus.0 {
+        if let Err(e) = menu.set_doubt_only(doubt_only) {
+            eprintln!("メニューの項目を迷いだけの設定に合わせられませんでした: {e}");
+        }
+    }
+}
+
+/// メニューの「取り消し」を、取り消せる記録があるときだけ押せるようにする。
+fn sync_undo_menus<R: Runtime>(app: &AppHandle<R>, can_undo: bool) {
+    let Some(menus) = app.try_state::<ModeMenus>() else {
+        return;
+    };
+    for menu in &menus.0 {
+        if let Err(e) = menu.set_can_undo(can_undo) {
+            eprintln!("メニューの「取り消し」の押せる・押せないを変えられませんでした: {e}");
+        }
+    }
+}
+
+/// ウィジェットの窓の大きさを、迷いだけの入・切と形に合わせる（入なら 48px 角、切なら選んだ形）。
+/// 左上は動かさず、画面の外に出るなら内側に寄せる。
+fn resize_widget<R: Runtime>(app: &AppHandle<R>, orientation: Orientation, doubt_only: bool) {
     let Some(window) = app.get_webview_window(WIDGET_LABEL) else {
         return;
     };
-    let (width, height) = widget_size(orientation);
+    let (width, height) = widget_size(orientation, doubt_only);
     let _ = window.set_size(LogicalSize::new(width, height));
     let scale = window.scale_factor().unwrap_or(1.0);
     let size = (
@@ -438,10 +483,8 @@ pub async fn add_rating(
 }
 
 #[tauri::command]
-pub async fn undo(app: AppHandle, core: State<'_, SharedCore>) -> Result<AppState, String> {
-    let state = core.lock().undo(now_ms())?;
-    emit_state(&app, &state);
-    Ok(state)
+pub async fn undo(app: AppHandle) -> Result<AppState, String> {
+    undo_now(&app)
 }
 
 #[tauri::command]

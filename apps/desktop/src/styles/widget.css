@@ -4,6 +4,7 @@
   ゲームの画面は読まない。操作はすべてマウスで届き、ボタンは 40px 以上。
   重みの順: 評価（いちばん押す）> 迷い（このアプリの要の操作。淡い色）> 取り消し（目立たせない）。
   点は緑（accent）。赤は「AI に対する自分の手」のためだけに取っておく。
+  迷いだけを記録する設定が入のとき（既定）は、48px 角の窓いっぱいの「迷い」ボタン 1 つ（.widget.sq。F0、W-15）。末尾にまとめて書く。
 */
 
 /* 窓いっぱいに描く（サンプルの .stage の余白は、実際の窓では無い）。 */
@@ -219,4 +220,64 @@ body {
   width: 54px;
   height: 44px;
   font-size: 11.5px;
+}
+
+/*
+  迷いだけ（.widget.sq）: 48px 角の窓いっぱいの「迷い」ボタン 1 つ（F0、W-15）。
+  - 見た目は .doubt のまま（淡い accent の面・accent の縁・ボタンの角丸）。窓の枠線は無く、ボタンの縁が窓の縁になる
+  - 中は「迷い」の小さな文字（11px）と、その下の迷いの数（18px の等幅）。右上の 6px の点が、記録中かどうか
+    （記録中は塗り、待機中は中抜き、エラーは濃い色。.dot の既定の形を小さくしただけ）
+  - 押して動かさずに離すと記録し、押したまま動かすと窓が動く（widget/useDoubtPress.ts）。押している間にブラウザが
+    横取りしないよう、タッチの操作は渡さない（touch-action）
+*/
+.widget.sq {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.sq-btn {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  touch-action: none;
+}
+
+.sq-btn .num {
+  font-size: 18px;
+}
+
+.sq-btn .dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+}
+
+/* 中抜きの点の線は、小さい点に合わせて細くする */
+.sq-btn .dot.idle {
+  border-width: 1px;
+}
+
+/* 押した直後は、ボタンの面が accent になるので、点は面の上の文字の色にする（そのままだと、面と同じ色で消える） */
+.sq-btn.flash .dot {
+  background: var(--on-accent);
+}
+
+.sq-btn.flash .dot.idle {
+  background: transparent;
+  border-color: var(--on-accent);
+}
+
+/* 窓いっぱいのボタンなので、焦点の枠は内側に描く（外側に描くと、窓の外になって切れる）。ボタンの縁（1px）から 1px 離して、縁と区別する */
+.sq-btn:focus-visible {
+  outline-offset: -4px;
+}
+
+/* 記録できない間（保存先を開けない）は、ボタンは押せない。押しを、後ろの窓（つかんで動かせる面。data-tauri-drag-region）に通して、窓は動かせるままにする */
+.sq-btn:disabled {
+  pointer-events: none;
 }

@@ -48,6 +48,8 @@ const settings = {
   orientation: 'vertical',
   widget_position: null,
   sound: true,
+  // 迷いだけ（F0、U-46）は切: 自分の〇△✕・メモの欄を持つ画面を検査する。入の検査は、下の「U-46 迷いだけの画面」
+  doubt_only: false,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
 };
@@ -1045,6 +1047,194 @@ describe('F9・F10・U-11 編集（実ブラウザ。実際のキーとマウス
       await page.getByRole('button', { name: '半荘全体の MAKA A+' }).waitFor();
       const axe = await runAxe(page);
       expect(seriousViolations(axe)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('U-46 迷いだけの画面（実ブラウザ。設定「迷いだけを記録する」が入）', () => {
+  /** 迷いだけを入にした設定（これまでの試験は、切のままで、〇△✕ とメモを見る）。迷い 1 にメモを書いておき、隠れていても消えないことを見る。 */
+  const doubtScenario = () => {
+    const withMemo = importedSession();
+    withMemo.memos = { marks: { '1': { candidates: '3m・6p', reason: '東を残したい' } }, extras: [{ id: 'x1', position: { kyoku: 1, honba: 0, junme: 5 }, candidates: '白', reason: '追加' }] };
+    return scenario({ settings: { ...settings, doubt_only: true }, sessions: [withMemo, recordedSession()] });
+  };
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 768, 1280] as const) {
+      it(`取り込んだ半荘 幅${width}px ${scheme}: 自分の列・旗・メモの欄・足す欄が無く、横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届き、外へ通信しない`, async () => {
+        const { context, page, problems, external } = await open({ width, scheme, scenario: doubtScenario() });
+        try {
+          const table = page.getByRole('table', { name: '局の評価' });
+          expect(await table.getByRole('columnheader').allTextContents()).toEqual(['局', '結果', '点', 'AI 基準', 'MAKA', '迷い']);
+          expect(await page.locator('.tbl [data-label="自分"], .tbl .self, .tbl .flag, .tbl-note .flag').count()).toBe(0);
+          expect(await page.getByText('結果が悪かった局を低く付けていないか').count()).toBe(0);
+          expect(await page.locator('.mcard .memo, .marks.extras, .memo-foot, .memo-add').count()).toBe(0);
+          expect(await page.getByRole('button', { name: /迷いマークの無い迷いを足す|終局直後のメモの説明/ }).count()).toBe(0);
+
+          const m = await overflow(page);
+          expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+          expect(m.body).toBeLessThanOrEqual(m.client);
+          for (const extra of m.table) expect(extra).toBeLessThanOrEqual(0);
+
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(5);
+          const reach = await unreachableByTab(page);
+          expect(reach.total).toBeGreaterThan(3);
+          expect(reach.missed).toEqual([]);
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+
+    it(`取り込む前の半荘 幅390px ${scheme}: 評価の一覧も、メモの欄も、足す欄も無く、横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届く`, async () => {
+      const { context, page, problems } = await open({ width: 390, scheme, session: 'older', scenario: doubtScenario() });
+      try {
+        expect(await page.getByRole('heading', { level: 2, name: /^評価（/ }).count()).toBe(0);
+        expect(await page.getByRole('list', { name: '局の評価の一覧' }).count()).toBe(0);
+        expect(await page.getByText(/取り込み前 · 迷い 3$/).count()).toBe(1);
+        expect(await page.locator('.mcard .memo, .memo-foot').count()).toBe(0);
+        const m = await overflow(page);
+        expect(m.scroll).toBeLessThanOrEqual(m.client);
+        const axe = await runAxe(page);
+        expect(seriousViolations(axe)).toEqual([]);
+        const reach = await unreachableByTab(page);
+        expect(reach.missed).toEqual([]);
+        expect(problems).toEqual([]);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  it('390px: 1 局が 2 行のかたまり（AI 基準・MAKA を、1 行目の局・結果の下に左をそろえる）。空の穴が無く、半荘全体の行も同じ形', async () => {
+    const { context, page } = await open({ width: 390, scenario: doubtScenario() });
+    try {
+      const table = page.getByRole('table', { name: '局の評価' });
+      expect(await table.getByRole('columnheader').count()).toBe(6);
+      expect(await table.getByRole('rowheader').count()).toBe(6);
+      const header = await page.locator('.tbl thead').boundingBox();
+      expect(header?.width ?? 99).toBeLessThanOrEqual(1);
+      // 1 行目: 局・結果・点が同じ高さ。2 行目: AI 基準・MAKA が、その下で同じ高さ。3 行目: 迷い
+      const rows = await page.locator('.tbl tbody tr').first().evaluate((tr) =>
+        Array.from(tr.children).map((cell) => {
+          const r = cell.getBoundingClientRect();
+          return { top: Math.round(r.top), left: Math.round(r.left), right: Math.round(r.right), height: r.height };
+        }),
+      );
+      expect(rows).toHaveLength(6);
+      expect(new Set(rows.slice(0, 3).map((r) => r.top)).size).toBe(1);
+      expect(new Set(rows.slice(3, 5).map((r) => r.top)).size).toBe(1);
+      expect(rows[3]?.top ?? 0).toBeGreaterThan(rows[0]?.top ?? 0);
+      expect(rows[5]?.top ?? 0).toBeGreaterThan(rows[3]?.top ?? 0);
+      // 左をそろえる: AI 基準は局の下、MAKA は結果の下
+      expect(rows[3]?.left).toBe(rows[0]?.left);
+      expect(rows[4]?.left).toBe(rows[1]?.left);
+      // 小さな見出しは AI 基準・MAKA・迷い（自分は無い）
+      const labels = await page.locator('.tbl tbody tr').first().evaluate((tr) =>
+        Array.from(tr.querySelectorAll('td[data-label]')).map((td) => getComputedStyle(td, '::before').content),
+      );
+      expect(labels).toEqual(['"AI 基準"', '"MAKA"', '"迷い"']);
+      expect(await page.locator('.tbl tbody tr').first().locator('[data-label="MAKA"]').evaluate((el) => getComputedStyle(el).textAlign)).toBe('left');
+      // 半荘全体の行: 空のセルが列を押し出さない（見える物は 2 行目の AI 基準・MAKA だけ）
+      const foot = await page.locator('.tbl tfoot tr').evaluate((tr) =>
+        Array.from(tr.children).map((cell) => {
+          const r = cell.getBoundingClientRect();
+          return { text: (cell.textContent ?? '').trim(), top: Math.round(r.top), left: Math.round(r.left), height: Math.round(r.height) };
+        }),
+      );
+      expect(foot).toHaveLength(6);
+      const visible = foot.filter((c) => c.text !== '');
+      expect(visible.map((c) => c.text.replace(/\s+/g, ' ')).slice(0, 1)).toEqual(['半荘全体']);
+      // 空のセルは、高さが 0（行の高さを増やさない）
+      for (const cell of foot.filter((c) => c.text === '')) expect(cell.height, `空のセルの高さ ${JSON.stringify(cell)}`).toBe(0);
+      const aiCell = foot[3];
+      const makaCell = foot[4];
+      expect(aiCell?.left).toBe(foot[0]?.left);
+      expect(makaCell?.top).toBe(aiCell?.top);
+      // どの局の行も、同じ形（高さが、札の数に応じて 3 行目だけ違う）
+      const heights = await page.locator('.tbl tbody tr').evaluateAll((trs) => trs.map((r) => Math.round(r.getBoundingClientRect().height)));
+      expect(Math.min(...heights)).toBeGreaterThan(60);
+      const m = await overflow(page);
+      expect(m.table).toEqual([0]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('1280px: 表は 6 列で幅 760px 以内（迷いの列があれば 1000px 以内）。見出しの行が見え、各行は 1 行', async () => {
+    const { context, page } = await open({ scenario: doubtScenario() });
+    try {
+      const table = await page.locator('.tbl').boundingBox();
+      expect(table?.width ?? 0).toBeLessThanOrEqual(1001);
+      const header = await page.locator('.tbl thead').boundingBox();
+      expect(header?.height ?? 0).toBeGreaterThan(20);
+      const heads = await page.locator('.tbl thead th').evaluateAll((ths) => ths.map((th) => Math.round(th.getBoundingClientRect().left)));
+      expect(new Set(heads).size).toBe(6);
+      // 各行の列の左端が、見出しの列の左端と同じ（行に、見出しとずれる穴が無い）
+      const aligned = await page.locator('.tbl tbody tr').evaluateAll((trs, expected) =>
+        trs.map((tr) => Array.from(tr.children).map((cell) => Math.round(cell.getBoundingClientRect().left)).join(',') === (expected as number[]).join(','))
+      , heads);
+      expect(aligned.every(Boolean)).toBe(true);
+      const heights = await page.locator('.tbl tbody tr').evaluateAll((rows) => rows.map((r) => Math.round(r.getBoundingClientRect().height)));
+      expect(Math.max(...heights)).toBeLessThanOrEqual(60);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('迷いのカードは、メモの欄のぶんの余白を残さない: 各カードの中身に高さ 0 の空の要素が無く、幅 390px（1 列。行の高さにそろえて伸びない）では、最後の要素の下は、中身の下の余白だけ', async () => {
+    for (const width of [390, 1280]) {
+      const { context, page } = await open({ width, scenario: doubtScenario() });
+      try {
+        const empties = await page.locator('.mcard .mbody > *').evaluateAll((els) =>
+          els.filter((el) => el.getBoundingClientRect().height === 0).map((el) => el.className),
+        );
+        expect(empties, `@${width}`).toEqual([]);
+        const gaps = await page.locator('.mcard').evaluateAll((cards) =>
+          cards.map((card) => {
+            const body = card.querySelector('.mbody') as HTMLElement;
+            const last = body.lastElementChild as HTMLElement;
+            return Math.round(body.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom);
+          }),
+        );
+        // 最後の要素の下は、中身の下の余白（12px）だけ。幅 1280px（3 列）は、同じ行の背の高いカードにそろえて伸びるので、見ない
+        if (width === 390) for (const gap of gaps) expect(gap, `@${width}`).toBeLessThanOrEqual(13);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('設定を切ると（settings-changed）、その場で、自分の列・旗・メモの欄・足す欄が元どおり出て、書いてあったメモが入っている。入れ直すとまた隠れる', async () => {
+    const { context, page, problems } = await open({ width: 1280, scenario: doubtScenario() });
+    try {
+      const flip = (doubtOnly: boolean) =>
+        page.evaluate(async (value) => {
+          const w = window as unknown as {
+            __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<Record<string, unknown>> };
+            __jrEmit: (event: string, payload: unknown) => void;
+          };
+          const current = await w.__TAURI_INTERNALS__.invoke('get_settings');
+          w.__jrEmit('settings-changed', { ...current, doubt_only: value });
+        }, doubtOnly);
+      const headers = () => page.getByRole('table', { name: '局の評価' }).getByRole('columnheader').allTextContents();
+      expect(await headers()).toEqual(['局', '結果', '点', 'AI 基準', 'MAKA', '迷い']);
+      await flip(false);
+      await page.getByRole('group', { name: '迷い1のメモ' }).waitFor();
+      expect(await headers()).toEqual(['局', '結果', '点', '自分', 'AI 基準', 'MAKA', '迷い']);
+      expect(await page.getByLabel('候補').first().inputValue()).toBe('3m・6p');
+      expect(await page.getByRole('button', { name: /迷いマークの無い迷いを足す/ }).count()).toBe(1);
+      expect(await page.locator('.tbl .flag').count()).toBeGreaterThan(0);
+      await flip(true);
+      await page.waitForFunction(() => document.querySelector('.mcard .memo') === null);
+      expect(await headers()).toEqual(['局', '結果', '点', 'AI 基準', 'MAKA', '迷い']);
+      expect(problems).toEqual([]);
     } finally {
       await context.close();
     }

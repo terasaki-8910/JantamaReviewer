@@ -42,7 +42,7 @@ use tauri::{Manager, WindowEvent};
 
 use crate::app_core::Core;
 use crate::commands::{
-    InputHandle, PositionSaver, SharedCore, SharedShowGate, SoundMenuItems, WidgetMenu,
+    InputHandle, ModeMenus, PositionSaver, SharedCore, SharedShowGate, SoundMenuItems, WidgetMenu,
     SHOW_TIMEOUT,
 };
 use crate::input_effects::TauriEffects;
@@ -223,6 +223,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         Arc::clone(&platform.sound),
     );
     let settings = core.settings().clone();
+    // メニューの「取り消し」の、押せる・押せないの最初の状態（起動し直しても続けている半荘に、取り消せる記録がある）。
+    let can_undo = core.app_state().can_undo;
     if let Some(note) = core.startup_note() {
         eprintln!("{note}");
     }
@@ -266,7 +268,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let features = platform::info().features;
     app.manage(SharedShowGate::new());
     if features.widget {
-        let widget_spec = widget_window_spec(settings.orientation);
+        // 迷いだけ（既定）なら 48px 角、切なら選んだ形の大きさで作る（W-15）。
+        let widget_spec = widget_window_spec(settings.orientation, settings.doubt_only);
         let widget = build_window(app, &widget_spec)?;
         platform::style_window(&widget, &widget_spec);
         if let Some(position) = commands::initial_widget_position(&widget, settings.widget_position)
@@ -288,13 +291,16 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     commands::spawn_show_watchdog(handle.clone(), SHOW_TIMEOUT);
 
     // 右クリックのメニューとタスクトレイ。「音を鳴らす」の印は、設定が変わるたびに両方で合わせる（W-12）。
+    // 迷いだけ（W-15）の入・切で入れ替わる項目（「取り消し」と「縦長と横長を切り替える」）も、設定が変わるたびに両方で合わせ、
+    // 「取り消し」の押せる・押せないは、記録の状態が変わるたびに合わせる。
     if features.widget {
-        let widget_menu = menu::build_menu(app, settings.sound)?;
-        let tray_menu = menu::build_menu(app, settings.sound)?;
+        let widget_menu = menu::build_menu(app, settings.sound, settings.doubt_only, can_undo)?;
+        let tray_menu = menu::build_menu(app, settings.sound, settings.doubt_only, can_undo)?;
         app.manage(SoundMenuItems(vec![
             widget_menu.sound.clone(),
             tray_menu.sound.clone(),
         ]));
+        app.manage(ModeMenus(vec![widget_menu.mode, tray_menu.mode]));
         app.manage(WidgetMenu(widget_menu.menu));
         let mut tray = TrayIconBuilder::new()
             .tooltip("JantamaReviewer")

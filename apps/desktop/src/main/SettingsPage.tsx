@@ -202,6 +202,7 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
   }
 
   const keywordsText = keywordsDraft ?? settings.capture_keywords.join('\n');
+  const doubtOnly = settings.doubt_only === true;
   const probeMs = input?.probe_ms ?? null;
   const helper = input?.helper ?? null;
 
@@ -323,7 +324,24 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
             </fieldset>
           )}
 
-          {features.widget && (
+          {/* 画面の部品（〇△✕・メモ）の出し入れも決めるので、ウィジェットの無い OS でも出す */}
+          <div className="setting">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={doubtOnly}
+                aria-describedby="doubt-only-help"
+                onChange={(e) => void update({ doubt_only: e.target.checked })}
+              />
+              迷いだけを記録する
+            </label>
+            <p className="quiet" id="doubt-only-help">
+              〇△✕ と終局直後メモを使わず、ウィジェットを小さな四角の「迷い」ボタン1つにします。これまでの〇△✕ とメモは消えません。
+            </p>
+          </div>
+
+          {/* 迷いだけのウィジェットは 48px 角で、形を選べない（切にすると、選んでいた形に戻る） */}
+          {features.widget && !doubtOnly && (
             <fieldset className="setting pills-set">
               <legend className="lbl">ウィジェットの形</legend>
               <div className="pills">

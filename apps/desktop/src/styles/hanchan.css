@@ -940,7 +940,7 @@ body.lb-open {
     display: none;
   }
 
-  .with-marks .tbl td:nth-child(6) {
+  .with-marks .tbl td[data-label="MAKA"] {
     text-align: right;
   }
 
@@ -951,6 +951,18 @@ body.lb-open {
 
   .mk-chips {
     padding: 0;
+  }
+}
+
+/*
+  ================= 自分の〇△✕の列が無いとき（迷いだけを記録する設定が入。F0、U-46） =================
+  「自分」の列（と、その行の見出し）は作らない。表の列は 1 つ減るので、位置で選んでいる規則（MAKA を最後から 2 番目と見る）は、
+  列の名前（data-label）で選ぶ。幅が狭いとき、2 行目は「AI 基準」「MAKA」の 2 つだけになり、1 行目の「局」「結果」の下に、
+  左をそろえて並べる（自分の列があったときの、右端に寄せた MAKA を、空いた真ん中に残さない）。
+*/
+@container main (width < 600px) {
+  .tbl-wrap.no-self .tbl td[data-label="MAKA"] {
+    text-align: left;
   }
 }
 

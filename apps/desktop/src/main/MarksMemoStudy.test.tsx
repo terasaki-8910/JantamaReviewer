@@ -13,8 +13,8 @@ import { FakeSessionStore, local, seedSession } from '../../tests/fake-sessions'
 import { FakeStudyStore, answerRow } from '../../tests/fake-study';
 import { fx4Ocr, fx4Session } from '../../tests/import-fixtures';
 import { renderQuiz } from '../../tests/study-harness';
-import { installTauriMock } from '../../tests/tauri-mock';
-import type { Links, Memos, SessionRecord } from '../api/types';
+import { baseSettings, installTauriMock } from '../../tests/tauri-mock';
+import type { Links, Memos, SessionRecord, Settings } from '../api/types';
 import { App } from './App';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -235,7 +235,11 @@ const USER_LINKS: Links = {
   marks: { '1': 'k0h0e4', '2': 'k1h0e12', '3': 'k1h1e7', '4': 'k1h1e10', '5': 'k2h1e6', '6': 'k2h1e14' },
 };
 
-function replaySetup(memos: Memos = { marks: {}, extras: [] }, overrides: Record<string, (args: unknown) => unknown> = {}) {
+function replaySetup(
+  memos: Memos = { marks: {}, extras: [] },
+  overrides: Record<string, (args: unknown) => unknown> = {},
+  settings: Partial<Settings> = {},
+) {
   const fx4 = {
     session: fx4Session(FX4_ID, local(2026, 10, 9, 19, 9), {
       report_path: `C:\\data\\games\\${FX4_ID}\\report.json`,
@@ -247,7 +251,10 @@ function replaySetup(memos: Memos = { marks: {}, extras: [] }, overrides: Record
   };
   const sessions = new FakeSessionStore([fx4, seedSession(local(2026, 10, 9, 17, 12), { id: FX1A_ID, report: 'fx1a' })]);
   const study = new FakeStudyStore();
-  const mock = installTauriMock({ handlers: { ...sessions.handlers, ...study.handlers, ...overrides } });
+  const mock = installTauriMock({
+    settings: { ...baseSettings, ...settings },
+    handlers: { ...sessions.handlers, ...study.handlers, ...overrides },
+  });
   const user = userEvent.setup();
   render(<App />);
   return { user, mock, sessions, study };
@@ -448,5 +455,132 @@ describe('U-28 半荘を通して見る画面の迷いの場面（FX-4 の迷い
     });
     await waitFor(() => expect(sessions.session(FX4_ID).memos.marks['3']).toBeUndefined());
     await waitFor(() => expect(within(group).getByLabelText('候補')).toHaveValue(''));
+  });
+});
+
+// ---- 迷いだけを記録する設定が入のとき（F0、U-46）----
+
+describe('U-46 迷いだけの画面: 通して見る画面の迷いの場面と、答え合わせのあとのメモ', () => {
+  const MEMO3: Memos = { marks: { '3': { candidates: '南・6m', reason: '東を残したい' } }, extras: [] };
+
+  /** 迷い 3 の場面で、打牌を 1 つ選んで答え合わせまで進める。 */
+  async function answerScene(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
+    await user.type(screen.getByLabelText('理由（1行）'), '形を崩さない');
+    await user.click(screen.getByRole('button', { name: '答え合わせ' }));
+    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+  }
+
+  it('迷いの場面に、答える前のメモの欄（候補・理由）が無い。書いてあるメモの文字も出ない。場面そのものは、答えられる', async () => {
+    const { user } = replaySetup(MEMO3, {}, { doubt_only: true });
+    await loaded();
+    await openScene(user, 3);
+    expect(memoEditor()).toBeNull();
+    expect(screen.queryByRole('group', { name: '迷い3のメモ' })).toBeNull();
+    expect(screen.queryByLabelText('候補')).toBeNull();
+    expect(screen.queryByRole('heading', { level: 2, name: '終局直後のメモ' })).toBeNull();
+    // 答えの欄の「理由（1行）」は 1 つだけ
+    expect(screen.getAllByLabelText('理由（1行）')).toHaveLength(1);
+    expect(document.body.textContent).not.toContain('東を残したい');
+    expect(document.querySelector('[data-memo]')).toBeNull();
+    // 場面は迷いの場面のまま（答えて、答え合わせを押せる）
+    expect(document.querySelector('.q-chips .is-doubt')).not.toBeNull();
+    expect(screen.getByRole('button', { name: '答え合わせ' })).toBeInTheDocument();
+  });
+
+  it('迷いが 2 つ結びついた場面でも、メモの欄は並ばない', async () => {
+    const links: Links = { ...USER_LINKS, marks: { ...USER_LINKS.marks, '4': 'k1h1e7' } };
+    const fx4 = fx4Session(FX4_ID, local(2026, 10, 9, 19, 9), {
+      report_path: `C:\\data\\games\\${FX4_ID}\\report.json`,
+      ocr: fx4Ocr(),
+      links,
+    });
+    const sessions = new FakeSessionStore([{ session: fx4, report: 'fx4' }]);
+    installTauriMock({
+      settings: { ...baseSettings, doubt_only: true },
+      handlers: { ...sessions.handlers, ...new FakeStudyStore().handlers },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('navigation', { name: '半荘の一覧' });
+    await waitFor(() => expect(sideCount(/^今日の出題/)).not.toBeNull(), LOAD);
+    await openScene(user, 3);
+    expect(memoEditor()).toBeNull();
+    expect(screen.queryAllByRole('group', { name: /^迷い\d+のメモ$/ })).toHaveLength(0);
+  });
+
+  it('答えると、書いてあるメモは、自分の答えの下に読むだけで出る（答え合わせのあとのメモは、設定にかかわらず、書いてあれば出す）', async () => {
+    const { user } = replaySetup(MEMO3, {}, { doubt_only: true });
+    await loaded();
+    await openScene(user, 3);
+    expect(document.querySelector('[data-memo]')).toBeNull();
+    await answerScene(user);
+    const block = document.querySelector('[data-memo="shown"]') as HTMLElement;
+    expect(within(block).getByRole('heading', { level: 2, name: '終局直後のメモ' })).toBeInTheDocument();
+    expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['南・6m', '東を残したい']);
+    expect(block.querySelector('input, textarea')).toBeNull();
+    expect(memoEditor()).toBeNull();
+  });
+
+  it('位置だけの追加のメモ（東2局1本場 6巡目）も、書いてあれば、答えたあとに出る（迷いだけでは、半荘のページが結びつけを保存しない）', async () => {
+    const memos: Memos = { marks: {}, extras: [{ id: 'x1', position: { kyoku: 1, honba: 1, junme: 6 }, candidates: '位置から', reason: '速さ' }] };
+    const writes: unknown[] = [];
+    const { user, sessions } = replaySetup(
+      memos,
+      {
+        set_extra_memo: (args) => {
+          writes.push(args);
+          return undefined;
+        },
+      },
+      { doubt_only: true },
+    );
+    await loaded();
+    await openScene(user, 3);
+    await answerScene(user);
+    const block = document.querySelector('[data-memo="shown"]') as HTMLElement;
+    expect([...block.querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['位置から', '速さ']);
+    // 出すだけ。結びつけの保存はしていない（追加のメモの欄が、画面に無いため）
+    expect(writes).toEqual([]);
+    expect(sessions.session(FX4_ID).memos.extras[0]?.decision).toBeUndefined();
+  });
+
+  it('設定を切ると（settings-changed）、答える前の迷いの場面に、メモの欄が出る。書いてあったメモが入っている。入れ直すと消える', async () => {
+    const { user, mock } = replaySetup(MEMO3, {}, { doubt_only: true });
+    await loaded();
+    await openScene(user, 3);
+    expect(memoEditor()).toBeNull();
+    act(() => {
+      mock.emit('settings-changed', { ...baseSettings, doubt_only: false } satisfies Settings);
+    });
+    await waitFor(() => expect(memoEditor()).not.toBeNull());
+    const group = within(memoEditor() as HTMLElement).getByRole('group', { name: '迷い3のメモ' });
+    expect(within(group).getByLabelText('候補')).toHaveValue('南・6m');
+    expect(within(group).getByLabelText('理由')).toHaveValue('東を残したい');
+    act(() => {
+      mock.emit('settings-changed', { ...baseSettings, doubt_only: true } satisfies Settings);
+    });
+    await waitFor(() => expect(memoEditor()).toBeNull());
+    expect(screen.queryByLabelText('候補')).toBeNull();
+  });
+
+  it('切のとき（これまでの画面）は、迷いの場面に、メモの欄がある', async () => {
+    const { user } = replaySetup(MEMO3, {}, { doubt_only: false });
+    await loaded();
+    await openScene(user, 3);
+    expect(memoEditor()).not.toBeNull();
+    expect(screen.getByRole('group', { name: '迷い3のメモ' })).toBeInTheDocument();
+  });
+
+  it('出題・解き直しの答え合わせのあとの「終局直後のメモ」も、書いてあれば出る（迷いだけの設定でも）', async () => {
+    const { user } = renderQuiz({ doubtOnly: true, session: quizSession(MEMO) });
+    expect(memoBlock()).toBeNull();
+    await answer(user);
+    expect([...(memoBlock() as HTMLElement).querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['南・6m', '東を残して形を整えたい']);
+    cleanup();
+    const review = renderQuiz({ doubtOnly: true, mode: 'review', previousIntervalDays: 1, session: quizSession(MEMO) });
+    expect(memoBlock()).toBeNull();
+    await answer(review.user);
+    expect([...(memoBlock() as HTMLElement).querySelectorAll('dd')].map((dd) => dd.textContent)).toEqual(['南・6m', '東を残して形を整えたい']);
   });
 });

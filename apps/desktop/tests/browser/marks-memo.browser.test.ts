@@ -42,6 +42,8 @@ const settings = {
   orientation: 'vertical',
   widget_position: null,
   sound: true,
+  // 迷いだけ（F0、U-46）は切: メモの欄を検査する。入の検査は、下の「U-46」
+  doubt_only: false,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
 };
@@ -603,6 +605,112 @@ describe('U-28: 取り込む前の半荘で、メモを足す（実ブラウザ�
       } finally {
         await context.close();
       }
+    }
+  });
+});
+
+describe('U-46: 迷いだけを記録する設定が入のとき、終局直後のメモの欄を出さない（FX-5。実ブラウザ）', () => {
+  const doubtScenario = (overrides: Partial<Scenario> = {}) => scenario({ settings: { ...settings, doubt_only: true }, ...overrides });
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 1280] as const) {
+      it(`取り込んだ半荘 幅${width}px ${scheme}: メモの欄・追加のメモ・足す欄・メモの説明が無く、迷いの札と、局の評価の表の説明は残る。横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届く`, async () => {
+        const { context, page, problems, external } = await open({ width, scheme, scenario: doubtScenario() });
+        try {
+          expect(await page.locator('.mcard .memo, .marks.extras, .memo-foot, .memo-add').count()).toBe(0);
+          expect(await page.getByLabel('候補').count()).toBe(0);
+          expect(await page.getByRole('button', { name: /迷いマークの無い迷いを足す|終局直後のメモの説明/ }).count()).toBe(0);
+          expect(await page.getByRole('button', { name: '迷いの札の説明' }).count()).toBe(1);
+          // 迷いの札（局の評価の表の「迷い」の列）は、そのまま 13 枚
+          expect(await page.getByRole('button', { name: /カードへ移る$/ }).count()).toBe(13);
+          expect(await page.getByRole('article').count()).toBe(13);
+          // 書いてあったメモの文字は、画面のどこにも出ない
+          const body = await page.evaluate(() => document.body.innerText);
+          for (const hidden of ['形を崩したくない', 'ポン・スルー', '押すか引くか迷った']) expect(body).not.toContain(hidden);
+
+          const f = await page.evaluate(() => ({
+            scroll: document.documentElement.scrollWidth,
+            client: document.documentElement.clientWidth,
+            table: [...document.querySelectorAll<HTMLElement>('.tbl-wrap')].map((el) => el.scrollWidth - el.clientWidth),
+            // 札は、表の外へ出ない
+            chipsOutside: [...document.querySelectorAll<HTMLElement>('.mk-chip')].filter((chip) => {
+              const box = chip.getBoundingClientRect();
+              const wrap = (chip.closest('.tbl-wrap') as HTMLElement).getBoundingClientRect();
+              return box.right > wrap.right + 1 || box.left < wrap.left - 1;
+            }).length,
+          }));
+          expect(f.scroll).toBeLessThanOrEqual(f.client);
+          for (const extra of f.table) expect(extra).toBeLessThanOrEqual(0);
+          expect(f.chipsOutside).toBe(0);
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          const reach = await unreachableByTab(page);
+          expect(reach.total).toBeGreaterThan(10);
+          expect(reach.missed).toEqual([]);
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('札を押すと、そのカードへ移って目立つ（メモの欄が無くても、移る先のカードは同じ）。幅 390px でも', async () => {
+    for (const width of [1280, 390]) {
+      const { context, page } = await open({ width, scenario: doubtScenario() });
+      try {
+        const chip = page.getByRole('button', { name: /迷い1 .*カードへ移る$/ }).first();
+        await chip.scrollIntoViewIfNeeded();
+        await chip.click();
+        await page.waitForFunction(() => document.activeElement?.id === 'mark-card-1');
+        expect(await page.locator('#mark-card-1').evaluate((el) => el.classList.contains('is-flash'))).toBe(true);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('取り込む前の半荘 幅 390px: 迷いのカードだけが並び、メモの欄も足す欄も無い。横スクロールが無い', async () => {
+    const recorded = fx4Session('20261009-161200', new Date(2026, 9, 9, 16, 12).getTime());
+    const marks = recorded.marks.slice(0, 2).map((mark) => ({ ...mark, screenshot: null, capture: null, capture_error: '試験の画像なし', screenshot_path: null }));
+    const session = { ...recorded, mark_count: 2, marks, rating_count: 0, ratings: [], memos: MEMOS };
+    const { context, page } = await open({ width: 390, table: false, scenario: doubtScenario({ sessions: [session], reports: {} }) });
+    try {
+      expect(await page.getByRole('article').count()).toBe(2);
+      expect(await page.locator('.mcard .memo, .memo-foot, .memo-add, .marks.extras').count()).toBe(0);
+      expect(await page.getByRole('button', { name: /迷いマークの無い迷いを足す|終局直後のメモの説明/ }).count()).toBe(0);
+      const f = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
+      expect(f.scroll).toBeLessThanOrEqual(f.client);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('設定を切ると（settings-changed）、メモの欄・追加のメモ・足す欄・説明が元どおり出て、書いてあったメモが入っている。入れ直すと隠れる', async () => {
+    const { context, page } = await open({ width: 1280, scenario: doubtScenario() });
+    try {
+      const flip = (doubtOnly: boolean) =>
+        page.evaluate(async (value) => {
+          const w = window as unknown as {
+            __TAURI_INTERNALS__: { invoke: (cmd: string) => Promise<Record<string, unknown>> };
+            __jrEmit: (event: string, payload: unknown) => void;
+          };
+          const current = await w.__TAURI_INTERNALS__.invoke('get_settings');
+          w.__jrEmit('settings-changed', { ...current, doubt_only: value });
+        }, doubtOnly);
+      await flip(false);
+      const group = page.getByRole('group', { name: '迷い3のメモ' });
+      await group.waitFor();
+      expect(await group.getByLabel('候補').inputValue()).toBe('3m・6p');
+      expect(await page.getByRole('list', { name: '追加のメモの一覧' }).count()).toBe(1);
+      expect(await page.getByRole('button', { name: /迷いマークの無い迷いを足す/ }).count()).toBe(1);
+      expect(await page.getByRole('button', { name: '終局直後のメモの説明' }).count()).toBe(1);
+      await flip(true);
+      await page.waitForFunction(() => document.querySelector('.mcard .memo') === null);
+      expect(await page.getByRole('button', { name: /迷いマークの無い迷いを足す/ }).count()).toBe(0);
+    } finally {
+      await context.close();
     }
   });
 });

@@ -194,6 +194,65 @@ describe('設定ページ', () => {
   });
 });
 
+describe('設定ページ: 迷いだけを記録する（F0、W-15）', () => {
+  const HELP =
+    '〇△✕ と終局直後メモを使わず、ウィジェットを小さな四角の「迷い」ボタン1つにします。これまでの〇△✕ とメモは消えません。';
+
+  it('「迷いだけを記録する」のチェックと説明を出す。設定が入ならチェックあり、切ならチェックなし', async () => {
+    await renderPage({ settings: { ...baseSettings, doubt_only: true } });
+    const box = screen.getByRole('checkbox', { name: '迷いだけを記録する' });
+    expect(box).toBeChecked();
+    expect(box).toHaveAccessibleDescription(HELP);
+    expect(screen.getByText(HELP)).toBeInTheDocument();
+  });
+
+  it('切のとき（試験の見本）は、チェックなし', async () => {
+    await renderPage();
+    expect(screen.getByRole('checkbox', { name: '迷いだけを記録する' })).not.toBeChecked();
+  });
+
+  it('チェックを外す・入れると、その場で保存する（ほかの設定はそのまま）', async () => {
+    const user = userEvent.setup();
+    const mock = await renderPage({ settings: { ...baseSettings, doubt_only: true, sound: false } });
+    await user.click(screen.getByRole('checkbox', { name: '迷いだけを記録する' }));
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
+    expect(savedSettings(mock)[0]).toMatchObject({ doubt_only: false, sound: false, orientation: 'vertical' });
+    expect(await screen.findByText('保存しました')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '迷いだけを記録する' })).not.toBeChecked();
+    await user.click(screen.getByRole('checkbox', { name: '迷いだけを記録する' }));
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(2));
+    expect(savedSettings(mock)[1]?.doubt_only).toBe(true);
+  });
+
+  it('入のときは、ウィジェットの形の欄（縦長・横長）を出さない。切にすると、選んでいた形が選ばれて出る', async () => {
+    const user = userEvent.setup();
+    await renderPage({ settings: { ...baseSettings, doubt_only: true, orientation: 'horizontal' } });
+    expect(screen.queryByRole('group', { name: 'ウィジェットの形' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: '縦長' })).toBeNull();
+    await user.click(screen.getByRole('checkbox', { name: '迷いだけを記録する' }));
+    expect(await screen.findByRole('radio', { name: '横長' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '縦長' })).not.toBeChecked();
+  });
+
+  it('メニューや同期で変わったら（settings-changed）、チェックも形の欄も変わる', async () => {
+    const mock = await renderPage();
+    expect(screen.getByRole('group', { name: 'ウィジェットの形' })).toBeInTheDocument();
+    act(() => {
+      mock.emit('settings-changed', { ...baseSettings, doubt_only: true } satisfies Settings);
+    });
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: '迷いだけを記録する' })).toBeChecked());
+    expect(screen.queryByRole('group', { name: 'ウィジェットの形' })).toBeNull();
+  });
+
+  it('音のチェックなど、ほかの設定の保存は、迷いだけの値を変えない', async () => {
+    const user = userEvent.setup();
+    const mock = await renderPage({ settings: { ...baseSettings, doubt_only: true } });
+    await user.click(screen.getByRole('checkbox', { name: '迷いを記録したら音を鳴らす' }));
+    await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
+    expect(savedSettings(mock)[0]).toMatchObject({ sound: false, doubt_only: true });
+  });
+});
+
 describe('設定ページ: 出題の設定（D-3・U-19）', () => {
   it('既定: 1日に出す数 5・大きな不一致の基準 5%・ドラを目立たせる は切', async () => {
     await renderPage();

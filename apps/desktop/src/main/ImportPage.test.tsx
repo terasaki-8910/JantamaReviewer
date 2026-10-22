@@ -11,7 +11,7 @@ import {
   fx4Session,
   importHandlers,
 } from '../../tests/import-fixtures';
-import { installTauriMock, type TauriMock } from '../../tests/tauri-mock';
+import { baseSettings, installTauriMock, type TauriMock } from '../../tests/tauri-mock';
 import type { SessionRecord } from '../api/types';
 import { ANNOUNCED_STORAGE_KEY } from './announced';
 import { App } from './App';
@@ -575,6 +575,56 @@ describe('代わりの取り込み方（F1）', () => {
     await user.click(screen.getByRole('button', { name: '結果の JSON ファイルを開く' }));
     expect(await screen.findByRole('heading', { name: '結果のファイルを読めませんでした' })).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('拡張子が .json');
+  });
+});
+
+describe('迷いだけを記録する設定が入のとき、取り込みの画面に〇△✕ の数を出さない（F0）', () => {
+  const doubtSettings = { ...baseSettings, doubt_only: true };
+
+  it('半荘を選ぶ一覧の各行は「迷い 6」だけ（評価の数が無い）。切のときは「迷い 6 · 評価 5」', async () => {
+    const older = recordedSession('20261009-190000', 30 * HOUR);
+    const newer = recordedSession('20261009-210000', 10 * HOUR);
+    const mock = installTauriMock({ settings: doubtSettings, handlers: importHandlers([older, newer]) });
+    const user = userEvent.setup();
+    render(<App />);
+    await startMjai(user);
+    reportFound(mock);
+    await screen.findByRole('heading', { name: 'どの半荘の結果か、選んでください' });
+    const rows = within(screen.getByRole('list', { name: '結びつける半荘の一覧（新しい順）' })).getAllByRole('button');
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).toHaveTextContent('迷い 6');
+      expect(row.textContent).not.toContain('評価');
+      expect(row).toHaveTextContent('画面が合う');
+    }
+  });
+
+  it('取り込みました: 迷いの数は出し、「局の評価 5 件のうち…」は出さない。結びつけは、これまでどおり保存する（記録は消えない）', async () => {
+    const session = recordedSession();
+    const mock = installTauriMock({ settings: doubtSettings, handlers: importHandlers([session]), sessions: [session] });
+    const user = userEvent.setup();
+    render(<App />);
+    await startMjai(user);
+    reportFound(mock);
+    expect(await screen.findByRole('heading', { name: '取り込みました' })).toBeInTheDocument();
+    const panel = screen.getByRole('heading', { name: '取り込みました' }).closest('section') as HTMLElement;
+    expect(panel.textContent).toContain('迷い 6');
+    expect(panel.textContent).not.toContain('局の評価');
+    expect(lastCall(mock, 'replace_links')).toMatchObject({
+      sessionId: session.id,
+      links: { ratings: { '7': 'k0h0', '8': 'k1h0', '9': 'k1h1', '10': '', '11': 'k2h1' } },
+    });
+  });
+
+  it('記録の無い半荘として取り込んだとき、「迷いマークは、ありません。」（評価のことは言わない）', async () => {
+    const mock = installTauriMock({ settings: doubtSettings, handlers: importHandlers([]) });
+    const user = userEvent.setup();
+    render(<App />);
+    await startMjai(user);
+    reportFound(mock);
+    expect(await screen.findByRole('heading', { name: '取り込みました' })).toBeInTheDocument();
+    expect(screen.getByText('記録の無い半荘として取り込みました。迷いマークは、ありません。')).toBeInTheDocument();
+    expect(screen.queryByText(/迷いマークと評価は/)).toBeNull();
   });
 });
 

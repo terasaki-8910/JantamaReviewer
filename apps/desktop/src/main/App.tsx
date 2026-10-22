@@ -528,10 +528,11 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
               onOpenReplay={openReplay}
               fit={fit}
               threshold={study.threshold}
+              doubtOnly={study.doubtOnly}
             />
           )}
           {sessions !== null && selectedSession === null && (view.kind === 'none' || view.kind === 'session') && (
-            <EmptyPage />
+            <EmptyPage doubtOnly={study.doubtOnly} />
           )}
         </main>
         {toast !== null && <Toast toast={toast} onClose={() => setToast(null)} />}
@@ -577,15 +578,17 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
   );
 }
 
-/** 半荘が 1 つも無いときの本文。 */
-function EmptyPage() {
+/** 半荘が 1 つも無いときの本文。迷いだけを記録する設定が入のときは、〇△✕ のことを言わない。 */
+function EmptyPage({ doubtOnly }: { doubtOnly: boolean }) {
   return (
     <>
       <header className="head">
         <h1 className="title">半荘がありません</h1>
       </header>
       <div className="page">
-        <p className="empty">ウィジェットの「迷い」や〇△✕を押すと、ここに並びます。</p>
+        <p className="empty">
+          {doubtOnly ? 'ウィジェットの「迷い」を押すと、ここに並びます。' : 'ウィジェットの「迷い」や〇△✕を押すと、ここに並びます。'}
+        </p>
       </div>
     </>
   );

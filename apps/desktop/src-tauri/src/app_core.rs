@@ -47,6 +47,8 @@ pub struct SettingsChange {
     pub data_dir: bool,
     /// 音の入・切（メニューの印を合わせるため）。
     pub sound: bool,
+    /// 迷いだけの入・切（ウィジェットの大きさと、2 つのメニューの項目を合わせるため。W-15）。
+    pub doubt_only: bool,
 }
 
 pub struct Core {
@@ -241,6 +243,7 @@ impl Core {
             orientation: new.orientation != self.settings.orientation,
             data_dir: data_dir_changed,
             sound: new.sound != self.settings.sound,
+            doubt_only: new.doubt_only != self.settings.doubt_only,
         };
         self.settings = new;
         match reopened {
@@ -671,6 +674,72 @@ mod tests {
         next.orientation = Orientation::Horizontal;
         let change = f.core.apply_settings(next).unwrap();
         assert!(change.orientation && !change.sound);
+    }
+
+    #[test]
+    fn w15_flipping_doubt_only_is_reported_saved_and_kept_after_a_restart() {
+        let mut f = fixture();
+        assert!(f.core.settings().doubt_only, "既定は入");
+        let mut next = f.core.settings().clone();
+        next.doubt_only = false;
+        let change = f.core.apply_settings(next).unwrap();
+        assert_eq!(
+            change,
+            SettingsChange {
+                doubt_only: true,
+                ..SettingsChange::default()
+            },
+            "窓の大きさとメニューを合わせるために、変わったことを知らせる"
+        );
+        assert!(!f.core.settings().doubt_only);
+        // 同じ設定フォルダから読み直す（= 次の起動）。
+        let reloaded = Core::load(f.config_dir(), FakeCapturer::ok(&[1]), CountingSound::new());
+        assert!(!reloaded.settings().doubt_only);
+        // 入に戻すと、それも残る。
+        let mut back = f.core.settings().clone();
+        back.doubt_only = true;
+        assert!(f.core.apply_settings(back).unwrap().doubt_only);
+        let reloaded = Core::load(f.config_dir(), FakeCapturer::ok(&[1]), CountingSound::new());
+        assert!(reloaded.settings().doubt_only);
+    }
+
+    #[test]
+    fn w15_other_settings_changes_do_not_report_a_doubt_only_change_and_doubt_only_keeps_the_shape()
+    {
+        let mut f = fixture();
+        let mut next = f.core.settings().clone();
+        next.orientation = Orientation::Horizontal;
+        next.sound = false;
+        let change = f.core.apply_settings(next).unwrap();
+        assert!(change.orientation && change.sound && !change.doubt_only);
+        // 迷いだけを切り替えても、選んだ形は変わらない（切にすると、選んでいた形に戻る）。
+        for value in [false, true, false] {
+            let mut next = f.core.settings().clone();
+            next.doubt_only = value;
+            f.core.apply_settings(next).unwrap();
+            assert_eq!(f.core.settings().orientation, Orientation::Horizontal);
+        }
+    }
+
+    #[test]
+    fn w15_recording_works_the_same_in_both_modes_and_never_loses_what_was_recorded() {
+        // 迷いだけを入れても切っても、記録の担当は同じ。〇△✕ の記録も、入れたあとに消えない。
+        let mut f = fixture();
+        f.core.rate(T0, Rating::Good).unwrap();
+        f.core.mark(T0 + 1).unwrap();
+        let mut off = f.core.settings().clone();
+        off.doubt_only = false;
+        f.core.apply_settings(off).unwrap();
+        let mut on = f.core.settings().clone();
+        on.doubt_only = true;
+        f.core.apply_settings(on).unwrap();
+        let state = f.core.mark(T0 + 2).unwrap();
+        assert_eq!(state.mark_count, 2);
+        assert_eq!(state.ratings, vec![Rating::Good]);
+        // 取り消しは、迷いだけでも、最後の記録を 1 つ消す（メニューの「取り消し」と同じ）。
+        let state = f.core.undo(T0 + 3).unwrap();
+        assert_eq!(state.mark_count, 1);
+        assert!(state.can_undo);
     }
 
     #[test]

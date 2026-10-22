@@ -4,6 +4,10 @@
 //! 新しい半荘・縦長と横長の切り替え / 音を鳴らす（入・切の印つき）・検討画面を開く / 終了。
 //! 「音を鳴らす」は、設定のチェックと同じ設定（`Settings::sound`）を切り替える（W-12）。
 //!
+//! 迷いだけ（`Settings::doubt_only`。W-15）が入のときは、形の切り替えを出さず、その場所に「取り消し」を置く
+//! （ウィジェットが 48px 角の「迷い」ボタン 1 つで、取り消しのボタンが無いため）。「取り消し」は、最後の記録が無いとき押せない。
+//! 2 つのメニューの項目は、設定が変わったとき（設定のチェックからも、同期からも）と、記録の状態が変わったときに、その場で合わせる。
+//!
 //! macOS のアプリのメニュー（メニューバー。`mac_app_menu`）も、ここで作る。Quit（Cmd+Q）と、入力欄の取り消し・切り取り・
 //! コピー・貼り付け・すべてを選択（Cmd+Z/X/C/V/A）に要る編集のメニュー、窓のメニューだけで、
 //! ブラウザの機能（再読み込み・印刷・検索）は入れない。
@@ -15,6 +19,7 @@ use crate::commands;
 
 pub const MENU_NEW_SESSION: &str = "new_session";
 pub const MENU_TOGGLE_ORIENTATION: &str = "toggle_orientation";
+pub const MENU_UNDO: &str = "undo";
 pub const MENU_TOGGLE_SOUND: &str = "toggle_sound";
 pub const MENU_OPEN_MAIN: &str = "open_main";
 pub const MENU_QUIT: &str = "quit";
@@ -30,7 +35,7 @@ pub enum Entry {
     Separator,
 }
 
-/// メニューの並び（上から順）。ウィジェットの右クリックとタスクトレイで、同じものを使う。
+/// メニューの並び（上から順）。迷いだけが切のとき。ウィジェットの右クリックとタスクトレイで、同じものを使う。
 pub const MENU_LAYOUT: [Entry; 7] = [
     Entry::Item(MENU_NEW_SESSION, "新しい半荘"),
     Entry::Item(MENU_TOGGLE_ORIENTATION, "縦長と横長を切り替える"),
@@ -41,21 +46,102 @@ pub const MENU_LAYOUT: [Entry; 7] = [
     Entry::Item(MENU_QUIT, "終了"),
 ];
 
-/// 作ったメニューと、その中の「音を鳴らす」の項目（設定が変わったときに、印を合わせるため）。
-pub struct BuiltMenu<R: Runtime> {
-    pub menu: Menu<R>,
-    pub sound: CheckMenuItem<R>,
+/// メニューの並び（上から順）。迷いだけが入のとき（W-15）。形の切り替えは出さず、同じ場所に「取り消し」を置く。
+pub const MENU_LAYOUT_DOUBT_ONLY: [Entry; 7] = [
+    Entry::Item(MENU_NEW_SESSION, "新しい半荘"),
+    Entry::Item(MENU_UNDO, "取り消し"),
+    Entry::Separator,
+    Entry::Check(MENU_TOGGLE_SOUND, "音を鳴らす"),
+    Entry::Item(MENU_OPEN_MAIN, "検討画面を開く"),
+    Entry::Separator,
+    Entry::Item(MENU_QUIT, "終了"),
+];
+
+/// 迷いだけの入・切に合わせたメニューの並び。
+pub fn menu_layout(doubt_only: bool) -> &'static [Entry] {
+    if doubt_only {
+        &MENU_LAYOUT_DOUBT_ONLY
+    } else {
+        &MENU_LAYOUT
+    }
 }
 
-/// メニューを作る。ウィジェットの右クリックとトレイで、別々に作って使う。`sound` は、いまの音の設定。
+/// 2 番目に置く、迷いだけの入・切で入れ替わる項目（どちらの並びでも、新しい半荘の次）。
+const SWAP_POSITION: usize = 1;
+
+/// メニューの中で、迷いだけの入・切に合わせて入れ替わる 2 つの項目（「取り消し」と「縦長と横長を切り替える」）。
+/// 入れ替えは、メニューを作り直さずに、項目の出し入れで行う（メニューは、開いたままのトレイにも付いているため）。
+pub struct ModeItems<R: Runtime> {
+    menu: Menu<R>,
+    undo: MenuItem<R>,
+    orientation: MenuItem<R>,
+}
+
+impl<R: Runtime> ModeItems<R> {
+    /// 迷いだけの入・切に合わせて、どちらかの項目を出し、もう一方を外す。いまの状態と同じなら、何もしない。
+    pub fn set_doubt_only(&self, doubt_only: bool) -> tauri::Result<()> {
+        let (show, show_id, hide, hide_id) = if doubt_only {
+            (
+                &self.undo,
+                MENU_UNDO,
+                &self.orientation,
+                MENU_TOGGLE_ORIENTATION,
+            )
+        } else {
+            (
+                &self.orientation,
+                MENU_TOGGLE_ORIENTATION,
+                &self.undo,
+                MENU_UNDO,
+            )
+        };
+        if self.menu.get(hide_id).is_some() {
+            self.menu.remove(hide)?;
+        }
+        if self.menu.get(show_id).is_none() {
+            self.menu.insert(show, SWAP_POSITION)?;
+        }
+        Ok(())
+    }
+
+    /// 「取り消し」を押せるか（取り消せる記録があるか）に合わせる。
+    pub fn set_can_undo(&self, can_undo: bool) -> tauri::Result<()> {
+        self.undo.set_enabled(can_undo)
+    }
+}
+
+/// 作ったメニューと、その中の、設定や記録の状態が変わったときに合わせる項目。
+pub struct BuiltMenu<R: Runtime> {
+    pub menu: Menu<R>,
+    /// 「音を鳴らす」（設定が変わったときに、印を合わせる）。
+    pub sound: CheckMenuItem<R>,
+    /// 迷いだけの入・切で入れ替わる項目と、「取り消し」の押せる・押せない。
+    pub mode: ModeItems<R>,
+}
+
+/// メニューを作る。ウィジェットの右クリックとトレイで、別々に作って使う。
+/// `sound` は、いまの音の設定。`doubt_only` は、いまの迷いだけの設定。`can_undo` は、取り消せる記録があるか。
 pub fn build_menu<R: Runtime, M: Manager<R>>(
     manager: &M,
     sound: bool,
+    doubt_only: bool,
+    can_undo: bool,
 ) -> tauri::Result<BuiltMenu<R>> {
     let menu = Menu::new(manager)?;
+    // 入れ替わる 2 つの項目は、どちらの並びでも使うので、先に作っておく（並びに無い方は、メニューに入れない）。
+    let undo = MenuItem::with_id(manager, MENU_UNDO, "取り消し", can_undo, None::<&str>)?;
+    let orientation = MenuItem::with_id(
+        manager,
+        MENU_TOGGLE_ORIENTATION,
+        "縦長と横長を切り替える",
+        true,
+        None::<&str>,
+    )?;
     let mut sound_item = None;
-    for entry in MENU_LAYOUT {
-        match entry {
+    for entry in menu_layout(doubt_only) {
+        match *entry {
+            Entry::Item(MENU_UNDO, _) => menu.append(&undo)?,
+            Entry::Item(MENU_TOGGLE_ORIENTATION, _) => menu.append(&orientation)?,
             Entry::Item(id, label) => {
                 menu.append(&MenuItem::with_id(manager, id, label, true, None::<&str>)?)?
             }
@@ -72,7 +158,12 @@ pub fn build_menu<R: Runtime, M: Manager<R>>(
             "メニューに「音を鳴らす」の項目がありません",
         ))
     })?;
-    Ok(BuiltMenu { menu, sound })
+    let mode = ModeItems {
+        menu: menu.clone(),
+        undo,
+        orientation,
+    };
+    Ok(BuiltMenu { menu, sound, mode })
 }
 
 /// macOS のアプリのメニューに入れる、標準の項目（動きは macOS が持っている）。
@@ -217,6 +308,11 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
                 eprintln!("ウィジェットの形を切り替えられませんでした: {e}");
             }
         }
+        MENU_UNDO => {
+            if let Err(e) = commands::undo_now(app) {
+                eprintln!("最後の記録を取り消せませんでした: {e}");
+            }
+        }
         MENU_TOGGLE_SOUND => {
             if let Err(e) = commands::toggle_sound_now(app) {
                 eprintln!("音の入・切を切り替えられませんでした: {e}");
@@ -232,12 +328,37 @@ pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
 mod tests {
     use super::*;
 
-    fn labels() -> Vec<&'static str> {
-        MENU_LAYOUT
+    fn labels_of(layout: &[Entry]) -> Vec<&'static str> {
+        layout
             .iter()
             .filter_map(|entry| match entry {
                 Entry::Item(_, label) | Entry::Check(_, label) => Some(*label),
                 Entry::Separator => None,
+            })
+            .collect()
+    }
+
+    fn labels() -> Vec<&'static str> {
+        labels_of(&MENU_LAYOUT)
+    }
+
+    fn ids_of(layout: &[Entry]) -> Vec<&'static str> {
+        layout
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::Item(id, _) | Entry::Check(id, _) => Some(*id),
+                Entry::Separator => None,
+            })
+            .collect()
+    }
+
+    fn kinds_of(layout: &[Entry]) -> Vec<&'static str> {
+        layout
+            .iter()
+            .map(|e| match e {
+                Entry::Item(..) => "item",
+                Entry::Check(..) => "check",
+                Entry::Separator => "sep",
             })
             .collect()
     }
@@ -254,32 +375,78 @@ mod tests {
                 "終了"
             ]
         );
+        // 迷いだけが切のときの並びは、これまでのまま
+        assert_eq!(menu_layout(false), &MENU_LAYOUT[..]);
     }
 
     #[test]
     fn w12_the_sound_item_is_a_checkable_item_and_the_only_one() {
-        let checks: Vec<_> = MENU_LAYOUT
-            .iter()
-            .filter(|e| matches!(e, Entry::Check(..)))
-            .collect();
-        assert_eq!(checks, vec![&Entry::Check(MENU_TOGGLE_SOUND, "音を鳴らす")]);
+        for doubt_only in [false, true] {
+            let checks: Vec<_> = menu_layout(doubt_only)
+                .iter()
+                .filter(|e| matches!(e, Entry::Check(..)))
+                .collect();
+            assert_eq!(
+                checks,
+                vec![&Entry::Check(MENU_TOGGLE_SOUND, "音を鳴らす")],
+                "{doubt_only}"
+            );
+        }
     }
 
     #[test]
     fn w12_separators_group_the_items_like_the_approved_sample() {
         // 新しい半荘・形 | 音・検討画面 | 終了
-        let kinds: Vec<&str> = MENU_LAYOUT
-            .iter()
-            .map(|e| match e {
-                Entry::Item(..) => "item",
-                Entry::Check(..) => "check",
-                Entry::Separator => "sep",
-            })
-            .collect();
         assert_eq!(
-            kinds,
+            kinds_of(&MENU_LAYOUT),
             vec!["item", "item", "sep", "check", "item", "sep", "item"]
         );
+        // 迷いだけでも、同じ区切り（形の代わりに取り消しが、同じ組に入る）
+        assert_eq!(kinds_of(&MENU_LAYOUT), kinds_of(&MENU_LAYOUT_DOUBT_ONLY));
+    }
+
+    #[test]
+    fn w15_with_doubt_only_the_menu_offers_undo_and_no_shape_switch() {
+        assert_eq!(
+            labels_of(menu_layout(true)),
+            vec![
+                "新しい半荘",
+                "取り消し",
+                "音を鳴らす",
+                "検討画面を開く",
+                "終了"
+            ]
+        );
+        let ids = ids_of(menu_layout(true));
+        assert!(ids.contains(&MENU_UNDO));
+        assert!(
+            !ids.contains(&MENU_TOGGLE_ORIENTATION),
+            "形の切り替えは出さない"
+        );
+        // 切のときは、取り消しを出さない（ウィジェットに取り消しのボタンがあるため）
+        let ids = ids_of(menu_layout(false));
+        assert!(!ids.contains(&MENU_UNDO));
+        assert!(ids.contains(&MENU_TOGGLE_ORIENTATION));
+    }
+
+    #[test]
+    fn w15_the_two_layouts_differ_only_in_the_one_swapped_item_and_it_sits_at_the_swap_position() {
+        let off = menu_layout(false);
+        let on = menu_layout(true);
+        assert_eq!(off.len(), on.len());
+        let differing: Vec<usize> = (0..off.len()).filter(|&i| off[i] != on[i]).collect();
+        assert_eq!(
+            differing,
+            vec![SWAP_POSITION],
+            "入れ替わるのは 2 番目の 1 つだけ"
+        );
+        assert_eq!(
+            off[SWAP_POSITION],
+            Entry::Item(MENU_TOGGLE_ORIENTATION, "縦長と横長を切り替える")
+        );
+        assert_eq!(on[SWAP_POSITION], Entry::Item(MENU_UNDO, "取り消し"));
+        // 出し入れで入れ替えるとき（`ModeItems`）に入れる場所と、並びの場所が同じ
+        assert_eq!(SWAP_POSITION, 1);
     }
 
     fn mac_items(menu: &MacMenu) -> Vec<MacItem> {
@@ -361,17 +528,13 @@ mod tests {
     }
 
     #[test]
-    fn menu_ids_are_unique() {
-        let mut ids: Vec<&str> = MENU_LAYOUT
-            .iter()
-            .filter_map(|e| match e {
-                Entry::Item(id, _) | Entry::Check(id, _) => Some(*id),
-                Entry::Separator => None,
-            })
-            .collect();
-        let total = ids.len();
-        ids.sort_unstable();
-        ids.dedup();
-        assert_eq!(ids.len(), total);
+    fn menu_ids_are_unique_in_both_layouts() {
+        for doubt_only in [false, true] {
+            let mut ids = ids_of(menu_layout(doubt_only));
+            let total = ids.len();
+            ids.sort_unstable();
+            ids.dedup();
+            assert_eq!(ids.len(), total, "{doubt_only}");
+        }
     }
 }

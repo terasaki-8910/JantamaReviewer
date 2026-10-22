@@ -4,6 +4,7 @@
  */
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import type {
   AnswerNotes,
@@ -73,6 +74,11 @@ export const api = {
   restoreSessions: (ids: string[]) => invoke<void>('restore_sessions', { ids }),
   getStartupNote: () => invoke<string | null>('get_startup_note'),
   showWidgetMenu: () => invoke<void>('show_widget_menu'),
+  /**
+   * 押している間、この窓を動かす（OS の窓の移動を始める。押したままでないと、動かない）。ウィジェットの迷いだけのボタンが、
+   * 押したまま動かされたときに呼ぶ（F0、W-15）。窓に許してある操作は `core:window:allow-start-dragging` だけ（widget.json）。
+   */
+  startWindowDrag: () => getCurrentWindow().startDragging(),
   /**
    * 最初の絵を描き終えたことを知らせる（N-7）。窓は隠したまま作られ、これを受けた Rust 側が
    * 窓の背景色を `background`（いま描いている背景の色。CSS の色の文字列）にそろえてから見せる。
