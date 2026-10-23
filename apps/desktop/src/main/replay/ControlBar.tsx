@@ -35,10 +35,19 @@ interface ControlBarProps {
   onChangeKeys: (next: ReplayKeys) => Promise<string | null>;
   /** 他家が聴牌になった手の目盛り（他家の手牌を開いているときだけ渡す。F14、R16-7）。 */
   ticks?: readonly StripTick[];
+  /** 設定の「拮抗の場面を出す」。切のときは、拮抗の段を出さない（F17）。 */
+  contestEnabled: boolean;
   /** 「細かいミスだけ」を入れているか（迷いの段の切り替え。F17）。 */
   fineMissOnly: boolean;
   onFineMissOnly: (on: boolean) => void;
 }
+
+/** 「飛ぶ」段ごとの、前・次の操作と、場面の呼び名（F17 で、拮抗の段が増えた）。 */
+const JUMP_ACTIONS = {
+  mismatch: { prev: 'prev_mismatch', next: 'next_mismatch', noun: '不一致' },
+  doubt: { prev: 'prev_doubt', next: 'next_doubt', noun: '迷い' },
+  contest: { prev: 'prev_contest', next: 'next_contest', noun: '拮抗' },
+} as const satisfies Record<string, { prev: ReplayAction; next: ReplayAction; noun: string }>;
 
 /** 押したボタンが押せなくなったとき、キーボードの位置を移す先（対のボタン）。 */
 const PAIR: Partial<Record<ReplayAction, ReplayAction>> = {
@@ -56,7 +65,7 @@ const PAIR: Partial<Record<ReplayAction, ReplayAction>> = {
   next_contest: 'prev_contest',
 };
 
-export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, currentKey, go, onChangeKeys, ticks, fineMissOnly, onFineMissOnly }: ControlBarProps) {
+export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, currentKey, go, onChangeKeys, ticks, contestEnabled, fineMissOnly, onFineMissOnly }: ControlBarProps) {
   const step = timeline.steps[g];
   const kyoku = step === undefined ? undefined : timeline.kyokus[step.kyokuPosition];
   const buttons = useRef(new Map<ReplayAction, HTMLButtonElement>());
@@ -119,15 +128,12 @@ export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, 
           };
         });
 
-  // 場面の数は、解決した場面を除いたもの（「細かいミスだけ」を入れているときは、迷いは細かいミスだけ。nav が数える）
-  const JUMPS = {
-    mismatch: { total: nav.mismatchTotal, ahead: nav.mismatchesAhead, prev: 'prev_mismatch', next: 'next_mismatch', noun: '不一致', name: showAll ? '不一致' : '大きな不一致' },
-    doubt: { total: nav.doubtTotal, ahead: nav.doubtsAhead, prev: 'prev_doubt', next: 'next_doubt', noun: '迷い', name: '自分の迷い' },
-    contest: { total: nav.contestTotal, ahead: nav.contestsAhead, prev: 'prev_contest', next: 'next_contest', noun: '拮抗', name: '拮抗' },
-  } as const satisfies Record<string, { total: number; ahead: number; prev: ReplayAction; next: ReplayAction; noun: string; name: string }>;
-
   const jump = (kind: 'mismatch' | 'doubt' | 'contest') => {
-    const { total, ahead, prev, next, noun, name } = JUMPS[kind];
+    const { prev, next, noun } = JUMP_ACTIONS[kind];
+    // 場面の数は、解決した場面を除いたもの（「細かいミスだけ」を入れているときは、迷いは細かいミスだけ。nav が数える）
+    const total = { mismatch: nav.mismatchTotal, doubt: nav.doubtTotal, contest: nav.contestTotal }[kind];
+    const ahead = { mismatch: nav.mismatchesAhead, doubt: nav.doubtsAhead, contest: nav.contestsAhead }[kind];
+    const name = { mismatch: showAll ? '不一致' : '大きな不一致', doubt: '自分の迷い', contest: '拮抗' }[kind];
     return (
       <div className="jump" data-kind={kind} role="group" aria-label={`${name}の場面へ飛ぶ`}>
         <span className="jump-l">
@@ -244,7 +250,7 @@ export function ControlBar({ timeline, g, scenes, nav, keys, showAll, answered, 
       <div className="pb-jumps">
         {jump('mismatch')}
         {jump('doubt')}
-        {jump('contest')}
+        {contestEnabled && jump('contest')}
       </div>
       <div ref={trackFallback}>
         <Strip timeline={timeline} g={g} scenes={scenes} answered={answered} currentKey={currentKey} go={go} ticks={ticks} />

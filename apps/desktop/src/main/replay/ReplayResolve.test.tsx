@@ -360,14 +360,21 @@ describe('U-42 細かいミスの迷いの印と「細かいミスだけ」', ()
 });
 
 describe('U-42 拮抗の場面', () => {
-  it('切（既定の見本）: 拮抗の段は 0 か所で、印も札も無い。前・次は押せない', async () => {
+  it('切（試験の見本）: 拮抗の段そのものを出さない。印も札も無い。段は、不一致と迷いの 2 つ', async () => {
     const { user } = setup();
     await loaded();
     await openReplay(user);
-    expect(group('contest')).toHaveTextContent('拮抗 0か所');
-    expect(jumpButton('contest', 'prev')).toBeDisabled();
-    expect(jumpButton('contest', 'next')).toBeDisabled();
+    expect(document.querySelector('.jump[data-kind="contest"]')).toBeNull();
+    expect([...document.querySelectorAll('.pb-jumps .jump')].map((el) => el.getAttribute('data-kind'))).toEqual(['mismatch', 'doubt']);
+    expect(screen.queryByRole('button', { name: /^次の拮抗へ/ })).toBeNull();
     expect(document.querySelectorAll('.pin.cst')).toHaveLength(0);
+  });
+
+  it('入: 段は、不一致・迷い・拮抗の順の 3 つ', async () => {
+    const { user } = setup({ settings: WIDE });
+    await loaded();
+    await openReplay(user);
+    expect([...document.querySelectorAll('.pb-jumps .jump')].map((el) => el.getAttribute('data-kind'))).toEqual(['mismatch', 'doubt', 'contest']);
   });
 
   it('入: 「拮抗 N か所」の段と前・次。印は帯の下の短い横棒（ひし形と同じ段）。次の拮抗へ ×N で順に開き、最後は押せない', async () => {
@@ -467,7 +474,10 @@ describe('U-42 拮抗の場面', () => {
     await loaded();
     await openReplay(user);
     const settings = (patch: Partial<Settings>): Settings => ({ ...baseSettings, ...patch });
-    const countOf = () => Number(/(\d+)か所/.exec(group('contest').textContent ?? '')?.[1]);
+    const countOf = () => {
+      const el = document.querySelector('.jump[data-kind="contest"]');
+      return el === null ? 0 : Number(/(\d+)か所/.exec(el.textContent ?? '')?.[1]);
+    };
     const emit = async (patch: Partial<Settings>) => {
       act(() => mock.emit('settings-changed', settings(patch)));
     };
@@ -487,9 +497,9 @@ describe('U-42 拮抗の場面', () => {
     // 3 つの条件を全部切ると、0 か所
     await emit({ ...WIDE, contest_by_junme: false, contest_after_riichi: false, contest_two_calls: false });
     await waitFor(() => expect(countOf()).toBe(0));
-    // 出さない: 0 か所のまま、印も無い
+    // 出さない: 段そのものが消え、印も無い
     await emit({ ...WIDE, contest_enabled: false });
-    await waitFor(() => expect(countOf()).toBe(0));
+    await waitFor(() => expect(document.querySelector('.jump[data-kind="contest"]')).toBeNull());
     expect(document.querySelectorAll('.pin.cst')).toHaveLength(0);
   });
 

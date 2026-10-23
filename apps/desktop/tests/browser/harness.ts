@@ -360,6 +360,10 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'clear_self_rating': mutate(args.sessionId, function (s) { delete s.self_ratings.kyokus[args.kyoku]; }); return null;
       case 'set_maka_grade': mutate(args.sessionId, function (s) { s.maka.kyokus[args.kyoku] = args.grade; }); return null;
       case 'clear_maka_grade': mutate(args.sessionId, function (s) { delete s.maka.kyokus[args.kyoku]; }); return null;
+      case 'set_resolved': mutate(args.sessionId, function (s) {
+        if (!s.resolved) s.resolved = { decisions: {} };
+        if (args.resolved) s.resolved.decisions[args.decisionKey] = Date.now(); else delete s.resolved.decisions[args.decisionKey];
+      }); return null;
       case 'set_maka_hanchan': mutate(args.sessionId, function (s) { s.maka.hanchan = args.grade; }); return null;
       case 'clear_maka_hanchan': mutate(args.sessionId, function (s) { delete s.maka.hanchan; }); return null;
       case 'set_memo': mutate(args.sessionId, function (s) {

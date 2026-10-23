@@ -63,6 +63,8 @@ const baseSettings = {
   daily_count: 5,
   disagreement_percent: 5,
   highlight_dora: false,
+  // 拮抗の場面（F17）の既定は入だが、問題の数を数える試験が多いので、試験の見本は切にしておく（入の試験は、設定を重ねる）
+  contest_enabled: false,
 };
 
 /** FX-4（読み取りの写しつき。迷い 1〜5 は推定）と、f9da。 */
@@ -71,6 +73,24 @@ function sessions() {
     fx4Session(FX4_ID, local(2026, 10, 9, 19, 9), { report_path: `C:\\data\\games\\${FX4_ID}\\report.json`, ocr: fx4Ocr() }),
     seedSession(local(2026, 10, 9, 17, 12), { id: FX1A_ID, report: 'fx1a' }).session,
   ];
+}
+
+/** FX-4 の今日の組（細かいミス（迷い 2）が先頭、あとは迷いの順）の判断の鍵。 */
+const DAILY_KEYS = ['k1h0e12', 'k0h0e4', 'k1h1e7', 'k1h1e10', 'k2h1e6'];
+
+/** 組が保存済みで、そのうちの 2 問（迷い 1 と迷い 3）を解決した状態（F16）。解決した問題は、組に残り、薄い行になる。 */
+function resolvedScenario(): Partial<Scenario> {
+  return {
+    sessions: [
+      fx4Session(FX4_ID, local(2026, 10, 9, 19, 9), {
+        report_path: `C:\\data\\games\\${FX4_ID}\\report.json`,
+        ocr: fx4Ocr(),
+        resolved: { decisions: { k0h0e4: 1_760_000_000_000, k1h1e7: 1_760_000_000_000 } },
+      }),
+      seedSession(local(2026, 10, 9, 17, 12), { id: FX1A_ID, report: 'fx1a' }).session,
+    ],
+    dailySets: { '2026-10-09': DAILY_KEYS.map((decision_key) => ({ session_id: FX4_ID, decision_key })) },
+  };
 }
 
 /**
@@ -230,6 +250,8 @@ async function openYaku(page: Page): Promise<void> {
   const toggle = page.locator('[data-ai="yaku-box"]').getByRole('button', { name: '役', exact: true });
   if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
   await page.locator('[data-ai="yaku-box"] .yk').waitFor();
+  // 開いたときに初めて描く牌の画像が、読み終わるまで待つ（読み込み中のまま調べると、負荷で落ちる）
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('[data-ai="yaku-box"] img')).every((img) => (img as HTMLImageElement).complete));
 }
 
 interface StateDef {
@@ -437,6 +459,12 @@ const STATES: StateDef[] = [
       await selectDangerTab(page);
     },
   },
+  { name: '今日の出題の一覧（解決した問題が組に残っている。薄い行）', scenario: resolvedScenario(), run: openToday },
+  {
+    name: '出題（解決した問題を開いたところ。答える前。上の段に解決と次へ）',
+    scenario: resolvedScenario(),
+    run: (page) => openRow(page, 2),
+  },
 ];
 
 async function openState(state: StateDef, options: Omit<OpenOptions, 'scenario'> = {}): Promise<Opened> {
@@ -599,6 +627,9 @@ describe('U-5: Tab ですべての操作に届く', () => {
       await expect.poll(() => page.locator('.hand .tile-btn[aria-pressed="true"]').count()).toBe(1);
       // 選んだ牌が、Tab の止まり場所
       expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-pressed'))).toBe('true');
+      // 手牌のあとは、答えの欄の上の段の「解決」（F16）、それから理由
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => document.activeElement?.id)).toBe('resolve');
       await page.keyboard.press('Tab');
       expect(await page.evaluate(() => document.activeElement?.id)).toBe('reason');
       await page.keyboard.type('キーボードだけで答える');

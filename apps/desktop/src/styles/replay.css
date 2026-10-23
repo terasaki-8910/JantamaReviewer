@@ -141,7 +141,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px var(--s5);
+  gap: 6px var(--s4);
 }
 
 .jump {
@@ -155,7 +155,6 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-width: 9.2em;
   font-size: 12.5px;
   color: var(--muted);
   white-space: nowrap;
@@ -576,10 +575,19 @@
   font-weight: 700;
 }
 
-/* 解決した場面の行: 場所と札を薄くする（解決の印は薄くしない） */
-.sc-row[data-resolved="1"] .sc-where b,
-.sc-row[data-resolved="1"] .sc-tags {
-  opacity: 0.55;
+/*
+  解決した場面の行: 場所と札を、補助の文字と同じ静かな色にする（太さも戻す）。透明にはしない（薄い文字でも、読める濃さを保つ。
+  axe の色のコントラスト）。解決の印（.sc-st.resolved）は、ink のまま
+*/
+.sc-row[data-resolved="1"] .sc-where b {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.sc-row[data-resolved="1"] .sc-tags .tag {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--muted);
 }
 
 /* ---- キーの一覧と割り当て（操作の段のキーボードのアイコンを押す・マウスを乗せると、重なって出る） ---- */

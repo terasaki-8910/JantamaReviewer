@@ -18,7 +18,7 @@ import {
   shantenTag,
   type ImportedGame,
 } from '@jantama/engine';
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react';
 
 import type { SessionRecord } from '../../api/types';
 import { resolveMarks } from '../markCards';
@@ -44,6 +44,31 @@ function subscribeResize(onChange: () => void): () => void {
 /** 窓の高さ。 */
 function useWindowHeight(): number {
   return useSyncExternalStore(subscribeResize, () => window.innerHeight);
+}
+
+/**
+ * 操作の段の「飛ぶ」段（不一致・迷い・拮抗）が、窓の幅で折り返して増えた高さ（px。1 行のときは 0）。
+ * 3 つの段が 1 行に収まる広さなら 0、収まらなければ 1 行ぶん（36px）ずつ。卓の外の高さ（`--chrome-h`）はそのまま、この分だけ卓を小さくする
+ * （`.rp` の `--bar-extra`。文書全体をスクロールさせない。U-39）。レイアウトのない環境（試験の jsdom）では、いつも 0。
+ */
+function useBarExtra(rootRef: RefObject<HTMLElement | null>): number {
+  const [extra, setExtra] = useState(0);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const jumps = root?.querySelector<HTMLElement>('.pb-jumps') ?? null;
+    if (jumps === null) return undefined;
+    const measure = () => {
+      const groups = [...jumps.querySelectorAll<HTMLElement>('.jump')];
+      const oneRow = groups.length === 0 ? 0 : Math.min(...groups.map((group) => group.offsetHeight));
+      setExtra(Math.max(0, jumps.offsetHeight - oneRow));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(jumps);
+    return () => observer.disconnect();
+  }, [rootRef]);
+  return extra;
 }
 
 export interface ReplayScreenProps {
@@ -98,6 +123,8 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   const calledSomewhere = useMemo(() => anyCalled(boards), [boards]);
   // 窓の高さが足りないときは、卓を小さい配置にする（操作の段・卓・手牌が、1 画面に入るように）
   const windowHeight = useWindowHeight();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const barExtra = useBarExtra(rootRef);
   const [drafts] = useState<SceneDrafts>(() => new Map());
   // 他家の手牌の開け閉め（盤面の手牌を押す。F14、R16-7）: 手を進めても、開いたままにする（この画面を離れると、閉じに戻る）
   const [handsOpen, setHandsOpen] = useState(false);
@@ -142,14 +169,19 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   useReplayKeys(settings.keys, handlers);
 
   if (step === undefined || info === null) return null;
-  const compact = windowHeight < compactBelowHeight(info.rows, info.riichiAny);
+  const compact = windowHeight < compactBelowHeight(info.rows, info.riichiAny, barExtra);
 
   // 「次の場面へ」: いまより後ろの、次の場面（迷いでも不一致でも拮抗でも。解決した場面は飛ばす）。無ければ、1 手先
   const nextScene = scenes.find((item) => item.step > g && !item.resolved);
   const afterReveal = () => go(nextScene === undefined ? g + 1 : nextScene.step);
 
   return (
-    <div className="rp" data-compact={compact ? '1' : undefined}>
+    <div
+      className="rp"
+      ref={rootRef}
+      data-compact={compact ? '1' : undefined}
+      style={barExtra > 0 ? ({ '--bar-extra': `${barExtra}px` } as CSSProperties) : undefined}
+    >
       <header className="head qhead">
         <div className="q-main">
           <div className="q-l">
@@ -182,6 +214,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
         go={go}
         onChangeKeys={(next) => settings.update({ replay_keys: next })}
         ticks={ticks}
+        contestEnabled={study.contest.enabled}
         fineMissOnly={fineMissOnly}
         onFineMissOnly={setFineMissOnly}
       />

@@ -181,6 +181,12 @@ describe('卓の大きさの切り替えの高さ', () => {
     expect(compactBelowHeight(4, true)).toBe(1174);
   });
 
+  it('操作の段が折り返して増えた高さ（barExtra）の分だけ、高い窓が要る。足さなければ、変わらない（F17）', () => {
+    expect(compactBelowHeight(3, false, 0)).toBe(compactBelowHeight(3, false));
+    expect(compactBelowHeight(3, false, 36)).toBe(compactBelowHeight(3, false) + 36);
+    expect(compactBelowHeight(2, true, 72)).toBe(compactBelowHeight(2, true) + 72);
+  });
+
   it('段が増えるほど高く、卓の外の高さより必ず高い', () => {
     for (const riichi of [false, true]) {
       let previous = compactBelowHeight(2, riichi);

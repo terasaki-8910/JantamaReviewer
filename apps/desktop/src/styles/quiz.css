@@ -275,7 +275,7 @@
   --kwx: calc(var(--kw) + 2 * var(--g));
   --kwy: calc(var(--kw) + var(--g));
   --rw-w: calc((100cqw - var(--kwx)) / var(--cwx));
-  --rw-h: calc((100vh - var(--chrome-h, 276px) - var(--chrome-extra, 0px) - var(--kwy)) / var(--cwy));
+  --rw-h: calc((100vh - var(--chrome-h, 276px) - var(--chrome-extra, 0px) - var(--bar-extra, 0px) - var(--kwy)) / var(--cwy));
   --rw: max(14px, min(46px, var(--rw-w), var(--rw-h)));
   --rh: calc(var(--rw) * 4 / 3);
   --hw: calc(var(--rw) * var(--hf));
@@ -1784,16 +1784,18 @@ li:has(> .qrow.next) + li > .qrow {
 }
 
 /*
-  解決した問題（F16）の行: 薄くして、押せばそのまま開ける。「解決」の札（.st-resolved）は薄くしない。
-  薄くした文字でも読めるよう、2 行目の補助の文字は、濃い色にする。
+  解決した問題（F16）の行: 薄くして、押せばそのまま開ける。文字は透明にせず（薄い文字でも、読める濃さを保つ。axe の色のコントラスト）、
+  解答済みの行と同じ静かな色・細い字にして、札も塗りを抜く。「解決」の印（.st-resolved）は、ink の太字のまま。
 */
-.qrow.resolved .no,
-.qrow.resolved .main-l {
-  opacity: 0.55;
+.qrow.resolved .l1 {
+  font-weight: 400;
+  color: var(--muted);
 }
 
-.qrow.resolved .l2 {
-  color: var(--ink);
+.qrow.resolved .q-tag {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--muted);
 }
 
 .qrow .st-resolved {
