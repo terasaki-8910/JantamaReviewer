@@ -111,6 +111,7 @@ pub fn run() {
             evaluation::clear_maka_grade,
             evaluation::set_maka_hanchan,
             evaluation::clear_maka_hanchan,
+            evaluation::set_resolved,
             memo::set_memo,
             memo::clear_memo,
             memo::set_extra_memo,

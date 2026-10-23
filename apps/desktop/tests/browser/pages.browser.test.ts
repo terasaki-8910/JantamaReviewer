@@ -96,6 +96,7 @@ function makeSessions(): unknown[] {
       self_ratings: { kyokus: {} },
       maka: { kyokus: {} },
       memos: { marks: {}, extras: [] },
+      resolved: { decisions: {} },
     },
     {
       id: '20261008-210000',
@@ -111,6 +112,7 @@ function makeSessions(): unknown[] {
       self_ratings: { kyokus: {} },
       maka: { kyokus: {} },
       memos: { marks: {}, extras: [] },
+      resolved: { decisions: {} },
     },
     {
       id: '20250101-090000',
@@ -126,6 +128,7 @@ function makeSessions(): unknown[] {
       self_ratings: { kyokus: {} },
       maka: { kyokus: {} },
       memos: { marks: {}, extras: [] },
+      resolved: { decisions: {} },
     },
   ];
 }

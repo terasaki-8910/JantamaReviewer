@@ -88,7 +88,10 @@ export function QuizPage({ sessionId, decisionKey, mode, onOpen, onToday, onRevi
   const existing = inSet !== undefined ? inSet.answer : latestAnswerFor(study.answers, sessionId, decisionKey, 'quiz');
   // 今日の次の問題: いまの問題より後ろの、まだ答えていない問題。無ければ、前の側の答えていない問題
   const isOther = (_: unknown, at: number) => at !== index;
-  const pending = items.map((item, at) => ({ item, at })).filter(({ item, at }) => item.answer === null && isOther(item, at));
+  // 解決した問題は飛ばす（F16。解決した問題は、組に残っていても、次の問題にならない）
+  const pending = items
+    .map((item, at) => ({ item, at }))
+    .filter(({ item, at }) => item.answer === null && !item.resolved && isOther(item, at));
   const nextItem = (pending.find(({ at }) => at > index) ?? pending[0])?.item;
   const openNext = () => {
     // 答えた直後の一覧を見る（画面の描き直しを待たずに、いまの答えの数で決める）
@@ -103,6 +106,8 @@ export function QuizPage({ sessionId, decisionKey, mode, onOpen, onToday, onRevi
       mode="quiz"
       progress={index >= 0 ? { current: index + 1, total: items.length } : null}
       markNumber={problem?.markNumber ?? null}
+      fineMiss={problem?.fineMiss ?? false}
+      contest={problem?.kind === 'contest'}
       existing={existing}
       previousIntervalDays={null}
       nextLabel={nextItem === undefined ? '今日の出題に戻る' : '次の問題へ'}

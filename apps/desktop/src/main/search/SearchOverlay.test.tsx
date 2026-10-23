@@ -11,6 +11,7 @@ import { answerRow } from '../../../tests/fake-study';
 import { SEARCH_NOW, SEARCH_SEEDS, searchFixture, type SearchFixture, type SearchSeed } from '../../../tests/search-fixtures';
 import type { AnswerRow } from '../../api/types';
 import { MAC_STAGE_2_PLATFORM, setPlatform, WINDOWS_PLATFORM } from '../../shared/platform';
+import { contestOptionsOf } from '../study/contestOptions';
 import { StudyProvider, type StudyValue } from '../study/StudyProvider';
 import { useShortcutsBlocked } from '../undo/shortcutGuard';
 import { UndoProvider } from '../undo/UndoProvider';
@@ -40,11 +41,13 @@ function studyValue(fixture: SearchFixture, options: Options): StudyValue {
     threshold: 0.05,
     dailyCount: 5,
     highlightDora: false,
+    contest: contestOptionsOf(null),
+    resolvedIds: new Set(),
     doubtOnly: false,
     answers: options.answers ?? [],
     model: {
       problems: fixture.problems,
-      today: { items: [], answered: 0, unanswered: 0, rest: [], undecidedMarks: 0, sessionCount: 0 },
+      today: { items: [], answered: 0, unanswered: 0, resolvedOnly: 0, rest: [], undecidedMarks: 0, sessionCount: 0 },
       due: [],
       nextDue: null,
     },
@@ -54,6 +57,7 @@ function studyValue(fixture: SearchFixture, options: Options): StudyValue {
     gameState: () => undefined,
     session: () => undefined,
     reloadSessions: () => Promise.resolve(),
+    setResolved: () => Promise.resolve(),
     recordAnswer: () => Promise.reject(new Error('使わない')),
     updateNotes: () => Promise.reject(new Error('使わない')),
   };

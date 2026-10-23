@@ -275,7 +275,7 @@
   --kwx: calc(var(--kw) + 2 * var(--g));
   --kwy: calc(var(--kw) + var(--g));
   --rw-w: calc((100cqw - var(--kwx)) / var(--cwx));
-  --rw-h: calc((100vh - var(--chrome-h, 324px) - var(--kwy)) / var(--cwy));
+  --rw-h: calc((100vh - var(--chrome-h, 324px) - var(--bar-extra, 0px) - var(--kwy)) / var(--cwy));
   --rw: max(14px, min(46px, var(--rw-w), var(--rw-h)));
   --rh: calc(var(--rw) * 4 / 3);
   --hw: calc(var(--rw) * var(--hf));
@@ -1143,6 +1143,24 @@
 .answer-bar #next {
   width: auto;
   margin-left: auto;
+}
+
+/*
+  「解決」（F16）: 上の段の先頭。入のときは、チェックの印と、accent の枠・文字（色だけにしない）。文字は入でも切でも「解決」。
+*/
+.resolve-btn {
+  flex: none;
+  gap: 6px;
+}
+
+.resolve-btn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.resolve-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .answer-scroll {
@@ -2018,6 +2036,35 @@ li:has(> .qrow.next) + li > .qrow {
 .q-tag.doubt {
   background: var(--accent-fill);
   border-color: var(--accent);
+}
+
+/*
+  解決した問題（F16）の行: 薄くして、押せばそのまま開ける。文字は透明にせず（薄い文字でも、読める濃さを保つ。axe の色のコントラスト）、
+  解答済みの行と同じ静かな色・細い字にして、札も塗りを抜く。「解決」の印（.st-resolved）は、ink の太字のまま。
+*/
+.qrow.resolved .l1 {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.qrow.resolved .q-tag {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--muted);
+}
+
+.qrow .st-resolved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.q-resolved-n {
+  margin-left: var(--s2);
+  font-size: 12.5px;
+  color: var(--muted);
 }
 
 .qrest {

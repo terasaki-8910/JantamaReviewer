@@ -32,6 +32,10 @@ export interface QuizScreenProps {
   progress?: { current: number; total: number } | null;
   /** 迷いの問題のとき、何番目の迷いか。 */
   markNumber: number | null;
+  /** 細かいミスの問題か（迷いのうち、実戦が AI の1位と違うもの。見出しに札を出す。F17）。 */
+  fineMiss?: boolean;
+  /** 拮抗の問題か（AI の1位と2位の差が小さい、終盤の判断。見出しに札を出す。F17）。 */
+  contest?: boolean;
   /** すでに答えた問題（あれば、答え合わせのあとの形で開く）。 */
   existing: AnswerRow | null;
   /** 解き直しのとき、前の答えのあとの間隔（日）。 */
@@ -62,6 +66,8 @@ export function QuizScreen({
   kicker,
   progress = null,
   markNumber,
+  fineMiss = false,
+  contest = false,
   existing,
   previousIntervalDays,
   nextLabel,
@@ -158,6 +164,8 @@ export function QuizScreen({
               <li className="q-chip">{shantenTag(decision.shanten)}</li>
               {mode === 'quiz' && <li className="q-chip">実戦：{actualText(decision)}</li>}
               {markNumber !== null && <li className="q-chip is-doubt">迷い{markNumber}</li>}
+              {fineMiss && <li className="q-chip is-doubt">細かいミス</li>}
+              {contest && <li className="q-chip is-mis">拮抗</li>}
             </ul>
           </div>
         </div>

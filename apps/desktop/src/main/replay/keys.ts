@@ -6,9 +6,10 @@
  *   ← →        前・次の自分の判断（鳴きを含む）
  *   ↑ ↓        前・次の不一致
  *   Shift+↑ ↓  前・次の迷い
+ *   （前・次の拮抗は、ボタンだけ。キーは割り当てで足せる。F17）
  *   Shift+← →  前・次の局
  *   Home End   局の頭・局の終わり（R11-4）。手牌の牌・位置の帯・答えの選択肢にキーボードの位置があるときは、それぞれの Home・End が先
- * 巡目の移動は、ボタンだけ（キーは割り当てで足せる）。
+ * 巡目の移動と、拮抗の場面への移動は、ボタンだけ（キーは割り当てで足せる）。
  *
  * キーは、`KeyboardEvent.code` に、押していた修飾キーを `Ctrl+` `Alt+` `Shift+` の順に付けた文字（例: `Shift+ArrowUp`・`Comma`）。
  * 配列によらず、同じ位置のキーが同じ意味になる。設定ファイルの `replay_keys`（settings.rs。同じ表と同じ検査を持つ。試験が突き合わせる）に保存する。
@@ -26,6 +27,8 @@ export type ReplayAction =
   | 'next_mismatch'
   | 'prev_doubt'
   | 'next_doubt'
+  | 'prev_contest'
+  | 'next_contest'
   | 'prev_kyoku'
   | 'next_kyoku'
   | 'prev_turn'
@@ -53,6 +56,8 @@ export const REPLAY_ACTIONS: readonly ReplayActionDef[] = [
   { id: 'next_mismatch', label: '次の不一致', key: 'ArrowDown' },
   { id: 'prev_doubt', label: '前の迷い', key: 'Shift+ArrowUp' },
   { id: 'next_doubt', label: '次の迷い', key: 'Shift+ArrowDown' },
+  { id: 'prev_contest', label: '前の拮抗', key: null },
+  { id: 'next_contest', label: '次の拮抗', key: null },
   { id: 'prev_kyoku', label: '前の局', key: 'Shift+ArrowLeft' },
   { id: 'next_kyoku', label: '次の局', key: 'Shift+ArrowRight' },
   { id: 'prev_turn', label: '前の巡目', key: null },

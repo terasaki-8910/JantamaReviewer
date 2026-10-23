@@ -51,6 +51,18 @@ export interface Settings {
   highlight_dora: boolean;
   /** 半荘を通して見る画面で、AI の1位と違う判断もすべて不一致として出す（既定は切。出題の基準は変えない。R10-4、E-26）。 */
   show_all_mismatches: boolean;
+  /** 拮抗の場面を出す（既定は入。F17）。切ると、通して見る画面にも今日の出題にも、拮抗の場面を入れない。 */
+  contest_enabled: boolean;
+  /** 拮抗とする、AI の1位と2位の確率の差（ポイント。この値以内。1〜100。既定 20）。 */
+  contest_gap_percent: number;
+  /** 条件「N巡目以降」を使う（既定は入）。 */
+  contest_by_junme: boolean;
+  /** 条件「N巡目以降」の N（1〜24。既定 12）。 */
+  contest_min_junme: number;
+  /** 条件「他家のリーチのあと」を使う（既定は入）。 */
+  contest_after_riichi: boolean;
+  /** 条件「他家に2副露以上の人がいる」（暗槓は数えない）を使う（既定は入）。 */
+  contest_two_calls: boolean;
   /** 半荘を通して見る画面のキーの割り当て（R10-3、U-21）。 */
   replay_keys: ReplayKeys;
   /**
@@ -221,6 +233,14 @@ export interface Memos {
 }
 
 /**
+ * 解決した局面（`resolved.json`。F16）。`decisions` は判断の鍵（エンジンの `DecisionRef.key`。例: k1h1e7）→ 解決を入れた時刻（ミリ秒）。
+ * 解決を切ると鍵ごと消える（空ならファイルも無く、ここは空の表）。
+ */
+export interface ResolvedDecisions {
+  decisions: Record<string, number>;
+}
+
+/**
  * 半荘 1 つ分。取り消された記録は marks / ratings に含まれない。
  * 結果だけの半荘（記録の無いまま取り込んだもの）は、marks・ratings が空で、`report_path` がある。
  */
@@ -244,6 +264,8 @@ export interface SessionRecord {
   maka: MakaGrades;
   /** 終局直後のメモ（迷いのカードと、半荘を通して見る画面で書いたもの）。 */
   memos: Memos;
+  /** 解決した局面（出題・解き直し・通して見る画面で「解決」を入れたもの。F16）。 */
+  resolved: ResolvedDecisions;
 }
 
 /** 文字認識の結果の写しを、半荘ごとに返したもの（`ocr_sessions` の返り値）。 */

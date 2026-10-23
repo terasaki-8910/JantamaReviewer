@@ -111,11 +111,18 @@ export function mismatchName(kind: MismatchKind): string {
   return kind === 'big' ? '大きな不一致' : '不一致';
 }
 
-/** 場面の見出しに出す札（迷いと不一致）。例: 迷い1・2、大きな不一致。 */
-export function sceneTags(scene: Pick<ReplayScene, 'doubts' | 'mismatch'>): Array<{ kind: 'doubt' | 'mis'; text: string }> {
+/**
+ * 場面の見出しと一覧に出す札（迷い・細かいミス・不一致・拮抗）。例: 迷い1・2、細かいミス、大きな不一致、拮抗。
+ * 細かいミス（迷いの場面で、実戦が AI の1位と違うもの）は迷いの札と同じ形、拮抗は不一致の札と同じ形（F17）。
+ */
+export function sceneTags(
+  scene: Pick<ReplayScene, 'doubts' | 'mismatch'> & Partial<Pick<ReplayScene, 'fineMiss' | 'contest'>>,
+): Array<{ kind: 'doubt' | 'mis'; text: string }> {
   const tags: Array<{ kind: 'doubt' | 'mis'; text: string }> = [];
   if (scene.doubts.length > 0) tags.push({ kind: 'doubt', text: `迷い${scene.doubts.join('・')}` });
+  if (scene.fineMiss === true) tags.push({ kind: 'doubt', text: '細かいミス' });
   if (scene.mismatch !== null) tags.push({ kind: 'mis', text: mismatchName(scene.mismatch) });
+  if (scene.contest !== undefined && scene.contest !== null) tags.push({ kind: 'mis', text: '拮抗' });
   return tags;
 }
 
@@ -124,12 +131,27 @@ export function sceneSubText(decision: Pick<Decision, 'kind' | 'shanten'>, kindN
   return `${kindName} · ${shantenTag(decision.shanten)}`;
 }
 
-/** 局の選択に出す、その局の迷いと不一致の数。例: 迷い1 · 不一致2。無ければ空。 */
+/**
+ * 局の選択に出す、その局の迷い・細かいミス・不一致・拮抗の数と、解決した場面の数。例: 迷い1 · 拮抗2 · 解決1。無ければ空。
+ * 解決した場面（F16）は、迷い・細かいミス・不一致・拮抗の数に入れず、「解決」の数に回す。
+ */
 export function kyokuCounts(timeline: ReplayTimeline, scenes: readonly ReplayScene[], position: number): string {
   const inKyoku = scenes.filter((scene) => timeline.steps[scene.step]?.kyokuPosition === position);
-  const doubts = inKyoku.filter((scene) => scene.doubts.length > 0).length;
-  const mismatches = inKyoku.filter((scene) => scene.mismatch !== null).length;
-  return [doubts > 0 ? `迷い${doubts}` : '', mismatches > 0 ? `不一致${mismatches}` : ''].filter((text) => text !== '').join(' · ');
+  const open = inKyoku.filter((scene) => !scene.resolved);
+  const doubts = open.filter((scene) => scene.doubts.length > 0).length;
+  const fineMisses = open.filter((scene) => scene.fineMiss).length;
+  const mismatches = open.filter((scene) => scene.mismatch !== null).length;
+  const contests = open.filter((scene) => scene.contest !== null).length;
+  const resolved = inKyoku.length - open.length;
+  return [
+    doubts > 0 ? `迷い${doubts}` : '',
+    fineMisses > 0 ? `細かいミス${fineMisses}` : '',
+    mismatches > 0 ? `不一致${mismatches}` : '',
+    contests > 0 ? `拮抗${contests}` : '',
+    resolved > 0 ? `解決${resolved}` : '',
+  ]
+    .filter((text) => text !== '')
+    .join(' · ');
 }
 
 // ---- 卓の大きさ（窓の高さが足りないとき、小さい配置にする） ----
@@ -156,28 +178,42 @@ export const TABLE_TILE_MIN_PX = 36;
  * 窓の高さがこれより低いとき、卓を小さい配置にする（局・本場・残り・ドラ表示牌を卓の上の 1 行にして、牌を小さくする）。
  * 大きい配置は、窓の高さから牌の幅を決めるが、下限（36px）より小さくはできないので、河の段が多い局ほど高い窓が要る。
  * `rows` は河の段の数（6 枚で折り返す。最低 2）、`riichiAny` はリーチ宣言牌（横向き）の分の余白があるか（quiz.css の `--kwy`・`--cwy` と同じ式）。
+ * `barExtra` は、操作の段の「飛ぶ」段が折り返して増えた高さ（px。`.rp` の `--bar-extra` と同じ値。F17。既定は 0）。
  */
-export function compactBelowHeight(rows: number, riichiAny: boolean): number {
+export function compactBelowHeight(rows: number, riichiAny: boolean, barExtra = 0): number {
   // 高さ: --kwy = --kw + --g（手牌の帯の隙間）、--cwy = --cw + --hk（手牌の帯）
   const kw = 2 * 12 + 4 * 8 + 2 * rows + 3 + 8;
   const cw = 6 + (rows * 8) / 3 + (riichiAny ? 1 / 3 : 0) + TABLE_HAND_BAND;
-  return Math.ceil(TABLE_CHROME_PX + kw + TABLE_TILE_MIN_PX * cw + TABLE_BOTTOM_SLACK_PX);
+  return Math.ceil(TABLE_CHROME_PX + barExtra + kw + TABLE_TILE_MIN_PX * cw + TABLE_BOTTOM_SLACK_PX);
 }
 
 // ---- 行き先（どの操作も、いまの手 `g` からの行き先の手の通し番号。無ければ null） ----
 
-/** 迷い・不一致・自分の判断がある手の通し番号（昇順）。 */
+/**
+ * 迷い・不一致・拮抗・自分の判断がある手の通し番号（昇順）。
+ * 解決した場面（F16）は、迷い・不一致・拮抗の止まる場所に入れない（場面の一覧と位置の帯には残り、押せば開ける）。
+ */
 export interface ReplayStops {
   decisions: number[];
   doubts: number[];
   mismatches: number[];
+  contests: number[];
 }
 
-export function replayStops(timeline: ReplayTimeline, scenes: readonly ReplayScene[]): ReplayStops {
+export interface ReplayStopsOptions {
+  /** 「細かいミスだけ」を入れているか。入れると、迷いの止まる場所は、細かいミスだけになる（F17）。 */
+  fineMissOnly?: boolean;
+}
+
+export function replayStops(timeline: ReplayTimeline, scenes: readonly ReplayScene[], options: ReplayStopsOptions = {}): ReplayStops {
+  const open = scenes.filter((scene) => !scene.resolved);
   return {
     decisions: decisionSteps(timeline),
-    doubts: scenes.filter((scene) => scene.doubts.length > 0).map((scene) => scene.step),
-    mismatches: scenes.filter((scene) => scene.mismatch !== null).map((scene) => scene.step),
+    doubts: open
+      .filter((scene) => scene.doubts.length > 0 && (options.fineMissOnly !== true || scene.fineMiss))
+      .map((scene) => scene.step),
+    mismatches: open.filter((scene) => scene.mismatch !== null).map((scene) => scene.step),
+    contests: open.filter((scene) => scene.contest !== null).map((scene) => scene.step),
   };
 }
 
@@ -191,15 +227,22 @@ export interface ReplayNav {
   next_mismatch: number | null;
   prev_doubt: number | null;
   next_doubt: number | null;
+  prev_contest: number | null;
+  next_contest: number | null;
   prev_kyoku: number | null;
   next_kyoku: number | null;
   prev_turn: number | null;
   next_turn: number | null;
   kyoku_start: number | null;
   kyoku_end: number | null;
-  /** これより後ろの迷い・不一致の数（「次の…へ」の数）。 */
+  /** これより後ろの迷い・不一致・拮抗の数（「次の…へ」の数）。解決した場面は数えない。 */
   doubtsAhead: number;
   mismatchesAhead: number;
+  contestsAhead: number;
+  /** 半荘全体の迷い・不一致・拮抗の数（「…N か所」の数）。解決した場面は数えない。 */
+  doubtTotal: number;
+  mismatchTotal: number;
+  contestTotal: number;
 }
 
 export function replayNav(timeline: ReplayTimeline, stops: ReplayStops, g: number): ReplayNav {
@@ -215,6 +258,8 @@ export function replayNav(timeline: ReplayTimeline, stops: ReplayStops, g: numbe
     next_mismatch: nextStepIn(stops.mismatches, g),
     prev_doubt: prevStepIn(stops.doubts, g),
     next_doubt: nextStepIn(stops.doubts, g),
+    prev_contest: prevStepIn(stops.contests, g),
+    next_contest: nextStepIn(stops.contests, g),
     prev_kyoku: prevKyokuStep(timeline, g),
     next_kyoku: nextKyokuStep(timeline, g),
     prev_turn: prevTurnStep(timeline, g),
@@ -223,5 +268,9 @@ export function replayNav(timeline: ReplayTimeline, stops: ReplayStops, g: numbe
     kyoku_end: kyoku === undefined || g === kyoku.last ? null : kyoku.last,
     doubtsAhead: countAfter(stops.doubts, g),
     mismatchesAhead: countAfter(stops.mismatches, g),
+    contestsAhead: countAfter(stops.contests, g),
+    doubtTotal: stops.doubts.length,
+    mismatchTotal: stops.mismatches.length,
+    contestTotal: stops.contests.length,
   };
 }

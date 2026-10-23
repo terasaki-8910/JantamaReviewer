@@ -67,6 +67,7 @@ function sessionOf(seed: Seed) {
     self_ratings: { kyokus: {} },
     maka: { kyokus: {} },
     memos: { marks: {}, extras: [] },
+    resolved: { decisions: {} },
   };
 }
 

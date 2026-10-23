@@ -1,6 +1,7 @@
 /**
  * 位置の帯（F12）。半荘の全体を、局ごとの区間に分けて横に並べ、いまの手の位置（縦の線）を出す。
- * 迷いの場面は帯の上の丸、不一致の場面は下のひし形（色だけで区別しない）。解答済みの場面は、中を抜いた輪郭だけ。
+ * 迷いの場面は帯の上の丸（細かいミスだけ四角。F17）、不一致の場面は下のひし形、拮抗の場面は下の短い横棒（色だけで区別しない）。
+ * 解答済みの場面は、中を抜いた輪郭だけ。解決した場面（F16）は薄くする（押せば開ける）。
  * 帯を押す・引きずると、その手へ動く。印を押すと、その場面へ飛ぶ。帯は、スライダー（矢印で 1 手ずつ・Home・End）。
  * 他家の手牌を開いているときだけ（R16-7 の A）、他家が聴牌になった手の目盛り（帯の下の縁の小さな三角。この局のものは accent）と、その数と、この局の分を書いた 1 行を、帯の下に出す。
  * 目盛りは押せない（押す・引きずるは、帯のまま）ので、読み上げは 1 行のほうに任せる（目盛りは aria-hidden）。
@@ -38,21 +39,32 @@ interface StripProps {
   ticks?: readonly StripTick[];
 }
 
+type PinKind = 'doubt' | 'mis' | 'contest';
+
 interface Pin {
   id: string;
   scene: ReplayScene;
-  kind: 'doubt' | 'mis';
+  kind: PinKind;
   label: string;
 }
 
-function pinLabel(scene: ReplayScene, kind: 'doubt' | 'mis', done: boolean): string {
+/** 印の読み上げの名前。例: 迷い3（細かいミス） 東2局 6巡目 打牌（大きな不一致、拮抗でもある）（解答済み）（解決）。 */
+function pinLabel(scene: ReplayScene, kind: PinKind, done: boolean): string {
   const where = `${scene.decision.kyokuLabel} ${scene.decision.junme}巡目 ${KIND_NAME[scene.decision.kind]}`;
-  const doubt = `迷い${scene.doubts.join('・')}`;
+  const doubt = scene.doubts.length === 0 ? '' : `迷い${scene.doubts.join('・')}${scene.fineMiss ? '（細かいミス）' : ''}`;
   const mis = scene.mismatch === null ? '' : mismatchName(scene.mismatch);
-  const head = kind === 'doubt' ? doubt : mis;
-  const also = kind === 'doubt' ? (mis === '' ? '' : `（${mis}でもある）`) : scene.doubts.length > 0 ? `（${doubt}でもある）` : '';
-  return `${head} ${where}${also}${done ? '（解答済み）' : ''}`;
+  const contest = scene.contest === null ? '' : '拮抗';
+  const own = { doubt, mis, contest }[kind];
+  const others = (['doubt', 'mis', 'contest'] as const)
+    .filter((other) => other !== kind)
+    .map((other) => ({ doubt, mis, contest })[other])
+    .filter((text) => text !== '');
+  const also = others.length === 0 ? '' : `（${others.join('、')}でもある）`;
+  return `${own} ${where}${also}${done ? '（解答済み）' : ''}${scene.resolved ? '（解決）' : ''}`;
 }
+
+/** 印の形の名前（replay.css）。迷い = 丸、不一致 = ひし形、拮抗 = 短い横棒。 */
+const PIN_CLASS: Record<PinKind, string> = { doubt: 'dbt', mis: 'mis', contest: 'cst' };
 
 /** 印を置く x 座標（手の位置の割合から、押せる大きさが重ならないように）。 */
 function placePins(list: readonly Pin[], width: number, total: number): number[] {
@@ -88,7 +100,9 @@ export function Strip({ timeline, g, scenes, answered, currentKey, go, ticks }: 
     for (const scene of scenes) {
       const done = answered.has(scene.key);
       if (scene.doubts.length > 0) up.push({ id: `${scene.key}:doubt`, scene, kind: 'doubt', label: pinLabel(scene, 'doubt', done) });
+      // 帯の下の段は、不一致のひし形と拮抗の横棒。手の位置の順に並べる（同じ場面なら、ひし形が先）
       if (scene.mismatch !== null) down.push({ id: `${scene.key}:mis`, scene, kind: 'mis', label: pinLabel(scene, 'mis', done) });
+      if (scene.contest !== null) down.push({ id: `${scene.key}:contest`, scene, kind: 'contest', label: pinLabel(scene, 'contest', done) });
     }
     return { up, down };
   }, [scenes, answered]);
@@ -146,10 +160,11 @@ export function Strip({ timeline, g, scenes, answered, currentKey, go, ticks }: 
       <button
         key={pin.id}
         type="button"
-        className={`pin ${pin.kind === 'doubt' ? 'dbt' : 'mis'}${pin.kind === 'mis' && pin.scene.mismatch === 'other' ? ' small' : ''}`}
+        className={`pin ${PIN_CLASS[pin.kind]}${pin.kind === 'mis' && pin.scene.mismatch === 'other' ? ' small' : ''}${pin.kind === 'doubt' && pin.scene.fineMiss ? ' sq' : ''}`}
         data-key={pin.scene.key}
         data-step={pin.scene.step}
         data-done={done ? '1' : '0'}
+        data-resolved={pin.scene.resolved ? '1' : '0'}
         aria-label={pin.label}
         title={pin.label}
         aria-current={currentKey === pin.scene.key ? 'true' : undefined}

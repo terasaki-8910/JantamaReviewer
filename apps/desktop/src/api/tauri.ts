@@ -187,6 +187,12 @@ export const api = {
     invoke<void>('set_maka_hanchan', { sessionId, grade }),
   /** 半荘全体の MAKA の評価を消す。 */
   clearMakaHanchan: (sessionId: string) => invoke<void>('clear_maka_hanchan', { sessionId }),
+  /**
+   * 局面の解決を入れる・切る（F16）。`decisionKey` は判断の鍵。入れると、半荘のフォルダの resolved.json に、いまの時刻が入る。
+   * 切って空になったら、ファイルも消える。取り消し（Ctrl+Z）にも使う。
+   */
+  setResolved: (sessionId: string, decisionKey: string, resolved: boolean) =>
+    invoke<void>('set_resolved', { sessionId, decisionKey, resolved }),
 
   // ---- 終局直後のメモ（F4、U-28）。ウィジェットの記録は書き換えず、半荘のフォルダの memos.json に保存する ----
   /** 迷いマークのメモを書く（置き換える）。「候補」も「理由」も空なら、メモを消す。 */

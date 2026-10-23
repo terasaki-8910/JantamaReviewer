@@ -318,7 +318,7 @@ describe('U-21 手の進み方: 1 手・巡目・局の頭と終わり・局の�
     ]);
     expect(items.map((item) => item.querySelector('.pi-r')?.textContent ?? '')).toEqual([
       '迷い1',
-      '迷い1 · 不一致1',
+      '迷い1 · 細かいミス1 · 不一致1',
       '迷い2 · 不一致2',
       '',
       '迷い2 · 不一致2',
@@ -663,7 +663,7 @@ describe('U-21 キーの説明と割り当ての変更（アイコンを押す�
     await user.click(icon);
     expect(icon).toHaveAttribute('aria-expanded', 'true');
     const rows = [...dialog().querySelectorAll('.kp-row')];
-    expect(rows).toHaveLength(14);
+    expect(rows).toHaveLength(16);
     const text = (label: string) => rowOf(label).querySelector('.kp-key')?.textContent;
     expect(text('1手戻る')).toBe(',');
     expect(text('1手進む')).toBe('.');
@@ -673,6 +673,9 @@ describe('U-21 キーの説明と割り当ての変更（アイコンを押す�
     expect(text('次の不一致')).toBe('↓');
     expect(text('前の迷い')).toBe('Shift↑');
     expect(text('次の迷い')).toBe('Shift↓');
+    // 拮抗の場面への移動は、ボタンだけ（キーは割り当てで足せる。F17）
+    expect(text('前の拮抗')).toBe('なし');
+    expect(text('次の拮抗')).toBe('なし');
     expect(text('前の局')).toBe('Shift←');
     expect(text('次の局')).toBe('Shift→');
     expect(text('前の巡目')).toBe('なし');
@@ -887,7 +890,7 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
     expect(rows[5]?.querySelector('.sc-sub')?.textContent).toBe('鳴き · 1向聴 · 未解答');
     expect(rows.map((row) => [...row.querySelectorAll('.tag')].map((tag) => tag.textContent))).toEqual([
       ['迷い1'],
-      ['迷い2', '大きな不一致'],
+      ['迷い2', '細かいミス', '大きな不一致'],
       ['大きな不一致'],
       ['迷い3'],
       ['大きな不一致'],
@@ -928,11 +931,13 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
     expect(pins.filter((pin) => pin.classList.contains('small'))).toHaveLength(0);
     expect(document.querySelectorAll('.tl-pins.up .pin.dbt')).toHaveLength(6);
     expect(document.querySelectorAll('.tl-pins.down .pin.mis')).toHaveLength(5);
-    expect(pins.map((pin) => pin.getAttribute('aria-label'))).toContain('迷い2 東2局 11巡目 打牌（大きな不一致でもある）');
+    expect(pins.map((pin) => pin.getAttribute('aria-label'))).toContain('迷い2（細かいミス） 東2局 11巡目 打牌（大きな不一致でもある）');
+    // 細かいミスの迷いの印だけ四角（ほかの迷いは丸）。色だけに頼らない（F17、U-42）
+    expect([...document.querySelectorAll('.pin.dbt.sq')].map((pin) => pin.getAttribute('data-key'))).toEqual(['k1h0e12']);
     await user.click(document.querySelector('.pin[data-key="k1h0e12"]') as HTMLElement);
     expect(title()).toBe('東2局 11巡目');
     expect([...document.querySelectorAll('.pin[aria-current="true"]')].map((pin) => pin.className)).toHaveLength(2);
-    expect(chips()).toEqual(['1向聴', '実戦：打8p', '迷い2', '大きな不一致']);
+    expect(chips()).toEqual(['1向聴', '実戦：打8p', '迷い2', '細かいミス', '大きな不一致']);
     await user.click(document.querySelector('.pin[data-key="k2h1e14"]') as HTMLElement);
     expect(title()).toBe('東3局1本場 11巡目');
     expect(document.querySelectorAll('.pin[aria-current="true"]')).toHaveLength(1);

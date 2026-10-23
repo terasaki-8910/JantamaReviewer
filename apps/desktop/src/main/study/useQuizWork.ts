@@ -8,6 +8,8 @@
 import {
   answerOptions,
   calledTileOf,
+  keyOfDecision,
+  problemId,
   type AnswerOption,
   type BoardState,
   type Decision,
@@ -15,10 +17,11 @@ import {
   type Seat,
   type Tile as TileCode,
 } from '@jantama/engine';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import type { AnswerMode, AnswerRow } from '../../api/types';
 import { handBars, type HandBars } from './aiBars';
+import type { ResolveControl } from './AnswerBar';
 import { doraKinds } from './dora';
 import type { HandItem, HandMark } from './Hand';
 import { buildHandItems, handMarks, usedIndices } from './handMarks';
@@ -68,6 +71,8 @@ export interface QuizWorkState {
   pickedTile: TileCode | null;
   /** 正解とする確率の下限。 */
   threshold: number;
+  /** この局面の「解決」の入切（F16）。 */
+  resolve: ResolveControl;
 }
 
 /** 下書きの答え（牌）が、手牌の何枚目か（同じ牌があれば、いちばん左）。 */
@@ -148,6 +153,19 @@ export function useQuizWork({ decision, sessionId, mode, board, past, existing, 
   const pickedTile = quiz.choice !== null && quiz.choice.type === 'dahai' ? quiz.choice.tile : null;
   const calledFrom = calledSeat === null ? null : relationName(decision.board.playerId, calledSeat);
 
+  // 解決の入切（F16）。いまの形は、保存した解決（半荘の一覧）から読む。保存が済むまでの間の押し直しは、受け付けない
+  const resolvedNow = study.resolvedIds.has(problemId({ sessionId, key: keyOfDecision(decision) }));
+  const { setResolved } = study;
+  const saving = useRef(false);
+  const toggleResolve = useCallback(() => {
+    if (saving.current) return;
+    saving.current = true;
+    void setResolved(sessionId, keyOfDecision(decision), !resolvedNow).finally(() => {
+      saving.current = false;
+    });
+  }, [setResolved, sessionId, decision, resolvedNow]);
+  const resolve = useMemo<ResolveControl>(() => ({ on: resolvedNow, toggle: toggleResolve }), [resolvedNow, toggleResolve]);
+
   return {
     quiz,
     options,
@@ -164,5 +182,6 @@ export function useQuizWork({ decision, sessionId, mode, board, past, existing, 
     onPick,
     pickedTile,
     threshold: study.threshold,
+    resolve,
   };
 }

@@ -22,6 +22,9 @@ const ORIENTATION_CHOICES: ReadonlyArray<{ value: Orientation; label: string }> 
 /** 出題の設定の範囲（settings.rs と同じ。範囲の外は、保存側が断る）。 */
 const DAILY_COUNT_RANGE = { min: 1, max: 50 } as const;
 const DISAGREEMENT_RANGE = { min: 1, max: 50 } as const;
+/** 拮抗の場面の設定の範囲（settings.rs と同じ。F17）。差はポイント、巡目は「この巡目以降」。 */
+const CONTEST_GAP_RANGE = { min: 1, max: 100 } as const;
+const CONTEST_JUNME_RANGE = { min: 1, max: 24 } as const;
 
 const PROBE_IDLE = 'ボタンを押すと、ここに表示されます。迷いマークは記録しません';
 
@@ -73,6 +76,8 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
   // 数の欄の編集中の文字（欄の外へ出る・Enter で確定するまで設定は変えない）。
   const [dailyDraft, setDailyDraft] = useState<string | null>(null);
   const [percentDraft, setPercentDraft] = useState<string | null>(null);
+  const [contestGapDraft, setContestGapDraft] = useState<string | null>(null);
+  const [contestJunmeDraft, setContestJunmeDraft] = useState<string | null>(null);
   const startButton = useRef<HTMLButtonElement>(null);
   const listening = useRef<HTMLParagraphElement>(null);
   const wasRegistering = useRef(false);
@@ -203,6 +208,7 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
 
   const keywordsText = keywordsDraft ?? settings.capture_keywords.join('\n');
   const doubtOnly = settings.doubt_only === true;
+  const contestOn = settings.contest_enabled;
   const probeMs = input?.probe_ms ?? null;
   const helper = input?.helper ?? null;
 
@@ -511,6 +517,110 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
               出題と半荘を通して見る画面で、ドラ表示牌が指す牌の面を黄色にします。赤五は、指される牌でもあるときだけ黄色になります（既定は切）。
             </p>
           </div>
+
+          {/* 拮抗の場面（F17）。切のときは、差と条件の欄を押せなくする（値は残る） */}
+          <fieldset className="setting pills-set contest-set">
+            <legend className="lbl">拮抗の場面</legend>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={contestOn}
+                aria-describedby="contest-help"
+                onChange={(e) => void update({ contest_enabled: e.target.checked })}
+              />
+              拮抗の場面を出す
+            </label>
+            <p className="quiet" id="contest-help">
+              AI の1位と2位の確率の差が小さい、局の終盤の判断を、通して見る画面と今日の出題に出します。条件はどれか1つに当たれば出します。
+            </p>
+            <div className="field contest-gap">
+              <label htmlFor="contest-gap">1位と2位の差（ポイント）</label>
+              <input
+                id="contest-gap"
+                className="input num"
+                type="number"
+                inputMode="numeric"
+                min={CONTEST_GAP_RANGE.min}
+                max={CONTEST_GAP_RANGE.max}
+                step={1}
+                disabled={!contestOn}
+                value={contestGapDraft ?? String(settings.contest_gap_percent)}
+                onChange={(e) => setContestGapDraft(e.target.value)}
+                onBlur={() =>
+                  commitNumber(
+                    contestGapDraft,
+                    () => setContestGapDraft(null),
+                    settings.contest_gap_percent,
+                    CONTEST_GAP_RANGE,
+                    '拮抗の差',
+                    'ポイント',
+                    (value) => ({ contest_gap_percent: value }),
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
+              />
+            </div>
+            <div className="contest-conds" role="group" aria-label="拮抗にする条件（どれか1つに当たれば出します）">
+              <div className="contest-cond">
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={settings.contest_by_junme}
+                    disabled={!contestOn}
+                    onChange={(e) => void update({ contest_by_junme: e.target.checked })}
+                  />
+                  {settings.contest_min_junme}巡目以降
+                </label>
+                <input
+                  id="contest-min-junme"
+                  className="input num"
+                  type="number"
+                  inputMode="numeric"
+                  aria-label="何巡目以降か"
+                  min={CONTEST_JUNME_RANGE.min}
+                  max={CONTEST_JUNME_RANGE.max}
+                  step={1}
+                  disabled={!contestOn}
+                  value={contestJunmeDraft ?? String(settings.contest_min_junme)}
+                  onChange={(e) => setContestJunmeDraft(e.target.value)}
+                  onBlur={() =>
+                    commitNumber(
+                      contestJunmeDraft,
+                      () => setContestJunmeDraft(null),
+                      settings.contest_min_junme,
+                      CONTEST_JUNME_RANGE,
+                      '拮抗の巡目',
+                      '巡目',
+                      (value) => ({ contest_min_junme: value }),
+                    )
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur();
+                  }}
+                />
+              </div>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={settings.contest_after_riichi}
+                  disabled={!contestOn}
+                  onChange={(e) => void update({ contest_after_riichi: e.target.checked })}
+                />
+                他家のリーチのあと
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={settings.contest_two_calls}
+                  disabled={!contestOn}
+                  onChange={(e) => void update({ contest_two_calls: e.target.checked })}
+                />
+                他家に2副露以上の人がいる
+              </label>
+            </div>
+          </fieldset>
         </div>
         {error && (
           <p className="error selectable" role="alert">

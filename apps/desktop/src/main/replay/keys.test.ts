@@ -38,6 +38,8 @@ describe('U-21 通して見る画面のキーの既定（R10-3、R11-4）', () =
       next_mismatch: 'ArrowDown',
       prev_doubt: 'Shift+ArrowUp',
       next_doubt: 'Shift+ArrowDown',
+      prev_contest: null,
+      next_contest: null,
       prev_kyoku: 'Shift+ArrowLeft',
       next_kyoku: 'Shift+ArrowRight',
       prev_turn: null,

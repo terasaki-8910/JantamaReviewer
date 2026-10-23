@@ -18,6 +18,7 @@
 //! | `sr:<半荘>:<局の鍵>` | 局の自己評価の付け直し |
 //! | `mk:<半荘>:<局の鍵>` | 局の MAKA の評価 |
 //! | `mh:<半荘>` | 半荘全体の MAKA の評価 |
+//! | `rv:<半荘>:<判断の鍵>` | 局面の解決（解決を入れた時刻。F16） |
 //! | `mm:<半荘>:<迷いマークの番号>` | 迷いマークのメモ（候補・理由） |
 //! | `xm:<半荘>:<uid>` | 迷いマークの無い迷いのメモ |
 //! | `r:<半荘>` | 結果のファイル（report.json）。中身は、圧縮して別の表に置く |
@@ -42,6 +43,7 @@ pub enum Kind {
     SelfRating,
     MakaKyoku,
     MakaHanchan,
+    Resolved,
     MarkMemo,
     ExtraMemo,
     Report,
@@ -60,6 +62,7 @@ impl Kind {
             Kind::SelfRating => "sr",
             Kind::MakaKyoku => "mk",
             Kind::MakaHanchan => "mh",
+            Kind::Resolved => "rv",
             Kind::MarkMemo => "mm",
             Kind::ExtraMemo => "xm",
             Kind::Report => "r",
@@ -78,6 +81,7 @@ impl Kind {
             "sr" => Kind::SelfRating,
             "mk" => Kind::MakaKyoku,
             "mh" => Kind::MakaHanchan,
+            "rv" => Kind::Resolved,
             "mm" => Kind::MarkMemo,
             "xm" => Kind::ExtraMemo,
             "r" => Kind::Report,
@@ -95,6 +99,7 @@ impl Kind {
                 | Kind::SelfRating
                 | Kind::MakaKyoku
                 | Kind::MakaHanchan
+                | Kind::Resolved
                 | Kind::MarkMemo
                 | Kind::ExtraMemo
                 | Kind::Report
@@ -265,6 +270,12 @@ mod tests {
                 Some("20261009-190953"),
                 "",
             ),
+            (
+                make_key(Kind::Resolved, &["20261009-190953", "k2h1e14"]),
+                Kind::Resolved,
+                Some("20261009-190953"),
+                "k2h1e14",
+            ),
         ];
         for (key, kind, session, rest) in cases {
             let parsed = parse_key(&key).unwrap_or_else(|| panic!("{key}"));
@@ -287,6 +298,8 @@ mod tests {
             "r:S:extra",
             "lv:S:extra",
             "mh:S:extra",
+            "rv:S",
+            "rv:S:",
             "lm:S:",
         ] {
             assert_eq!(parse_key(key), None, "{key}");
