@@ -29,6 +29,7 @@ import { MemoShown } from './MemoShown';
 import { formatProbability, type RevealModel } from './reveal';
 import { Tile } from './Tile';
 import { tileName } from './tiles';
+import { AnswerBar, type ResolveControl } from './AnswerBar';
 import { AnswerTabs, type TabSpec } from './AnswerTabs';
 import { DEFAULT_TAB_LABEL, visibleRevealTabs } from './revealTabs';
 import { UkeireSection } from './UkeireSection';
@@ -60,6 +61,8 @@ export interface AnswerPanelProps {
   memoShown?: readonly ShownMemo[];
   /** 答えの欄の上に出す欄（他家の手牌を開いているときの「他家の手牌」の欄。答えたあとだけ渡す。R16-7）。 */
   above?: ReactNode;
+  /** 「解決」の入切（上の段の先頭。答える前も、答え合わせのあとも出す。F16、U-41）。 */
+  resolve?: ResolveControl;
 }
 
 /** 「答え合わせ」を押せない理由（何を選ぶと押せるか）。 */
@@ -377,7 +380,7 @@ interface RevealProps extends AnswerPanelProps {
   focusOnMount: boolean;
 }
 
-function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, above }: RevealProps) {
+function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, above, resolve }: RevealProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
@@ -408,11 +411,7 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
 
   return (
     <>
-      <div className="answer-bar">
-        <button type="button" className="btn primary lg block" id="next" onClick={() => void next()}>
-          {nextLabel}
-        </button>
-      </div>
+      <AnswerBar resolve={resolve} next={{ label: nextLabel, onClick: () => void next() }} />
       <div className="answer-scroll">
         {above}
         <div className="only-revealed q-review" id="review">
@@ -516,6 +515,13 @@ export function AnswerPanel(props: AnswerPanelProps) {
   const revealed = quiz.stage === 'revealed' && quiz.model !== null && quiz.row !== null;
   return (
     <section className="answer" aria-label="答え" id="answer">
+      {/* 答える前も、上の段を出す（「解決」だけ。解決を入れたあとは、次へ進むボタンも。答え合わせのあとと同じ名前・同じ動き） */}
+      {quiz.stage !== 'revealed' && (
+        <AnswerBar
+          resolve={props.resolve}
+          next={props.resolve?.on === true ? { label: props.nextLabel, onClick: props.onNext } : null}
+        />
+      )}
       {quiz.stage !== 'revealed' && (
         <div className="answer-scroll">
           {props.above}

@@ -70,7 +70,14 @@ export function NowPanel({ timeline, step, scenes, answered, go, above }: NowPan
             const done = answered.has(scene.key);
             return (
               <li key={scene.key}>
-                <button type="button" className="sc-row" data-key={scene.key} data-done={done ? 1 : 0} onClick={() => go(scene.step)}>
+                <button
+                  type="button"
+                  className="sc-row"
+                  data-key={scene.key}
+                  data-done={done ? 1 : 0}
+                  data-resolved={scene.resolved ? 1 : 0}
+                  onClick={() => go(scene.step)}
+                >
                   <span className="sc-where">
                     <b>
                       {scene.decision.kyokuLabel} {scene.decision.junme}巡目
@@ -84,6 +91,15 @@ export function NowPanel({ timeline, step, scenes, answered, go, above }: NowPan
                         </span>
                       ) : (
                         <span className="sc-st">未解答</span>
+                      )}
+                      {scene.resolved && (
+                        <>
+                          {' · '}
+                          <span className="sc-st resolved">
+                            <Icon name="check" />
+                            解決
+                          </span>
+                        </>
                       )}
                     </span>
                   </span>

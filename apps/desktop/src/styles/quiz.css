@@ -987,6 +987,24 @@
   margin-left: auto;
 }
 
+/*
+  「解決」（F16）: 上の段の先頭。入のときは、チェックの印と、accent の枠・文字（色だけにしない）。文字は入でも切でも「解決」。
+*/
+.resolve-btn {
+  flex: none;
+  gap: 6px;
+}
+
+.resolve-btn .ic {
+  width: 16px;
+  height: 16px;
+}
+
+.resolve-btn[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .answer-scroll {
   min-width: 0;
 }
@@ -1763,6 +1781,33 @@ li:has(> .qrow.next) + li > .qrow {
 .q-tag.doubt {
   background: var(--accent-fill);
   border-color: var(--accent);
+}
+
+/*
+  解決した問題（F16）の行: 薄くして、押せばそのまま開ける。「解決」の札（.st-resolved）は薄くしない。
+  薄くした文字でも読めるよう、2 行目の補助の文字は、濃い色にする。
+*/
+.qrow.resolved .no,
+.qrow.resolved .main-l {
+  opacity: 0.55;
+}
+
+.qrow.resolved .l2 {
+  color: var(--ink);
+}
+
+.qrow .st-resolved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.q-resolved-n {
+  margin-left: var(--s2);
+  font-size: 12.5px;
+  color: var(--muted);
 }
 
 .qrest {

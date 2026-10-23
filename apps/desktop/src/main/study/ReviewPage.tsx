@@ -19,6 +19,9 @@ function ReviewFlow({ due }: { due: readonly DueEntry[] }) {
   const [queue] = useState(due);
   const [index, setIndex] = useState(0);
   const entry = queue[index];
+  // 次に出す問題の位置。開いたあとに解決した問題は飛ばす（始めたときの並びのまま、解決していない次の問題へ進む。F16）
+  let nextAt = index + 1;
+  while (nextAt < queue.length && study.resolvedIds.has(problemId(queue[nextAt] as DueEntry))) nextAt++;
 
   if (queue.length === 0) {
     const { nextDue } = study.model;
@@ -62,8 +65,8 @@ function ReviewFlow({ due }: { due: readonly DueEntry[] }) {
       markNumber={null}
       existing={null}
       previousIntervalDays={entry.answer.interval_days}
-      nextLabel={index + 1 >= queue.length ? '解き直しを終える' : '次の問題へ'}
-      onNext={() => setIndex(index + 1)}
+      nextLabel={nextAt >= queue.length ? '解き直しを終える' : '次の問題へ'}
+      onNext={() => setIndex(nextAt)}
     />
   );
 }

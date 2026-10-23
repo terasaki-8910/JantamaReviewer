@@ -60,6 +60,13 @@ const baseSettings = {
   disagreement_percent: 5,
   highlight_dora: false,
   show_all_mismatches: false,
+  // 拮抗の場面（F17）の既定は入だが、問題・場面の数を数える試験が多いので、試験の見本は切にしておく（入の試験は、設定を重ねる）
+  contest_enabled: false,
+  contest_gap_percent: 20,
+  contest_by_junme: true,
+  contest_min_junme: 12,
+  contest_after_riichi: true,
+  contest_two_calls: true,
   replay_keys: defaultReplayKeys(),
 };
 

@@ -74,6 +74,7 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
         onNext={onNext}
         memoEditor={memoEditor}
         memoShown={memoShown}
+        resolve={work.resolve}
         above={
           view.showing && view.seats !== null ? (
             <OpenHandsBlock me={game.playerId} seats={view.seats} eventIndex={eventIndex} dora={work.dora} tracks={view.tracks} />

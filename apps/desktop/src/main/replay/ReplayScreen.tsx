@@ -33,6 +33,7 @@ import { compactBelowHeight, replayNav, replayStops, sceneTags, turnLabel } from
 import { BrowseWork, SceneWork, type SceneDrafts } from './ReplayWork';
 import type { StripTick } from './Strip';
 import { useReplayKeys, type ReplayHandlers } from './useReplayKeys';
+import { useFineMissOnly } from './useFineMissOnly';
 import { useReplaySettings } from './useReplaySettings';
 
 function subscribeResize(onChange: () => void): () => void {
@@ -62,16 +63,22 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
     () => resolved.map((mark) => (mark.resolution.kind === 'linked' ? mark.resolution.ref.key : null)),
     [resolved],
   );
+  // この半荘で解決した局面の鍵（F16）。解決した場面は、場面の一覧と位置の帯には薄く残り、前・次の移動では止まらない
+  const resolvedKeys = useMemo(() => new Set(Object.keys(session.resolved.decisions)), [session.resolved]);
   const scenes = useMemo(
     () =>
       listReplayScenes(timeline, game.decisions, {
         markKeys,
         threshold: study.threshold,
         includeAll: settings.showAllMismatches,
+        contest: study.contest,
+        resolvedKeys,
       }),
-    [timeline, game.decisions, markKeys, study.threshold, settings.showAllMismatches],
+    [timeline, game.decisions, markKeys, study.threshold, settings.showAllMismatches, study.contest, resolvedKeys],
   );
-  const stops = useMemo(() => replayStops(timeline, scenes), [timeline, scenes]);
+  // 「細かいミスだけ」（F17）。入れると、前・次の迷いと迷いの数が、細かいミスだけになる
+  const [fineMissOnly, setFineMissOnly] = useFineMissOnly();
+  const stops = useMemo(() => replayStops(timeline, scenes, { fineMissOnly }), [timeline, scenes, fineMissOnly]);
 
   const [g, setG] = useState(() => {
     const decision = startKey === undefined ? undefined : findDecisionByKey(game, startKey);
@@ -137,8 +144,8 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   if (step === undefined || info === null) return null;
   const compact = windowHeight < compactBelowHeight(info.rows, info.riichiAny);
 
-  // 「次の場面へ」: いまより後ろの、次の場面（迷いでも不一致でも）。無ければ、1 手先
-  const nextScene = scenes.find((item) => item.step > g);
+  // 「次の場面へ」: いまより後ろの、次の場面（迷いでも不一致でも拮抗でも。解決した場面は飛ばす）。無ければ、1 手先
+  const nextScene = scenes.find((item) => item.step > g && !item.resolved);
   const afterReveal = () => go(nextScene === undefined ? g + 1 : nextScene.step);
 
   return (
@@ -175,6 +182,8 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
         go={go}
         onChangeKeys={(next) => settings.update({ replay_keys: next })}
         ticks={ticks}
+        fineMissOnly={fineMissOnly}
+        onFineMissOnly={setFineMissOnly}
       />
       {scene === null ? (
         <BrowseWork

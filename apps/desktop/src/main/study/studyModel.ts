@@ -1,9 +1,11 @@
 /**
  * 出題（今日の出題・解き直し）の、画面に出すもの。取り込んだ半荘・答えの記録・設定・その日の組から、純粋に組み立てる。
  *
- * - 問題: 大きな不一致（基準は設定）と、迷いマークを結びつけた判断（結びつけは、半荘のページと同じ `resolveMarks`）
- * - 今日の出題: その日の組（保存してあるもの。まだ無ければ、これから作る組 `plannedSet`）と、「残り」
- * - 解き直し: 問題ごとの最後の答えの期限が、今日までのもの（期限の古い順）
+ * - 問題: 大きな不一致（基準は設定）と、迷いマークを結びつけた判断（結びつけは、半荘のページと同じ `resolveMarks`）と、
+ *   拮抗した判断（設定で出すとき。F17）。並びは、細かいミス → ほかの迷い → 大きな不一致 → 拮抗（E-46）
+ * - 今日の出題: その日の組（保存してあるもの。まだ無ければ、これから作る組 `plannedSet`）と、「残り」。解決した局面（F16）は、
+ *   新しく組に入れず、残りにも出さない（すでに組に入っているものは、印を付けて残す）
+ * - 解き直し: 問題ごとの最後の答えの期限が、今日までのもの（期限の古い順）。解決した局面は出さない
  * 消した半荘（一覧に無い半荘）の問題は、どこにも出ない（答えの記録は、置き場にある間、残してある）。
  */
 import {
@@ -16,6 +18,7 @@ import {
   problemId,
   restOfProblems,
   type AnswerLike,
+  type ContestOptions,
   type Decision,
   type ImportedGame,
   type Problem,
@@ -31,6 +34,8 @@ import type { GameMap } from './gameStore';
 export interface TodayItem {
   problem: Problem;
   answer: AnswerRow | null;
+  /** 解決した局面か（F16）。組に入ったあとに解決したものは、印を付けて残し、「次の問題へ」で飛ばす。 */
+  resolved: boolean;
 }
 
 /** 解き直しに出る 1 問。`answer` は、その問題の最後の答え（期限と間隔を持つ）。 */
@@ -49,8 +54,10 @@ export interface TodayModel {
   items: TodayItem[];
   /** 組の中の、答えた問題の数。 */
   answered: number;
-  /** 組の中の、まだ答えていない問題の数。 */
+  /** 組の中の、まだ答えていない問題の数（解決した問題は数えない）。 */
   unanswered: number;
+  /** 組の中の、答えないまま解決した問題の数（F16）。 */
+  resolvedOnly: number;
   /** 組に入っていない、まだ答えていない問題（「残り」）。 */
   rest: Problem[];
   /** 結びつけが決まっていない迷いの数（結果を取り込んだ半荘の、局面を手で選ぶ迷い）。 */
@@ -77,7 +84,11 @@ export interface StudyInput {
   daily: readonly StoredProblemRef[] | null;
   /** 今日（午前 4 時までは前の日。YYYY-MM-DD）。 */
   today: string;
+  /** 解決した問題の `problemId`（F16）。省略時は、解決したものは無い。 */
+  resolved?: ReadonlySet<string>;
 }
+
+const NO_RESOLVED: ReadonlySet<string> = new Set();
 
 const refOf = (item: StoredProblemRef): ProblemRef => ({ sessionId: item.session_id, key: item.decision_key });
 
@@ -148,11 +159,16 @@ export function answeredIds(answers: readonly AnswerRow[]): Set<string> {
 }
 
 /**
- * これから保存する、今日の組（まだ組を作っていないとき）。まだ答えていない問題の先頭から、1 日に出す数まで。
+ * これから保存する、今日の組（まだ組を作っていないとき）。まだ答えていない問題の先頭から、1 日に出す数まで。解決した問題は入れない（F16）。
  * 半荘の結果を、すべて読み終えたあとに作る（読み込み中に作ると、一部の半荘だけの組になる）。
  */
-export function plannedSet(problems: readonly Problem[], answers: readonly AnswerRow[], count: number): StoredProblemRef[] {
-  return buildDailySet(problems, answeredIds(answers), count).map((p) => ({ session_id: p.sessionId, decision_key: p.key }));
+export function plannedSet(
+  problems: readonly Problem[],
+  answers: readonly AnswerRow[],
+  count: number,
+  resolved: ReadonlySet<string> = NO_RESOLVED,
+): StoredProblemRef[] {
+  return buildDailySet(problems, answeredIds(answers), count, resolved).map((p) => ({ session_id: p.sessionId, decision_key: p.key }));
 }
 
 /** 問題の一覧と、結びつけが決まっていない迷いの数。 */
@@ -161,18 +177,23 @@ export interface CollectedProblems {
   undecided: number;
 }
 
-/** 結果を読み終えた半荘から、問題を集める（並びは、今日の出題の並び）。 */
+/**
+ * 結果を読み終えた半荘から、問題を集める（並びは、今日の出題の並び）。`contest` は拮抗の場面の設定（F17）。
+ * 渡さない、または「出す」が切のときは、拮抗の問題は入らない。
+ */
 export function collectProblems(
   sessions: readonly SessionRecord[],
   games: GameMap,
   threshold: number,
+  contest?: ContestOptions,
 ): CollectedProblems {
   const { sources, undecided } = sourcesOf(sessions, games);
-  return { problems: listProblems(sources, { threshold }), undecided };
+  return { problems: listProblems(sources, contest === undefined ? { threshold } : { threshold, contest }), undecided };
 }
 
 export function buildStudyModel(input: StudyInput, collected?: CollectedProblems): StudyModel {
   const { sessions, games, answers, threshold, daily, today } = input;
+  const resolved = input.resolved ?? NO_RESOLVED;
   const { problems, undecided } = collected ?? collectProblems(sessions, games, threshold);
   const byId = new Map(problems.map((p) => [problemId(p), p] as const));
   const sessionById = new Map(sessions.map((s) => [s.id, s] as const));
@@ -191,13 +212,16 @@ export function buildStudyModel(input: StudyInput, collected?: CollectedProblems
         problem = problemOf(session, state.game, ref.key);
       }
     }
-    if (problem !== null) items.push({ problem, answer: quiz.get(id) ?? null });
+    if (problem !== null) items.push({ problem, answer: quiz.get(id) ?? null, resolved: resolved.has(id) });
   }
   const answered = items.filter((item) => item.answer !== null).length;
+  // 答えないまま解決した問題は、解いていない数にも数えない（F16）
+  const resolvedOnly = items.filter((item) => item.answer === null && item.resolved).length;
   const rest = restOfProblems(
     problems,
     answeredIds(answers),
     items.map((item) => ({ sessionId: item.problem.sessionId, key: item.problem.key })),
+    resolved,
   );
 
   // 解き直し: 問題ごとの最後の答えの期限が今日までのもの（結果が読めない・消した半荘の問題は出さない）
@@ -207,8 +231,12 @@ export function buildStudyModel(input: StudyInput, collected?: CollectedProblems
     return sessionById.has(row.session_id) && state !== undefined && state.status === 'ready';
   });
   const latest = latestAnswers(present.map(toAnswerLike));
-  const later = latest.map((entry) => entry.dueDate).filter((date) => date > today);
-  for (const entry of dueAnswers(latest, today)) {
+  // 解決した問題は、解き直しにも、「次の解き直しは…」の日にも出さない（切ると、元の期限で戻る。F16）
+  const later = latest
+    .filter((entry) => !resolved.has(problemId(entry)))
+    .map((entry) => entry.dueDate)
+    .filter((date) => date > today);
+  for (const entry of dueAnswers(latest, today, resolved)) {
     const session = sessionById.get(entry.sessionId);
     const state = games.get(entry.sessionId);
     if (session === undefined || state === undefined || state.status !== 'ready') continue;
@@ -230,7 +258,8 @@ export function buildStudyModel(input: StudyInput, collected?: CollectedProblems
     today: {
       items,
       answered,
-      unanswered: items.length - answered,
+      unanswered: items.length - answered - resolvedOnly,
+      resolvedOnly,
       rest,
       undecidedMarks: undecided,
       sessionCount: new Set(items.map((item) => item.problem.sessionId)).size,

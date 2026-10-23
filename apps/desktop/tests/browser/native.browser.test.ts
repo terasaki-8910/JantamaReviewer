@@ -71,6 +71,7 @@ const sessions = [
     self_ratings: { kyokus: {} },
     maka: { kyokus: {} },
     memos: { marks: {}, extras: [] },
+    resolved: { decisions: {} },
   },
 ];
 

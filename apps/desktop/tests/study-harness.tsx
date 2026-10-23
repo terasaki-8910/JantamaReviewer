@@ -2,23 +2,25 @@
  * 出題の画面（`QuizScreen`）を、1 問だけ、取り込んだ半荘や保存先を使わずに動かすための道具（試験のデータで、画面の部品ではない）。
  * 答えの一覧は、本物の `StudyProvider` と同じく、記録・メモの保存で更新する（取り消しの積み重ねも本物）。
  */
-import { findDecisionByKey, type Decision, type ImportedGame } from '@jantama/engine';
+import { findDecisionByKey, problemId, type Decision, type ImportedGame } from '@jantama/engine';
 import { render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRef, useState } from 'react';
 import { vi, type Mock } from 'vitest';
 
 import type { AnswerMode, AnswerNotes, AnswerRow, NewAnswer, SessionRecord } from '../src/api/types';
+import { contestOptionsOf } from '../src/main/study/contestOptions';
 import { QuizScreen } from '../src/main/study/QuizScreen';
+import { resolveCommand } from '../src/main/study/resolveEdits';
 import { StudyProvider, type StudyValue } from '../src/main/study/StudyProvider';
 import type { StudyModel } from '../src/main/study/studyModel';
-import { UndoProvider } from '../src/main/undo/UndoProvider';
+import { UndoProvider, useUndo } from '../src/main/undo/UndoProvider';
 import { answerRow, gameOf } from './fake-study';
 import { seedSession, type ReportKey } from './fake-sessions';
 
 const EMPTY_MODEL: StudyModel = {
   problems: [],
-  today: { items: [], answered: 0, unanswered: 0, rest: [], undecidedMarks: 0, sessionCount: 0 },
+  today: { items: [], answered: 0, unanswered: 0, resolvedOnly: 0, rest: [], undecidedMarks: 0, sessionCount: 0 },
   due: [],
   nextDue: null,
 };
@@ -44,9 +46,17 @@ export interface QuizOptions {
   updateNotes?: (id: number, patch: Partial<AnswerNotes>) => Promise<void>;
   /** 半荘（迷いマーク・結びつけ・終局直後のメモを持たせたいとき）。既定は、迷いも評価も無い半荘。 */
   session?: SessionRecord;
+  /** 最初から解決している局面の鍵（F16）。 */
+  resolved?: readonly string[];
+  /** 細かいミスの問題として開く（見出しに札が出る。F17）。 */
+  fineMiss?: boolean;
+  /** 拮抗の問題として開く（見出しに札が出る。F17）。 */
+  contest?: boolean;
 }
 
 export interface QuizProbe {
+  /** 解決の保存の呼び出し（'on:鍵'・'off:鍵'）。 */
+  resolveCalls: string[];
   recorded: NewAnswer[];
   /** メモの保存の呼び出し（答えの番号と、渡した欄）。 */
   notes: Array<{ id: number; patch: Partial<AnswerNotes> }>;
@@ -79,7 +89,18 @@ interface HarnessProps extends QuizOptions {
   probe: QuizProbe;
 }
 
-function Harness({ decision, imported, probe, ...options }: HarnessProps) {
+function Harness(props: HarnessProps) {
+  return (
+    <UndoProvider>
+      <HarnessInner {...props} />
+    </UndoProvider>
+  );
+}
+
+function HarnessInner({ decision, imported, probe, ...options }: HarnessProps) {
+  const undo = useUndo();
+  const sessionId = (options.session ?? seedSession(0, { id: 'sess' }).session).id;
+  const [resolvedKeys, setResolvedKeys] = useState<readonly string[]>(options.resolved ?? []);
   const [answers, setAnswers] = useState<AnswerRow[]>(options.existing === null || options.existing === undefined ? [] : [options.existing]);
   const rows = useRef(answers);
   rows.current = answers;
@@ -92,6 +113,8 @@ function Harness({ decision, imported, probe, ...options }: HarnessProps) {
     threshold: 0.05,
     dailyCount: 5,
     highlightDora: options.highlightDora ?? false,
+    contest: contestOptionsOf(null),
+    resolvedIds: new Set(resolvedKeys.map((key) => problemId({ sessionId, key }))),
     doubtOnly: options.doubtOnly ?? false,
     answers,
     model: EMPTY_MODEL,
@@ -101,6 +124,17 @@ function Harness({ decision, imported, probe, ...options }: HarnessProps) {
     gameState: () => undefined,
     session: () => undefined,
     reloadSessions: async () => undefined,
+    setResolved: async (_session, key, on) => {
+      const before = resolvedKeys.includes(key);
+      if (before === on) return;
+      const api = {
+        setResolved: async (_id: string, target: string, resolved: boolean) => {
+          probe.resolveCalls.push(`${resolved ? 'on' : 'off'}:${target}`);
+          setResolvedKeys((keys) => (resolved ? [...keys.filter((k) => k !== target), target] : keys.filter((k) => k !== target)));
+        },
+      };
+      await undo.run(resolveCommand(api, async () => undefined, { sessionId, key, before, after: on }));
+    },
     recordAnswer: async (answer) => {
       probe.recorded.push(answer);
       const row =
@@ -128,27 +162,27 @@ function Harness({ decision, imported, probe, ...options }: HarnessProps) {
   };
 
   return (
-    <UndoProvider>
-      <StudyProvider value={value}>
-        <QuizScreen
-          located={{ session: options.session ?? seedSession(0, { id: 'sess' }).session, game: imported, decision }}
-          mode={options.mode ?? 'quiz'}
-          progress={options.progress ?? null}
-          markNumber={options.markNumber ?? null}
-          existing={options.existing ?? null}
-          previousIntervalDays={options.previousIntervalDays ?? null}
-          nextLabel={options.nextLabel ?? '次の問題へ'}
-          onNext={probe.onNext}
-          kicker={
-            (options.mode ?? 'quiz') === 'review' ? (
-              <p className="kicker">
-                解き直し<span aria-hidden="true"> · </span>今日の期限 <b>6</b>問
-              </p>
-            ) : undefined
-          }
-        />
-      </StudyProvider>
-    </UndoProvider>
+    <StudyProvider value={value}>
+      <QuizScreen
+        located={{ session: options.session ?? seedSession(0, { id: 'sess' }).session, game: imported, decision }}
+        mode={options.mode ?? 'quiz'}
+        progress={options.progress ?? null}
+        markNumber={options.markNumber ?? null}
+        fineMiss={options.fineMiss ?? false}
+        contest={options.contest ?? false}
+        existing={options.existing ?? null}
+        previousIntervalDays={options.previousIntervalDays ?? null}
+        nextLabel={options.nextLabel ?? '次の問題へ'}
+        onNext={probe.onNext}
+        kicker={
+          (options.mode ?? 'quiz') === 'review' ? (
+            <p className="kicker">
+              解き直し<span aria-hidden="true"> · </span>今日の期限 <b>6</b>問
+            </p>
+          ) : undefined
+        }
+      />
+    </StudyProvider>
   );
 }
 
@@ -160,7 +194,7 @@ export function renderQuiz(options: QuizOptions = {}) {
       ? { key: 'k3h0e15' }
       : { ...(options.key !== undefined ? { key: options.key } : {}), ...(options.find !== undefined ? { find: options.find } : {}) };
   const decision = decisionOf(report, lookup);
-  const probe: QuizProbe = { recorded: [], notes: [], onNext: vi.fn<() => void>() };
+  const probe: QuizProbe = { resolveCalls: [], recorded: [], notes: [], onNext: vi.fn<() => void>() };
   const user = userEvent.setup();
   const view = render(<Harness decision={decision} imported={game(report)} probe={probe} {...options} />);
   return { user, probe, decision, ...view };

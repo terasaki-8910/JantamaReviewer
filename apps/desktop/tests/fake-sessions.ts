@@ -73,6 +73,7 @@ export function seedSession(startedMs: number, options: SeedOptions = {}): { ses
     self_ratings: { kyokus: {} },
     maka: { kyokus: {} },
     memos: { marks: {}, extras: [] },
+    resolved: { decisions: {} },
   };
   return options.report ? { session, report: options.report } : { session };
 }
@@ -94,6 +95,8 @@ export class FakeSessionStore {
   readonly memoCalls: string[] = [];
   /** 次のメモの保存を失敗させたいときの理由（1 回だけ）。 */
   failNextMemo: string | null = null;
+  /** 解決の保存の呼び出しの記録（'on:半荘:k0h0e3'・'off:半荘:k0h0e3'）。 */
+  readonly resolveCalls: string[] = [];
 
   constructor(seeds: Array<{ session: SessionRecord; report?: ReportKey }>) {
     this.active = seeds.map((s) => s.session);
@@ -208,6 +211,18 @@ export class FakeSessionStore {
     clear_maka_hanchan: (args) => {
       const { sessionId } = args as { sessionId: string };
       this.update(sessionId, (s) => ({ ...s, maka: { kyokus: s.maka.kyokus } }));
+      return undefined;
+    },
+    // 解決（F16）。Rust 側と同じく、入れると時刻つきで保存し、切って空になったら空の表にする。呼ばれた順は `resolveCalls`
+    set_resolved: (args) => {
+      const { sessionId, decisionKey, resolved } = args as { sessionId: string; decisionKey: string; resolved: boolean };
+      this.resolveCalls.push(`${resolved ? 'on' : 'off'}:${sessionId}:${decisionKey}`);
+      this.update(sessionId, (s) => {
+        const decisions = { ...s.resolved.decisions };
+        if (resolved) decisions[decisionKey] = Date.now();
+        else delete decisions[decisionKey];
+        return { ...s, resolved: { decisions } };
+      });
       return undefined;
     },
     // 終局直後のメモ（F4、U-28）。Rust 側と同じく、前後の空白を除き、「候補」も「理由」も空なら消す。迷いマークの無い迷いのメモは、名前ごとに置き換える

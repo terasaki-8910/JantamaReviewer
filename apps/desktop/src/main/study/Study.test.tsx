@@ -147,7 +147,7 @@ describe('U-15 今日の出題の一覧', () => {
     expect(rows.some((row) => row.className.includes('done') || row.className.includes('next'))).toBe(false);
     // 組の説明の 1 行
     expect(document.querySelector('.q-rule')?.textContent).toBe(
-      '10月9日の半荘から5問。迷いに結びついた局面を先に入れ、足りない分を、AIとの差が大きい順に入れています。1日に出す数は設定で変えられます。',
+      '10月9日の半荘から5問。細かいミス（迷ったうえで実戦が AI の1位と違った局面）を先に、次にほかの迷い、AI との差が大きい順の大きな不一致、最後に拮抗した局面を入れています。1日に出す数は設定で変えられます。',
     );
   });
 
@@ -199,7 +199,7 @@ describe('U-16 出題と答え合わせ（今日の出題を順に解く）', ()
     expect(await screen.findByRole('heading', { level: 1, name: '東2局 11巡目' })).toBeInTheDocument();
     expect(document.querySelector('.progress')?.textContent).toBe('1 / 5');
     const chips = [...document.querySelectorAll('.q-chips .q-chip')].map((chip) => chip.textContent);
-    expect(chips).toEqual(['1向聴', '実戦：打8p', '迷い2']);
+    expect(chips).toEqual(['1向聴', '実戦：打8p', '迷い2', '細かいミス']);
     // サイドバーは、今日の出題に印
     expect(sideButton(/^今日の出題/)).toHaveAttribute('aria-current', 'page');
   });

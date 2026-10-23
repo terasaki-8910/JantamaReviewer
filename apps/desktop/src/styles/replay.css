@@ -6,7 +6,8 @@
   方針（サンプルのまま）:
   - 新しい見た目は足さず、既存の部品（.btn、.icon-btn、.pill、.pop、.tag、.sec-title、.track）を言い換えて作る
   - accent は「選択・主な操作・フォーカス」と AI の印。ink は「実戦（実際のゲーム）」。赤は「自分の手」だけ
-  - 迷い = 丸（accent）、不一致 = ひし形（ink）。色だけで区別しない
+  - 迷い = 丸（accent。細かいミスだけ四角）、不一致 = ひし形（ink）、拮抗 = 短い横棒（ink）。色だけで区別しない
+  - 解決した場面（F16）は、印も一覧の行も薄くする（押せば開ける）
 */
 /* stylelint-disable no-descending-specificity -- 狭いとき（640px 未満）の上書きを、サンプルの並びのまま、各部品の規則のあとにまとめて置く */
 
@@ -200,8 +201,26 @@
   background: transparent;
 }
 
+.jump[data-kind="contest"] .jump-l .shape {
+  width: 14px;
+  height: 4px;
+  margin: 4px 0 4px -1px;
+  background: var(--ink);
+  border-radius: 1px;
+}
+
 .jump .jnext {
   gap: 6px;
+}
+
+/* 「細かいミスだけ」（F17）: 入のときは、チェックの印と、accent の枠・文字 */
+.jump .fm-toggle {
+  gap: 6px;
+}
+
+.jump .fm-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .jump .btn .ic {
@@ -342,6 +361,22 @@
   transform: rotate(45deg);
 }
 
+/* 細かいミス（迷いのうち、実戦が AI の1位と違うもの）の迷いの印は、四角（ほかの迷いは丸） */
+.pin.dbt.sq::before {
+  border-radius: 2px;
+}
+
+/* 拮抗の場面は、帯の下の短い横棒 */
+.pin.cst {
+  color: var(--ink);
+}
+
+.pin.cst::before {
+  width: 16px;
+  height: 6px;
+  border-radius: 1px;
+}
+
 /* AI の1位と違うだけの判断（設定を入れたときだけ出る不一致）は、小さなひし形 */
 .pin.mis.small::before {
   width: 7px;
@@ -352,6 +387,11 @@
 .pin[data-done="1"]::before {
   background: transparent;
   box-shadow: inset 0 0 0 2px currentcolor;
+}
+
+/* 解決した場面は、薄くする（押せば開ける） */
+.pin[data-resolved="1"] {
+  opacity: 0.35;
 }
 
 .pin[aria-current="true"]::after {
@@ -530,9 +570,16 @@
   height: 13px;
 }
 
-.sc-st.done {
+.sc-st.done,
+.sc-st.resolved {
   color: var(--ink);
   font-weight: 700;
+}
+
+/* 解決した場面の行: 場所と札を薄くする（解決の印は薄くしない） */
+.sc-row[data-resolved="1"] .sc-where b,
+.sc-row[data-resolved="1"] .sc-tags {
+  opacity: 0.55;
 }
 
 /* ---- キーの一覧と割り当て（操作の段のキーボードのアイコンを押す・マウスを乗せると、重なって出る） ---- */

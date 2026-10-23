@@ -162,7 +162,8 @@ describe('文言', () => {
 describe('局の選択の数', () => {
   it('局ごとの迷いと不一致（迷い 2 は不一致でもあるので、両方に数える）', () => {
     const counts = timeline.kyokus.map((kyoku) => kyokuCounts(timeline, scenes, kyoku.position));
-    expect(counts).toEqual(['迷い1', '迷い1 · 不一致1', '迷い2 · 不一致2', '', '迷い2 · 不一致2']);
+    // 迷い 2 は細かいミスでもある（実戦が AI の1位と違う）。拮抗は、この設定（出さない）では数えない
+    expect(counts).toEqual(['迷い1', '迷い1 · 細かいミス1 · 不一致1', '迷い2 · 不一致2', '', '迷い2 · 不一致2']);
   });
 
   it('場面が無いときは、どの局も空', () => {
