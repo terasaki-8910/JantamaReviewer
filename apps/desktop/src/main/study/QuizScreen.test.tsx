@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { answerRow } from '../../../tests/fake-study';
 import { decisionOf, renderQuiz } from '../../../tests/study-harness';
+import { revealed } from '../../../tests/reveal';
 import { doraKinds } from './dora';
 
 
@@ -34,7 +35,7 @@ async function answer(user: ReturnType<typeof renderQuiz>['user'], pick: () => H
   await user.click(pick());
   await user.type(reasonBox(), reason);
   await user.click(submit());
-  await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+  await revealed();
 }
 
 describe('U-1 答える前は、AI の候補・確率・順位を DOM に出さない（打牌の判断）', () => {
@@ -92,7 +93,7 @@ describe('U-2 答え合わせは、答えを選ぶまで押せない（理由は
     const { user, probe } = renderQuiz();
     await user.click(drawn());
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(probe.recorded[0]?.reason).toBe('');
     expect(document.querySelector('.summary .why')).toBeNull();
   });
@@ -150,7 +151,7 @@ describe('U-3 答え合わせ（打牌の判断）', () => {
     const panel = document.getElementById('answer') as HTMLElement;
     const review = document.getElementById('review') as HTMLElement;
     const text = panel.textContent ?? '';
-    const order = ['次の問題へ', '自分の答え', 'AIの評価（Mortal）', '受け入れ枚数', '差の原因', '学んだ原則（1行）', 'MAKA の推した打牌'].map((title) =>
+    const order = ['次の問題へ', '自分の答え', '受け入れ枚数', '差の原因', '学んだ原則（1行）', 'MAKA の推した打牌'].map((title) =>
       text.indexOf(title),
     );
     expect(order.every((at) => at >= 0)).toBe(true);
@@ -163,11 +164,11 @@ describe('U-3 答え合わせ（打牌の判断）', () => {
     expect(within(review).getByText('受け入れを広く')).toBeInTheDocument();
     expect(review.querySelector('.meta')?.textContent).toMatch(/^答えるまで \d:\d\d · 選び直し 0回$/);
     expect(review.querySelector('.what')?.textContent).toBe('自分打1s');
-    // AI の評価: 候補ごとの棒と確率。答え合わせのあとは data-ai がある
-    expect(document.querySelectorAll('[data-ai="candidate"]').length).toBeGreaterThanOrEqual(4);
-    const percents = [...document.querySelectorAll('[data-ai="candidate"] .v')].map((v) => v.textContent);
-    expect(percents.every((value) => /^(\d+\.\d\d%|<0\.01%)$/.test(value ?? ''))).toBe(true);
-    expect(document.querySelector('[data-ai="eval"]')).not.toBeNull();
+    // AI の評価: 打牌の判断は、手牌の上の棒（右の欄に一覧は出さない）。棒は AI の情報なので data-ai がある（U-43）
+    expect(panel.textContent).not.toContain('AIの評価（Mortal）');
+    expect(document.querySelector('[data-ai="eval"]')).toBeNull();
+    expect(document.querySelectorAll('[data-ai="candidate"]')).toHaveLength(0);
+    expect(document.querySelectorAll('.hand [data-ai="bar"]')).toHaveLength(14);
     expect(document.querySelector('[data-ai="ukeire-box"]')).not.toBeNull();
     // 答える前の欄は消えて、手牌は押せない
     expect(screen.queryByRole('button', { name: '答え合わせ' })).toBeNull();
@@ -192,7 +193,7 @@ describe('U-3 答え合わせ（打牌の判断）', () => {
     await user.click(drawn());
     await user.type(reasonBox(), '考え直した');
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(document.querySelector('.meta')?.textContent).toMatch(/選び直し 1回$/);
     expect(probe.recorded[0]?.reselect_count).toBe(1);
   });
@@ -297,7 +298,7 @@ describe('U-18 受け入れ枚数の行と小窓', () => {
     const row = ukRow('自分・最大');
     await user.click(row);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    await user.click(screen.getByRole('heading', { name: 'AIの評価（Mortal）' }));
+    await user.click(screen.getByRole('heading', { level: 2, name: '自分の答え' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     await user.click(row);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -315,7 +316,7 @@ describe('U-18 受け入れ枚数の行と小窓', () => {
     await user.click(handButtons()[0] as HTMLElement); // 3m（実戦と同じ。2 向聴になる）
     await user.type(reasonBox(), '試験');
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     await user.click(ukRow('自分・実戦'));
     const dialog = screen.getByRole('dialog');
     const tabs = within(dialog).getAllByRole('tab');
@@ -386,7 +387,8 @@ describe('U-20 差の原因・U-11 取り消し', () => {
     await answer(user, drawn);
     await user.keyboard('{Control>}z{/Control}');
     expect(probe.notes).toEqual([]);
-    expect(screen.getByRole('heading', { name: 'AIの評価（Mortal）' })).toBeInTheDocument();
+    expect(document.getElementById('reveal-h')).not.toBeNull();
+    expect(screen.getByRole('list', { name: 'AIの評価' })).toBeInTheDocument();
     expect(probe.recorded).toHaveLength(1);
   });
 
@@ -548,7 +550,7 @@ describe('U-16 鳴き（チー・ポン・スルー）の判断', () => {
     await user.click(pass);
     await user.click(pon);
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(probe.recorded[0]?.reselect_count).toBe(2);
     expect(probe.recorded[0]?.choice).toEqual({ type: 'option', id: 'pon' });
   });
@@ -567,7 +569,7 @@ describe('U-16 鳴き（チー・ポン・スルー）の判断', () => {
     await user.click(options()[0] as HTMLElement);
     await user.type(reasonBox(), '東は役牌');
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const bars = [...document.querySelectorAll('[data-ai="candidate"]')];
     expect(bars.map((bar) => bar.querySelector('.lab b')?.textContent).sort()).toEqual(['スルー', 'ポン']);
     expect(bars.find((bar) => bar.querySelector('.lab b')?.textContent === 'ポン')?.querySelector('.btag')?.textContent).toMatch(/自分/);
@@ -610,7 +612,7 @@ describe('U-16 リーチ・和了・カンの判断も、雀魂と同じ並び�
     await user.click(screen.getAllByRole('radio')[0] as HTMLElement);
     await user.type(reasonBox(), '良形の聴牌');
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(probe.recorded[0]?.choice).toEqual({ type: 'option', id: 'reach' });
     const labels = [...document.querySelectorAll('[data-ai="candidate"] .lab b')].map((b) => b.textContent);
     expect(labels).toEqual(expect.arrayContaining(['リーチ', 'しない']));
@@ -636,7 +638,7 @@ describe('U-17 解き直し', () => {
     await user.click(handButtons()[5] as HTMLElement); // 3p など、AI が選ばない牌
     await user.type(reasonBox(), '試験');
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const verdict = document.querySelector('[data-ai="verdict"]') as HTMLElement;
     expect(verdict.getAttribute('data-result')).toBe(probe.recorded[0]?.correct ? 'ok' : 'ng');
     expect(verdict.querySelector('.v-badge')?.textContent).toBe(probe.recorded[0]?.correct ? '正解' : '不正解');
@@ -655,7 +657,7 @@ describe('U-17 解き直し', () => {
     await user.click(screen.getAllByRole('button', { name: '七索を切る' })[0] as HTMLElement);
     await user.type(reasonBox(), '孤立牌を切る');
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const verdict = document.querySelector('[data-ai="verdict"]') as HTMLElement;
     expect(verdict.getAttribute('data-result')).toBe('ok');
     expect(verdict.querySelector('.v-badge')?.textContent).toBe('正解');
@@ -669,7 +671,7 @@ describe('U-17 解き直し', () => {
     await user.click(screen.getAllByRole('button', { name: '七索を切る' })[0] as HTMLElement);
     await user.type(reasonBox(), '考え直した');
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const verdict = document.querySelector('[data-ai="verdict"]') as HTMLElement;
     expect(verdict.getAttribute('data-result')).toBe('ok');
     expect(verdict.querySelector('.v-line')?.textContent).toBe('次の解き直し 3日後（10月12日）');
@@ -709,9 +711,9 @@ describe('U-19 ドラを目立たせる', () => {
   it('既定は切: ページの印は off。どの牌にも is-dora が付かない', () => {
     renderQuiz();
     expect(document.querySelector('.qz')?.getAttribute('data-dora')).toBe('off');
-    // 凡例の見本（設定が切のときは、CSS で隠す）のほかには付かない
-    expect([...document.querySelectorAll('.is-dora')].filter((tile) => tile.closest('.legend') === null)).toEqual([]);
-    expect(document.querySelector('.lg-dora')).not.toBeNull();
+    expect(document.querySelectorAll('.is-dora')).toHaveLength(0);
+    // 凡例の「ドラ」の見本も、設定が切のときは出さない（凡例は、卓の上の説明のアイコンの中）
+    expect(document.querySelector('.lg-dora')).toBeNull();
   });
 
   it('入にすると: ドラ表示牌が指す牌（手牌・河・副露）にだけ is-dora。ドラ表示牌そのものと、鳴かれて薄くなった牌には付けない', () => {
@@ -722,8 +724,9 @@ describe('U-19 ドラを目立たせる', () => {
     expect(kinds.size).toBeGreaterThan(0);
     const dora = [...document.querySelectorAll('.is-dora')].filter((tile) => tile.closest('.legend') === null);
     expect(dora.length).toBeGreaterThan(0);
-    // ドラ表示牌（中央の箱・上の 1 行）は付けない
+    // ドラ表示牌と、それが指すドラ（中央の箱）は付けない。凡例には「ドラ」の見本が出る
     expect(document.querySelector('.dora-t .is-dora, .info-strip .is-dora')).toBeNull();
+    expect(document.querySelector('.legend .lg-dora .is-dora')).not.toBeNull();
     // 鳴かれた牌（薄い牌）には付けない
     expect(document.querySelector('.called.is-dora')).toBeNull();
     // 付いた牌は、読み上げに「（ドラ）」が入る

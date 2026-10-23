@@ -3,6 +3,7 @@ import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { game, renderQuiz } from '../../../tests/study-harness';
+import { revealed } from '../../../tests/reveal';
 import { replayStepFrames } from './steps';
 
 // 他家の手牌（F14、E-40・E-43、U-34・U-35・U-38。R15-2・R15-5・R16-7）の、出題・解き直しの画面の試験。
@@ -42,7 +43,7 @@ async function reveal(user: ReturnType<typeof renderQuiz>['user'], pick: () => H
   await user.click(pick());
   await user.type(screen.getByLabelText('理由（1行）'), '待ちを見て選んだ');
   await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-  await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+  await revealed();
 }
 
 const firstTile = () => screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement;

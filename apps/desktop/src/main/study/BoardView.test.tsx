@@ -1,0 +1,333 @@
+/**
+ * 盤面の作業（出題・解き直しの画面）の試験:
+ * - U-43 AI の評価の棒（打牌の判断。手牌の上）: 答え合わせのあとだけ。高さ・数字・読み上げの一覧。右の欄の一覧は、打牌の判断では出さない
+ * - U-44 ドラ表示牌（卓の中央の箱）
+ * - U-47 答える前の欄の、場面の情報の 1 行（巡目・向聴数・他家の立直）
+ * - 盤面の見方（卓の上の右端の説明のアイコン。凡例と「過去の盤面」の旗）
+ * 通して見る画面（自分の判断の手番の棒・右の欄の一覧）は、replay/Replay.test.tsx。実ブラウザでの高さ・幅・色は、tests/browser/quiz.browser.test.ts。
+ */
+import { tileLabel, type BoardState, type Decision, type Tile } from '@jantama/engine';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { answerRow } from '../../../tests/fake-study';
+import { revealed } from '../../../tests/reveal';
+import { decisionOf, renderQuiz } from '../../../tests/study-harness';
+import { Board, boardInfoOf } from './Board';
+import { doraOfMarker } from './dora';
+
+/** 試験の「いま」: 2026 年 10 月 9 日 22:00（日付だけ動かす）。 */
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 9, 9, 22, 0, 0));
+});
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+const handButtons = () => screen.getAllByRole('button', { name: /を切る$/ });
+const submit = () => screen.getByRole('button', { name: '答え合わせ' });
+const reasonBox = () => screen.getByLabelText('理由（1行）');
+/** FX-1 a 東4局 13巡目: ツモ牌は 1s。AI の 1 位は 7s（手牌に 2 枚）。実戦は 3m（手牌に 2 枚）。 */
+const drawn = () => screen.getByRole('button', { name: '一索（ツモ牌）を切る' });
+
+async function answer(user: ReturnType<typeof renderQuiz>['user'], pick: () => HTMLElement = drawn) {
+  await user.click(pick());
+  await user.type(reasonBox(), '受け入れを広く');
+  await user.click(submit());
+  await revealed();
+}
+
+describe('U-43 AI の評価の棒（打牌の判断。手牌の上）', () => {
+  const bars = () => [...document.querySelectorAll<HTMLElement>('.hand .ai-bar')];
+  const heightOf = (bar: HTMLElement) => bar.style.getPropertyValue('--h');
+  const labelsOf = () => bars().map((bar) => bar.querySelector('.ai-num')?.textContent ?? null);
+  const sayings = () => [...screen.getByRole('list', { name: 'AIの評価' }).querySelectorAll('li')].map((li) => li.textContent);
+
+  it('答える前は、棒も数字も一覧も DOM に無い。棒の帯と印の行は、答える前から取ってある（打牌の判断の手牌）', async () => {
+    const { user } = renderQuiz();
+    expect(bars()).toHaveLength(0);
+    expect(screen.queryByRole('list', { name: 'AIの評価' })).toBeNull();
+    expect(document.querySelector('.ai-num, .ai-fill, [data-ai]')).toBeNull();
+    expect(document.querySelector('.hand-wrap[data-kind="discard"]')).not.toBeNull();
+    // 選んだだけ・理由を書いただけの途中でも、出ない
+    await user.click(drawn());
+    await user.type(reasonBox(), '受け入れを広く');
+    expect(bars()).toHaveLength(0);
+    expect(document.querySelector('[data-ai]')).toBeNull();
+  });
+
+  it('答え合わせのあと、手牌の 1 枚ごとに 1 本。高さは 40px × 確率（0 より大きければ 2px 以上）。AI の 1 位（7s）の 2 枚は強い色の印', async () => {
+    const { user } = renderQuiz();
+    await answer(user);
+    expect(bars()).toHaveLength(14);
+    for (const bar of bars()) {
+      expect(bar.getAttribute('aria-hidden')).toBe('true');
+      expect(bar.getAttribute('data-ai')).toBe('bar');
+      expect(bar.closest('.slot')).not.toBeNull();
+    }
+    // 3m 3m 4m 4m 4m 3p 4p 6p 7p 8p 赤5s 7s 7s と、ツモ牌 1s。7s は 97.7%、1s は 2.3%、ほかはごく小さい確率
+    const heights = bars().map(heightOf);
+    expect(heights.slice(11, 13)).toEqual(['39px', '39px']);
+    expect(heights[13]).toBe('2px');
+    expect(heights.slice(0, 11).every((height) => height === '2px')).toBe(true);
+    expect(bars().map((bar) => bar.classList.contains('is-top'))).toEqual([...Array(11).fill(false), true, true, false]);
+    // ツモ牌の列は、手牌から少し離れている（.slot.draw）。棒も、その列の中
+    expect(bars()[13]?.closest('.slot')?.className).toContain('draw');
+  });
+
+  it('数字: 確率の上位（7s 97.7%）・自分の答え（ツモ牌 1s 2.3%）・実戦（3m。2 枚のうち左の 1 枚だけ <0.1%）。同じ牌には 1 回だけ', async () => {
+    const { user } = renderQuiz();
+    await answer(user);
+    expect(labelsOf()).toEqual(['<0.1%', null, null, null, null, null, null, null, null, null, null, '97.7%', null, '2.3%']);
+  });
+
+  it('自分の答えを替えると、数字の付く牌が替わる（6p を選ぶと、6p に <0.1%）', async () => {
+    const { user } = renderQuiz();
+    await answer(user, () => screen.getByRole('button', { name: '六筒を切る' }));
+    const labels = labelsOf();
+    expect(labels[7]).toBe('<0.1%');
+    // ツモ牌の 1s は、自分の答えではなくなっても、確率の上位 2 つ目（2.3%）なので、数字が付く
+    expect(labels[13]).toBe('2.3%');
+    expect(labels[11]).toBe('97.7%');
+    expect(labels[0]).toBe('<0.1%');
+    expect(labels.filter((label) => label !== null)).toHaveLength(4);
+  });
+
+  it('読み上げ用の一覧「AIの評価」: 確率の高い順に「打7s 97.7%」。棒は読み上げず、一覧は手牌の外（手牌は inert のことがある）', async () => {
+    const { user } = renderQuiz();
+    await answer(user);
+    const list = screen.getByRole('list', { name: 'AIの評価' });
+    expect(list.getAttribute('data-ai')).toBe('bars-list');
+    expect(sayings().slice(0, 3)).toEqual(['打7s 97.7%', '打1s 2.3%', '打6p <0.1%']);
+    expect(sayings()).toHaveLength(10);
+    expect(list.closest('.hand-wrap')).toBeNull();
+    expect(list.className).toContain('sr-only');
+  });
+
+  it('右の欄に、AI の評価の一覧は出ない（打牌の判断）。受け入れ枚数・差の原因は出る', async () => {
+    const { user } = renderQuiz();
+    await answer(user);
+    expect(screen.queryByRole('heading', { name: 'AIの評価（Mortal）' })).toBeNull();
+    expect(document.querySelector('[data-ai="eval"], [data-ai="candidate"], .bars')).toBeNull();
+    expect(screen.getByRole('heading', { name: '受け入れ枚数' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '受け入れ枚数' })).toBeInTheDocument();
+  });
+
+  it('過去の盤面（前の巡目）では、棒を出さない（その時点の別の手牌のため）。判断の盤面に戻すと、また出る', async () => {
+    const { user } = renderQuiz();
+    await answer(user);
+    await user.click(screen.getByRole('button', { name: /前の巡目/ }));
+    expect(bars()).toHaveLength(0);
+    expect(screen.queryByRole('list', { name: 'AIの評価' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /次の巡目/ }));
+    expect(bars()).toHaveLength(14);
+  });
+
+  it('解き直しでも、答え合わせのあとだけ出る', async () => {
+    const { user } = renderQuiz({ mode: 'review', previousIntervalDays: 3 });
+    expect(bars()).toHaveLength(0);
+    expect(document.querySelector('[data-ai]')).toBeNull();
+    await answer(user);
+    expect(bars()).toHaveLength(14);
+    expect(screen.getByRole('list', { name: 'AIの評価' })).toBeInTheDocument();
+  });
+
+  it('保存してある答えを開いたとき（答え合わせのあとの形）も、最初から出る', () => {
+    renderQuiz({
+      existing: answerRow({ session_id: 'sess', decision_key: 'k3h0e15', choice: { type: 'dahai', tile: '1s' }, reason: '受け入れを広く' }),
+    });
+    expect(bars()).toHaveLength(14);
+    expect(bars()[13]?.querySelector('.ai-num')?.textContent).toBe('2.3%');
+  });
+
+  it('鳴きの判断は、棒を出さず、右の欄に評価の一覧（ボタンごとの棒）', async () => {
+    const find = (d: Decision) => d.kind === 'call' && d.kyokuLabel === '東2局1本場' && d.junme === 8;
+    const { user } = renderQuiz({ report: 'fx4', find });
+    await user.click(screen.getAllByRole('radio')[0] as HTMLElement);
+    await user.type(reasonBox(), '役牌');
+    await user.click(submit());
+    await revealed();
+    expect(bars()).toHaveLength(0);
+    expect(screen.queryByRole('list', { name: 'AIの評価' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'AIの評価（Mortal）' })).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-ai="candidate"]')).toHaveLength(2);
+    // 鳴きの判断の手牌には、棒の帯も印の行も要らない（印は打牌の判断だけ）が、帯は取ってある（盤面の高さは、判断の種類で替わらない）
+    expect(document.querySelector('.hand-wrap')?.getAttribute('data-kind')).toBe('call');
+  });
+});
+
+describe('U-44 ドラ表示牌（卓の中央の箱）', () => {
+  /** 盤面のドラ表示牌だけを替えた盤面（牌の種類の変換を、決まった牌で確かめる）。 */
+  function boardWith(markers: Tile[]): BoardState {
+    return { ...decisionOf('fx1a', { key: 'k3h0e15' }).board, doraMarkers: markers };
+  }
+  const renderBoard = (markers: Tile[]) => {
+    const step = boardWith(markers);
+    return render(
+      <Board info={boardInfoOf(step, [step])} step={step} dora={null} hands={{ open: false, available: false, seats: null, onToggle: () => undefined }} />,
+    );
+  };
+  const row = () => document.querySelector('.center .dora') as HTMLElement;
+
+  it('局の名前の下の 1 行「表示 [牌] → ドラ [牌]」。読み上げは「ドラ表示牌 4m、ドラ 5m」。牌の絵は、まとめて読み上げるので個別には読み上げない', () => {
+    renderBoard(['4m']);
+    expect(row().getAttribute('role')).toBe('group');
+    expect(row().getAttribute('aria-label')).toBe('ドラ表示牌 4m、ドラ 5m');
+    expect(row().textContent).toBe('表示→ドラ');
+    const [from, to] = [...row().querySelectorAll('.dora-t')];
+    expect(from?.querySelectorAll('.tile')).toHaveLength(1);
+    expect(to?.querySelectorAll('.tile')).toHaveLength(1);
+    expect([...row().querySelectorAll('img')].every((img) => img.getAttribute('alt') === '')).toBe(true);
+    // 中央の箱の中で、狭いときに隠す「.info」の外にある（狭い卓でも出る）
+    expect(row().closest('.info')).toBeNull();
+    expect(row().parentElement?.className).toBe('center');
+  });
+
+  it('牌の種類の変換: 4m→5m、9m→1m、北→東、中→白、赤5m→6m', () => {
+    const cases: Array<[Tile, string]> = [
+      ['4m', 'ドラ表示牌 4m、ドラ 5m'],
+      ['9m', 'ドラ表示牌 9m、ドラ 1m'],
+      ['N', 'ドラ表示牌 北、ドラ 東'],
+      ['C', 'ドラ表示牌 中、ドラ 白'],
+      ['5mr', 'ドラ表示牌 赤5m、ドラ 6m'],
+    ];
+    for (const [marker, label] of cases) {
+      const { unmount } = renderBoard([marker]);
+      expect(row().getAttribute('aria-label'), marker).toBe(label);
+      unmount();
+    }
+  });
+
+  it('カンでドラ表示牌が増えれば、全部（ドラは 1 枚ずつ対応）。3 枚以上は牌を小さくする印（data-many）', () => {
+    const { unmount } = renderBoard(['N', 'C']);
+    expect(row().getAttribute('aria-label')).toBe('ドラ表示牌 北・中、ドラ 東・白');
+    expect([...row().querySelectorAll('.dora-t')].map((tiles) => tiles.querySelectorAll('.tile').length)).toEqual([2, 2]);
+    expect(row().getAttribute('data-many')).toBeNull();
+    unmount();
+    renderBoard(['1m', '5pr', 'E']);
+    expect(row().getAttribute('aria-label')).toBe('ドラ表示牌 1m・赤5p・東、ドラ 2m・6p・南');
+    expect(row().getAttribute('data-many')).toBe('1');
+  });
+
+  it('出題の画面: 実際のドラ表示牌（FX-1 a 西1局の北・中 → 東・白）が中央の箱に出る。卓の上の 1 行（.info-strip）には、ドラ表示牌が無い', () => {
+    const decision = decisionOf('fx1a', { find: (d) => d.board.doraMarkers.length >= 2 });
+    renderQuiz({ report: 'fx1a', find: (d) => d.index === decision.index });
+    const markers = decision.board.doraMarkers;
+    const expected = `ドラ表示牌 ${markers.map((tile) => tileLabel(tile)).join('・')}、ドラ ${markers.map((tile) => tileLabel(doraOfMarker(tile))).join('・')}`;
+    expect(row().getAttribute('aria-label')).toBe(expected);
+    expect(expected).toBe('ドラ表示牌 北・中、ドラ 東・白');
+    const strip = document.querySelector('.info-strip') as HTMLElement;
+    expect(strip.querySelector('.dora, .dora-t, .tile')).toBeNull();
+    expect(strip.textContent).not.toContain('ドラ');
+    // 局・本場・残りは、卓の上の 1 行に残る
+    expect(strip.textContent).toMatch(/^西1局\d+本場残り\d+枚$/);
+  });
+
+  it('設定「ドラを目立たせる」の黄色は、この牌には付けない（手牌・河・副露の牌だけ）', () => {
+    renderQuiz({ highlightDora: true });
+    expect(document.querySelectorAll('.center .dora .is-dora')).toHaveLength(0);
+    expect(document.querySelectorAll('.center .dora .tile').length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('U-47 場面の情報の 1 行（答える前の欄）', () => {
+  const line = () => document.querySelector('.scene-line') as HTMLElement | null;
+  const bolds = () => [...(line()?.querySelectorAll('b') ?? [])].map((b) => b.textContent);
+
+  it('「13巡目 · 1向聴 · 他家の立直なし」。見出しと同じ巡目・向聴数。「自分の答え」の見出しの上、欄の最初', () => {
+    renderQuiz();
+    expect(line()?.textContent).toBe('13巡目 · 1向聴 · 他家の立直なし');
+    expect(screen.getByRole('heading', { level: 1, name: '東4局 13巡目' })).toBeInTheDocument();
+    expect(screen.getByText('1向聴', { selector: '.q-chip' })).toBeInTheDocument();
+    const heading = screen.getByRole('heading', { level: 2, name: '自分の答え' });
+    expect(line()?.compareDocumentPosition(heading)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelector('#answer-form')?.firstElementChild).toBe(line());
+    // 数は濃い色の印（b）、そのほかは静かな色
+    expect(bolds()).toEqual(['13', '1']);
+  });
+
+  it('AI の情報は入れない（確率・順位・data-ai・実戦の行動）', () => {
+    renderQuiz();
+    expect(line()?.textContent).not.toMatch(/\d\s*%|Mortal|AI|実戦/);
+    expect(line()?.querySelector('[data-ai]')).toBeNull();
+    expect(document.querySelector('[data-ai]')).toBeNull();
+  });
+
+  it('聴牌は「聴牌」。他家が立直していれば「上家が立直（9巡目）」（FX-4 東1局 14巡目）', () => {
+    renderQuiz({ report: 'fx4', key: 'k0h0e15' });
+    expect(line()?.textContent).toBe('14巡目 · 聴牌 · 上家が立直（9巡目）');
+    expect(bolds()).toEqual(['14', '聴牌', '上家', '9']);
+  });
+
+  it('立直が 2 人なら、全員（下家・対面・上家の順に「・」でつなぐ）。N巡目は、その人の宣言牌が河の何枚目か', () => {
+    renderQuiz({ report: 'fx1c', key: 'k1h0e19' });
+    expect(line()?.textContent).toBe('16巡目 · 1向聴 · 下家が立直（15巡目）・対面が立直（8巡目）');
+  });
+
+  it('立直が無ければ「他家の立直なし」（聴牌でも）', () => {
+    renderQuiz({ report: 'fx4', key: 'k1h1e11' });
+    expect(line()?.textContent).toBe('9巡目 · 聴牌 · 他家の立直なし');
+  });
+
+  it('鳴きの判断でも出る。答えのボタンの上', () => {
+    renderQuiz({ report: 'fx1a', key: 'k5h1e8' });
+    expect(line()?.textContent).toBe('7巡目 · 3向聴 · 対面が立直（3巡目）');
+    const choices = document.querySelector('.q-choices') as HTMLElement;
+    expect(line()?.compareDocumentPosition(choices)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelector('#answer-form')?.firstElementChild).toBe(line());
+  });
+
+  it('解き直しの答える前の欄にも出る（実戦の行動は出さないまま）。答え合わせのあとは、出ない', async () => {
+    const { user } = renderQuiz({ mode: 'review', previousIntervalDays: 3 });
+    expect(line()?.textContent).toBe('13巡目 · 1向聴 · 他家の立直なし');
+    expect(screen.queryByText(/実戦/)).toBeNull();
+    await answer(user);
+    expect(line()).toBeNull();
+  });
+
+  it('過去の盤面（前の巡目）を見ていても、場面の巡目・向聴数のまま', async () => {
+    const { user } = renderQuiz();
+    await user.click(screen.getByRole('button', { name: /前の巡目/ }));
+    expect(line()?.textContent).toBe('13巡目 · 1向聴 · 他家の立直なし');
+  });
+});
+
+describe('盤面の見方（卓の上の右端の説明のアイコン）', () => {
+  it('凡例は、卓の下ではなく、説明のアイコンの重なりの中。アイコンの名前は「盤面の見方」。押すと凡例が出る', async () => {
+    const { user } = renderQuiz();
+    const tools = document.querySelector('.board-col > .board-tools') as HTMLElement;
+    expect(tools).not.toBeNull();
+    // 卓より前（上）にある
+    expect(tools.compareDocumentPosition(document.querySelector('.table-wrap') as HTMLElement)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelector('.board-col > .legend, .board-col > .hands-hint')).toBeNull();
+    const button = within(tools).getByRole('button', { name: '盤面の見方' });
+    const pop = document.querySelector('.legend-pop') as HTMLElement;
+    expect(pop.hasAttribute('hidden')).toBe(true);
+    await user.click(button);
+    expect(pop.hasAttribute('hidden')).toBe(false);
+    expect([...pop.querySelectorAll('.legend li')].map((li) => li.textContent)).toContain('ツモ切り');
+    // 「ドラ」の見本は、設定「ドラを目立たせる」が切のとき出さない
+    expect(pop.querySelector('.lg-dora')).toBeNull();
+  });
+
+  it('「過去の盤面」の旗は、見ているときだけ、説明の外に文字で出る', async () => {
+    const { user } = renderQuiz();
+    expect(document.querySelector('.past-flag')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /前の巡目/ }));
+    const flag = document.querySelector('.board-tools > .past-flag') as HTMLElement;
+    expect(flag.textContent).toBe('過去の盤面');
+    expect(flag.closest('.legend-pop')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /次の巡目/ }));
+    expect(document.querySelector('.past-flag')).toBeNull();
+  });
+});
+
+describe('手牌の一覧（棒の帯を足したあとも）', () => {
+  it('手牌の牌のボタンは、これまでどおり（13 枚 + ツモ牌）。棒の読み上げの一覧は、牌のボタンに混ざらない', () => {
+    renderQuiz();
+    expect(handButtons()).toHaveLength(14);
+  });
+});

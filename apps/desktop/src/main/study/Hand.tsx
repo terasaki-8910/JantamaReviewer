@@ -1,6 +1,7 @@
 import type { DecisionKind, Tile as TileCode } from '@jantama/engine';
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
+import type { HandBar, HandBars } from './aiBars';
 import { isDoraTile } from './dora';
 import { Tile } from './Tile';
 import { tileName, tileSrc } from './tiles';
@@ -45,6 +46,22 @@ interface HandProps {
   calledCaption: string | null;
   dora: ReadonlySet<number> | null;
   onPick: (index: number) => void;
+  /**
+   * AI の評価の棒（牌の上）。出してよい場面（打牌の判断の答え合わせのあと・通して見る画面の自分の打牌の手番）でだけ渡す。
+   * 渡さないときも、棒の帯（`--band`）は空のまま取っておく（答える前と答えたあとで、盤面が動かないように。U-1・U-39）。
+   */
+  bars?: HandBars | null;
+}
+
+/** 牌の上の棒 1 本（読み上げない。読み上げは、手牌のそばの一覧が受け持つ）。AI の情報なので `data-ai`。 */
+function BarColumn({ bar }: { bar: HandBar | undefined }) {
+  if (bar === undefined) return null;
+  return (
+    <span className={`ai-bar${bar.top ? ' is-top' : ''}`} aria-hidden="true" data-ai="bar" style={{ '--h': `${bar.height}px` } as CSSProperties}>
+      {bar.height > 0 && <span className="ai-fill" />}
+      {bar.label !== null && <span className="ai-num">{bar.label}</span>}
+    </span>
+  );
 }
 
 function tileLabel(item: HandItem, dora: boolean): string {
@@ -52,7 +69,7 @@ function tileLabel(item: HandItem, dora: boolean): string {
 }
 
 /** 手牌。切る牌を選ぶときは、1 つの Tab の止まり場所（矢印キーで牌の間を動く）で、Space か Enter で選ぶ。 */
-export function Hand({ items, interactive, kind, selected, revealed, marks, used, calledCaption, dora, onPick }: HandProps) {
+export function Hand({ items, interactive, kind, selected, revealed, marks, used, calledCaption, dora, onPick, bars = null }: HandProps) {
   const refs = useRef(new Map<number, HTMLButtonElement>());
   // 矢印キーで動いた位置（選んでいる牌が替わったら、そこへ戻す）
   const [moved, setMoved] = useState<{ for: number | null; at: number } | null>(null);
@@ -77,68 +94,81 @@ export function Hand({ items, interactive, kind, selected, revealed, marks, used
   };
 
   return (
-    <div className="hand-wrap" data-kind={kind} inert={!interactive}>
-      <div className="hand" role="group" aria-label="手牌（右端がツモ牌）">
-        {items.map((item) => {
-          const isDora = !item.called && isDoraTile(item.tile, dora);
-          if (item.called) {
+    <>
+      <div className="hand-wrap" data-kind={kind} inert={!interactive}>
+        <div className="hand" role="group" aria-label="手牌（右端がツモ牌）">
+          {items.map((item) => {
+            const isDora = !item.called && isDoraTile(item.tile, dora);
+            if (item.called) {
+              return (
+                <span className="slot draw" key={`c${item.index}`}>
+                  {calledCaption !== null && <span className="cap-top">{calledCaption}</span>}
+                  <Tile tile={item.tile} className="target" alt={`${tileName(item.tile)}（${calledCaption ?? '他家の打牌'}）`} />
+                </span>
+              );
+            }
+            const bar = bars?.bars.get(item.index);
+            if (kind !== 'discard' || !interactive) {
+              return (
+                <span className={`slot${item.draw ? ' draw' : ''}`} key={item.index} data-use={used.has(item.index) ? '1' : undefined}>
+                  <BarColumn bar={bar} />
+                  <Tile tile={item.tile} dora={isDora} alt={`${tileName(item.tile)}${item.draw ? '（ツモ牌）' : ''}`} />
+                </span>
+              );
+            }
+            const mark = marks.get(item.index);
+            const present = mark === undefined ? [] : MARK_ORDER.filter((k) => mark.kinds.includes(k));
+            const ring = present.length === 0 ? undefined : present[0] === 'you' ? 'you' : present.includes('top') ? 'top' : 'act';
+            const base = tileLabel(item, isDora);
+            const label =
+              present.length > 0 ? `${base}（${present.map((k) => MARK_NAME[k]).join('・')}）` : `${base}を切る`;
+            const pressed = selected === item.index && !revealed;
             return (
-              <span className="slot draw" key={`c${item.index}`}>
-                {calledCaption !== null && <span className="cap-top">{calledCaption}</span>}
-                <Tile tile={item.tile} className="target" alt={`${tileName(item.tile)}（${calledCaption ?? '他家の打牌'}）`} />
-              </span>
-            );
-          }
-          if (kind !== 'discard' || !interactive) {
-            return (
-              <span className={`slot${item.draw ? ' draw' : ''}`} key={item.index} data-use={used.has(item.index) ? '1' : undefined}>
-                <Tile tile={item.tile} dora={isDora} alt={`${tileName(item.tile)}${item.draw ? '（ツモ牌）' : ''}`} />
-              </span>
-            );
-          }
-          const mark = marks.get(item.index);
-          const present = mark === undefined ? [] : MARK_ORDER.filter((k) => mark.kinds.includes(k));
-          const ring = present.length === 0 ? undefined : present[0] === 'you' ? 'you' : present.includes('top') ? 'top' : 'act';
-          const base = tileLabel(item, isDora);
-          const label =
-            present.length > 0 ? `${base}（${present.map((k) => MARK_NAME[k]).join('・')}）` : `${base}を切る`;
-          const pressed = selected === item.index && !revealed;
-          return (
-            <span
-              className={`slot${item.draw ? ' draw' : ''}`}
-              key={item.index}
-              data-mark={present.length > 0 ? present.join(' ') : undefined}
-              data-ai={present.length > 0 ? 'mark' : undefined}
-              data-ring={ring}
-            >
-              <button
-                type="button"
-                className={`tile tile-btn${isDora ? ' is-dora' : ''}`}
-                aria-pressed={pressed}
-                aria-label={label}
-                tabIndex={item.index === rove ? 0 : -1}
-                disabled={revealed}
-                ref={(el) => {
-                  if (el === null) refs.current.delete(item.index);
-                  else refs.current.set(item.index, el);
-                }}
-                onClick={() => onPick(item.index)}
-                onKeyDown={onKeyDown}
+              <span
+                className={`slot${item.draw ? ' draw' : ''}`}
+                key={item.index}
+                data-mark={present.length > 0 ? present.join(' ') : undefined}
+                data-ai={present.length > 0 ? 'mark' : undefined}
+                data-ring={ring}
               >
-                <img src={tileSrc(item.tile)} alt={tileName(item.tile)} draggable={false} />
-              </button>
-              <span className="mks" aria-hidden="true">
-                {mark !== undefined &&
-                  MARK_ORDER.filter((k) => mark.labeled.includes(k)).map((k) => (
-                    <span className={`mk ${k}`} key={k}>
-                      {MARK_NAME[k]}
-                    </span>
-                  ))}
+                <BarColumn bar={bar} />
+                <button
+                  type="button"
+                  className={`tile tile-btn${isDora ? ' is-dora' : ''}`}
+                  aria-pressed={pressed}
+                  aria-label={label}
+                  tabIndex={item.index === rove ? 0 : -1}
+                  disabled={revealed}
+                  ref={(el) => {
+                    if (el === null) refs.current.delete(item.index);
+                    else refs.current.set(item.index, el);
+                  }}
+                  onClick={() => onPick(item.index)}
+                  onKeyDown={onKeyDown}
+                >
+                  <img src={tileSrc(item.tile)} alt={tileName(item.tile)} draggable={false} />
+                </button>
+                <span className="mks" aria-hidden="true">
+                  {mark !== undefined &&
+                    MARK_ORDER.filter((k) => mark.labeled.includes(k)).map((k) => (
+                      <span className={`mk ${k}`} key={k}>
+                        {MARK_NAME[k]}
+                      </span>
+                    ))}
+                </span>
               </span>
-            </span>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
+      {/* 棒の読み上げ（棒は読み上げない）。手牌の外に置く: 手牌は inert のことがあり、その中は読み上げられないため */}
+      {bars !== null && (
+        <ul className="sr-only" aria-label="AIの評価" data-ai="bars-list">
+          {bars.spoken.map((text, index) => (
+            <li key={`${index}${text}`}>{text}</li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

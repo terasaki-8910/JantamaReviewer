@@ -3,6 +3,7 @@ import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { decisionOf, renderQuiz } from '../../../tests/study-harness';
+import { revealed } from '../../../tests/reveal';
 
 // 答え合わせのタブ「守備」（F14、E-39、U-34。R15-2・R15-4・R16-6。提案 3）の画面の試験。
 // 分類の正しさ（現物・スジ・壁・字牌・無スジ。majiang-ai の数値の順との照合）は、エンジンの試験（danger.test.ts）が固定している。
@@ -46,7 +47,7 @@ async function reveal(user: ReturnType<typeof renderQuiz>['user'], pick: () => H
   await user.click(pick());
   await user.type(screen.getByLabelText('理由（1行）'), '守りを見て選んだ');
   await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-  await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+  await revealed();
 }
 
 const tile = (name: string) => () => screen.getAllByRole('button', { name: `${name}を切る` })[0] as HTMLElement;

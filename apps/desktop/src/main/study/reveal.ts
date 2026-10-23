@@ -147,22 +147,33 @@ function discardBars(decision: Decision, choice: Extract<QuizChoice, { type: 'da
   });
 }
 
-function optionBars(decision: Decision, choice: QuizChoice): Bar[] {
+/** 打牌以外の判断の評価の行。`choice` は自分の答え（通して見る画面の、答える場面でない手番では無いので null）。 */
+function optionBars(decision: Decision, choice: QuizChoice | null): Bar[] {
   const options = [...answerOptions(decision)].sort((a, b) => b.probability - a.probability);
   const actual = actualChoice(decision);
   const top = topChoice(decision);
   const rows = options.filter(
     (o, index) =>
-      index < 4 || sameChoice(choice, { type: 'option', id: o.id }) || sameChoice(actual, { type: 'option', id: o.id }),
+      index < 4 ||
+      (choice !== null && sameChoice(choice, { type: 'option', id: o.id })) ||
+      sameChoice(actual, { type: 'option', id: o.id }),
   );
   return rows.map((o) => {
     const as: QuizChoice = { type: 'option', id: o.id };
     const tags: BarMark[] = [];
-    if (sameChoice(choice, as)) tags.push('自分');
+    if (choice !== null && sameChoice(choice, as)) tags.push('自分');
     if (sameChoice(actual, as)) tags.push('実戦');
     if (top !== null && sameChoice(top, as)) tags.push('AI');
     return { key: `option:${o.id}`, tags, kind: barKind(tags), tile: null, option: o, probability: o.probability };
   });
+}
+
+/**
+ * 通して見る画面で、答える場面でない自分の判断（打牌以外）の、AI の評価の行。自分の答えが無いので、印は実戦と AI だけ。
+ * 打牌の判断は、手牌の上の棒（`aiBars.ts`）で出すので、空を返す。
+ */
+export function browseBars(decision: Decision): Bar[] {
+  return decision.kind === 'discard' ? [] : optionBars(decision, null);
 }
 
 function ukeireBox(decision: Decision, mineTile: Tile): UkeireBox | null {

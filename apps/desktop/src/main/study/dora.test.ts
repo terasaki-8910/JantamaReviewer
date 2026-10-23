@@ -16,6 +16,14 @@ describe('U-19 ドラを目立たせる: どの牌に付けるか', () => {
     expect(doraOfMarker('5pr')).toBe('6p');
   });
 
+  it('中央の箱の「表示 → ドラ」の変換（U-44）: 4m→5m、9m→1m、北→東、中→白、赤5m→6m', () => {
+    expect(doraOfMarker('4m')).toBe('5m');
+    expect(doraOfMarker('9m')).toBe('1m');
+    expect(doraOfMarker('N')).toBe('E');
+    expect(doraOfMarker('C')).toBe('P');
+    expect(doraOfMarker('5mr')).toBe('6m');
+  });
+
   it('設定が切（null）のときは、どの牌にも付けない', () => {
     expect(isDoraTile('3p', null)).toBe(false);
     expect(isDoraTile('5pr', null)).toBe(false);

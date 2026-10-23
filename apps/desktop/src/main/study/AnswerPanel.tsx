@@ -1,10 +1,12 @@
 /**
  * 答えの欄（出題・解き直し、あとで半荘を通して見る画面も使う）。
  *
- * 答える前: 打牌の判断は選んだ牌の表示、ほかの判断（鳴き・リーチ・和了・カン）は雀魂と同じ並びのボタン。理由（1 行・任意）。
- *   答えを選ぶまで「答え合わせ」は押せない（U-2）。この間、AI の候補・確率・順位は、DOM のどこにも出さない（U-1）。
- * 答え合わせのあと: 自分の答え・（解き直しは）正解か次の予定・AI の評価・受け入れ枚数（打牌の判断）・差の原因・学んだ原則・MAKA・次へ。
+ * 答える前: 場面の情報の 1 行（巡目・向聴数・他家の立直。U-47）、打牌の判断は選んだ牌の表示、ほかの判断（鳴き・リーチ・和了・カン）は
+ *   雀魂と同じ並びのボタン。理由（1 行・任意）。答えを選ぶまで「答え合わせ」は押せない（U-2）。この間、AI の候補・確率・順位は、DOM のどこにも出さない（U-1）。
+ * 答え合わせのあと: 自分の答え・（解き直しは）正解か次の予定・AI の評価（打牌の判断は、手牌の上の棒で出すので、ここには無い）・
+ *   受け入れ枚数（打牌の判断）・差の原因・学んだ原則・MAKA・次へ。
  *   AI の情報を持つ要素には `data-ai` を付ける（答える前の画面に無いことを、試験が確かめる）。
+ * どちらの欄も、いちばん上（スクロールする部分の頭）に、迷いのスクショの欄（`shots`。迷いマークを結びつけた場面だけ。U-45）を置ける。
  */
 import {
   CAUSE_CHOICES,
@@ -18,15 +20,17 @@ import {
   type QuizChoice,
   type Tile as TileCode,
 } from '@jantama/engine';
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 import type { AnswerMode, AnswerRow } from '../../api/types';
 import { Icon } from '../Icon';
 import type { ShownMemo } from '../memos';
 import { isDoraTile } from './dora';
+import { Evaluation } from './Evaluation';
 import { formatElapsed, formatMonthDay } from './labels';
 import { MemoShown } from './MemoShown';
 import { formatProbability, type RevealModel } from './reveal';
+import { riichiOpponents } from './sceneLine';
 import { Tile } from './Tile';
 import { tileName } from './tiles';
 import { AnswerTabs, type TabSpec } from './AnswerTabs';
@@ -60,6 +64,11 @@ export interface AnswerPanelProps {
   memoShown?: readonly ShownMemo[];
   /** 答えの欄の上に出す欄（他家の手牌を開いているときの「他家の手牌」の欄。答えたあとだけ渡す。R16-7）。 */
   above?: ReactNode;
+  /**
+   * スクロールする部分のいちばん上に出す、迷いのスクショの欄（迷いマークを結びつけた場面。U-45）。AI の情報は含まない。
+   * 解き直しでは、答える前は渡さない（打牌の直後に押したスクショには、実戦の打牌が写るため）。
+   */
+  shots?: ReactNode;
 }
 
 /** 「答え合わせ」を押せない理由（何を選ぶと押せるか）。 */
@@ -169,6 +178,39 @@ function OptionGroup({ options, choice, calledFrom, dora, onChoose }: OptionGrou
   );
 }
 
+/**
+ * 答える前の、場面の情報の 1 行（U-47）: 自分の巡目・向聴数（見出しと同じ値）・他家の立直（無ければ「他家の立直なし」、あれば
+ * 「対面が立直（9巡目）」を全員。N巡目はその人の宣言牌が河の何枚目か）。数と人の名前は濃い色で、そのほかは静かな色。AI の情報は入れない。
+ */
+function SceneLine({ decision }: { decision: Decision }) {
+  const opponents = riichiOpponents(decision.board);
+  return (
+    <p className="scene-line" data-line="scene">
+      <span>
+        <b>{decision.junme}</b>巡目
+      </span>
+      {' · '}
+      <span>{decision.shanten <= 0 ? <b>聴牌</b> : <><b>{decision.shanten}</b>向聴</>}</span>
+      {' · '}
+      <span>
+        {opponents.length === 0
+          ? '他家の立直なし'
+          : opponents.map((opponent, index) => (
+              <Fragment key={opponent.seat}>
+                {index > 0 && '・'}
+                <b>{opponent.relation}</b>が立直
+                {opponent.junme !== null && (
+                  <>
+                    （<b>{opponent.junme}</b>巡目）
+                  </>
+                )}
+              </Fragment>
+            ))}
+      </span>
+    </p>
+  );
+}
+
 function AnsweringForm({ decision, quiz, pickedTile, options, calledFrom, dora }: AnswerPanelProps) {
   const submitRef = useRef<HTMLButtonElement>(null);
   // 保存できなかったときは、もう一度押せるよう、ボタンにキーボードの位置を戻す
@@ -186,6 +228,7 @@ function AnsweringForm({ decision, quiz, pickedTile, options, calledFrom, dora }
 
   return (
     <form className="only-answering" id="answer-form" noValidate onSubmit={onSubmit}>
+      <SceneLine decision={decision} />
       {decision.kind === 'discard' ? (
         <>
           <h2 className="sec-title">自分の答え</h2>
@@ -241,43 +284,6 @@ function AnsweringForm({ decision, quiz, pickedTile, options, calledFrom, dora }
 }
 
 // ---- 答え合わせのあと ----
-
-function OptionLabel({ option, dora }: { option: AnswerOption; dora: ReadonlySet<number> | null }) {
-  return (
-    <>
-      <b>{option.label}</b>
-      {option.use.map((tile, index) => (
-        <Tile key={`${index}${tile}`} tile={tile} dora={isDoraTile(tile, dora)} />
-      ))}
-    </>
-  );
-}
-
-function Evaluation({ model, discard, dora }: { model: RevealModel; discard: boolean; dora: ReadonlySet<number> | null }) {
-  return (
-    <div className="q-sec" data-ai="eval">
-      <h2 className="sec-title">AIの評価（Mortal）</h2>
-      <ul className={`bars${discard ? '' : ' call'}`}>
-        {model.bars.map((bar) => (
-          <li className={bar.kind === 'other' ? 'bar' : `bar ${bar.kind}`} data-ai="candidate" key={bar.key}>
-            <span className="btag">{bar.tags.join('・')}</span>
-            <span className="lab">
-              {bar.tile !== null ? (
-                <Tile tile={bar.tile} dora={isDoraTile(bar.tile, dora)} />
-              ) : bar.option !== null ? (
-                <OptionLabel option={bar.option} dora={dora} />
-              ) : null}
-            </span>
-            <span className="track" aria-hidden="true">
-              <span className="fill" style={{ width: `${Math.max(bar.probability * 100, 0.6).toFixed(2)}%` }} />
-            </span>
-            <span className="v">{formatProbability(bar.probability)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 /** 解き直しの結果（正解か・次の予定）。 */
 function Verdict({ decision, quiz, model, threshold }: { decision: Decision; quiz: QuizAnswer; model: RevealModel; threshold: number }) {
@@ -377,7 +383,7 @@ interface RevealProps extends AnswerPanelProps {
   focusOnMount: boolean;
 }
 
-function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, above }: RevealProps) {
+function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, above, shots }: RevealProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
@@ -414,6 +420,7 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
         </button>
       </div>
       <div className="answer-scroll">
+        {shots}
         {above}
         <div className="only-revealed q-review" id="review">
       {mode === 'review' && <Verdict decision={decision} quiz={quiz} model={model} threshold={threshold} />}
@@ -438,7 +445,8 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
         </div>
       </div>
       {memoShown !== undefined && <MemoShown memos={memoShown} />}
-      <Evaluation model={model} discard={discard} dora={dora} />
+      {/* 打牌の判断は、手牌の上の棒で出す（U-43）。鳴き・リーチ・和了・カンの判断は、ここの一覧 */}
+      {!discard && <Evaluation bars={model.bars} discard={false} dora={dora} />}
       {extraTabs.length === 0 ? (
         defaultSections
       ) : (
@@ -515,9 +523,10 @@ export function AnswerPanel(props: AnswerPanelProps) {
   const [startedAnswering] = useState(quiz.stage !== 'revealed');
   const revealed = quiz.stage === 'revealed' && quiz.model !== null && quiz.row !== null;
   return (
-    <section className="answer" aria-label="答え" id="answer">
+    <section className="answer" aria-label="答え" id="answer" tabIndex={-1}>
       {quiz.stage !== 'revealed' && (
         <div className="answer-scroll">
+          {props.shots}
           {props.above}
           <AnsweringForm {...props} />
           {/* 答えのフォームのあとに置く（手牌から Tab で、理由・答え合わせへ続く順を変えない）。答えを出す前なら、いつでも書ける・直せる */}

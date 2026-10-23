@@ -7,6 +7,7 @@ import {
   buildReplayTimeline,
   decisionSteps,
   findDecisionByKey,
+  listDecisionRefs,
   nextKyokuStep,
   nextStepIn,
   openHandsAt,
@@ -23,6 +24,7 @@ import { FakeSessionStore, local, seedSession } from '../../../tests/fake-sessio
 import { FakeStudyStore, gameOf } from '../../../tests/fake-study';
 import { fx4Ocr, fx4Session } from '../../../tests/import-fixtures';
 import { baseSettings, installTauriMock } from '../../../tests/tauri-mock';
+import { revealed } from '../../../tests/reveal';
 import type { Links, Settings } from '../../api/types';
 import { App } from '../App';
 import { doraKinds } from '../study/dora';
@@ -1038,7 +1040,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.type(reasonBox(), '形を崩さないほうを残す');
     expect(submit()).toBeEnabled();
     await user.click(submit());
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(answeringState()).toBe('revealed');
     expect(study.rows).toHaveLength(1);
     expect(study.rows[0]).toMatchObject({
@@ -1050,7 +1052,11 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
       due_date: '2026-10-10',
     });
     expect(study.rows[0]?.shown_at).toBeGreaterThan(0);
-    expect(document.querySelectorAll('[data-ai="candidate"]').length).toBeGreaterThanOrEqual(3);
+    // AI の評価: 打牌の判断は、手牌の上の棒（右の欄に一覧は出さない。U-43）
+    expect(document.querySelectorAll('.hand [data-ai="bar"]').length).toBeGreaterThanOrEqual(13);
+    expect(document.querySelectorAll('.ai-bar .ai-num').length).toBeGreaterThanOrEqual(3);
+    expect(document.querySelector('[data-ai="eval"]')).toBeNull();
+    expect(document.querySelectorAll('[data-ai="candidate"]')).toHaveLength(0);
     expect(document.querySelectorAll('.uk-open').length).toBeGreaterThanOrEqual(2);
     // 役の欄（U-33）: 出題と同じ部品が、受け入れ枚数の欄の下に出る
     expect(screen.getByRole('heading', { name: '役' })).toBeInTheDocument();
@@ -1073,7 +1079,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(reasonBox(), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const here = pos();
     press({ code: 'KeyZ', key: 'z', ctrlKey: true });
     press({ code: 'KeyY', key: 'y', ctrlKey: true });
@@ -1092,7 +1098,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(reasonBox(), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     press(PERIOD);
     expect(answeringState()).toBe('browse');
     expect(document.querySelector('[data-ai]')).toBeNull();
@@ -1102,7 +1108,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     press(COMMA);
     expect(answeringState()).toBe('revealed');
     expect(screen.getByText('形を崩さない')).toBeInTheDocument();
-    expect(document.querySelectorAll('[data-ai="candidate"]').length).toBeGreaterThanOrEqual(3);
+    expect(document.querySelectorAll('.hand [data-ai="bar"]').length).toBeGreaterThanOrEqual(13);
     // 戻ると、役の欄も出る（ほかの手を見ている間は、欄が DOM に無い）
     expect(screen.getByRole('heading', { name: '役' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '答え合わせ' })).toBeNull();
@@ -1116,7 +1122,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
     await user.type(reasonBox(), '形を崩さない');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     // 前の迷い（迷い 2）→ 次の迷い（迷い 3。答えた場面）
     await user.click(screen.getByRole('button', { name: '前の迷いへ' }));
     expect(pos()).toBe(posAt(stepOf('k1h0e12')));
@@ -1149,7 +1155,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('radio')[0] as HTMLElement);
     await user.type(reasonBox(), '鳴いて進める');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(study.rows[0]).toMatchObject({ decision_key: 'k1h1e10', mode: 'quiz', choice: { type: 'option', id: 'pon' } });
   });
 
@@ -1164,7 +1170,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('radio')[0] as HTMLElement);
     await user.type(reasonBox(), '鳴いて進める');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['受け入れ・役', '待ちと打点']);
     // 選ぶと、待ちと打点の表（ポンのあとに切る牌ごと）
     const [first, second] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement];
@@ -1195,7 +1201,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
     await user.type(reasonBox(), '現物を切る');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     const names = () => screen.getAllByRole('tab').map((tab) => tab.textContent);
     expect(names()).toEqual(['受け入れ・役', '待ちと打点', '守備']);
     // 守備のタブを → を 2 回で選ぶ。← → Home End は、場面の移動に渡さない
@@ -1254,7 +1260,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     await user.click(screen.getByRole('button', { name: '1手進む' }));
     await user.type(reasonBox(), '理由');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(study.rows[0]!.duration_ms).toBeGreaterThanOrEqual(90_000);
   });
 });
@@ -1492,7 +1498,7 @@ describe('U-35 他家の手牌（通して見る画面。R15-5・R16-7: 盤面�
     for (const button of handButtons()) expect(button).toBeDisabled();
     noFaceUp();
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(study.rows).toHaveLength(1);
     // 答えたあと: 押せる。開いたままなので、盤面に表向きで出て、欄が出る（答えの欄の上）。タブには出ない
     for (const button of handButtons()) {
@@ -1527,7 +1533,7 @@ describe('U-35 他家の手牌（通して見る画面。R15-5・R16-7: 盤面�
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
     await user.type(reasonBox(), '孤立牌を切る');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(block()).toBeNull();
     await press1(user);
     expect(shown()).toEqual(expected(stepOf('k1h1e7')));
@@ -1632,8 +1638,215 @@ describe('U-38 他家が聴牌した巡目（通して見る画面。R16-7 の A
     await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
     await user.type(reasonBox(), '孤立牌を切る');
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(ticks().length).toBe(allMarks().length);
     expect(document.querySelectorAll('.oh-row .tp-line')).toHaveLength(3);
+  });
+});
+
+describe('U-43 AI の評価（通して見る画面）: 答える場面でない自分の判断の手番は、いつも出す。答える場面は、答えるまで出さない', () => {
+  const bars = () => [...document.querySelectorAll<HTMLElement>('.hand .ai-bar')];
+
+  it('自分の打牌の判断の手番（場面ではない）: 手牌の上に棒と数字、読み上げの一覧。右の欄に評価の一覧は出ない。次の手（打牌のあと）では出ない', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await openReplay(user);
+    expect(bars()).toHaveLength(0);
+    // 次の自分の判断へ（東1局 1巡目。迷いでも不一致でもない）
+    press(arrow('Right'));
+    expect(pos()).toBe(posAt(stepOf('k0h0e0')));
+    expect(answeringState()).toBe('browse');
+    const decision = findDecisionByKey(fx4, 'k0h0e0')!;
+    expect(decision.kind).toBe('discard');
+    expect(bars()).toHaveLength(decision.board.hand.length + 1);
+    for (const bar of bars()) {
+      expect(bar.getAttribute('aria-hidden')).toBe('true');
+      expect(bar.getAttribute('data-ai')).toBe('bar');
+    }
+    expect(bars().filter((bar) => bar.querySelector('.ai-num')).length).toBeGreaterThanOrEqual(1);
+    expect(bars().some((bar) => bar.classList.contains('is-top'))).toBe(true);
+    const list = screen.getByRole('list', { name: 'AIの評価' });
+    expect(list.querySelectorAll('li').length).toBeGreaterThanOrEqual(5);
+    expect(list.querySelector('li')?.textContent).toMatch(/^打.+ \d+\.\d%$/);
+    expect(document.querySelector('[data-ai="eval"], [data-ai="candidate"]')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'AIの評価（Mortal）' })).toBeNull();
+    // 打牌のあとの手には、棒が無い（手牌の帯は、そのまま取ってある）
+    press(PERIOD);
+    expect(bars()).toHaveLength(0);
+    expect(screen.queryByRole('list', { name: 'AIの評価' })).toBeNull();
+    expect(document.querySelector('.hand-wrap[data-kind="discard"]')).not.toBeNull();
+  });
+
+  it('自分の打牌以外の判断（鳴き）の手番: 右の欄に評価の一覧（実戦・AI の印）。手牌の上に棒は無い', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await openReplay(user);
+    press(arrow('Right'));
+    press(arrow('Right'));
+    press(arrow('Right'));
+    const key = 'k0h0e2';
+    expect(pos()).toBe(posAt(stepOf(key)));
+    expect(findDecisionByKey(fx4, key)?.kind).toBe('call');
+    expect(answeringState()).toBe('browse');
+    expect(bars()).toHaveLength(0);
+    expect(screen.queryByRole('list', { name: 'AIの評価' })).toBeNull();
+    const panel = document.querySelector('section.answer') as HTMLElement;
+    const evaluation = panel.querySelector('[data-ai="eval"]') as HTMLElement;
+    expect(within(evaluation).getByRole('heading', { name: 'AIの評価（Mortal）' })).toBeInTheDocument();
+    const rows = [...evaluation.querySelectorAll('[data-ai="candidate"]')];
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    // 自分の答えは無いので、印は実戦と AI だけ
+    const tags = rows.map((row) => row.querySelector('.btag')?.textContent ?? '');
+    expect(tags.some((tag) => tag.includes('実戦'))).toBe(true);
+    expect(tags.some((tag) => tag.includes('AI'))).toBe(true);
+    expect(tags.some((tag) => tag.includes('自分'))).toBe(false);
+    for (const row of rows) expect(row.querySelector('.v')?.textContent).toMatch(/^(\d+\.\d\d%|<0\.01%)$/);
+    // 「いまの一手」の下、場面の一覧の上
+    expect(panel.querySelector('.now')?.compareDocumentPosition(evaluation)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(evaluation.compareDocumentPosition(panel.querySelector('.scenes-h') as HTMLElement)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    // 次の手は、自分の打牌の判断（鳴いたあとの打牌）: 手牌の上に棒が出て、右の欄の一覧は消える
+    press(PERIOD);
+    expect(pos()).toBe(posAt(stepOf('k0h0e3')));
+    expect(bars().length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-ai="eval"]')).toBeNull();
+  });
+
+  it('答える場面（迷い）の答える前は、棒も一覧も無い。答えると、手牌の上に棒が出る。別の手を見に行くと、棒は消える', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await openReplay(user);
+    await user.click(document.querySelector('.pin[data-key="k1h1e7"]') as HTMLElement);
+    expect(answeringState()).toBe('answering');
+    expect(bars()).toHaveLength(0);
+    expect(screen.queryByRole('list', { name: 'AIの評価' })).toBeNull();
+    expect(document.querySelector('[data-ai]')).toBeNull();
+    // 帯は、答える前から取ってある
+    expect(document.querySelector('.hand-wrap[data-kind="discard"]')).not.toBeNull();
+    await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
+    await user.type(reasonBox(), '形を崩さない');
+    await user.click(screen.getByRole('button', { name: '答え合わせ' }));
+    await revealed();
+    const decision = findDecisionByKey(fx4, 'k1h1e7')!;
+    expect(bars()).toHaveLength(decision.board.hand.length + (decision.board.drawn === null ? 0 : 1));
+    expect(screen.getByRole('list', { name: 'AIの評価' })).toBeInTheDocument();
+    press(PERIOD);
+    expect(bars()).toHaveLength(0);
+  });
+});
+
+describe('U-45 迷いのスクショ（通して見る画面）', () => {
+  const refs = listDecisionRefs(fx4.report);
+  const neighbours = (key: string) => {
+    const at = refs.findIndex((ref) => ref.key === key);
+    return { prev: refs[at - 1]!, next: refs[at + 1]! };
+  };
+  const shots = () => document.querySelector<HTMLElement>('[data-shots="block"]');
+  const thumb = (n: number) => screen.getByRole('button', { name: `迷い${n}の画像を大きく見る` });
+
+  it('迷いの場面は、答える前から、答えの欄のいちばん上に出る。写真・迷い3・札・読んだ値・付け替えのボタン。迷いの無い場面（不一致だけ）と、見ているだけの手には出ない', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await openReplay(user);
+    expect(shots()).toBeNull();
+    await user.click(document.querySelector('.pin[data-key="k1h1e7"]') as HTMLElement);
+    expect(answeringState()).toBe('answering');
+    const block = shots() as HTMLElement;
+    expect(block).not.toBeNull();
+    expect(document.querySelector('.answer-scroll')?.firstElementChild).toBe(block);
+    expect(within(block).getByRole('heading', { level: 2, name: '迷いのスクショ' })).toBeInTheDocument();
+    expect(block.querySelector('.shot-n')?.textContent).toBe('迷い3');
+    expect(block.querySelector('.tag')?.textContent).toBe('選んだ');
+    expect(block.querySelector('.shot-read')?.textContent).toBe('スクショ: 東2局・残り47・15,100点');
+    expect(screen.getByRole('button', { name: '迷い3を前の手に付け替える' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '迷い3を次の手に付け替える' })).toBeEnabled();
+    expect(block.querySelector('[data-ai]')).toBeNull();
+    expect(document.querySelector('[data-ai]')).toBeNull();
+    // 場面の 1 行は、そのあと（答える前の欄）
+    expect(document.querySelector('.scene-line')?.textContent).toBe('6巡目 · 2向聴 · 他家の立直なし');
+    // 答えたあとも、いちばん上
+    await user.click(screen.getAllByRole('button', { name: /を切る$/ })[5] as HTMLElement);
+    await user.type(reasonBox(), '形を崩さない');
+    await user.click(screen.getByRole('button', { name: '答え合わせ' }));
+    await revealed();
+    expect(document.querySelector('.answer-scroll')?.firstElementChild).toBe(shots());
+    // 不一致だけの場面（迷いが結びつかない）と、見ているだけの手には無い
+    await user.click(document.querySelector('.pin[data-key="k1h1e6"]') as HTMLElement);
+    expect(shots()).toBeNull();
+    press(PERIOD);
+    expect(shots()).toBeNull();
+  });
+
+  it('「次の手に付け替える」: 迷いが次の判断に結びつき（利用者の選びとして保存）、その判断の場面へ移る。そこに、その迷いの写真が出て、キーボードの位置が写真へ移る', async () => {
+    const { user, sessions } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
+    await screen.findByLabelText('理由（1行）');
+    const { next } = neighbours('k1h1e7');
+    await user.click(screen.getByRole('button', { name: '迷い3を次の手に付け替える' }));
+    await waitFor(() => expect(sessions.session(FX4_ID).links.marks['3']).toBe(next.key));
+    await waitFor(() => expect(pos()).toBe(posAt(stepOf(next.key))));
+    expect(title()).toBe(titleAt(stepOf(next.key)));
+    // 付け替えた先は、迷い 3 の場面になった（見出しの札・場面の一覧）
+    await waitFor(() => expect(chips()).toContain('迷い3'));
+    expect(answeringState()).toBe('answering');
+    expect(shots()?.querySelector('.shot-n')?.textContent).toBe('迷い3');
+    await waitFor(() => expect(thumb(3)).toHaveFocus());
+    // 元の場面は、迷いの場面ではなくなった
+    expect(document.querySelector('.pin[data-key="k1h1e7"]')).toBeNull();
+  });
+
+  it('「前の手に付け替える」: 前の判断へ。Ctrl+Z で、付け替える前の結びつけに戻る（半荘のページと同じ保存）', async () => {
+    const { user, sessions } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
+    await screen.findByLabelText('理由（1行）');
+    const { prev } = neighbours('k1h1e7');
+    await user.click(screen.getByRole('button', { name: '迷い3を前の手に付け替える' }));
+    await waitFor(() => expect(sessions.session(FX4_ID).links.marks['3']).toBe(prev.key));
+    await waitFor(() => expect(pos()).toBe(posAt(stepOf(prev.key))));
+    // 取り消し: 結びつけが元に戻る（見ている手は、そのまま）
+    press({ code: 'KeyZ', key: 'z', ctrlKey: true });
+    await waitFor(() => expect(sessions.session(FX4_ID).links.marks['3']).toBe('k1h1e7'));
+    expect(pos()).toBe(posAt(stepOf(prev.key)));
+    await waitFor(() => expect(shots()).toBeNull());
+    // やり直し
+    press({ code: 'KeyY', key: 'y', ctrlKey: true });
+    await waitFor(() => expect(sessions.session(FX4_ID).links.marks['3']).toBe(prev.key));
+  });
+
+  it('推定の結びつけ（利用者が選んでいない）の迷いも付け替えられる。付け替えると、札は「選んだ」になる', async () => {
+    const { user, sessions } = setup();
+    await loaded('5');
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
+    await screen.findByLabelText('理由（1行）');
+    expect(shots()?.querySelector('.tag')?.textContent).toBe('推定');
+    expect(sessions.session(FX4_ID).links.marks['3']).toBeUndefined();
+    const { next } = neighbours('k1h1e7');
+    await user.click(screen.getByRole('button', { name: '迷い3を次の手に付け替える' }));
+    await waitFor(() => expect(sessions.session(FX4_ID).links.marks['3']).toBe(next.key));
+    await waitFor(() => expect(shots()?.querySelector('.tag')?.textContent).toBe('選んだ'));
+  });
+
+  it('写真を押す（Enter・Space）と大きく見られる。Esc で閉じて、キーボードの位置は写真に戻る。外の押下でも同じ', async () => {
+    const { user } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
+    await screen.findByLabelText('理由（1行）');
+    thumb(3).focus();
+    await user.keyboard('{Enter}');
+    const dialog = await screen.findByRole('dialog', { name: '迷いの画像' });
+    expect(within(dialog).getByRole('img', { name: '迷い3のスクリーンショット' })).toBeInTheDocument();
+    expect(dialog.querySelector('.lb-cap')?.textContent).toContain('迷い3 · 東2局1本場 · 6巡目 · 打牌の迷い');
+    expect(document.querySelector('.app')).toHaveAttribute('inert');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.querySelector('.app')).not.toHaveAttribute('inert');
+    expect(thumb(3)).toHaveFocus();
+    // Space で開き、外（背景）の押下で閉じる
+    await user.keyboard(' ');
+    await screen.findByRole('dialog', { name: '迷いの画像' });
+    await user.click(document.querySelector('.lb-backdrop') as HTMLElement);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(thumb(3)).toHaveFocus();
   });
 });

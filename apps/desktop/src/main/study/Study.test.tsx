@@ -12,6 +12,7 @@ import { FakeSessionStore, local, seedSession } from '../../../tests/fake-sessio
 import { FakeStudyStore, answerRow, gameOf } from '../../../tests/fake-study';
 import { fx4Ocr, fx4Session } from '../../../tests/import-fixtures';
 import { baseSettings, installTauriMock } from '../../../tests/tauri-mock';
+import { revealed } from '../../../tests/reveal';
 import type { Settings } from '../../api/types';
 import { App } from '../App';
 
@@ -88,7 +89,7 @@ async function solve(user: ReturnType<typeof userEvent.setup>, reason = '試験�
   else await user.click(screen.getAllByRole('button', { name: /を切る$/ })[0] as HTMLElement);
   await user.type(screen.getByLabelText('理由（1行）'), reason);
   await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-  await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+  await revealed();
 }
 
 describe('U-15 サイドバーの今日の出題・解き直し', () => {
@@ -322,7 +323,7 @@ describe('U-16 出題と答え合わせ（今日の出題を順に解く）', ()
     expect(study.rows).toHaveLength(0);
     // 押し直すと、通る
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-    await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+    await revealed();
     expect(study.rows).toHaveLength(1);
   });
 

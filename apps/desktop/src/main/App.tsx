@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 
 import { api, errorMessage } from '../api/tauri';
 import type { AnswerMode, SessionRecord } from '../api/types';
@@ -24,11 +24,12 @@ import { SettingsPage } from './SettingsPage';
 import { Sidebar, TopBar } from './Sidebar';
 import { QuizPage } from './study/QuizPage';
 import { ReviewPage } from './study/ReviewPage';
-import { StudyProvider, useStudyData } from './study/StudyProvider';
+import { StudyProvider, useStudyData, type StudyValue } from './study/StudyProvider';
 import { TodayPage } from './study/TodayPage';
 import { WeekPage } from './week/WeekPage';
 import { TOAST_MS, Toast, type ToastModel } from './Toast';
 import { UndoProvider, useUndo, useUndoEvents } from './undo/UndoProvider';
+import { ViewerProvider, type OpenViewer } from './ViewerContext';
 import { useShortcutsBlocked } from './undo/shortcutGuard';
 import type { UndoCommand, UndoEvent } from './undo/undoStack';
 import { useImportFlow } from './useImportFlow';
@@ -444,7 +445,7 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
   const solvedLine = solvedProblemsLine(solved);
 
   return (
-    <StudyProvider value={study}>
+    <Providers study={study} openViewer={setViewer}>
       <div
         className="app"
         data-sb={sidebar.shown ? 'shown' : 'hidden'}
@@ -574,6 +575,15 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
       <p className="sr-only" aria-live="polite">
         {live}
       </p>
+    </Providers>
+  );
+}
+
+/** 出題のデータと、迷いの画像を大きく表示する関数（半荘のページの迷いのカードと、出題・通して見る画面の「迷いのスクショ」が使う）を、画面に配る。 */
+function Providers({ study, openViewer, children }: { study: StudyValue; openViewer: OpenViewer; children: ReactNode }) {
+  return (
+    <StudyProvider value={study}>
+      <ViewerProvider value={openViewer}>{children}</ViewerProvider>
     </StudyProvider>
   );
 }

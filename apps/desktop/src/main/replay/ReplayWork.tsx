@@ -1,10 +1,12 @@
 /**
  * 半荘を通して見る画面の作業の面（左に卓・凡例・手牌、右に欄）。
- * - `BrowseWork`: 場面にいないとき。卓は、直前の打牌に印を付ける。手牌は押せない。右は「いまの一手」と場面の一覧
+ * - `BrowseWork`: 場面にいないとき。卓は、直前の打牌に印を付ける。手牌は押せない。右は「いまの一手」と場面の一覧。
+ *   答える場面でない自分の判断の手番は、AI の評価をいつも出す（U-43）: 打牌の判断は手牌の上の棒、ほかの判断は右の欄の一覧
  * - `SceneWork`: 迷いと不一致の場面に着いたとき。出題と同じ（`QuizWork`）。答える前は、AI の候補・確率・順位を出さない（U-1）。
  *   答えは、出題と同じに記録する（`record_answer`・mode は quiz。1 日後の解き直しの予定も入る）。答えた場面は、答え合わせのあとの形で開く。
  *   迷いの場面は、答える前に、その迷いの終局直後のメモ（「候補」「理由」）を書ける・直せる（迷いのカードと同じ保存先。F4、U-28）。
  *   答えたあとは、メモは書き換えられず、自分の答えの下に出る（AI の情報は、答えるまで出さない）
+ *   迷いの場面は、答えの欄のいちばん上に、その迷いのスクショの欄（前・次の手に付け替えられる。付け替えた先の場面へは、呼ぶ側が移る。U-45）
  * - 他家の手牌（F14、R15-5、R16-7）は、盤面に裏向きで置く。どれか 1 人の手牌を押すと 3 人分が開き、もう一度押すと閉じる。場面にいない手は、いつでも押せる。
  *   開いているあいだ、場面にいない手と、答えたあとの場面は、右の欄の上に「他家の手牌」の欄（聴牌の 1 行・向聴数の折れ線・待ちと点）を出し、
  *   盤面の河に聴牌になった打牌の枠を付ける。答える場面は、答えるまで、押せず、表の牌も DOM に出さない（U-35）。
@@ -17,12 +19,15 @@ import type { AnswerRow, SessionRecord } from '../../api/types';
 import type { ResolvedMark } from '../markCards';
 import { MarkMemoFields } from '../MarkMemoFields';
 import { memoOfMark, memosForDecision } from '../memos';
-import { Board, Legend, type BoardInfo } from '../study/Board';
+import { handBars } from '../study/aiBars';
+import { Board, BoardTools, type BoardInfo } from '../study/Board';
 import { doraKinds } from '../study/dora';
 import { Hand, type HandMark } from '../study/Hand';
 import { buildHandItems } from '../study/handMarks';
+import { HesitationShots } from '../study/HesitationShots';
 import { OpenHandsBlock, useOpenHandsView, type OpenHandsControl } from '../study/OpenHands';
 import { QuizWork } from '../study/QuizWork';
+import { browseBars } from '../study/reveal';
 import { useStudy } from '../study/StudyProvider';
 import type { QuizDraft } from '../study/useQuizAnswer';
 import { useQuizWork } from '../study/useQuizWork';
@@ -52,6 +57,13 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
   const study = useStudy();
   const items = useMemo(() => buildHandItems(step.board, null), [step.board]);
   const dora = useMemo(() => (study.highlightDora ? doraKinds(step.board.doraMarkers) : null), [study.highlightDora, step.board]);
+  // 自分の判断の手番: 打牌の判断は手牌の上の棒、ほかの判断は右の欄の一覧（答える場面ではないので、いつも出す）
+  const { decision } = step;
+  const bars = useMemo(
+    () => (decision !== null && decision.kind === 'discard' ? handBars(items, decision.entry, null) : null),
+    [decision, items],
+  );
+  const evaluation = useMemo(() => (decision === null ? null : browseBars(decision)), [decision]);
   // 直前の打牌を、その席の河の最後の牌に印する
   const latest = step.event.type === 'dahai' ? step.actor : null;
   // 場面にいない手は、他家の手牌をいつでも開ける
@@ -60,8 +72,17 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
     <div className="qz" data-state="browse" data-dora={study.highlightDora ? 'on' : 'off'}>
       <div className="work">
         <section className="board-col" aria-label="盤面と手牌" data-view="now">
+          <BoardTools
+            riichi={info.riichiAny}
+            called={anyCalled}
+            call={false}
+            pastView={false}
+            latest={latest !== null}
+            tenpai={view.showing}
+            dora={dora !== null}
+            handsHint
+          />
           <Board info={info} step={step.board} dora={dora} latest={latest} hands={view.hands} tenpai={view.tenpai} />
-          <Legend riichi={info.riichiAny} called={anyCalled} call={false} pastView={false} latest={latest !== null} tenpai={view.showing} handsHint />
           <Hand
             items={items}
             interactive={false}
@@ -73,6 +94,7 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
             calledCaption={null}
             dora={dora}
             onPick={noop}
+            bars={bars}
           />
         </section>
         <NowPanel
@@ -81,6 +103,8 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
           scenes={scenes}
           answered={answered}
           go={go}
+          evaluation={evaluation}
+          dora={dora}
           above={
             view.showing && view.seats !== null ? (
               <OpenHandsBlock me={game.playerId} seats={view.seats} eventIndex={step.eventIndex} dora={dora} tracks={view.tracks} />
@@ -113,9 +137,31 @@ interface SceneWorkProps {
   drafts: SceneDrafts;
   nextLabel: string;
   onNext: () => void;
+  /** 迷いのスクショの欄で、迷いを前・次の手に付け替えて、保存できたあと（付け替えた先の場面へ移る）。 */
+  onRelinked: (mark: ResolvedMark, to: DecisionRef) => void;
+  /** 付け替えたあと、キーボードの位置を渡す迷いの記録の番号（付け替えた先の場面の、その迷いの写真へ）。 */
+  focusMarkId: number | null;
+  onFocusDone: () => void;
 }
 
-export function SceneWork({ game, openHands, step, info, anyCalled, scene, session, resolved, decisions, existing, drafts, nextLabel, onNext }: SceneWorkProps) {
+export function SceneWork({
+  game,
+  openHands,
+  step,
+  info,
+  anyCalled,
+  scene,
+  session,
+  resolved,
+  decisions,
+  existing,
+  drafts,
+  nextLabel,
+  onNext,
+  onRelinked,
+  focusMarkId,
+  onFocusDone,
+}: SceneWorkProps) {
   const study = useStudy();
   const reload = study.reloadSessions;
   const sessionId = session.id;
@@ -173,6 +219,19 @@ export function SceneWork({ game, openHands, step, info, anyCalled, scene, sessi
         onNext={onNext}
         memoEditor={memoEditor}
         memoShown={memoShown}
+        shots={
+          scene.doubts.length === 0 ? undefined : (
+            <HesitationShots
+              decisionKey={key}
+              session={session}
+              resolved={resolved}
+              decisions={decisions}
+              onRelinked={onRelinked}
+              focusMarkId={focusMarkId}
+              onFocusDone={onFocusDone}
+            />
+          )
+        }
         game={game}
         eventIndex={step.eventIndex}
         openHands={openHands}

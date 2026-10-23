@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { answerRow } from '../../../tests/fake-study';
 import { decisionOf, renderQuiz } from '../../../tests/study-harness';
+import { revealed } from '../../../tests/reveal';
 
 // 役の欄（F13・U-33。R14-1）の画面の試験。中身の正しさ（役・近い役・警告・まとめ）は、エンジンの試験（yaku-view.test.ts）が固定している。
 // ここでは、欄が出るところ・出ないところ、行動ごとの行、まとめ、警告の見え方（文字と枠）、説明のアイコンを確かめる。
@@ -58,7 +59,7 @@ async function reveal(user: ReturnType<typeof renderQuiz>['user'], pick: () => H
   await user.click(pick());
   await user.type(screen.getByLabelText('理由（1行）'), '役を見て選んだ');
   await user.click(screen.getByRole('button', { name: '答え合わせ' }));
-  await screen.findByRole('heading', { name: 'AIの評価（Mortal）' });
+  await revealed();
   if (open) await user.click(within(yakuBox()).getByRole('button', { name: /^役$/ }));
 }
 
