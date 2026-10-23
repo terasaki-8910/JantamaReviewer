@@ -525,6 +525,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto auto;
+  container: cbox / inline-size;
   padding: 6px;
   background: var(--bg);
   border: 1px solid var(--line-strong);
@@ -646,28 +647,36 @@
 
 /*
   ドラ表示牌とそれが指すドラ（U-44）: 局の名前の下の 1 行「表示 [4m] → ドラ [5m]」。中央の箱の幅いっぱい（左右の点数の下）に置く。
-  幅が足りないときは、「表示」と「→ ドラ」の 2 かたまりで折り返す。牌は、広い卓で 24px（ドラ表示牌が 3 枚以上なら 18px）、狭い卓で 18px（同じく 16px）。
+  この行は、どの大きさの卓でも折り返さない（1 行のまま）。箱の幅（中央の箱自身が持つ container「cbox」の幅。窓の幅ではない）で、次のように収める:
+  - 牌の幅 --dtw は、広い卓で 24px（ドラ表示牌が 3 枚以上なら 18px）、狭い卓で 18px（同じく 16px）を上限に、箱の幅に入る大きさまで小さくする
+    （牌の数 --n、牌の間・矢印の分 4px × n + 24px、「表示」「ドラ」の分 --dlab を引いて、2 × n 枚で割る）
+  - 箱が、「表示」「ドラ」の 2 語を入れるには狭いとき（牌が 1 枚で 124px 未満・2 枚で 184px 未満・3 枚以上で 200px 未満）は、2 語を隠して「[牌] → [牌]」だけにする
+    （読み上げは、行の aria-label が受け持つので、2 語は隠してよい）
 */
 .dora {
-  --dtw: 24px;
+  --dpre: 24px;
+  --dlab: 54px;
+  --dtw: clamp(8px, calc((100cqw - 4px * var(--n, 1) - 24px - var(--dlab)) / (2 * var(--n, 1))), var(--dpre));
 
   grid-column: 1 / -1;
   grid-row: 3;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
-  gap: 2px 8px;
+  gap: 8px;
+  min-width: 0;
   padding: 3px 0 0;
 }
 
 .dora[data-many] {
-  --dtw: 18px;
+  --dpre: 18px;
 }
 
 .dora-from,
 .dora-to {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 4px;
 }
@@ -691,6 +700,36 @@
 
 .dora .tile {
   --tw: var(--dtw);
+}
+
+@container cbox (width < 124px) {
+  .dora[data-n="1"] {
+    --dlab: 0px;
+  }
+
+  .dora[data-n="1"] .dora-l {
+    display: none;
+  }
+}
+
+@container cbox (width < 184px) {
+  .dora[data-n="2"] {
+    --dlab: 0px;
+  }
+
+  .dora[data-n="2"] .dora-l {
+    display: none;
+  }
+}
+
+@container cbox (width < 200px) {
+  .dora[data-n="3"] {
+    --dlab: 0px;
+  }
+
+  .dora[data-n="3"] .dora-l {
+    display: none;
+  }
 }
 
 @container board (width <= 639px) {
@@ -744,13 +783,13 @@
   }
 
   .dora {
-    --dtw: 18px;
+    --dpre: 18px;
 
     padding-top: 1px;
   }
 
   .dora[data-many] {
-    --dtw: 16px;
+    --dpre: 16px;
   }
 
   .score .rel {

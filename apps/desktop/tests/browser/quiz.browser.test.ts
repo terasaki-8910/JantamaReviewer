@@ -2245,3 +2245,70 @@ describe('U-45: 迷いのスクショの欄（出題。実ブラウザ）', () =
     }
   });
 });
+
+/**
+ * 中央の箱のドラ表示牌の行を測って、決まりを確かめる（U-44）: 折り返さない（牌の上端がそろう）・行の箱が、中央の箱の中の点数・席の名前・
+ * リーチの札・局の名前・本場・残りの箱と重ならない・行の中身が行からあふれない。箱が狭くて 2 語（表示・ドラ）を入れられないときは、2 語は見えない
+ * （見えているときは、行に収まっている）。読み上げの名前（aria-label）は、どちらでも残る。
+ */
+async function expectDoraRowFits(page: Page, where: string): Promise<{ centre: number; labels: boolean; tiles: number }> {
+  const m = await page.evaluate(() => {
+    const box = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    };
+    const center = document.querySelector('.table .center') as HTMLElement;
+    const row = center.querySelector('.dora') as HTMLElement;
+    const shown = (el: Element) => (el as HTMLElement).checkVisibility();
+    const others: Array<{ name: string; box: ReturnType<typeof box> }> = [];
+    for (const selector of ['.score .who', '.score .pts', '.score .rch', '.round', '.round-s', '.honba', '.rest']) {
+      for (const el of Array.from(center.querySelectorAll(selector))) if (shown(el)) others.push({ name: selector, box: box(el) });
+    }
+    const labels = Array.from(row.querySelectorAll('.dora-l'));
+    return {
+      centre: center.clientWidth,
+      center: box(center),
+      row: box(row),
+      others,
+      tileTops: Array.from(row.querySelectorAll('.tile')).map((tile) => tile.getBoundingClientRect().top),
+      labelsShown: labels.length > 0 && labels.every(shown),
+      labelsHidden: labels.every((label) => !shown(label)),
+      scroll: [row.scrollWidth, row.clientWidth],
+      aria: row.getAttribute('aria-label') ?? '',
+    };
+  });
+  // 牌は 1 行（上端がそろう）。ドラ表示牌とドラの 2 つ以上の牌
+  expect(m.tileTops.length, `${where} 牌の数`).toBeGreaterThanOrEqual(2);
+  expect(Math.max(...m.tileTops) - Math.min(...m.tileTops), `${where} 牌の上端`).toBeLessThanOrEqual(0.5);
+  // 中央の箱の中。点数・席の名前・局の名前と重ならない
+  expect(m.row.left, `${where} 箱の左`).toBeGreaterThanOrEqual(m.center.left - 0.5);
+  expect(m.row.right, `${where} 箱の右`).toBeLessThanOrEqual(m.center.right + 0.5);
+  expect(m.row.bottom, `${where} 箱の下`).toBeLessThanOrEqual(m.center.bottom + 0.5);
+  for (const other of m.others) {
+    const hit = m.row.left < other.box.right && other.box.left < m.row.right && m.row.top < other.box.bottom && other.box.top < m.row.bottom;
+    expect(hit, `${where} ${other.name} と重なる`).toBe(false);
+  }
+  // 行の中身は、行からあふれない。2 語は、全部見えるか、全部隠れるか
+  expect(m.scroll[0], `${where} あふれ`).toBeLessThanOrEqual((m.scroll[1] as number) + 0.5);
+  expect(m.labelsShown || m.labelsHidden, `${where} 2 語は、そろって出るか、そろって隠れる`).toBe(true);
+  expect(m.aria, `${where} 読み上げ`).toMatch(/^ドラ表示牌 .+、ドラ .+$/);
+  // 箱が狭い（牌 1 枚の行の 2 語が入らない 124px 未満）ときは 2 語を隠し、広い（200px 以上）ときは出す
+  if (m.centre < 124) expect(m.labelsHidden, `${where} 狭い箱（${m.centre}px）では 2 語を隠す`).toBe(true);
+  if (m.centre >= 200) expect(m.labelsShown, `${where} 広い箱（${m.centre}px）では 2 語を出す`).toBe(true);
+  return { centre: m.centre, labels: m.labelsShown, tiles: m.tileTops.length };
+}
+
+describe('U-44: ドラ表示牌の行は折り返さず、中央の箱の点数・局の名前と重ならない（出題。実ブラウザ）', () => {
+  it('1280×800: 出題の 1 問目（答える前・答えたあと）で、行は 1 行・重ならない', { timeout: 90_000 }, async () => {
+    const { context, page } = await open({ width: 1280, height: 800, scheme: 'dark' });
+    try {
+      await openRow(page, 1);
+      const before = await expectDoraRowFits(page, '答える前');
+      expect(before.tiles).toBe(2);
+      await answerCurrent(page);
+      await expectDoraRowFits(page, '答えたあと');
+    } finally {
+      await context.close();
+    }
+  });
+});

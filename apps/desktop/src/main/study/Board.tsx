@@ -261,7 +261,7 @@ function tilesText(tiles: readonly TileCode[]): string {
 /**
  * 中央の箱の、ドラ表示牌とそれが指すドラ（U-44）。「表示 [4m] → ドラ [5m]」。カンでドラ表示牌が増えれば、並べて出す（ドラは 1 枚ずつ対応）。
  * 窓が狭く卓が小さいときも、中央の箱に出す。設定「ドラを目立たせる」の黄色は、この牌には付けない（手牌・河・副露の牌だけ）。
- * 牌の画像は飾り（名前は、まとめて 1 つの文で読み上げる）。
+ * 牌の画像は飾り（名前は、まとめて 1 つの文で読み上げる）。行は折り返さず、箱が狭いときは、牌を小さくし、「表示」「ドラ」の 2 語を隠す（quiz.css の cbox）。
  */
 function DoraRow({ markers }: { markers: readonly TileCode[] }) {
   if (markers.length === 0) return null;
@@ -272,6 +272,8 @@ function DoraRow({ markers }: { markers: readonly TileCode[] }) {
       role="group"
       aria-label={`ドラ表示牌 ${tilesText(markers)}、ドラ ${tilesText(doras)}`}
       data-many={markers.length >= 3 ? '1' : undefined}
+      data-n={Math.min(markers.length, 3)}
+      style={{ '--n': markers.length } as CSSProperties}
     >
       <span className="dora-from">
         <span className="dora-l" aria-hidden="true">
