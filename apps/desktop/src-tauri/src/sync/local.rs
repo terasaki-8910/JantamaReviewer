@@ -23,9 +23,9 @@ use super::rows::{canon, make_key, parse_key, ExtraValue, Kind, ReportMeta};
 use crate::ids::{new_uid, sha256_hex};
 use crate::settings::Settings;
 use crate::store::{
-    valid_session_id, write_atomic, ExtraMemo, Links, Maka, MemoText, Memos, SelfRating,
+    valid_session_id, write_atomic, ExtraMemo, Links, Maka, MemoText, Memos, Resolved, SelfRating,
     SelfRatings, SessionRecords, GAMES_DIR, LINKS_FILE, MAKA_FILE, MEMOS_FILE, REPORT_FILE,
-    SELF_RATINGS_FILE, TRASH_DIR,
+    RESOLVED_FILE, SELF_RATINGS_FILE, TRASH_DIR,
 };
 use crate::study::uid::legacy_extra_uid;
 use crate::study::{
@@ -33,7 +33,7 @@ use crate::study::{
 };
 
 /// 同期する設定の項目の名前（データの保存先と窓の位置は入れない）。
-pub const SETTING_NAMES: [&str; 10] = [
+pub const SETTING_NAMES: [&str; 16] = [
     "trigger",
     "orientation",
     "sound",
@@ -43,6 +43,12 @@ pub const SETTING_NAMES: [&str; 10] = [
     "disagreement_percent",
     "highlight_dora",
     "show_all_mismatches",
+    "contest_enabled",
+    "contest_gap_percent",
+    "contest_by_junme",
+    "contest_min_junme",
+    "contest_after_riichi",
+    "contest_two_calls",
     "replay_keys",
 ];
 
@@ -214,17 +220,18 @@ fn list_session_dirs(root: &Path, sub: &str) -> BTreeSet<String> {
     ids
 }
 
-/// 半荘のフォルダの 4 つの記録のファイルを読む。
+/// 半荘のフォルダの 5 つの記録のファイルを読む。
 fn read_session_records(dir: &Path) -> Result<SessionRecords, String> {
     Ok(SessionRecords {
         links: read_strict::<Links>(&dir.join(LINKS_FILE))?.unwrap_or_default(),
         self_ratings: read_strict::<SelfRatings>(&dir.join(SELF_RATINGS_FILE))?.unwrap_or_default(),
         maka: read_strict::<Maka>(&dir.join(MAKA_FILE))?.unwrap_or_default(),
         memos: read_strict::<Memos>(&dir.join(MEMOS_FILE))?.unwrap_or_default(),
+        resolved: read_strict::<Resolved>(&dir.join(RESOLVED_FILE))?.unwrap_or_default(),
     })
 }
 
-/// 4 つのファイルのうち、中身が変わったものだけを書く（空になった種類のファイルは消す）。
+/// 5 つのファイルのうち、中身が変わったものだけを書く（空になった種類のファイルは消す）。
 fn write_changed_records(dir: &Path, records: &SessionRecords) -> Result<(), String> {
     let files = records.files().map_err(|e| e.to_string())?;
     for (name, text) in files {
@@ -301,6 +308,13 @@ fn session_rows(
             MAKA_FILE,
         ));
     }
+    for (key, at) in &records.resolved.decisions {
+        rows.push((
+            make_key(Kind::Resolved, &[session, key]),
+            canon(at),
+            RESOLVED_FILE,
+        ));
+    }
     for (id, memo) in &records.memos.marks {
         rows.push((
             make_key(Kind::MarkMemo, &[session, id]),
@@ -328,6 +342,7 @@ fn session_value(records: &SessionRecords, kind: Kind, rest: &str) -> Option<Str
         Kind::SelfRating => records.self_ratings.kyokus.get(rest).map(canon),
         Kind::MakaKyoku => records.maka.kyokus.get(rest).map(canon),
         Kind::MakaHanchan => records.maka.hanchan.as_ref().map(canon),
+        Kind::Resolved => records.resolved.decisions.get(rest).map(canon),
         Kind::MarkMemo => records.memos.marks.get(rest).map(canon),
         Kind::ExtraMemo => records
             .memos
@@ -412,6 +427,15 @@ fn set_session_row(
             records.maka.hanchan = Some(parse_value::<String>(v, "MAKA の評価")?);
         }
         (Kind::MakaHanchan, None) => records.maka.hanchan = None,
+        (Kind::Resolved, Some(v)) => {
+            records
+                .resolved
+                .decisions
+                .insert(rest.to_string(), parse_value::<i64>(v, "解決")?);
+        }
+        (Kind::Resolved, None) => {
+            records.resolved.decisions.remove(rest);
+        }
         (Kind::MarkMemo, Some(v)) => {
             records
                 .memos
@@ -480,6 +504,12 @@ fn setting_value(settings: &Settings, name: &str) -> Option<serde_json::Value> {
         "disagreement_percent" => serde_json::to_value(settings.disagreement_percent),
         "highlight_dora" => serde_json::to_value(settings.highlight_dora),
         "show_all_mismatches" => serde_json::to_value(settings.show_all_mismatches),
+        "contest_enabled" => serde_json::to_value(settings.contest_enabled),
+        "contest_gap_percent" => serde_json::to_value(settings.contest_gap_percent),
+        "contest_by_junme" => serde_json::to_value(settings.contest_by_junme),
+        "contest_min_junme" => serde_json::to_value(settings.contest_min_junme),
+        "contest_after_riichi" => serde_json::to_value(settings.contest_after_riichi),
+        "contest_two_calls" => serde_json::to_value(settings.contest_two_calls),
         "replay_keys" => serde_json::to_value(&settings.replay_keys),
         _ => return None,
     };
@@ -503,6 +533,22 @@ fn set_setting(settings: &mut Settings, name: &str, text: &str) -> Result<(), St
         "highlight_dora" => settings.highlight_dora = serde_json::from_str(text).map_err(bad)?,
         "show_all_mismatches" => {
             settings.show_all_mismatches = serde_json::from_str(text).map_err(bad)?
+        }
+        "contest_enabled" => settings.contest_enabled = serde_json::from_str(text).map_err(bad)?,
+        "contest_gap_percent" => {
+            settings.contest_gap_percent = serde_json::from_str(text).map_err(bad)?
+        }
+        "contest_by_junme" => {
+            settings.contest_by_junme = serde_json::from_str(text).map_err(bad)?
+        }
+        "contest_min_junme" => {
+            settings.contest_min_junme = serde_json::from_str(text).map_err(bad)?
+        }
+        "contest_after_riichi" => {
+            settings.contest_after_riichi = serde_json::from_str(text).map_err(bad)?
+        }
+        "contest_two_calls" => {
+            settings.contest_two_calls = serde_json::from_str(text).map_err(bad)?
         }
         "replay_keys" => settings.replay_keys = serde_json::from_str(text).map_err(bad)?,
         _ => return Err(format!("知らない設定です: {name}")),
@@ -1203,6 +1249,7 @@ pub fn change_marker(data_dir: &Path, settings_file: &Path) -> String {
                     SELF_RATINGS_FILE,
                     MAKA_FILE,
                     MEMOS_FILE,
+                    RESOLVED_FILE,
                     REPORT_FILE,
                 ] {
                     stat(&dir.join(file), &mut parts);

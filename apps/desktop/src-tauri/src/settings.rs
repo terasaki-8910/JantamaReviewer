@@ -3,7 +3,8 @@
 //! 保存する項目: 迷いマークのボタン（マウスのボタン、または修飾キー付きのキー）、ウィジェットの形と位置、音、
 //! 迷いだけを記録する（既定は入。ウィジェットが 48px 角の「迷い」ボタン 1 つになり、〇△✕ と終局直後メモの画面の部品を出さない）、
 //! 雀魂の窓を探す語、データの保存先、出題の設定（1 日に出す数・大きな不一致の基準・ドラを目立たせる）、
-//! 半荘を通して見る画面の設定（AI の1位と違う判断も不一致として出す・キーの割り当て）。
+//! 半荘を通して見る画面の設定（AI の1位と違う判断も不一致として出す・キーの割り当て）、
+//! 拮抗の場面の設定（出す・出さない、1位と2位の差、終盤の条件。F17）。
 
 use std::ffi::OsString;
 use std::fs;
@@ -32,6 +33,15 @@ pub const MAX_DAILY_COUNT: u32 = 50;
 pub const DEFAULT_DISAGREEMENT_PERCENT: u32 = 5;
 pub const MIN_DISAGREEMENT_PERCENT: u32 = 1;
 pub const MAX_DISAGREEMENT_PERCENT: u32 = 50;
+
+/// 拮抗の場面（AI の1位と2位の確率の差が小さい、終盤の判断。F17）の設定の既定値と、設定できる範囲。
+/// 差は %（ポイント）。巡目は「この巡目以降」。
+pub const DEFAULT_CONTEST_GAP_PERCENT: u32 = 20;
+pub const MIN_CONTEST_GAP_PERCENT: u32 = 1;
+pub const MAX_CONTEST_GAP_PERCENT: u32 = 100;
+pub const DEFAULT_CONTEST_MIN_JUNME: u32 = 12;
+pub const MIN_CONTEST_MIN_JUNME: u32 = 1;
+pub const MAX_CONTEST_MIN_JUNME: u32 = 24;
 
 /// データの保存先の既定のフォルダ名（ユーザーのフォルダの直下）。
 pub const DEFAULT_DATA_DIR_NAME: &str = "JantamaReviewerData";
@@ -163,6 +173,18 @@ pub struct Settings {
     pub highlight_dora: bool,
     /// 半荘を通して見る画面で、AI の1位と違う判断もすべて不一致として出す（既定は切。R10-4、E-26）。出題の基準は変えない。
     pub show_all_mismatches: bool,
+    /// 拮抗の場面を出す（既定は入。F17）。切にすると、通して見る画面にも今日の出題にも、拮抗の場面を入れない。
+    pub contest_enabled: bool,
+    /// 拮抗とする、AI の1位と2位の確率の差（ポイント。この値以内。1〜100。既定 20）。
+    pub contest_gap_percent: u32,
+    /// 「N巡目以降」を条件に入れる（既定は入）。
+    pub contest_by_junme: bool,
+    /// 「N巡目以降」の N（1〜24。既定 12）。
+    pub contest_min_junme: u32,
+    /// 「他家のリーチのあと」を条件に入れる（既定は入）。
+    pub contest_after_riichi: bool,
+    /// 「他家に2副露以上の人がいる」（暗槓は数えない）を条件に入れる（既定は入）。
+    pub contest_two_calls: bool,
     /// 半荘を通して見る画面のキーの割り当て（操作の名前 → キー。割り当て無しは null。R10-3、U-21）。
     pub replay_keys: ReplayKeys,
     /// `replay_keys` の表の版（`replay_keys::KEYS_REVISION`）。読み込みと保存のたびに、いまの版にそろえる。
@@ -187,6 +209,12 @@ impl Default for Settings {
             disagreement_percent: DEFAULT_DISAGREEMENT_PERCENT,
             highlight_dora: false,
             show_all_mismatches: false,
+            contest_enabled: true,
+            contest_gap_percent: DEFAULT_CONTEST_GAP_PERCENT,
+            contest_by_junme: true,
+            contest_min_junme: DEFAULT_CONTEST_MIN_JUNME,
+            contest_after_riichi: true,
+            contest_two_calls: true,
             replay_keys: replay_keys::default_keys(),
             replay_keys_revision: replay_keys::KEYS_REVISION,
         }
@@ -202,6 +230,10 @@ pub enum SettingsError {
     DailyCountOutOfRange(u32),
     /// 大きな不一致の基準が範囲の外。
     DisagreementPercentOutOfRange(u32),
+    /// 拮抗の差が範囲の外。
+    ContestGapOutOfRange(u32),
+    /// 拮抗の「N巡目以降」の N が範囲の外。
+    ContestMinJunmeOutOfRange(u32),
     /// 半荘を通して見る画面のキーの割り当てが使えない。
     ReplayKeys(ReplayKeysError),
 }
@@ -219,6 +251,14 @@ impl std::fmt::Display for SettingsError {
             SettingsError::DisagreementPercentOutOfRange(value) => write!(
                 f,
                 "大きな不一致の基準は {MIN_DISAGREEMENT_PERCENT}% から {MAX_DISAGREEMENT_PERCENT}% の間で指定してください: {value}"
+            ),
+            SettingsError::ContestGapOutOfRange(value) => write!(
+                f,
+                "拮抗の差は {MIN_CONTEST_GAP_PERCENT} から {MAX_CONTEST_GAP_PERCENT} ポイントの間で指定してください: {value}"
+            ),
+            SettingsError::ContestMinJunmeOutOfRange(value) => write!(
+                f,
+                "拮抗の巡目は {MIN_CONTEST_MIN_JUNME} から {MAX_CONTEST_MIN_JUNME} 巡目の間で指定してください: {value}"
             ),
             SettingsError::ReplayKeys(error) => write!(f, "{error}"),
         }
@@ -276,6 +316,19 @@ impl Settings {
             highlight_dora: field(value, "highlight_dora").unwrap_or(defaults.highlight_dora),
             show_all_mismatches: field(value, "show_all_mismatches")
                 .unwrap_or(defaults.show_all_mismatches),
+            contest_enabled: field(value, "contest_enabled").unwrap_or(defaults.contest_enabled),
+            // 範囲の外の値（手で書き換えた設定ファイル）は、既定値にする。
+            contest_gap_percent: field::<u32>(value, "contest_gap_percent")
+                .filter(|n| (MIN_CONTEST_GAP_PERCENT..=MAX_CONTEST_GAP_PERCENT).contains(n))
+                .unwrap_or(defaults.contest_gap_percent),
+            contest_by_junme: field(value, "contest_by_junme").unwrap_or(defaults.contest_by_junme),
+            contest_min_junme: field::<u32>(value, "contest_min_junme")
+                .filter(|n| (MIN_CONTEST_MIN_JUNME..=MAX_CONTEST_MIN_JUNME).contains(n))
+                .unwrap_or(defaults.contest_min_junme),
+            contest_after_riichi: field(value, "contest_after_riichi")
+                .unwrap_or(defaults.contest_after_riichi),
+            contest_two_calls: field(value, "contest_two_calls")
+                .unwrap_or(defaults.contest_two_calls),
             // 無い・読めない・使えないキーは、既定のキーにする（replay_keys.rs）。版 1 のファイルの null は、書いていないものとして読む。
             replay_keys: replay_keys::from_value(
                 value.get("replay_keys"),
@@ -317,6 +370,17 @@ impl Settings {
         {
             return Err(SettingsError::DisagreementPercentOutOfRange(
                 self.disagreement_percent,
+            ));
+        }
+        if !(MIN_CONTEST_GAP_PERCENT..=MAX_CONTEST_GAP_PERCENT).contains(&self.contest_gap_percent)
+        {
+            return Err(SettingsError::ContestGapOutOfRange(
+                self.contest_gap_percent,
+            ));
+        }
+        if !(MIN_CONTEST_MIN_JUNME..=MAX_CONTEST_MIN_JUNME).contains(&self.contest_min_junme) {
+            return Err(SettingsError::ContestMinJunmeOutOfRange(
+                self.contest_min_junme,
             ));
         }
         replay_keys::validate(&self.replay_keys).map_err(SettingsError::ReplayKeys)?;
@@ -534,6 +598,106 @@ mod tests {
         assert!(SettingsError::DailyCountOutOfRange(0)
             .to_string()
             .contains("1 から 50"));
+    }
+
+    #[test]
+    fn f17_the_contest_settings_default_to_on_with_20_points_and_the_three_conditions() {
+        let s = Settings::default();
+        assert!(s.contest_enabled);
+        assert_eq!(s.contest_gap_percent, 20);
+        assert!(s.contest_by_junme);
+        assert_eq!(s.contest_min_junme, 12);
+        assert!(s.contest_after_riichi);
+        assert!(s.contest_two_calls);
+        assert_eq!(s.validate(), Ok(()));
+        // 昔の設定ファイル（この項目が無い）は、既定値。ほかの項目は守る
+        let old = Settings::from_json_str(r#"{ "sound": false, "daily_count": 8 }"#).unwrap();
+        assert!(old.contest_enabled && old.contest_by_junme && old.contest_after_riichi);
+        assert!(old.contest_two_calls);
+        assert_eq!((old.contest_gap_percent, old.contest_min_junme), (20, 12));
+        assert!(!old.sound);
+        assert_eq!(old.daily_count, 8);
+        // 画面から届く設定にこの項目が無くても（`#[serde(default)]`）、既定値になる
+        let from_page: Settings = serde_json::from_str(r#"{ "sound": false }"#).unwrap();
+        assert!(from_page.contest_enabled);
+        assert_eq!(from_page.contest_gap_percent, 20);
+        assert_eq!(from_page.contest_min_junme, 12);
+    }
+
+    #[test]
+    fn f17_the_contest_settings_are_saved_and_read_back() {
+        let dir = temp_dir();
+        let path = settings_path(dir.path());
+        let saved = Settings {
+            contest_enabled: false,
+            contest_gap_percent: 35,
+            contest_by_junme: false,
+            contest_min_junme: 9,
+            contest_after_riichi: false,
+            contest_two_calls: false,
+            ..Settings::default()
+        };
+        assert_eq!(saved.validate(), Ok(()));
+        saved.save(&path).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert_eq!(loaded, saved);
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"contest_enabled\": false"), "{text}");
+        assert!(text.contains("\"contest_gap_percent\": 35"), "{text}");
+        assert!(text.contains("\"contest_min_junme\": 9"), "{text}");
+    }
+
+    #[test]
+    fn f17_contest_values_outside_their_ranges_are_refused_when_saving_and_fall_back_when_reading()
+    {
+        for bad in [0, 101, 1000] {
+            let s = Settings {
+                contest_gap_percent: bad,
+                ..Settings::default()
+            };
+            assert_eq!(s.validate(), Err(SettingsError::ContestGapOutOfRange(bad)));
+        }
+        for bad in [0, 25, 99] {
+            let s = Settings {
+                contest_min_junme: bad,
+                ..Settings::default()
+            };
+            assert_eq!(
+                s.validate(),
+                Err(SettingsError::ContestMinJunmeOutOfRange(bad))
+            );
+        }
+        for (gap, junme) in [(1, 1), (20, 12), (100, 24)] {
+            let s = Settings {
+                contest_gap_percent: gap,
+                contest_min_junme: junme,
+                ..Settings::default()
+            };
+            assert_eq!(s.validate(), Ok(()));
+        }
+        assert!(SettingsError::ContestGapOutOfRange(0)
+            .to_string()
+            .contains("1 から 100"));
+        assert!(SettingsError::ContestMinJunmeOutOfRange(0)
+            .to_string()
+            .contains("1 から 24"));
+        // 手で書き換えた設定ファイルの範囲の外・型の違う値は、その項目だけ既定値にする（ほかの項目は守る）
+        let s = Settings::from_json_str(
+            r#"{ "contest_gap_percent": 0, "contest_min_junme": "late", "contest_enabled": "yes",
+                 "contest_by_junme": 1, "contest_after_riichi": false, "contest_two_calls": null, "sound": false }"#,
+        )
+        .unwrap();
+        assert_eq!(s.contest_gap_percent, 20);
+        assert_eq!(s.contest_min_junme, 12);
+        assert!(s.contest_enabled);
+        assert!(s.contest_by_junme);
+        assert!(!s.contest_after_riichi);
+        assert!(s.contest_two_calls);
+        assert!(!s.sound);
+        let s =
+            Settings::from_json_str(r#"{ "contest_gap_percent": 101, "contest_min_junme": 25 }"#)
+                .unwrap();
+        assert_eq!((s.contest_gap_percent, s.contest_min_junme), (20, 12));
     }
 
     #[test]

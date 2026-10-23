@@ -19,8 +19,8 @@ use crate::capture::{CaptureError, CaptureTarget, Screenshot};
 use crate::settings::{Orientation, Trigger};
 use crate::store::{
     ExtraMemo, Links, MemoPosition, MemoText, Memos, OcrCache, OcrEntry, Rating, SelfRating,
-    EVENTS_FILE, LINKS_FILE, MAKA_FILE, MEMOS_FILE, OCR_FILE, REPORT_FILE, SELF_RATINGS_FILE,
-    SESSION_GAP_MS,
+    EVENTS_FILE, LINKS_FILE, MAKA_FILE, MEMOS_FILE, OCR_FILE, REPORT_FILE, RESOLVED_FILE,
+    SELF_RATINGS_FILE, SESSION_GAP_MS,
 };
 use crate::study::{AnswerMode, NewAnswer, ProblemRef, StudyDb, WeekRecord, WeekStats};
 
@@ -103,6 +103,9 @@ fn populate(dev: &Dev) -> (String, String) {
         .unwrap();
     store.set_maka_grade(&a, "k0h0", "A-").unwrap();
     store.set_maka_hanchan(&a, "B+").unwrap();
+    store.set_resolved(&a, "k0h0e3", true, T0 + 4_000).unwrap();
+    store.set_resolved(&a, "k1h0e4", true, T0 + 4_100).unwrap();
+    store.set_resolved(&b, "k0h0e2", true, T0 + 4_200).unwrap();
     store.set_memo(&a, 1, "3m・6p", "東を残したい").unwrap();
     let pos = MemoPosition {
         kyoku: 2,
@@ -166,6 +169,13 @@ fn populate(dev: &Dev) -> (String, String) {
         s.sound = false;
         // 既定（入）とは違う値にして、設定の行で届くことを確かめる（W-15）
         s.doubt_only = false;
+        // 拮抗の場面の設定も、既定とは違う値にする（F17）
+        s.contest_enabled = false;
+        s.contest_gap_percent = 30;
+        s.contest_by_junme = false;
+        s.contest_min_junme = 8;
+        s.contest_after_riichi = false;
+        s.contest_two_calls = false;
         s.daily_count = 9;
         s.orientation = Orientation::Horizontal;
         s.trigger = Trigger::Key {
@@ -209,6 +219,7 @@ fn logical(dev: &Dev) -> Logical {
                 self_ratings: session.self_ratings,
                 maka: session.maka,
                 memos: session.memos,
+                resolved: session.resolved,
             },
         );
     }
@@ -318,6 +329,23 @@ fn d4_records_round_trip_through_the_sync_rows_into_another_local_db_identically
     assert!(!b.ports.settings().sound);
     assert!(!b.ports.settings().doubt_only, "迷いだけの設定も届く");
     assert_eq!(b.ports.settings().daily_count, 9);
+    // 拮抗の場面の設定も届く（F17）
+    let contest = b.ports.settings();
+    assert!(!contest.contest_enabled && !contest.contest_by_junme);
+    assert!(!contest.contest_after_riichi && !contest.contest_two_calls);
+    assert_eq!(
+        (contest.contest_gap_percent, contest.contest_min_junme),
+        (30, 8)
+    );
+    // 解決した局面（D-6）が、同じ時刻のまま届く
+    let resolved = b.store().load_resolved(&sa).unwrap();
+    assert_eq!(resolved.decisions.len(), 2);
+    assert_eq!(resolved.decisions["k0h0e3"], T0 + 4_000);
+    assert_eq!(resolved.decisions["k1h0e4"], T0 + 4_100);
+    assert_eq!(
+        b.store().load_resolved(&sb).unwrap().decisions["k0h0e2"],
+        T0 + 4_200
+    );
     // 同期しない: スクショ・ウィジェットの記録・文字認識の写し
     let folder = session_dir(&b, &sa);
     assert!(!folder.join(EVENTS_FILE).exists());
@@ -354,6 +382,7 @@ fn d4_a_record_never_changes_when_it_goes_to_the_sync_db_and_back() {
     assert_eq!(xa.links, xb.links);
     assert_eq!(xa.self_ratings, xb.self_ratings);
     assert_eq!(xa.maka, xb.maka);
+    assert_eq!(xa.resolved, xb.resolved);
     assert_eq!(xa.memos.marks, xb.memos.marks);
     let strip = |memos: &Memos| -> Vec<(Option<String>, Option<MemoPosition>, String, String)> {
         memos
@@ -452,6 +481,84 @@ fn d4_edits_to_different_memo_items_on_two_devices_both_survive() {
         assert_eq!(m.marks["2"].reason, "B が足したメモ");
     }
     assert_eq!(logical(&a), logical(&b));
+}
+
+#[test]
+fn d6_resolving_and_unresolving_on_one_device_reaches_the_other_and_an_empty_file_goes() {
+    let (_server, mut a, mut b, sa, _sb) = pair();
+    let file = |dev: &Dev| session_dir(dev, &sa).join(RESOLVED_FILE);
+    assert!(file(&b).is_file());
+    // A が 1 つ切る: B にも、1 つだけが残る
+    a.store().set_resolved(&sa, "k0h0e3", false, 1).unwrap();
+    a.reconcile(2_000_000).unwrap();
+    settle(&mut a, &mut b, 3_000_000);
+    for dev in [&a, &b] {
+        let resolved = dev.store().load_resolved(&sa).unwrap();
+        assert_eq!(resolved.decisions.keys().collect::<Vec<_>>(), ["k1h0e4"]);
+    }
+    // B が新しく入れる: A にも届く（時刻は B が入れたとき）
+    b.store()
+        .set_resolved(&sa, "k5h0e9", true, T0 + 50_000)
+        .unwrap();
+    b.reconcile(4_000_000).unwrap();
+    settle(&mut a, &mut b, 5_000_000);
+    for dev in [&a, &b] {
+        let resolved = dev.store().load_resolved(&sa).unwrap();
+        assert_eq!(resolved.decisions.len(), 2);
+        assert_eq!(resolved.decisions["k5h0e9"], T0 + 50_000);
+    }
+    // 全部切ると、どちらの端末でも、ファイルが消える
+    for key in ["k1h0e4", "k5h0e9"] {
+        a.store().set_resolved(&sa, key, false, 1).unwrap();
+    }
+    a.reconcile(6_000_000).unwrap();
+    settle(&mut a, &mut b, 7_000_000);
+    assert!(!file(&a).exists() && !file(&b).exists());
+    assert_eq!(logical(&a), logical(&b));
+}
+
+#[test]
+fn d6_different_decisions_resolved_on_two_devices_both_survive() {
+    let (_server, mut a, mut b, sa, _sb) = pair();
+    a.store()
+        .set_resolved(&sa, "k2h0e1", true, T0 + 60_000)
+        .unwrap();
+    a.reconcile(2_000_000).unwrap();
+    b.store()
+        .set_resolved(&sa, "k3h0e2", true, T0 + 61_000)
+        .unwrap();
+    b.reconcile(2_100_000).unwrap();
+    settle(&mut a, &mut b, 3_000_000);
+    for dev in [&a, &b] {
+        let resolved = dev.store().load_resolved(&sa).unwrap();
+        assert_eq!(
+            resolved.decisions.len(),
+            4,
+            "元の 2 つと、それぞれが足した 1 つずつ"
+        );
+        assert!(
+            resolved.decisions.contains_key("k2h0e1") && resolved.decisions.contains_key("k3h0e2")
+        );
+    }
+    assert_eq!(logical(&a), logical(&b));
+}
+
+#[test]
+fn d6_a_decision_unresolved_on_one_device_stays_unresolved_when_the_other_syncs_later() {
+    let (_server, mut a, mut b, sa, _sb) = pair();
+    // A が切ったあと、B は何もしないまま同期する: 切ったままになり、B が入れ直したりしない
+    a.store().set_resolved(&sa, "k1h0e4", false, 1).unwrap();
+    a.reconcile(2_000_000).unwrap();
+    b.cycle(3_000_000).unwrap();
+    settle(&mut a, &mut b, 4_000_000);
+    for dev in [&a, &b] {
+        assert!(!dev
+            .store()
+            .load_resolved(&sa)
+            .unwrap()
+            .decisions
+            .contains_key("k1h0e4"));
+    }
 }
 
 #[test]

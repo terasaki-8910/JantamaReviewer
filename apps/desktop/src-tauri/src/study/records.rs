@@ -1,8 +1,8 @@
 //! 記録の書き出しと読み込み（D-2、R11-14「記録だけを 1 つの JSON に」）。
 //!
 //! 書き出す: 答え・解き直しの予定（答えごとの間隔と期限）・今日の出題の組・週の成績と重点（以上は `study.sqlite`）、
-//! 半荘ごと（半荘の名前で。消した半荘 `trash/` は入れない）の結びつけ・自己評価の付け直し・MAKA の評価・メモ
-//! （半荘のフォルダの `links.json`・`self-ratings.json`・`maka.json`・`memos.json` の中身）、設定。
+//! 半荘ごと（半荘の名前で。消した半荘 `trash/` は入れない）の結びつけ・自己評価の付け直し・MAKA の評価・メモ・解決した局面
+//! （半荘のフォルダの `links.json`・`self-ratings.json`・`maka.json`・`memos.json`・`resolved.json` の中身）、設定。
 //! 入れないもの: スクリーンショット（`marks/`・`ratings/`）、Mortal の結果（`report.json`）、ウィジェットの記録（`events.jsonl`）、
 //! 文字認識の写し（`ocr.json`）、設定のうち、この PC だけで意味を持つ値（データの保存先・ウィジェットの窓の位置）。
 //!
@@ -25,6 +25,7 @@ use super::{
 };
 use crate::replay_keys::ReplayKeys;
 use crate::settings::{Orientation, Settings, Trigger};
+use crate::settings::{DEFAULT_CONTEST_GAP_PERCENT, DEFAULT_CONTEST_MIN_JUNME};
 use crate::store::{
     valid_session_id, write_atomic, PendingRecords, SessionRecords, Store, StoreError,
     PENDING_VERSION,
@@ -59,8 +60,34 @@ pub struct PortableSettings {
     pub disagreement_percent: u32,
     pub highlight_dora: bool,
     pub show_all_mismatches: bool,
+    /// 拮抗の場面の設定（F17）。この項目が無い昔の書き出しは、既定値として読む。
+    #[serde(default = "default_true")]
+    pub contest_enabled: bool,
+    #[serde(default = "default_contest_gap_percent")]
+    pub contest_gap_percent: u32,
+    #[serde(default = "default_true")]
+    pub contest_by_junme: bool,
+    #[serde(default = "default_contest_min_junme")]
+    pub contest_min_junme: u32,
+    #[serde(default = "default_true")]
+    pub contest_after_riichi: bool,
+    #[serde(default = "default_true")]
+    pub contest_two_calls: bool,
     pub replay_keys: ReplayKeys,
     pub replay_keys_revision: u32,
+}
+
+/// 拮抗の入り切りの既定（入）。この項目が無い昔の書き出しを読むときに使う。
+fn default_true() -> bool {
+    true
+}
+
+fn default_contest_gap_percent() -> u32 {
+    DEFAULT_CONTEST_GAP_PERCENT
+}
+
+fn default_contest_min_junme() -> u32 {
+    DEFAULT_CONTEST_MIN_JUNME
 }
 
 /// 迷いだけの既定（入）。この項目が無い昔の書き出しを読むときに使う。
@@ -81,6 +108,12 @@ impl PortableSettings {
             disagreement_percent: settings.disagreement_percent,
             highlight_dora: settings.highlight_dora,
             show_all_mismatches: settings.show_all_mismatches,
+            contest_enabled: settings.contest_enabled,
+            contest_gap_percent: settings.contest_gap_percent,
+            contest_by_junme: settings.contest_by_junme,
+            contest_min_junme: settings.contest_min_junme,
+            contest_after_riichi: settings.contest_after_riichi,
+            contest_two_calls: settings.contest_two_calls,
             replay_keys: settings.replay_keys.clone(),
             replay_keys_revision: settings.replay_keys_revision,
         }
@@ -101,6 +134,12 @@ impl PortableSettings {
             disagreement_percent: self.disagreement_percent,
             highlight_dora: self.highlight_dora,
             show_all_mismatches: self.show_all_mismatches,
+            contest_enabled: self.contest_enabled,
+            contest_gap_percent: self.contest_gap_percent,
+            contest_by_junme: self.contest_by_junme,
+            contest_min_junme: self.contest_min_junme,
+            contest_after_riichi: self.contest_after_riichi,
+            contest_two_calls: self.contest_two_calls,
             replay_keys: self.replay_keys.clone(),
             replay_keys_revision: self.replay_keys_revision,
         }
@@ -120,7 +159,7 @@ impl PortableSettings {
 ///   "answers": [ { "id": 1, "session_id": "20261009-190953", "decision_key": "k2h1e14", "mode": "quiz", "...": "..." } ],
 ///   "daily_sets": [ { "date": "2026-10-12", "items": [ { "session_id": "20261009-190953", "decision_key": "k2h1e14" } ] } ],
 ///   "weeks": [ { "week": "2026-10-05", "stats": { "rank4": 20.4 }, "focus": "受け入れを数えてから切る。" } ],
-///   "sessions": { "20261009-190953": { "links": {}, "self_ratings": {}, "maka": {}, "memos": {} } }
+///   "sessions": { "20261009-190953": { "links": {}, "self_ratings": {}, "maka": {}, "memos": {}, "resolved": { "decisions": { "k2h1e14": 1760000000123 } } } }
 /// }
 /// ```
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -649,7 +688,13 @@ mod tests {
     const T0: i64 = 1_760_000_000_123;
     const REPORT_SENTINEL: &str = "REPORT-SENTINEL-4f2a";
     const OCR_SENTINEL: &str = "OCR-SENTINEL-9b1c";
-    const RECORD_FILES: [&str; 4] = ["links.json", "self-ratings.json", "maka.json", "memos.json"];
+    const RECORD_FILES: [&str; 5] = [
+        "links.json",
+        "self-ratings.json",
+        "maka.json",
+        "memos.json",
+        "resolved.json",
+    ];
 
     fn shot() -> Result<Screenshot, CaptureError> {
         Ok(Screenshot {
@@ -723,6 +768,13 @@ mod tests {
             disagreement_percent: 8,
             highlight_dora: true,
             show_all_mismatches: true,
+            // 既定とは違う値にして、書き出し・読み込みで落ちないことを確かめる（F17）
+            contest_enabled: false,
+            contest_gap_percent: 35,
+            contest_by_junme: false,
+            contest_min_junme: 9,
+            contest_after_riichi: false,
+            contest_two_calls: false,
             replay_keys: replay,
             replay_keys_revision: replay_keys::KEYS_REVISION,
         }
@@ -776,6 +828,8 @@ mod tests {
             .unwrap();
         store.set_maka_grade(&a, "k0h0", "A-").unwrap();
         store.set_maka_hanchan(&a, "B+").unwrap();
+        store.set_resolved(&a, "k0h0e3", true, T0 + 5_000).unwrap();
+        store.set_resolved(&a, "k2h1e14", true, T0 + 6_000).unwrap();
         store.set_memo(&a, 1, "3m・6p", "東を残したい").unwrap();
         let pos = MemoPosition {
             kyoku: 2,
@@ -989,6 +1043,10 @@ mod tests {
         assert_eq!(a.self_ratings.kyokus["k1h0"], SelfRating::Unrated);
         assert_eq!(a.maka.kyokus["k0h0"], "A-");
         assert_eq!(a.maka.hanchan.as_deref(), Some("B+"));
+        // 解決した局面（D-6）: 判断の鍵ごとに、解決を入れた時刻
+        assert_eq!(a.resolved.decisions.len(), 2);
+        assert_eq!(a.resolved.decisions["k0h0e3"], T0 + 5_000);
+        assert_eq!(a.resolved.decisions["k2h1e14"], T0 + 6_000);
         assert_eq!(a.memos.marks["1"].reason, "東を残したい");
         assert_eq!(a.memos.extras.len(), 3);
         assert!(a.memos.extras[0].decision.is_none() && a.memos.extras[0].position.is_some());
@@ -1080,6 +1138,12 @@ mod tests {
             keys_of(&value["settings"]),
             [
                 "capture_keywords",
+                "contest_after_riichi",
+                "contest_by_junme",
+                "contest_enabled",
+                "contest_gap_percent",
+                "contest_min_junme",
+                "contest_two_calls",
                 "daily_count",
                 "disagreement_percent",
                 "doubt_only",
@@ -1092,16 +1156,21 @@ mod tests {
                 "trigger"
             ]
         );
-        // 半荘ごとの項目は、4 種類の記録だけ（空の種類は書かない）
+        // 半荘ごとの項目は、5 種類の記録だけ（空の種類は書かない）
         for session in value["sessions"].as_object().unwrap().values() {
             for key in session.as_object().unwrap().keys() {
                 assert!(
-                    ["links", "self_ratings", "maka", "memos"].contains(&key.as_str()),
+                    ["links", "self_ratings", "maka", "memos", "resolved"].contains(&key.as_str()),
                     "{key}"
                 );
             }
         }
         assert!(value["sessions"][&fx.b].get("maka").is_none());
+        assert!(value["sessions"][&fx.b].get("resolved").is_none());
+        assert_eq!(
+            value["sessions"][&fx.a]["resolved"],
+            json!({"decisions": {"k0h0e3": T0 + 5_000, "k2h1e14": T0 + 6_000}})
+        );
     }
 
     #[test]
@@ -1362,6 +1431,20 @@ mod tests {
                 "MAKA",
             ),
             (
+                "解決の鍵の形が違う",
+                edited(&base, |v| {
+                    v["sessions"][a.as_str()]["resolved"]["decisions"]["bad"] = json!(1);
+                }),
+                "判断の鍵",
+            ),
+            (
+                "解決の時刻が負",
+                edited(&base, |v| {
+                    v["sessions"][a.as_str()]["resolved"]["decisions"]["k0h0e3"] = json!(-1);
+                }),
+                "時刻",
+            ),
+            (
                 "メモの理由が長すぎる",
                 edited(&base, |v| {
                     v["sessions"][a.as_str()]["memos"]["marks"]["1"]["reason"] = json!(long_reason);
@@ -1457,6 +1540,48 @@ mod tests {
         let applied = file.settings.applied_to(&Settings::default());
         assert!(applied.doubt_only);
         assert_eq!(applied.validate(), Ok(()));
+    }
+
+    #[test]
+    fn f16_an_export_from_before_resolved_and_contest_settings_still_reads() {
+        // 解決も拮抗の設定も無かった版の書き出し: 解決は空、拮抗の設定は既定値として読む
+        let fx = fixture();
+        let base = fx.export();
+        let old = edited(&base, |v| {
+            for session in v["sessions"].as_object_mut().unwrap().values_mut() {
+                session.as_object_mut().unwrap().remove("resolved");
+            }
+            let settings = v["settings"].as_object_mut().unwrap();
+            for name in [
+                "contest_enabled",
+                "contest_gap_percent",
+                "contest_by_junme",
+                "contest_min_junme",
+                "contest_after_riichi",
+                "contest_two_calls",
+            ] {
+                settings.remove(name);
+            }
+        });
+        let file = parse_records(old.as_bytes()).unwrap();
+        assert!(file
+            .sessions
+            .values()
+            .all(|s| s.resolved.decisions.is_empty()));
+        let defaults = Settings::default();
+        assert_eq!(file.settings.contest_enabled, defaults.contest_enabled);
+        assert_eq!(file.settings.contest_gap_percent, 20);
+        assert_eq!(file.settings.contest_by_junme, defaults.contest_by_junme);
+        assert_eq!(file.settings.contest_min_junme, 12);
+        assert!(file.settings.contest_after_riichi && file.settings.contest_two_calls);
+        // 読み込んだ設定には、ファイルにある値が重なる（拮抗の設定も、書き出した値が戻る）
+        let restored = base.settings.applied_to(&Settings::default());
+        assert!(!restored.contest_enabled);
+        assert_eq!(restored.contest_gap_percent, 35);
+        assert!(!restored.contest_by_junme);
+        assert_eq!(restored.contest_min_junme, 9);
+        assert!(!restored.contest_after_riichi && !restored.contest_two_calls);
+        assert_eq!(restored.validate(), Ok(()));
     }
 
     #[test]
@@ -1654,6 +1779,7 @@ mod tests {
         let listed_a = listed.iter().find(|s| s.id == fx.a).unwrap();
         assert_eq!(listed_a.memos.extras.len(), 3);
         assert_eq!(listed_a.maka.hanchan.as_deref(), Some("B+"));
+        assert_eq!(listed_a.resolved.decisions.len(), 2);
     }
 
     #[test]

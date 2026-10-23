@@ -605,6 +605,7 @@ mod tests {
             .set_self_rating(&id, "k0h0", SelfRating::Fair)
             .unwrap();
         store.set_maka_grade(&id, "k0h0", "A").unwrap();
+        store.set_resolved(&id, "k0h0e1", true, T0 + 9).unwrap();
         id
     }
 
@@ -695,6 +696,7 @@ mod tests {
             "links.json",
             "self-ratings.json",
             "maka.json",
+            "resolved.json",
             "report.json",
             "events.jsonl",
         ] {

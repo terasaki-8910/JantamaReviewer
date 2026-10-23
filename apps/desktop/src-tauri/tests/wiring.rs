@@ -424,6 +424,7 @@ fn every_evaluation_command_is_registered_and_none_of_them_writes_the_recording(
             "clear_maka_grade",
             "set_maka_hanchan",
             "clear_maka_hanchan",
+            "set_resolved",
         ]
     );
     for name in &names {

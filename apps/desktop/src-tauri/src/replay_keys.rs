@@ -28,7 +28,7 @@ pub const KEYS_REVISION: u32 = 2;
 const CHANGED_IN_REVISION_2: [&str; 2] = ["kyoku_start", "kyoku_end"];
 
 /// 操作と、既定のキー（割り当て無しは `None`）。画面の表と同じ並び・同じ名前（試験が、画面のソースと突き合わせる）。
-pub const ACTIONS: [(&str, Option<&str>); 14] = [
+pub const ACTIONS: [(&str, Option<&str>); 16] = [
     ("step_back", Some("Comma")),
     ("step_forward", Some("Period")),
     ("prev_decision", Some("ArrowLeft")),
@@ -37,6 +37,8 @@ pub const ACTIONS: [(&str, Option<&str>); 14] = [
     ("next_mismatch", Some("ArrowDown")),
     ("prev_doubt", Some("Shift+ArrowUp")),
     ("next_doubt", Some("Shift+ArrowDown")),
+    ("prev_contest", None),
+    ("next_contest", None),
     ("prev_kyoku", Some("Shift+ArrowLeft")),
     ("next_kyoku", Some("Shift+ArrowRight")),
     ("prev_turn", None),
@@ -309,9 +311,11 @@ mod tests {
         assert_eq!(key("next_doubt").as_deref(), Some("Shift+ArrowDown"));
         assert_eq!(key("prev_kyoku").as_deref(), Some("Shift+ArrowLeft"));
         assert_eq!(key("next_kyoku").as_deref(), Some("Shift+ArrowRight"));
-        // 巡目の移動はボタンだけ（キーは、割り当てで足せる）
+        // 巡目の移動と、拮抗の場面への移動（F17）はボタンだけ（キーは、割り当てで足せる）
         assert_eq!(key("prev_turn"), None);
         assert_eq!(key("next_turn"), None);
+        assert_eq!(key("prev_contest"), None);
+        assert_eq!(key("next_contest"), None);
         // 局の頭・局の終わりは、Home・End（R11-4）
         assert_eq!(key("kyoku_start").as_deref(), Some("Home"));
         assert_eq!(key("kyoku_end").as_deref(), Some("End"));

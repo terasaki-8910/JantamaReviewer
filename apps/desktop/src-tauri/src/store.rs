@@ -53,6 +53,8 @@ pub const SELF_RATINGS_FILE: &str = "self-ratings.json";
 pub const MAKA_FILE: &str = "maka.json";
 /// 終局直後メモ（迷いマークごとの「候補」と「理由」・迷いマークの無い迷いのメモ）のファイル名（半荘のフォルダの中。F4）。
 pub const MEMOS_FILE: &str = "memos.json";
+/// 解決した局面（判断の鍵ごとに、解決を入れた時刻）のファイル名（半荘のフォルダの中。F16）。
+pub const RESOLVED_FILE: &str = "resolved.json";
 /// 読み込んだ記録のうち、この保存先にまだフォルダの無い半荘の分を、フォルダが現れるまで取っておくファイル名（保存先の直下。D-2）。
 pub const PENDING_FILE: &str = "pending-records.json";
 /// メモの「候補」の長さの上限（文字数）。「3m・6p」のような短い文。
@@ -454,6 +456,18 @@ pub struct Memos {
     pub extras: Vec<ExtraMemo>,
 }
 
+/// 解決した局面（`resolved.json`。F16）。`decisions` は判断の鍵（`k<局の通し番号>h<本場>e<局の中の番号>`）→ 解決を入れた時刻（UNIX エポックからのミリ秒）。
+/// 解決を切ると鍵ごと消え、空になったらファイルも消す。知らない項目があっても読める。
+///
+/// ```json
+/// { "decisions": { "k1h1e7": 1760000000123 } }
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Resolved {
+    #[serde(default)]
+    pub decisions: BTreeMap<String, i64>,
+}
+
 fn links_empty(links: &Links) -> bool {
     links.marks.is_empty() && links.ratings.is_empty() && links.ratings_version.is_none()
 }
@@ -470,8 +484,12 @@ fn memos_empty(memos: &Memos) -> bool {
     memos.marks.is_empty() && memos.extras.is_empty()
 }
 
-/// 半荘 1 つの、書き出し・読み込み（D-2）の対象の記録: 結びつけ・局の自己評価の付け直し・MAKA の評価・メモ
-/// （それぞれ、半荘のフォルダの `links.json`・`self-ratings.json`・`maka.json`・`memos.json` の中身）。
+fn resolved_empty(resolved: &Resolved) -> bool {
+    resolved.decisions.is_empty()
+}
+
+/// 半荘 1 つの、書き出し・読み込み（D-2）の対象の記録: 結びつけ・局の自己評価の付け直し・MAKA の評価・メモ・解決した局面
+/// （それぞれ、半荘のフォルダの `links.json`・`self-ratings.json`・`maka.json`・`memos.json`・`resolved.json` の中身）。
 /// 空の種類は書き出さず、読み込むときは、無い種類を空として読む。
 /// ウィジェットの記録（`events.jsonl`）・取り込んだ結果（`report.json`）・文字認識の写し（`ocr.json`）・画像は含まない。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -484,6 +502,8 @@ pub struct SessionRecords {
     pub maka: Maka,
     #[serde(default, skip_serializing_if = "memos_empty")]
     pub memos: Memos,
+    #[serde(default, skip_serializing_if = "resolved_empty")]
+    pub resolved: Resolved,
 }
 
 /// 結びつけ・メモの鍵（迷いマーク・評価の番号を、10 進の文字列にしたもの）の形か。ストアが書く形（先頭に 0 を付けない）だけを通す。
@@ -498,10 +518,11 @@ impl SessionRecords {
             && self_ratings_empty(&self.self_ratings)
             && maka_empty(&self.maka)
             && memos_empty(&self.memos)
+            && resolved_empty(&self.resolved)
     }
 
     /// 半荘のフォルダに置くファイルの名前と中身（JSON）。空の種類は `None`（ファイルを置かない）。
-    pub fn files(&self) -> Result<[(&'static str, Option<String>); 4], StoreError> {
+    pub fn files(&self) -> Result<[(&'static str, Option<String>); 5], StoreError> {
         fn text<T: Serialize>(value: &T, empty: bool) -> Result<Option<String>, StoreError> {
             if empty {
                 Ok(None)
@@ -517,6 +538,10 @@ impl SessionRecords {
             ),
             (MAKA_FILE, text(&self.maka, maka_empty(&self.maka))?),
             (MEMOS_FILE, text(&self.memos, memos_empty(&self.memos))?),
+            (
+                RESOLVED_FILE,
+                text(&self.resolved, resolved_empty(&self.resolved))?,
+            ),
         ])
     }
 
@@ -549,6 +574,14 @@ impl SessionRecords {
         }
         if let Some(grade) = &self.maka.hanchan {
             check_maka_grade(grade)?;
+        }
+        for (key, at) in &self.resolved.decisions {
+            check_resolved_key(key)?;
+            if *at < 0 {
+                return Err(StoreError::InvalidEvaluation(format!(
+                    "解決を入れた時刻が正しくありません: {key}"
+                )));
+            }
         }
         let mut marks = BTreeMap::new();
         for (key, text) in &self.memos.marks {
@@ -592,6 +625,7 @@ impl SessionRecords {
             self_ratings: self.self_ratings,
             maka: self.maka,
             memos: Memos { marks, extras },
+            resolved: self.resolved,
         })
     }
 }
@@ -631,6 +665,8 @@ pub struct SessionRecord {
     pub maka: Maka,
     /// 終局直後のメモ（迷いのカードと、半荘を通して見る画面で書いたもの）。
     pub memos: Memos,
+    /// 解決した局面（出題・解き直し・通して見る画面で「解決」を入れたもの。F16）。
+    pub resolved: Resolved,
 }
 
 #[derive(Debug)]
@@ -1079,7 +1115,7 @@ impl Store {
         self.scan_sessions()
     }
 
-    /// 書き出す記録: 一覧に出る半荘（`list_sessions` と同じ決まり）ごとの、結びつけ・自己評価・MAKA の評価・メモ。
+    /// 書き出す記録: 一覧に出る半荘（`list_sessions` と同じ決まり）ごとの、結びつけ・自己評価・MAKA の評価・メモ・解決した局面。
     /// 消した半荘（`trash/`）は入らない。何も書き換えない（取っておいた記録も付けない）。
     pub fn session_records(&self) -> Result<BTreeMap<String, SessionRecords>, StoreError> {
         Ok(self
@@ -1093,6 +1129,7 @@ impl Store {
                         self_ratings: session.self_ratings,
                         maka: session.maka,
                         memos: session.memos,
+                        resolved: session.resolved,
                     },
                 )
             })
@@ -1279,6 +1316,7 @@ impl Store {
                     .unwrap_or_default(),
                 maka: read_json_file::<Maka>(&dir.join(MAKA_FILE)).unwrap_or_default(),
                 memos: read_json_file::<Memos>(&dir.join(MEMOS_FILE)).unwrap_or_default(),
+                resolved: read_json_file::<Resolved>(&dir.join(RESOLVED_FILE)).unwrap_or_default(),
             });
         }
         sessions.sort_by(|a, b| {
@@ -1724,6 +1762,47 @@ impl Store {
         })
     }
 
+    // ---- 解決（F16）: 判断の鍵ごとに、解決を入れた時刻。events.jsonl は書き換えない ----
+
+    /// 解決した局面。まだ無い・読めないときは空。
+    pub fn load_resolved(&self, session_id: &str) -> Result<Resolved, StoreError> {
+        let dir = self.session_path(session_id)?;
+        Ok(read_json_file::<Resolved>(&dir.join(RESOLVED_FILE)).unwrap_or_default())
+    }
+
+    /// 局面の解決を入れる・切る。入れるときは、`t_ms`（いま）を解決を入れた時刻にする（すでに入っていれば、時刻を替える）。
+    /// 切って空になったら、ファイルも消す（空のファイルは持たない）。無い解決を切ってもエラーにならない。
+    /// `decision_key` は判断の鍵（`k<局の通し番号>h<本場>e<局の中の番号>`）。
+    pub fn set_resolved(
+        &self,
+        session_id: &str,
+        decision_key: &str,
+        resolved: bool,
+        t_ms: i64,
+    ) -> Result<(), StoreError> {
+        check_resolved_key(decision_key)?;
+        let dir = self.session_path(session_id)?;
+        let path = dir.join(RESOLVED_FILE);
+        let mut value = read_json_file::<Resolved>(&path).unwrap_or_default();
+        if resolved {
+            value
+                .decisions
+                .insert(decision_key.to_string(), t_ms.max(0));
+        } else {
+            value.decisions.remove(decision_key);
+        }
+        if resolved_empty(&value) {
+            return match fs::remove_file(&path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e.into()),
+            };
+        }
+        let text = serde_json::to_string_pretty(&value)?;
+        write_atomic(&path, text.as_bytes())?;
+        Ok(())
+    }
+
     /// 半荘のフォルダの JSON のファイルを読んで（無い・読めないときは空）、`change` で書き換えて、書き戻す。
     fn update_json<T>(
         &self,
@@ -1774,7 +1853,7 @@ fn move_all(
     Ok(())
 }
 
-/// 半荘のフォルダの記録のファイル（結びつけ・自己評価・MAKA・メモ）を、`records` の内容にそろえる（空の種類のファイルは消す）。
+/// 半荘のフォルダの記録のファイル（結びつけ・自己評価・MAKA・メモ・解決）を、`records` の内容にそろえる（空の種類のファイルは消す）。
 fn write_session_records(dir: &Path, records: &SessionRecords) -> Result<(), StoreError> {
     for (file, text) in records.files()? {
         match text {
@@ -1896,6 +1975,13 @@ fn check_memo_decision(key: &str) -> Result<(), StoreError> {
             "判断の鍵の形ではありません: {key:?}（例: k1h1e7）"
         )))
     }
+}
+
+/// 解決した局面の鍵が、判断の鍵（`k<局の通し番号>h<本場>e<局の中の番号>`）の形か。画面（エンジン）が決める鍵で、ここでは形だけを確かめる。
+fn check_resolved_key(key: &str) -> Result<(), StoreError> {
+    check_memo_decision(key).map_err(|_| {
+        StoreError::InvalidEvaluation(format!("判断の鍵の形ではありません: {key:?}（例: k1h1e7）"))
+    })
 }
 
 /// 迷いマークの無い迷いの位置（局・本場・巡目）が、決めた範囲に入っているか。
@@ -3925,6 +4011,203 @@ mod tests {
         let maka = store.load_maka(&older).unwrap();
         assert_eq!(maka.kyokus.get("k0h0").map(String::as_str), Some("C+"));
         assert_eq!(maka.hanchan.as_deref(), Some("B"));
+    }
+
+    // ---- F16・D-6: 解決の保存（resolved.json） ----
+
+    const RESOLVED_AT: i64 = 1_760_000_000_123;
+
+    #[test]
+    fn d6_a_decision_can_be_resolved_and_unresolved_and_the_file_goes_when_it_becomes_empty() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let path = session_dir_of(&store, &id).join(RESOLVED_FILE);
+        assert_eq!(store.load_resolved(&id).unwrap(), Resolved::default());
+        assert_eq!(only_session(&store).resolved, Resolved::default());
+        assert!(!path.exists(), "入れるまでは、ファイルを作らない");
+
+        store
+            .set_resolved(&id, "k0h0e3", true, RESOLVED_AT)
+            .unwrap();
+        store
+            .set_resolved(&id, "k2h1e14", true, RESOLVED_AT + 1)
+            .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"decisions": {"k0h0e3": RESOLVED_AT, "k2h1e14": RESOLVED_AT + 1}})
+        );
+        let loaded = store.load_resolved(&id).unwrap();
+        assert_eq!(loaded.decisions.len(), 2);
+        assert_eq!(only_session(&store).resolved, loaded, "一覧にも入る");
+
+        // 入れ直すと、時刻だけが替わる
+        store
+            .set_resolved(&id, "k0h0e3", true, RESOLVED_AT + 99)
+            .unwrap();
+        let loaded = store.load_resolved(&id).unwrap();
+        assert_eq!(loaded.decisions["k0h0e3"], RESOLVED_AT + 99);
+        assert_eq!(loaded.decisions["k2h1e14"], RESOLVED_AT + 1);
+
+        // 切る（無い解決を切っても、エラーにならない）。ほかの局面は残る
+        store.set_resolved(&id, "k0h0e3", false, 1).unwrap();
+        store.set_resolved(&id, "k0h0e3", false, 1).unwrap();
+        store.set_resolved(&id, "k9h9e9", false, 1).unwrap();
+        assert!(path.exists());
+        assert_eq!(store.load_resolved(&id).unwrap().decisions.len(), 1);
+        // 空になったら、ファイルを消す（切り直しても、エラーにならない）
+        store.set_resolved(&id, "k2h1e14", false, 1).unwrap();
+        assert!(!path.exists());
+        store.set_resolved(&id, "k2h1e14", false, 1).unwrap();
+        assert!(!path.exists());
+        assert!(!session_dir_of(&store, &id)
+            .join("resolved.json.tmp")
+            .exists());
+        assert_eq!(only_session(&store).resolved, Resolved::default());
+    }
+
+    #[test]
+    fn d6_a_resolve_write_never_touches_the_recording_or_the_other_record_files() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        store.set_maka_hanchan(&id, "A+").unwrap();
+        store.set_mark_link(&id, 1, "k0h0e1").unwrap();
+        let dir = session_dir_of(&store, &id);
+        let maka_before = fs::read(dir.join(MAKA_FILE)).unwrap();
+        let links_before = fs::read(dir.join(LINKS_FILE)).unwrap();
+        let before = event_lines(&store);
+        let view_before = store.view();
+        store
+            .set_resolved(&id, "k0h0e1", true, RESOLVED_AT)
+            .unwrap();
+        store
+            .set_resolved(&id, "k0h0e1", false, RESOLVED_AT)
+            .unwrap();
+        assert_eq!(event_lines(&store), before);
+        assert_eq!(store.view(), view_before);
+        assert_eq!(fs::read(dir.join(MAKA_FILE)).unwrap(), maka_before);
+        assert_eq!(fs::read(dir.join(LINKS_FILE)).unwrap(), links_before);
+        // 記録の続きは、これまでどおり同じ半荘に入る
+        store.add_mark(T0 + 5, shot()).unwrap();
+        assert_eq!(store.current_session_id(), Some(id.as_str()));
+    }
+
+    #[test]
+    fn d6_a_resolve_with_a_bad_key_or_session_is_refused_and_writes_nothing() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let dir = session_dir_of(&store, &id);
+        for bad in [
+            "",
+            "k1h1",
+            "k1h1e",
+            "kh1e1",
+            "k1h1e7x",
+            "K1h1e7",
+            "k1h1e-1",
+            "../k1h1e7",
+            "k1h1e7/../x",
+            "k1234567h1e7",
+        ] {
+            assert!(
+                matches!(
+                    store.set_resolved(&id, bad, true, RESOLVED_AT),
+                    Err(StoreError::InvalidEvaluation(_))
+                ),
+                "{bad:?}"
+            );
+            assert!(store.set_resolved(&id, bad, false, RESOLVED_AT).is_err());
+        }
+        assert!(!dir.join(RESOLVED_FILE).exists());
+        for bad in [
+            "",
+            "..",
+            "../x",
+            "a/b",
+            "a\\b",
+            "x y",
+            "あ",
+            "20991231-235959",
+        ] {
+            assert!(
+                matches!(
+                    store.set_resolved(bad, "k1h1e7", true, RESOLVED_AT),
+                    Err(StoreError::UnknownSession(_))
+                ),
+                "{bad:?}"
+            );
+            assert!(store.load_resolved(bad).is_err(), "{bad:?}");
+        }
+        assert!(!store
+            .root()
+            .join(GAMES_DIR)
+            .join("20991231-235959")
+            .exists());
+    }
+
+    #[test]
+    fn d6_a_broken_resolved_file_is_read_as_empty_and_the_next_write_replaces_it() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let dir = session_dir_of(&store, &id);
+        for broken in [
+            "{broken",
+            "[]",
+            "42",
+            "",
+            r#"{"decisions": 7}"#,
+            r#"{"decisions": {"k1h1e7": "x"}}"#,
+        ] {
+            fs::write(dir.join(RESOLVED_FILE), broken).unwrap();
+            assert_eq!(
+                only_session(&store).resolved,
+                Resolved::default(),
+                "{broken:?}"
+            );
+            assert_eq!(store.load_resolved(&id).unwrap(), Resolved::default());
+        }
+        fs::write(dir.join(RESOLVED_FILE), "{broken").unwrap();
+        store
+            .set_resolved(&id, "k1h1e7", true, RESOLVED_AT)
+            .unwrap();
+        assert_eq!(
+            store.load_resolved(&id).unwrap().decisions.get("k1h1e7"),
+            Some(&RESOLVED_AT)
+        );
+        // 知らない項目があっても読める（あとの版が足してもよい）
+        fs::write(
+            dir.join(RESOLVED_FILE),
+            r#"{"decisions": {"k1h1e7": 5}, "later": [1]}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            only_session(&store).resolved.decisions.get("k1h1e7"),
+            Some(&5)
+        );
+    }
+
+    #[test]
+    fn d6_the_resolved_file_moves_with_the_session_folder_when_it_is_deleted_and_restored() {
+        let (_tmp, mut store) = open_store();
+        let (older, _newer) = two_sessions(&mut store);
+        store
+            .set_resolved(&older, "k0h0e1", true, RESOLVED_AT)
+            .unwrap();
+        store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+        assert!(store
+            .root()
+            .join(TRASH_DIR)
+            .join(&older)
+            .join(RESOLVED_FILE)
+            .is_file());
+        store
+            .restore_sessions(std::slice::from_ref(&older))
+            .unwrap();
+        assert_eq!(
+            store.load_resolved(&older).unwrap().decisions.get("k0h0e1"),
+            Some(&RESOLVED_AT)
+        );
     }
 
     // ---- U-28: 終局直後のメモの保存（memos.json） ----
