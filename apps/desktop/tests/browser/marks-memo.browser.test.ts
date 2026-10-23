@@ -548,6 +548,8 @@ describe('U-28: 取り込む前の半荘で、メモを足す（実ブラウザ�
       }
       expect(names).toEqual(['追加するメモの局 南4局', '本場', '巡目', '候補', '理由（1行）', '足す', 'やめる']);
       await page.getByRole('button', { name: '追加するメモの局 南4局' }).focus();
+      // 焦点を移すと、ボタンが見えるようにページが少しスクロールする。そのスクロールの知らせは、開いたメニューを閉じるので、収まってから押す
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       await page.keyboard.press('Enter');
       await page.getByRole('menu', { name: '追加するメモの局' }).waitFor();
       await page.keyboard.press('Escape');
