@@ -1568,3 +1568,174 @@ describe('U-31 MAKA の当てはめの見込み（実ブラウザ。局の評価
     }
   }
 });
+
+describe('U-48: AI 一致率・類似度・悪手率の1行（実ブラウザ。半荘のページの見出し）', () => {
+  const LINE = 'AI 一致率 88.6% · 類似度 93.0 · 悪手率 7.1%';
+  const HINT =
+    'AI（Mortal）と比べた数です。AI 一致率は、自分の判断のうち、AI の1位と同じだった割合（62/70）。類似度は、Mortal の Rating と同じ値で、AI の1位なら満点、違えば AI の評価に応じた部分点です（NAGA の類似度に当たります）。悪手率は、実戦の行動の AI の確率が 5% より低かった判断の割合（5/70）で、大きな不一致と同じ基準です（NAGA の悪手と同じ線）。';
+
+  /** 見出しの箱（題・副題・1 行・右の操作）の位置と、1 行の文字・色・数字の形。 */
+  const measureHead = (page: Page) =>
+    page.evaluate(() => {
+      const box = (el: Element | null): BoxRect | null => {
+        if (el === null) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      };
+      const colorOf = (token: string) => {
+        const probe = document.createElement('span');
+        probe.style.color = `var(${token})`;
+        document.body.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
+      const label = document.querySelector('.metric-lbl') as HTMLElement;
+      const value = document.querySelector('.metric-val') as HTMLElement;
+      const list = document.querySelector('.metric-list') as HTMLElement;
+      return {
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth,
+        text: (list.textContent ?? '').replace(/\s+/g, ' ').trim(),
+        left: box(document.querySelector('.head-l')),
+        title: box(document.querySelector('.head-l .title')),
+        subtitle: box(document.querySelector('.head-l > p.quiet')),
+        row: box(document.querySelector('.head-metrics')),
+        list: box(list),
+        actions: box(document.querySelector('.head-actions')),
+        items: Array.from(list.querySelectorAll('li')).map((li) => box(li) as BoxRect),
+        labelColor: getComputedStyle(label).color,
+        valueColor: getComputedStyle(value).color,
+        muted: colorOf('--muted'),
+        ink: colorOf('--ink'),
+        valueFamily: getComputedStyle(value).fontFamily,
+        valueNumeric: getComputedStyle(value).fontVariantNumeric,
+      };
+    });
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 768, 1280] as const) {
+      it(`幅 ${width}px ${scheme}: 題と副題の下に 1 行（承認済みの文のとおり）。窓に収まり、横スクロールが無く、右の操作と重ならない。ラベルは静かな色、値は文字の色の等幅の数字。axe の重大な違反が 0 件`, async () => {
+        const { context, page, problems, external } = await open({ width, scheme });
+        try {
+          const m = await measureHead(page);
+          expect(m.text).toBe(LINE);
+          const left = m.left as BoxRect;
+          const list = m.list as BoxRect;
+          const row = m.row as BoxRect;
+          const actions = m.actions as BoxRect;
+          // 題 → 副題 → この 1 行の順で、見出しの左の欄の中に収まる
+          expect(list.top).toBeGreaterThanOrEqual((m.subtitle as BoxRect).bottom - 1);
+          expect((m.subtitle as BoxRect).top).toBeGreaterThanOrEqual((m.title as BoxRect).bottom - 1);
+          expect(row.left).toBeGreaterThanOrEqual(left.left - 0.5);
+          expect(row.right).toBeLessThanOrEqual(left.right + 0.5);
+          for (const item of m.items) expect(item.right).toBeLessThanOrEqual(m.client);
+          expect(row.right).toBeLessThanOrEqual(m.client);
+          // 項目の途中では折り返さない（狭い幅では、項目の間で 2 行になってもよい。広い幅では 1 行）
+          for (const item of m.items) expect(item.bottom - item.top).toBeLessThan(26);
+          if (width >= 768) expect(new Set(m.items.map((item) => Math.round(item.top))).size).toBe(1);
+          // 横スクロールが無い。見出しの右の操作（通して見る・段階の印と Rating）と重ならない
+          expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+          expect(m.body).toBeLessThanOrEqual(m.client);
+          expect(boxesOverlap(left, actions)).toBe(false);
+          expect(boxesOverlap(row, actions)).toBe(false);
+          // 色はトークンだけ: ラベルは --muted、値は --ink。値は等幅の数字（IBM Plex Mono・tabular-nums）
+          expect(m.labelColor).toBe(m.muted);
+          expect(m.valueColor).toBe(m.ink);
+          expect(m.valueFamily).toContain('IBM Plex Mono');
+          expect(m.valueNumeric).toContain('tabular-nums');
+
+          // axe: 全体で重大な違反が無い。この 1 行だけに絞っても、違反が無く、色のコントラストの規則が実際にこの 1 行に働いている
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          const scoped = await page.evaluate(async () => {
+            interface Rule {
+              id: string;
+              impact?: string | null;
+              nodes: unknown[];
+            }
+            const axeCore = (window as unknown as { axe: { run: (context: unknown) => Promise<{ violations: Rule[]; passes: Rule[] }> } }).axe;
+            const result = await axeCore.run({ include: [['.head-metrics']] });
+            return {
+              violations: result.violations.map((v) => `${v.id} (${v.impact ?? ''})`),
+              contrast: result.passes.find((p) => p.id === 'color-contrast')?.nodes.length ?? 0,
+            };
+          });
+          expect(scoped.violations).toEqual([]);
+          expect(scoped.contrast).toBeGreaterThanOrEqual(3);
+
+          // 一覧は名前つきで、項目が 3 つ
+          expect(await page.getByRole('list', { name: 'AI との比べ' }).getByRole('listitem').count()).toBe(3);
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+
+      it(`幅 ${width}px ${scheme}: 説明のアイコンに乗せるか、キーボードで選ぶと、3 つの意味の文が、窓の中に、1 行にもアイコンにもかからずに重なって出る。Esc で閉じる`, async () => {
+        const { context, page, problems } = await open({ width, scheme });
+        try {
+          const icon = page.getByRole('button', { name: 'AI 一致率・類似度・悪手率の説明' });
+          await icon.waitFor();
+          // 見える文字には、説明が無い（閉じている間は hidden）
+          expect(await page.locator('.head-l').evaluate((el) => (el as HTMLElement).innerText)).not.toContain('AI（Mortal）と比べた数です');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          await icon.hover();
+          await page.getByRole('tooltip').waitFor();
+          let m = await measureInfoTip(page, '.metric-list');
+          expect(m, `${width} ${scheme}`).not.toBeNull();
+          expect(m!.text).toBe(HINT);
+          expect(m!.tip.left).toBeGreaterThanOrEqual(7);
+          expect(m!.tip.right).toBeLessThanOrEqual(m!.innerWidth - 7);
+          expect(m!.tip.top).toBeGreaterThanOrEqual(0);
+          expect(m!.tip.bottom).toBeLessThanOrEqual(m!.innerHeight);
+          expect(boxesOverlap(m!.tip, m!.icon)).toBe(false);
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          expect(seriousViolations(await runAxe(page)), `${width} ${scheme}`).toEqual([]);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          // キーボード: アイコンへ Tab で届き、選ぶと出る
+          await page.mouse.move(2, 2);
+          await icon.focus();
+          await page.keyboard.press('Shift+Tab');
+          await page.keyboard.press('Tab');
+          expect(await isFocused(icon)).toBe(true);
+          await page.getByRole('tooltip').waitFor();
+          m = await measureInfoTip(page, '.metric-list');
+          expect(m!.text).toBe(HINT);
+          expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
+          await page.keyboard.press('Escape');
+          expect(await page.getByRole('tooltip').count()).toBe(0);
+          expect(problems).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('取り込む前の半荘には、1 行も説明のアイコンも無い（見出しは、題と「取り込み前」の副題だけ）', async () => {
+    const { context, page } = await open({ session: 'older' });
+    try {
+      expect(await page.locator('.head-metrics').count()).toBe(0);
+      expect(await page.getByRole('list', { name: 'AI との比べ' }).count()).toBe(0);
+      expect(await page.getByRole('button', { name: 'AI 一致率・類似度・悪手率の説明' }).count()).toBe(0);
+      expect(await page.locator('.head-l > *').count()).toBe(2);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('迷いだけの設定が入でも、1 行と説明のアイコンが出る（幅 390px）', async () => {
+    const { context, page, problems } = await open({ width: 390, scenario: scenario({ settings: { ...settings, doubt_only: true } }) });
+    try {
+      expect((await measureHead(page)).text).toBe(LINE);
+      expect(await page.getByRole('button', { name: 'AI 一致率・類似度・悪手率の説明' }).count()).toBe(1);
+      expect(problems).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+});
