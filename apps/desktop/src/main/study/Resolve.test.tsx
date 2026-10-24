@@ -292,6 +292,41 @@ describe('F16 解決した問題: 今日の出題', () => {
     expect(todayRows().some((row) => row.classList.contains('resolved'))).toBe(false);
     expect(document.querySelector('.nums')?.textContent).toBe('0 / 5 問を解きました');
   });
+
+  it('組の問題をすべて答えないまま解決しても、説明と一覧は消えない。「解決」の札を付けた行を押せば開き、解決を切れる', async () => {
+    const { user } = setup({ study: dailyStudy(), resolved: DAILY });
+    await loaded('0');
+    await openToday(user);
+    // 進み具合の式はそのまま（解決を除いた 0 問が分母）。続きにする問題は無いので、「出題を始める」も出ない
+    expect(document.querySelector('.nums')?.textContent).toBe('0 / 0 問を解きました（解決 5問を除く）');
+    expect(screen.queryByRole('button', { name: '出題を始める' })).toBeNull();
+    expect(document.querySelector('.q-rule')).not.toBeNull();
+    const rows = todayRows();
+    expect(rows).toHaveLength(5);
+    expect(rows.every((row) => row.classList.contains('resolved') && row.textContent?.includes('解決'))).toBe(true);
+    // 開いて、解決を切ると、サイドバーの数が戻り、一覧の印も消える
+    await user.click(rows[0] as HTMLElement);
+    expect(await screen.findByRole('heading', { level: 1, name: '東2局 11巡目' })).toBeInTheDocument();
+    expect(resolveButton()).toHaveAttribute('aria-pressed', 'true');
+    await user.click(resolveButton());
+    await waitFor(() => expect(sideCount(/^今日の出題/)).toBe('1'));
+    await user.click(sideButton(/^今日の出題/));
+    await screen.findByRole('heading', { level: 1, name: '今日の出題' });
+    expect(todayRows().map((row) => row.classList.contains('resolved'))).toEqual([false, true, true, true, true]);
+    expect(screen.getByRole('button', { name: '出題を始める' })).toBeInTheDocument();
+  });
+
+  it('残りの行の番号は、組の行（解決した行も数える）の続きから振る。解決した行があっても、番号は重ならない', async () => {
+    const { user } = setup({ study: dailyStudy(), resolved: ['k1h0e12', 'k1h1e7'] });
+    await loaded('3');
+    await openToday(user);
+    await user.click(within(document.querySelector('details.qrest') as HTMLElement).getByText(/^残り\d+問$/));
+    const numbersOf = (rows: HTMLElement[]) => rows.map((row) => row.querySelector('.no')?.textContent);
+    const rest = within(screen.getByRole('list', { name: '残りの出題' })).getAllByRole('button');
+    expect(numbersOf(todayRows())).toEqual(['1', '2', '3', '4', '5']);
+    expect(numbersOf(rest).slice(0, 3)).toEqual(['6', '7', '8']);
+    expect(numbersOf(rest)).toEqual(rest.map((_, index) => String(6 + index)));
+  });
 });
 
 describe('F16 解決した問題: 解き直し', () => {
