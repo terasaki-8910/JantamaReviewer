@@ -1,6 +1,7 @@
 /**
  * 答える前の欄の、場面の情報の 1 行（F3、U-47）: 自分の巡目・向聴数（場面の向聴数。見出しの札と同じ）・他家の立直。
  * 例: 「12巡目 · 1向聴 · 対面が立直（9巡目）」「5巡目 · 聴牌 · 他家の立直なし」。
+ * 項目ごとに、文字の部品の並びで返す。数と人の名前（値）は、画面が濃い色で出せるよう、別の部品にする。
  * どれも答える前に出してよい情報で、AI の情報は入れない（U-1）。画面にも Tauri にも依存しない純粋な関数。
  */
 import { shantenTag, type BoardState, type Decision, type Seat } from '@jantama/engine';
@@ -31,29 +32,44 @@ export function riichiOpponents(board: Pick<BoardState, 'playerId' | 'riichi' | 
   return out;
 }
 
-/** 他家の立直の言い方: 無ければ「他家の立直なし」、あれば「対面が立直（9巡目）」（2 人以上は「・」でつなぐ）。 */
-export function riichiText(board: Pick<BoardState, 'playerId' | 'riichi' | 'rivers'>): string {
+/** 1 行の中の 1 項目の部品。`strong` は、数や人の名前など、濃い色で出す値。 */
+export interface LinePart {
+  text: string;
+  strong: boolean;
+}
+
+const plain = (text: string): LinePart => ({ text, strong: false });
+const strong = (text: string): LinePart => ({ text, strong: true });
+
+/** 向聴数の言い方（見出しの札と同じ `shantenTag`）。数が付く「N向聴」は数が値、「聴牌」は全体が値。 */
+function shantenParts(shanten: number): LinePart[] {
+  const tag = shantenTag(shanten);
+  const count = /^\d+/.exec(tag)?.[0];
+  return count === undefined ? [strong(tag)] : [strong(count), plain(tag.slice(count.length))];
+}
+
+/** 他家の立直の言い方: 無ければ「他家の立直なし」、あれば「対面が立直（9巡目）」（2 人以上は「・」でつなぐ）。人の呼び名と巡目が値。 */
+export function riichiParts(board: Pick<BoardState, 'playerId' | 'riichi' | 'rivers'>): LinePart[] {
   const opponents = riichiOpponents(board);
-  if (opponents.length === 0) return '他家の立直なし';
-  return opponents.map((opponent) => `${opponent.relation}が立直${opponent.junme === null ? '' : `（${opponent.junme}巡目）`}`).join('・');
+  if (opponents.length === 0) return [plain('他家の立直なし')];
+  return opponents.flatMap((opponent, index) => [
+    ...(index === 0 ? [] : [plain('・')]),
+    strong(opponent.relation),
+    ...(opponent.junme === null ? [plain('が立直')] : [plain('が立直（'), strong(String(opponent.junme)), plain('巡目）')]),
+  ]);
 }
 
 /** 1 行の中身（巡目・向聴数・他家の立直）。見出しの巡目と向聴数の札と同じ言い方。 */
 export interface SceneLine {
-  junme: string;
-  shanten: string;
-  riichi: string;
+  junme: LinePart[];
+  shanten: LinePart[];
+  riichi: LinePart[];
 }
 
 export function sceneLine(decision: Pick<Decision, 'junme' | 'shanten' | 'board'>): SceneLine {
   return {
-    junme: `${decision.junme}巡目`,
-    shanten: shantenTag(decision.shanten),
-    riichi: riichiText(decision.board),
+    junme: [strong(String(decision.junme)), plain('巡目')],
+    shanten: shantenParts(decision.shanten),
+    riichi: riichiParts(decision.board),
   };
-}
-
-/** 1 行の文字（項目を「 · 」でつなぐ）。 */
-export function sceneLineText(line: SceneLine): string {
-  return [line.junme, line.shanten, line.riichi].join(' · ');
 }

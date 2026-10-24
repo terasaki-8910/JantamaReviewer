@@ -20,7 +20,7 @@ import {
   type QuizChoice,
   type Tile as TileCode,
 } from '@jantama/engine';
-import { Fragment, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 import type { AnswerMode, AnswerRow } from '../../api/types';
 import { Icon } from '../Icon';
@@ -30,7 +30,7 @@ import { Evaluation } from './Evaluation';
 import { formatElapsed, formatMonthDay } from './labels';
 import { MemoShown } from './MemoShown';
 import { formatProbability, type RevealModel } from './reveal';
-import { riichiOpponents } from './sceneLine';
+import { sceneLine, type LinePart } from './sceneLine';
 import { Tile } from './Tile';
 import { tileName } from './tiles';
 import { AnswerBar, type ResolveControl } from './AnswerBar';
@@ -181,34 +181,30 @@ function OptionGroup({ options, choice, calledFrom, dora, onChoose }: OptionGrou
   );
 }
 
+/** 1 項目の部品。値（数・人の名前）は濃い色の印（b）、そのほかは文字のまま。 */
+function LineParts({ parts }: { parts: readonly LinePart[] }) {
+  return <>{parts.map((part, index) => (part.strong ? <b key={index}>{part.text}</b> : part.text))}</>;
+}
+
 /**
  * 答える前の、場面の情報の 1 行（U-47）: 自分の巡目・向聴数（見出しと同じ値）・他家の立直（無ければ「他家の立直なし」、あれば
- * 「対面が立直（9巡目）」を全員。N巡目はその人の宣言牌が河の何枚目か）。数と人の名前は濃い色で、そのほかは静かな色。AI の情報は入れない。
+ * 「対面が立直（9巡目）」を全員。N巡目はその人の宣言牌が河の何枚目か）。言い方は `sceneLine` が決める。
+ * 数と人の名前は濃い色で、そのほかは静かな色。AI の情報は入れない。
  */
 function SceneLine({ decision }: { decision: Decision }) {
-  const opponents = riichiOpponents(decision.board);
+  const line = sceneLine(decision);
   return (
     <p className="scene-line" data-line="scene">
       <span>
-        <b>{decision.junme}</b>巡目
+        <LineParts parts={line.junme} />
       </span>
       {' · '}
-      <span>{decision.shanten <= 0 ? <b>聴牌</b> : <><b>{decision.shanten}</b>向聴</>}</span>
+      <span>
+        <LineParts parts={line.shanten} />
+      </span>
       {' · '}
       <span>
-        {opponents.length === 0
-          ? '他家の立直なし'
-          : opponents.map((opponent, index) => (
-              <Fragment key={opponent.seat}>
-                {index > 0 && '・'}
-                <b>{opponent.relation}</b>が立直
-                {opponent.junme !== null && (
-                  <>
-                    （<b>{opponent.junme}</b>巡目）
-                  </>
-                )}
-              </Fragment>
-            ))}
+        <LineParts parts={line.riichi} />
       </span>
     </p>
   );
