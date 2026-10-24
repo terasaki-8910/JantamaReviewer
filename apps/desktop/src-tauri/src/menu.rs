@@ -77,34 +77,64 @@ pub struct ModeItems<R: Runtime> {
     menu: Menu<R>,
     undo: MenuItem<R>,
     orientation: MenuItem<R>,
-    /// 「取り消し」を最後に合わせた、押せる・押せない。`None` は分からない（同じ値を重ねて合わせないために覚える）。
-    undo_enabled: Mutex<Option<bool>>,
+    /// 「取り消し」の押せる・押せないについて、覚えておくこと（同じ値を重ねて合わせないため）。
+    undo_enabled: Mutex<EnabledMemory>,
 }
 
-/// 「取り消し」の押せる・押せないを、`now` に合わせ直す必要があるか。`last` は、最後に合わせた値（分からなければ `None`）。
+/// 項目の押せる・押せないについて、覚えておくこと。
+struct EnabledMemory {
+    /// 最後に項目へ合わせた値。`None` は分からない。
+    applied: Option<bool>,
+    /// 最後に頼まれた値。合わせている間に別のスレッドから新しい値を頼まれたとき、合わせ終えたあとで合わせ直すために覚える。
+    wanted: bool,
+}
+
+impl EnabledMemory {
+    /// 項目を `enabled` で作ったところ。
+    fn new(enabled: bool) -> EnabledMemory {
+        EnabledMemory {
+            applied: Some(enabled),
+            wanted: enabled,
+        }
+    }
+}
+
+/// 項目の押せる・押せないを、`now` に合わせ直す必要があるか。`last` は、最後に合わせた値（分からなければ `None`）。
 fn needs_update(last: Option<bool>, now: bool) -> bool {
     last != Some(now)
 }
 
-/// 覚えてある値と違うときだけ `apply` で合わせ、合わせられたら覚え直す（失敗したら「分からない」に戻す）。
-/// 項目を合わせるには本体のスレッドの手が空くのを待つので、錠は `apply` の間は持たない
-/// （本体のスレッドが、メニューの操作から同じ錠を取ろうとして待つと、お互いに待って止まる）。
+/// 項目の押せる・押せないを `now` にする。最後に合わせた値と同じなら、`apply` を呼ばない。
+/// `apply` は本体のスレッドの手が空くのを待つので、錠は `apply` の間は持たない（本体のスレッドが、メニューの操作から
+/// 同じ錠を取ろうとして待つと、お互いに待って止まる）。合わせている間に別のスレッドが新しい値を頼んだら、合わせ終えたあとで、
+/// その値に合わせ直す（頼んだほうは、合わせ終わるのを待たずに戻る）。失敗したら「分からない」に戻して、そのまま返す。
 fn apply_when_needed<E>(
-    remembered: &Mutex<Option<bool>>,
+    memory: &Mutex<EnabledMemory>,
     now: bool,
-    apply: impl FnOnce(bool) -> Result<(), E>,
+    mut apply: impl FnMut(bool) -> Result<(), E>,
 ) -> Result<(), E> {
-    if !needs_update(*lock_remembered(remembered), now) {
-        return Ok(());
+    lock_memory(memory).wanted = now;
+    loop {
+        let want = {
+            let state = lock_memory(memory);
+            if !needs_update(state.applied, state.wanted) {
+                return Ok(());
+            }
+            state.wanted
+        };
+        let result = apply(want);
+        let mut state = lock_memory(memory);
+        state.applied = result.as_ref().ok().map(|_| want);
+        result?;
+        if state.wanted == want {
+            return Ok(());
+        }
     }
-    let result = apply(now);
-    *lock_remembered(remembered) = result.as_ref().ok().map(|_| now);
-    result
 }
 
 /// 別のスレッドが途中で止まっていても、メニューを合わせ続けられるよう、毒された錠は使い続ける。
-fn lock_remembered(remembered: &Mutex<Option<bool>>) -> MutexGuard<'_, Option<bool>> {
-    remembered.lock().unwrap_or_else(PoisonError::into_inner)
+fn lock_memory(memory: &Mutex<EnabledMemory>) -> MutexGuard<'_, EnabledMemory> {
+    memory.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl<R: Runtime> ModeItems<R> {
@@ -126,7 +156,7 @@ impl<R: Runtime> ModeItems<R> {
             )
         };
         // 出し入れしたあとの「取り消し」の押せる・押せないは、覚えている値と同じとは限らないので、次は必ず合わせ直す。
-        *lock_remembered(&self.undo_enabled) = None;
+        lock_memory(&self.undo_enabled).applied = None;
         if self.menu.get(hide_id).is_some() {
             self.menu.remove(hide)?;
         }
@@ -136,7 +166,7 @@ impl<R: Runtime> ModeItems<R> {
         Ok(())
     }
 
-    /// 「取り消し」を押せるか（取り消せる記録があるか）に合わせる。覚えている値と同じなら、何もしない。
+    /// 「取り消し」を押せるか（取り消せる記録があるか）に合わせる。最後に合わせた値と同じなら、何もしない。
     pub fn set_can_undo(&self, can_undo: bool) -> tauri::Result<()> {
         apply_when_needed(&self.undo_enabled, can_undo, |value| {
             self.undo.set_enabled(value)
@@ -197,7 +227,7 @@ pub fn build_menu<R: Runtime, M: Manager<R>>(
         undo,
         orientation,
         // 「取り消し」は、`can_undo` で作ったばかり
-        undo_enabled: Mutex::new(Some(can_undo)),
+        undo_enabled: Mutex::new(EnabledMemory::new(can_undo)),
     };
     Ok(BuiltMenu { menu, sound, mode })
 }
@@ -499,10 +529,18 @@ mod tests {
         assert!(needs_update(Some(false), true));
     }
 
+    /// 覚えていること（最後に合わせた値が `applied`）。最後に頼まれた値は、それと同じ（分からないときは false）。
+    fn memory(applied: Option<bool>) -> Mutex<EnabledMemory> {
+        Mutex::new(EnabledMemory {
+            applied,
+            wanted: applied.unwrap_or(false),
+        })
+    }
+
     #[test]
     fn w15_repeating_the_same_value_does_not_apply_again() {
         // 起動したとき（取り消せる記録が無い）に作ったメニューは、その値で覚えてある
-        let remembered = Mutex::new(Some(false));
+        let memory = Mutex::new(EnabledMemory::new(false));
         let applied = RefCell::new(Vec::new());
         let apply = |value: bool| -> Result<(), String> {
             applied.borrow_mut().push(value);
@@ -510,65 +548,113 @@ mod tests {
         };
         // 迷いマークが続く間（取り消せる記録がある）は、最初の 1 回だけ合わせる
         for _ in 0..3 {
-            apply_when_needed(&remembered, true, apply).unwrap();
+            apply_when_needed(&memory, true, apply).unwrap();
         }
         assert_eq!(*applied.borrow(), vec![true]);
         // 取り消して記録が無くなったら、また 1 回だけ合わせる
         for _ in 0..3 {
-            apply_when_needed(&remembered, false, apply).unwrap();
+            apply_when_needed(&memory, false, apply).unwrap();
         }
         assert_eq!(*applied.borrow(), vec![true, false]);
-        assert_eq!(*remembered.lock().unwrap(), Some(false));
+        assert_eq!(lock_memory(&memory).applied, Some(false));
     }
 
     #[test]
-    fn w15_when_the_remembered_value_is_unknown_the_next_value_is_always_applied() {
+    fn w15_when_the_applied_value_is_unknown_the_next_value_is_always_applied() {
         // 項目を出し入れしたあと（`set_doubt_only`）は「分からない」に戻すので、同じ値でも 1 回は合わせる
-        let remembered = Mutex::new(None);
+        let memory = memory(None);
         let applied = Cell::new(0);
         let apply = |_: bool| -> Result<(), String> {
             applied.set(applied.get() + 1);
             Ok(())
         };
-        apply_when_needed(&remembered, true, apply).unwrap();
+        apply_when_needed(&memory, true, apply).unwrap();
         assert_eq!(applied.get(), 1);
-        apply_when_needed(&remembered, true, apply).unwrap();
+        apply_when_needed(&memory, true, apply).unwrap();
         assert_eq!(applied.get(), 1);
-        *remembered.lock().unwrap() = None;
-        apply_when_needed(&remembered, true, apply).unwrap();
+        lock_memory(&memory).applied = None;
+        apply_when_needed(&memory, true, apply).unwrap();
         assert_eq!(applied.get(), 2);
     }
 
     #[test]
     fn w15_a_failed_apply_is_tried_again_with_the_same_value() {
-        let remembered = Mutex::new(Some(false));
+        let memory = memory(Some(false));
         let calls = Cell::new(0);
         let fail = |_: bool| -> Result<(), String> {
             calls.set(calls.get() + 1);
             Err("本体のスレッドに頼めなかった".to_string())
         };
-        assert!(apply_when_needed(&remembered, true, fail).is_err());
+        assert!(apply_when_needed(&memory, true, fail).is_err());
         // 合わせられたか分からないので、覚えていない（元の値の false に戻さない）
-        assert_eq!(*remembered.lock().unwrap(), None);
+        assert_eq!(lock_memory(&memory).applied, None);
         // 同じ値でもう一度頼まれたら、もう一度合わせる。今度は通る
         let ok = |_: bool| -> Result<(), String> {
             calls.set(calls.get() + 1);
             Ok(())
         };
-        apply_when_needed(&remembered, true, ok).unwrap();
+        apply_when_needed(&memory, true, ok).unwrap();
         assert_eq!(calls.get(), 2);
-        assert_eq!(*remembered.lock().unwrap(), Some(true));
+        assert_eq!(lock_memory(&memory).applied, Some(true));
     }
 
     #[test]
     fn w15_the_lock_is_not_held_while_the_item_is_being_applied() {
         // 合わせている間（本体のスレッドを待つ間）に、本体のスレッドが同じ錠を取りに来ても、待たされない
-        let remembered = Mutex::new(Some(false));
-        apply_when_needed(&remembered, true, |_| -> Result<(), String> {
-            assert!(remembered.try_lock().is_ok());
+        let memory = memory(Some(false));
+        apply_when_needed(&memory, true, |_| -> Result<(), String> {
+            assert!(memory.try_lock().is_ok());
             Ok(())
         })
         .unwrap();
+    }
+
+    #[test]
+    fn w15_a_newer_value_asked_while_applying_is_applied_afterwards() {
+        // 「押せる」を合わせている間に、別のスレッドが「押せない」を頼んだ。覚えている値（押せない）と同じなので、その場では
+        // 何もせずに戻るが、合わせている側が、合わせ終えたあとで「押せない」に合わせ直す（項目が古い値のまま残らない）
+        let memory = Mutex::new(EnabledMemory::new(false));
+        let applied = RefCell::new(Vec::new());
+        let mut asked = false;
+        apply_when_needed(&memory, true, |value| -> Result<(), String> {
+            applied.borrow_mut().push(value);
+            if !asked {
+                asked = true;
+                apply_when_needed(&memory, false, |other| -> Result<(), String> {
+                    applied.borrow_mut().push(other);
+                    Ok(())
+                })
+                .unwrap();
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(*applied.borrow(), vec![true, false]);
+        assert_eq!(lock_memory(&memory).applied, Some(false));
+    }
+
+    #[test]
+    fn w15_the_last_asked_value_is_applied_last_even_when_both_apply() {
+        // 合わせた値が分からないとき（出し入れのあと）は、2 つのスレッドが両方とも合わせる。順番が入れ替わっても、
+        // 最後に頼まれた値で終わる
+        let memory = memory(None);
+        let applied = RefCell::new(Vec::new());
+        let mut asked = false;
+        apply_when_needed(&memory, true, |value| -> Result<(), String> {
+            applied.borrow_mut().push(value);
+            if !asked {
+                asked = true;
+                apply_when_needed(&memory, false, |other| -> Result<(), String> {
+                    applied.borrow_mut().push(other);
+                    Ok(())
+                })
+                .unwrap();
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(applied.borrow().last(), Some(&false));
+        assert_eq!(lock_memory(&memory).applied, Some(false));
     }
 
     fn mac_items(menu: &MacMenu) -> Vec<MacItem> {
