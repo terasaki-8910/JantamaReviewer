@@ -752,6 +752,36 @@ body.dlg-open {
   color: var(--muted);
 }
 
+/* AI との比べの 1 行（F18、U-48）: 題の下の小さな 1 行と説明のアイコン。ラベルは静かな色、値は文字の色で等幅の数字（.mono）。
+   狭いときは、項目の途中ではなく、項目の間で折り返す（項目は折り返さない） */
+.head-metrics {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.metric-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.metric-list li {
+  white-space: nowrap;
+}
+
+.metric-val {
+  color: var(--ink);
+}
+
 .page > .detail {
   grid-template-columns: minmax(0, 1fr);
   gap: var(--s6);
