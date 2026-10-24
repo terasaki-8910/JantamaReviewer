@@ -4,8 +4,10 @@
  * 数えるのは取り込んだ半荘の記録だけ（雀魂の成績の画面は読まない。R14-4）。数え方はエンジンの `hanchanStatOf`（importedStats.ts が組み立てる）。
  * 手入力の成績の値は、ここからは書き換えない（この区画は、保存した成績にも手入力の欄にも触れない）。
  * 取り込んだ半荘が無い週は、表を出さず、1 行だけ。
+ * 表の最後の 3 行と、半荘ごとの表の最後の 3 列は、AI 一致率・類似度・悪手率（F18、U-48。数え方はエンジンの `aiMetricsOf`・`totalAiMetrics`）。
+ * 週の「一致率」（自分の〇△✕ と AI 基準の一致）とは別の数なので、呼び名は「AI 一致率」。
  */
-import type { HanchanStatTotals } from '@jantama/engine';
+import { formatRatePercent, formatSimilarity, type AiMetrics, type HanchanStatTotals } from '@jantama/engine';
 import { useId, useState } from 'react';
 
 import { groupedNumber } from '../format';
@@ -21,6 +23,10 @@ const NONE = '—';
 const percent = (value: number | null): string => (value === null ? NONE : `${value.toFixed(1)}%`);
 const rankText = (value: number | null): string => (value === null ? NONE : `${value.toFixed(2)}位`);
 const pointsText = (value: number | null): string => (value === null ? NONE : `${groupedNumber(Math.round(value))}点`);
+/** AI 一致率・悪手率（0 から 1）。 */
+const rateText = (value: number | null): string => (value === null ? NONE : formatRatePercent(value));
+/** 類似度（0 から 1。Rating と同じ書き方）。 */
+const similarityText = (value: number | null): string => (value === null ? NONE : formatSimilarity(value));
 
 interface Item {
   key: string;
@@ -29,10 +35,11 @@ interface Item {
   base: string;
 }
 
-/** 表の行: 項目・値・もとの数（見本のとおりの書き方）。 */
-function itemsOf(t: HanchanStatTotals): Item[] {
+/** 表の行: 項目・値・もとの数（見本のとおりの書き方）。`thresholdPercent` は、悪手の基準（設定の「大きな不一致の基準」）。 */
+function itemsOf(t: HanchanStatTotals, ai: AiMetrics, thresholdPercent: number): Item[] {
   const games = `${t.hanchanCount}半荘`;
   const kyokus = `${t.kyokuCount}局`;
+  const decisions = `${ai.decisions}判断`;
   return [
     { key: 'fourth', label: '4位率', value: percent(t.fourthRate), base: `${t.fourthCount}半荘 / ${games}` },
     { key: 'dealIn', label: '放銃率', value: percent(t.dealInRate), base: `${t.dealInCount}局 / ${kyokus}` },
@@ -41,6 +48,9 @@ function itemsOf(t: HanchanStatTotals): Item[] {
     { key: 'fulou', label: '副露率', value: percent(t.fulouRate), base: `${t.fulouCount}局 / ${kyokus}` },
     { key: 'riichi', label: '立直率', value: percent(t.riichiRate), base: `${t.riichiCount}局 / ${kyokus}` },
     { key: 'points', label: '平均和了点', value: pointsText(t.averageWinPoints), base: `和了 ${t.winCount}回の点数の合計 ${groupedNumber(t.winPointsSum)}` },
+    { key: 'aiMatch', label: 'AI 一致率', value: rateText(ai.matchRate), base: `${ai.matches}判断 / ${decisions}` },
+    { key: 'similarity', label: '類似度', value: similarityText(ai.similarity), base: decisions },
+    { key: 'badMove', label: '悪手率', value: rateText(ai.badMoveRate), base: `${ai.badMoves}判断 / ${decisions}（確率 ${thresholdPercent}% 未満）` },
   ];
 }
 
@@ -60,6 +70,9 @@ function GameRows({ rows }: { rows: readonly ImportedHanchanRow[] }) {
             <th scope="col">立直</th>
             <th scope="col">副露</th>
             <th scope="col">平均和了点</th>
+            <th scope="col">AI 一致率</th>
+            <th scope="col">類似度</th>
+            <th scope="col">悪手率</th>
           </tr>
         </thead>
         <tbody>
@@ -81,6 +94,9 @@ function GameRows({ rows }: { rows: readonly ImportedHanchanRow[] }) {
               <td>{row.stat.riichiCount}</td>
               <td>{row.stat.fulouCount}</td>
               <td>{row.averageWinPoints === null ? NONE : groupedNumber(Math.round(row.averageWinPoints))}</td>
+              <td>{rateText(row.ai.matchRate)}</td>
+              <td>{similarityText(row.ai.similarity)}</td>
+              <td>{rateText(row.ai.badMoveRate)}</td>
             </tr>
           ))}
         </tbody>
@@ -121,7 +137,7 @@ export function ImportedStatsSection({ stats }: { stats: ImportedWeekStats }) {
                 </tr>
               </thead>
               <tbody>
-                {itemsOf(stats.totals).map((item) => (
+                {itemsOf(stats.totals, stats.ai, Math.round(stats.threshold * 100)).map((item) => (
                   <tr key={item.key}>
                     <th scope="row">{item.label}</th>
                     <td className="num">{item.value}</td>
