@@ -29,7 +29,10 @@ interface HesitationShotsProps {
   decisions: readonly DecisionRef[];
   /** 付け替えて、保存できたあと（付け替えた迷いと、付け替えた先の判断）。 */
   onRelinked: (mark: ResolvedMark, to: DecisionRef) => void;
-  /** 付け替えたあとの画面で、キーボードの位置を渡す迷いの記録の番号（その迷いの写真へ）。渡したら、`onFocusDone` で知らせる。 */
+  /**
+   * 付け替えたあとの画面で、キーボードの位置を渡す迷いの記録の番号（その迷いの写真へ）。渡したら、`onFocusDone` で知らせる。
+   * 写真が見つからない間は、何もしない（呼ぶ側が、渡す場面にいる間だけ渡し、その場面を離れたら取り下げる）。
+   */
   focusMarkId?: number | null;
   onFocusDone?: () => void;
 }
