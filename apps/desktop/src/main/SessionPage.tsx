@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
-import { DEFAULT_DISAGREEMENT_THRESHOLD, listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
+import { DEFAULT_DISAGREEMENT_THRESHOLD, aiMetricsOf, listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
 
 import { api } from '../api/tauri';
 import type { RatingEntry, SelfRatingValue, SessionRecord } from '../api/types';
 import { RATING_GLYPH, RatingShape } from '../shared/RatingShape';
+import { AiMetricsLine } from './AiMetricsLine';
 import { formatClock, formatSessionTitle } from './format';
 import { GradeBadge } from './GradeBadge';
 import { ExtraMemos } from './ExtraMemos';
@@ -135,6 +136,8 @@ export function SessionPage({
 
   const resolved = useMemo(() => (report === null ? null : resolveMarks(report, session)), [report, session]);
   const decisions = useMemo<DecisionRef[]>(() => (report === null ? [] : listDecisionRefs(report)), [report]);
+  // AI との比べ（F18）: 読み込んだ結果から数える（結果は読み直さない）。基準（threshold）を替えると、悪手率が変わる
+  const aiMetrics = useMemo(() => (report === null ? null : aiMetricsOf(report, { threshold })), [report, threshold]);
   const table = useMemo(
     () => (report === null || ready === null ? null : buildHandTable({ report, summary: ready, session })),
     [report, ready, session],
@@ -252,6 +255,8 @@ export function SessionPage({
             ) : null}
           </h1>
           <p className="quiet">{subtitle(session, summary, doubtOnly)}</p>
+          {/* AI との比べ（F18、U-48）: 結果を取り込んで読めている半荘だけ（段階の印・Rating と同じとき）。迷いだけの設定でも出す */}
+          {ready !== null && aiMetrics !== null && aiMetrics.decisions > 0 && <AiMetricsLine metrics={aiMetrics} threshold={threshold} />}
         </div>
         {(replayable || (ready !== null && ready.grade !== null)) && (
           <div className="head-actions">

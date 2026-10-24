@@ -6,8 +6,20 @@
  * - 数え方はエンジンの `hanchanStatOf`・`totalStats`（雀魂の成績の画面は読まない。取り込んだ牌譜だけから数える）
  * - まだ読み込み中の半荘と、牌譜が読めず数えられない半荘は、数に入れず、その数を持つ（画面が一言添える）
  * 半荘ごとの数は、結果を読み直した（`MortalReport` が替わった）ときだけ数え直す（局を 1 つずつ再生するので、少し重い）。
+ *
+ * AI 一致率・類似度・悪手率（F18、E-48、U-48）も、同じ半荘（数える半荘と同じ絞り込み）から、エンジンの `aiMetricsOf`・`totalAiMetrics` で数える。
+ * 悪手の基準は、設定の「大きな不一致の基準」（`threshold`。確率）。判断を数えるだけで軽いので、基準が替わるたびに数え直し、覚えない。
  */
-import { hanchanStatOf, totalStats, type HanchanStat, type HanchanStatTotals, type MortalReport } from '@jantama/engine';
+import {
+  aiMetricsOf,
+  hanchanStatOf,
+  totalAiMetrics,
+  totalStats,
+  type AiMetrics,
+  type HanchanStat,
+  type HanchanStatTotals,
+  type MortalReport,
+} from '@jantama/engine';
 
 import type { SessionRecord } from '../../api/types';
 import { formatSessionTitle } from '../format';
@@ -25,6 +37,8 @@ export interface ImportedHanchanRow {
   stat: HanchanStat;
   /** その半荘の平均和了点。和了が無ければ null。 */
   averageWinPoints: number | null;
+  /** その半荘の AI 一致率・類似度・悪手率（もとの数つき）。 */
+  ai: AiMetrics;
 }
 
 /** 見ている週の、取り込んだ半荘から数えた成績。 */
@@ -39,6 +53,10 @@ export interface ImportedWeekStats {
   rows: ImportedHanchanRow[];
   /** 数えた半荘をまとめた、もとの数と値。 */
   totals: HanchanStatTotals;
+  /** 数えた半荘をまとめた、AI 一致率・類似度・悪手率（もとの数つき）。数えた半荘が無ければ、数は 0、値は null。 */
+  ai: AiMetrics;
+  /** 悪手を数えた基準（確率。設定の「大きな不一致の基準」）。 */
+  threshold: number;
 }
 
 /** 結果ごとの数（局を再生するので、結果を読み直さないかぎり覚えておく）。null は、数えられなかった。 */
@@ -64,10 +82,12 @@ export interface ImportedStatsInput {
   gameState: (sessionId: string) => GameState | undefined;
   /** 見ている週の月曜（YYYY-MM-DD）。 */
   week: string;
+  /** 悪手とする確率の基準（設定の「大きな不一致の基準」。出題・半荘のページと同じ値）。 */
+  threshold: number;
 }
 
 export function buildImportedStats(input: ImportedStatsInput): ImportedWeekStats {
-  const { sessions, summaries, gameState, week } = input;
+  const { sessions, summaries, gameState, week, threshold } = input;
   const inWeek = sessions
     .filter((session) => session.report_path !== null && weekOfInstant(session.started_ms) === week)
     .sort((a, b) => a.started_ms - b.started_ms);
@@ -80,8 +100,9 @@ export function buildImportedStats(input: ImportedStatsInput): ImportedWeekStats
       loading += 1;
       continue;
     }
-    const stat = state.status === 'ready' ? statOf(state.game.report) : null;
-    if (stat === null) {
+    const report = state.status === 'ready' ? state.game.report : null;
+    const stat = report === null ? null : statOf(report);
+    if (report === null || stat === null) {
       unreadable += 1;
       continue;
     }
@@ -92,7 +113,16 @@ export function buildImportedStats(input: ImportedStatsInput): ImportedWeekStats
       room: summary?.status === 'ready' ? summary.summary.room : null,
       stat,
       averageWinPoints: stat.winCount === 0 ? null : stat.winPointsSum / stat.winCount,
+      ai: aiMetricsOf(report, { threshold }),
     });
   }
-  return { imported: inWeek.length, loading, unreadable, rows, totals: totalStats(rows.map((row) => row.stat)) };
+  return {
+    imported: inWeek.length,
+    loading,
+    unreadable,
+    rows,
+    totals: totalStats(rows.map((row) => row.stat)),
+    ai: totalAiMetrics(rows.map((row) => row.ai)),
+    threshold,
+  };
 }

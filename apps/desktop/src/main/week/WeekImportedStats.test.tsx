@@ -102,6 +102,9 @@ describe('U-37 取り込んだ半荘からの成績: 週の集計の別の表（
       ['副露率', '29.3%', '24局 / 82局'],
       ['立直率', '19.5%', '16局 / 82局'],
       ['平均和了点', '6,925点', '和了 16回の点数の合計 110,800'],
+      ['AI 一致率', '79.4%', '920判断 / 1159判断'],
+      ['類似度', '88.9', '1159判断'],
+      ['悪手率', '8.8%', '102判断 / 1159判断（確率 5% 未満）'],
     ]);
     expect(within(statTable(root)).getAllByRole('columnheader').map((cell) => textOf(cell))).toEqual(['項目', '値', 'もとの数']);
   });
@@ -176,14 +179,14 @@ describe('U-37 取り込んだ半荘からの成績: 週の集計の別の表（
     await user.keyboard('{Enter}');
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const games = within(root).getByRole('table', { name: '取り込んだ半荘ごとの成績' });
-    expect(within(games).getAllByRole('columnheader').map((cell) => textOf(cell))).toEqual(['半荘', '順位', '局数', '和了', '放銃', '立直', '副露', '平均和了点']);
+    expect(within(games).getAllByRole('columnheader').map((cell) => textOf(cell))).toEqual(['半荘', '順位', '局数', '和了', '放銃', '立直', '副露', '平均和了点', 'AI 一致率', '類似度', '悪手率']);
     const body = rows(games);
     expect(body).toHaveLength(7);
     // 古い順。先頭は f9da（10/5 10:00）、最後は FX-4（10/9 19:09）
     expect(body[0]?.[0]).toMatch(/^10月5日\(月\) 10:00/);
-    expect(body[0]?.slice(1)).toEqual(['3位', '12', '2', '1', '1', '7', '6,500']);
+    expect(body[0]?.slice(1)).toEqual(['3位', '12', '2', '1', '1', '7', '6,500', '75.8%', '86.7', '10.7%']);
     expect(body[6]?.[0]).toMatch(/^10月9日\(金\) 19:09/);
-    expect(body[6]?.slice(1)).toEqual(['4位', '5', '1', '2', '0', '2', '1,000']);
+    expect(body[6]?.slice(1)).toEqual(['4位', '5', '1', '2', '0', '2', '1,000', '88.6%', '93.0', '7.1%']);
     // 半荘ごとの値の合計が、上の表の「もとの数」になる
     const sum = (column: number) => body.reduce((total, row) => total + Number(row[column]), 0);
     expect(sum(2)).toBe(82);

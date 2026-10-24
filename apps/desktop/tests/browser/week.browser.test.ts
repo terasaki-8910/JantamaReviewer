@@ -650,6 +650,9 @@ describe('U-37: 取り込んだ半荘から数えた値（手入力の成績の�
             ['副露率', '29.3%', '24局 / 82局'],
             ['立直率', '19.5%', '16局 / 82局'],
             ['平均和了点', '6,925点', '和了 16回の点数の合計 110,800'],
+            ['AI 一致率', '79.4%', '920判断 / 1159判断'],
+            ['類似度', '88.9', '1159判断'],
+            ['悪手率', '8.8%', '102判断 / 1159判断（確率 5% 未満）'],
           ]);
           // 3 列の表は、細い窓でも「もとの数」が折り返して、横にはみ出さない
           expect(info.mainOverflow, `${where} 表が横にはみ出す`).toBe(false);
@@ -657,7 +660,7 @@ describe('U-37: 取り込んだ半荘から数えた値（手入力の成績の�
           expect(info.tableRight, where).toBeLessThanOrEqual(width);
           expect(info.pageScroll, where).toBeLessThanOrEqual(0);
 
-          // 「半荘ごとに見る」を開く。8 列の表は、はみ出すときだけ、名前つきの領域（キーボードで止まれる）にする
+          // 「半荘ごとに見る」を開く。11 列の表（AI 一致率・類似度・悪手率の 3 列を含む）は、はみ出すときだけ、名前つきの領域（キーボードで止まれる）にする
           await page.getByRole('button', { name: '半荘ごとに見る（7半荘）' }).click();
           await page.getByRole('table', { name: '取り込んだ半荘ごとの成績' }).waitFor();
           await waitGamesRegionSettled(page);
@@ -685,7 +688,7 @@ describe('U-37: 取り込んだ半荘から数えた値（手入力の成績の�
           } else {
             expect(games.region, where).toBeNull();
           }
-          if (width === 390) expect(games.overflow, `${where} 8 列の表は、細い窓では領域の中で動く`).toBe(true);
+          if (width === 390) expect(games.overflow, `${where} 11 列の表は、細い窓では領域の中で動く`).toBe(true);
           expect(problems, where).toEqual([]);
         } finally {
           await context.close();
@@ -775,6 +778,171 @@ describe('U-37: 取り込んだ半荘から数えた値（手入力の成績の�
           await context.close();
         }
       }
+    }
+  });
+});
+
+// ---- AI 一致率・類似度・悪手率（U-48。F18） ----
+
+describe('U-48: 週の集計の AI 一致率・類似度・悪手率（実ブラウザ。取り込んだ半荘から数えた値の表）', () => {
+  const NEW_ROWS = [
+    ['AI 一致率', '79.4%', '920判断 / 1159判断'],
+    ['類似度', '88.9', '1159判断'],
+    ['悪手率', '8.8%', '102判断 / 1159判断（確率 5% 未満）'],
+  ];
+  /** 半荘ごとの表の最後の 3 列（始めた順の 7 半荘。基準 5%）。 */
+  const GAME_VALUES = [
+    ['75.8%', '86.7', '10.7%'],
+    ['80.2%', '90.2', '8.1%'],
+    ['76.3%', '83.3', '10.3%'],
+    ['81.4%', '91.9', '6.5%'],
+    ['77.2%', '87.3', '10.9%'],
+    ['81.6%', '92.1', '7.2%'],
+    ['88.6%', '93.0', '7.1%'],
+  ];
+
+  for (const width of [390, 768, 1280]) {
+    for (const scheme of SCHEMES) {
+      it(`幅 ${width}px・${scheme}: 表の最後に「AI 一致率」「類似度」「悪手率」の 3 行。表は横にはみ出さず、半荘ごとの表の最後の 3 列は、はみ出すときは名前つきの領域の中で右端まで動かして読める。axe の重大な違反が 0 件`, { timeout: 120_000 }, async () => {
+        const { context, page, problems, external } = await open({ width, scheme, imported: true });
+        try {
+          await openWeek(page);
+          await waitImported(page);
+          const where = `@${width} ${scheme}`;
+          const main = await page.evaluate((heading) => {
+            const imported = [...document.querySelectorAll('section')].find((el) => el.querySelector('h2')?.textContent === heading) as HTMLElement;
+            const wrap = imported.querySelector('.wk-tablewrap') as HTMLElement;
+            const table = imported.querySelector('table') as HTMLElement;
+            const cells = (tr: Element) => [...tr.children].map((c) => (c.textContent ?? '').replace(/\s+/g, ' ').trim());
+            const agree = document.querySelector('figure[data-fig="agree"] .wk-cap');
+            return {
+              labels: [...imported.querySelectorAll('tbody tr')].map((tr) => cells(tr)[0]),
+              added: [...imported.querySelectorAll('tbody tr')].slice(7).map((tr) => cells(tr)),
+              overflow: wrap.scrollWidth > wrap.clientWidth + 1,
+              region: wrap.getAttribute('role'),
+              tableRight: Math.round(table.getBoundingClientRect().right),
+              pageScroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+              // 値の数字は等幅（表の「値」の列）
+              numeric: getComputedStyle(imported.querySelectorAll('tbody tr')[7]?.querySelector('td.num') as Element).fontVariantNumeric,
+              // 自分の〇△✕ の「一致率」は、そのまま（呼び名が違う）
+              agreeCaption: (agree?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+            };
+          }, IMPORTED_HEADING);
+          expect(main.labels, where).toEqual(['4位率', '放銃率', '平均順位', '和了率', '副露率', '立直率', '平均和了点', 'AI 一致率', '類似度', '悪手率']);
+          expect(main.added, where).toEqual(NEW_ROWS);
+          expect(main.overflow, `${where} 3 列の表が横にはみ出す`).toBe(false);
+          expect(main.region, where).toBeNull();
+          expect(main.tableRight, where).toBeLessThanOrEqual(width);
+          expect(main.pageScroll, where).toBeLessThanOrEqual(0);
+          expect(main.numeric, where).toContain('tabular-nums');
+          expect(main.agreeCaption, `${where} 週の「一致率」は別のまま`).toMatch(/^一致率/);
+          expect(main.agreeCaption, where).not.toContain('AI 一致率');
+
+          // 半荘ごとの表: 11 列。最後の 3 列が AI 一致率・類似度・悪手率
+          await page.getByRole('button', { name: '半荘ごとに見る（7半荘）' }).click();
+          await page.getByRole('table', { name: '取り込んだ半荘ごとの成績' }).waitFor();
+          await waitGamesRegionSettled(page);
+          const games = await page.evaluate((heading) => {
+            const imported = [...document.querySelectorAll('section')].find((el) => el.querySelector('h2')?.textContent === heading) as HTMLElement;
+            const table = [...imported.querySelectorAll('table')].find((t) => t.querySelector('caption')?.textContent === '取り込んだ半荘ごとの成績') as HTMLElement;
+            const wrap = table.closest('.wk-tablewrap') as HTMLElement;
+            const text = (el: Element) => (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+            const wrapBox = wrap.getBoundingClientRect();
+            const lastHead = table.querySelector('thead th:last-child') as HTMLElement;
+            wrap.scrollLeft = wrap.scrollWidth;
+            const lastBox = lastHead.getBoundingClientRect();
+            return {
+              heads: [...table.querySelectorAll('thead th')].map(text),
+              values: [...table.querySelectorAll('tbody tr')].map((tr) => [...tr.children].slice(8).map(text)),
+              columnCounts: [...table.querySelectorAll('tbody tr')].map((tr) => tr.children.length),
+              overflow: wrap.scrollWidth > wrap.clientWidth + 1,
+              region: wrap.getAttribute('role'),
+              tabindex: wrap.getAttribute('tabindex'),
+              // 右端まで動かすと、最後の列（悪手率）の見出しが、入れ物の中に見える
+              lastVisible: lastBox.right <= wrapBox.right + 1 && lastBox.left >= wrapBox.left - 1,
+              wrapRight: Math.round(wrapBox.right),
+              pageScroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+              valueNumeric: getComputedStyle(table.querySelector('tbody tr td:last-child') as Element).fontVariantNumeric,
+            };
+          }, IMPORTED_HEADING);
+          expect(games.heads, where).toEqual(['半荘', '順位', '局数', '和了', '放銃', '立直', '副露', '平均和了点', 'AI 一致率', '類似度', '悪手率']);
+          expect(games.columnCounts, where).toEqual(Array(7).fill(11));
+          expect(games.values, where).toEqual(GAME_VALUES);
+          expect(games.wrapRight, where).toBeLessThanOrEqual(width);
+          expect(games.pageScroll, `${where} ページが横にはみ出す`).toBeLessThanOrEqual(0);
+          expect(games.lastVisible, `${where} 右端まで動かすと「悪手率」の列が見える`).toBe(true);
+          expect(games.valueNumeric, where).toContain('tabular-nums');
+          if (games.overflow) {
+            expect(games.region, where).toBe('region');
+            expect(games.tabindex, where).toBe('0');
+          } else {
+            expect(games.region, where).toBeNull();
+          }
+          if (width === 390) expect(games.overflow, `${where} 11 列の表は、細い窓では領域の中で動く`).toBe(true);
+
+          // axe: 全体で重大な違反が無い。取り込んだ半荘の区画だけに絞っても、違反が無く、色のコントラストが実際に働いている
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe), where).toEqual([]);
+          const scoped = await page.evaluate(async () => {
+            interface Rule {
+              id: string;
+              impact?: string | null;
+              nodes: unknown[];
+            }
+            const axeCore = (window as unknown as { axe: { run: (context: unknown) => Promise<{ violations: Rule[]; passes: Rule[] }> } }).axe;
+            const result = await axeCore.run({ include: [['.wk-imp']] });
+            return {
+              violations: result.violations.map((v) => `${v.id} (${v.impact ?? ''})`),
+              contrast: result.passes.find((p) => p.id === 'color-contrast')?.nodes.length ?? 0,
+            };
+          });
+          expect(scoped.violations, where).toEqual([]);
+          expect(scoped.contrast, `${where} コントラストの対象`).toBeGreaterThan(30);
+          expect(problems, where).toEqual([]);
+          expect(external, where).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('はみ出す半荘ごとの表（幅 390px）は、領域に Tab で止まり、矢印キーで横に動かせる。最後の列まで読める', { timeout: 120_000 }, async () => {
+    const { context, page } = await open({ width: 390, imported: true });
+    try {
+      await openWeek(page);
+      await waitImported(page);
+      await page.getByRole('button', { name: '半荘ごとに見る（7半荘）' }).click();
+      await page.getByRole('table', { name: '取り込んだ半荘ごとの成績' }).waitFor();
+      await waitGamesRegionSettled(page);
+      const region = page.getByRole('region', { name: '半荘ごとの成績（横にスクロールできます）' });
+      await region.focus();
+      expect(await region.evaluate((el) => el === document.activeElement)).toBe(true);
+      const before = await region.evaluate((el) => el.scrollLeft);
+      const max = await region.evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(max).toBeGreaterThan(100);
+      for (let i = 0; i < 40; i += 1) await page.keyboard.press('ArrowRight');
+      // キーで動かすスクロールは、滑らかに動く（押し終えてから右端に着くまで、少しかかる）。40 回押せば、右端に着く（11 列の幅は、390px の窓の 2 倍ほど）
+      await expect.poll(() => region.evaluate((el) => el.scrollLeft), { timeout: 10_000, interval: 100 }).toBeGreaterThan(before);
+      await expect.poll(() => region.evaluate((el) => el.scrollLeft), { timeout: 10_000, interval: 100 }).toBeGreaterThanOrEqual(max - 1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('迷いだけの設定が入でも、3 行と 3 列が出る（自分の〇△✕ の一致率の区画だけが隠れる。幅 1280px）', { timeout: 120_000 }, async () => {
+    const { context, page } = await open({ width: 1280, imported: true, doubtOnly: true });
+    try {
+      await openWeek(page);
+      await waitImported(page);
+      expect(await page.locator('figure[data-fig="agree"]').count()).toBe(0);
+      const rows = await page.evaluate((heading) => {
+        const imported = [...document.querySelectorAll('section')].find((el) => el.querySelector('h2')?.textContent === heading) as HTMLElement;
+        return [...imported.querySelectorAll('tbody tr')].slice(7).map((tr) => [...tr.children].map((c) => (c.textContent ?? '').replace(/\s+/g, ' ').trim()));
+      }, IMPORTED_HEADING);
+      expect(rows).toEqual(NEW_ROWS);
+    } finally {
+      await context.close();
     }
   });
 });
