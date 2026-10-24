@@ -124,6 +124,12 @@ describe('公開 API（src/index.ts）', () => {
     expect(engine.DEFAULT_GRADE_MODEL.recordCount).toBe(67);
   });
 
+  it('E-48 AI 一致率・類似度・悪手率の入口が使える', () => {
+    for (const name of ['aiMetricsOf', 'aiMetricsOfEntries', 'totalAiMetrics', 'formatRatePercent', 'formatSimilarity'] as const) {
+      expect(typeof engine[name], name).toBe('function');
+    }
+  });
+
   it('F10 局の自己評価と AI 基準の食い違い（印）の入口が使える', () => {
     for (const name of ['disagreesWithGrade', 'agreesWithGrade', 'markOffsetFromGrade', 'gradeBand', 'markBand'] as const) {
       expect(typeof engine[name], name).toBe('function');

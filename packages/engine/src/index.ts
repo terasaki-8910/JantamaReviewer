@@ -10,6 +10,8 @@
  * - 受け入れ枚数: `shanten` / `ukeire` / `discardOptions` / `tenhouPairiUrl`（E-3）、打牌の判断での比較: `compareDiscardUkeire`（F6）
  * - 2〜3巡前からの再生: `framesBeforeDecision`（F3）
  * - Rating: `gameRating` / `handRatings`（E-12）、段階の当てはめ: `fitGradeModel` / `evaluateLeaveOneGameOut`（E-13）
+ * - AI との比べ（F18、E-48）: `aiMetricsOf`（半荘の判断の数・AI の1位と同じだった数・悪手の数〔実戦の行動の確率が基準より低い。数は `listDisagreements` の total と同じ〕と、
+ *   AI 一致率・類似度〔Rating と同じ式〕・悪手率。判断が無ければ値は null）、半荘をまとめるのは `totalAiMetrics`（もとの数を足して出し直す）
  * - 局の結果と暫定の〇△✕: `summarizeKyokus`（E-6）、評価の突き合わせ: `alignRatings`（E-7）
  * - 解き直しの予定: `scheduleReview`（E-5。答えを選び直した問題は間隔を進めない）・`scheduleFirstReview`（出題で答えたら 1 日後。E-25）・
  *   `studyDate`（出題・解き直しの「今日」。午前 4 時まで前の日）、牌譜リンク: `parsePaipuLink`（E-9）、MAKA の打牌: `recordMakaMove`（E-14）
@@ -91,6 +93,7 @@
 export const ENGINE_PACKAGE = '@jantama/engine' as const;
 
 export * from './actions';
+export * from './ai-metrics';
 export * from './center-text';
 export * from './contest';
 export * from './danger';
