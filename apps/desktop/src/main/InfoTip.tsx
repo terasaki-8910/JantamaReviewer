@@ -7,6 +7,7 @@
  * - マウスを乗せると出て（離すと、少し待って閉じる。重なりの中へマウスが渡れる）、キーボードで選ぶと出る（外れると閉じる）。
  *   押す（Enter・Space）と出したままにする（もう一度押すと閉じる。タッチでも、これで開く）。Esc で閉じる
  * - 重なりは、説明している物にかからないように、アイコンの上に出す。上に入らないときだけ下に出す。窓の中に収める（幅 390px でも）。
+ *   本文（main）の中のアイコンは、本文の範囲に収める（左のサイドバーにかけない。本文が重なりより狭いときは、窓に収めるだけ）。
  *   スクロールと窓の大きさの変化では、置き直す（アイコンが窓の外へ出たら閉じる）
  * - 重なりは、body の下に描く（欄の中に置くと、`container-type` の入った本文の中では、窓ではなく本文が位置の基準になるため）
  *
@@ -105,7 +106,8 @@ export function Tip({ children, id, triggerClassName, triggerLabel, triggerConte
     setMode('closed');
   }, [clearLeaveTimer]);
 
-  // アイコンの上に置く。上に入らなければ下。窓の中に収める。アイコンが窓の外へ出ていれば、置かずに false を返す
+  // アイコンの上に置く。上に入らなければ下。窓の中に収める（本文の中のアイコンは、本文の左端より左へ出さない）。
+  // アイコンが窓の外へ出ていれば、置かずに false を返す
   const place = useCallback((): boolean => {
     const tip = tipRef.current;
     const button = buttonRef.current;
@@ -116,7 +118,9 @@ export function Tip({ children, id, triggerClassName, triggerLabel, triggerConte
     const viewHeight = document.documentElement.clientHeight;
     const width = tip.offsetWidth;
     const height = tip.offsetHeight;
-    const left = Math.max(EDGE, Math.min(rect.left + rect.width / 2 - width / 2, viewWidth - width - EDGE));
+    const area = button.closest('main')?.getBoundingClientRect();
+    const minLeft = area !== undefined && area.width >= width + EDGE * 2 ? Math.max(EDGE, area.left + EDGE) : EDGE;
+    const left = Math.max(minLeft, Math.min(rect.left + rect.width / 2 - width / 2, viewWidth - width - EDGE));
     let top = rect.top - height - GAP;
     let side: 'above' | 'below' = 'above';
     if (top < EDGE) {

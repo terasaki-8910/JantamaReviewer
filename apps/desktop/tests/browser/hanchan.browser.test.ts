@@ -1492,6 +1492,10 @@ describe('U-25: 説明のアイコン（局の評価の表の迷いの札）', (
           expect(m!.side).toBe('above');
           expect(boxesOverlap(m!.tip, m!.explained as BoxRect)).toBe(false);
           expect(boxesOverlap(m!.tip, m!.icon)).toBe(false);
+          // 左のサイドバーが出ている幅（768・1280）でも、サイドバーにかからない（本文の範囲に収める。細い窓の引き出しは、閉じていて画面の外）
+          const sideRight = await page.evaluate(() => Math.max(0, document.querySelector('.side')?.getBoundingClientRect().right ?? 0));
+          if (width >= 768) expect(sideRight, `${width} ${scheme}`).toBeGreaterThan(0);
+          expect(m!.tip.left, `${width} ${scheme}`).toBeGreaterThanOrEqual(sideRight);
           expect(seriousViolations(await runAxe(page)), `${width} ${scheme}`).toEqual([]);
           await page.keyboard.press('Escape');
           expect(await page.getByRole('tooltip').count()).toBe(0);
