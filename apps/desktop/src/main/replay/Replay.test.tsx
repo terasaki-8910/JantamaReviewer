@@ -15,6 +15,7 @@ import {
   prevStepIn,
   tileKind,
   tileLabel,
+  type ImportedGame,
 } from '@jantama/engine';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -37,6 +38,21 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 
+/** 試験が時間軸から手を取り除く判断の鍵（その判断に手が無い場合を作る。null のときは、本物の時間軸のまま）。 */
+const withoutStep = vi.hoisted(() => ({ key: null as string | null }));
+vi.mock('@jantama/engine', async (importOriginal) => {
+  const engine = await importOriginal<typeof import('@jantama/engine')>();
+  return {
+    ...engine,
+    buildReplayTimeline: (game: ImportedGame) => {
+      const timeline = engine.buildReplayTimeline(game);
+      const decision = withoutStep.key === null ? undefined : engine.findDecisionByKey(game, withoutStep.key);
+      if (decision === undefined) return timeline;
+      return { ...timeline, stepOfDecision: new Map([...timeline.stepOfDecision].filter(([index]) => index !== decision.index)) };
+    },
+  };
+});
+
 /** 試験の「いま」: 2026 年 10 月 9 日 22:00（日付だけ動かす）。 */
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -45,6 +61,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  withoutStep.key = null;
 });
 
 const FX4_ID = '20261009-190953';
@@ -1798,6 +1815,46 @@ describe('U-45 迷いのスクショ（通して見る画面）', () => {
     await waitFor(() => expect(thumb(3)).toHaveFocus());
     // 元の場面は、迷いの場面ではなくなった
     expect(document.querySelector('.pin[data-key="k1h1e7"]')).toBeNull();
+  });
+
+  it('キーボードの位置を写真へ渡す依頼は、渡し終えたら捨てる。ほかの場面へ移って、その場面へ戻っても、写真へは移らない', async () => {
+    const { user, sessions } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
+    await screen.findByLabelText('理由（1行）');
+    const { next } = neighbours('k1h1e7');
+    await user.click(screen.getByRole('button', { name: '迷い3を次の手に付け替える' }));
+    await waitFor(() => expect(sessions.session(FX4_ID).links.marks['3']).toBe(next.key));
+    await waitFor(() => expect(thumb(3)).toHaveFocus());
+    // 別の場面へ移り（キーボードの位置は、押した場面の印へ）、付け替えた先へ戻る
+    await user.click(document.querySelector('.pin[data-key="k1h1e6"]') as HTMLElement);
+    expect(shots()).toBeNull();
+    await user.click(document.querySelector(`.pin[data-key="${next.key}"]`) as HTMLElement);
+    expect(shots()?.querySelector('.shot-n')?.textContent).toBe('迷い3');
+    expect(pos()).toBe(posAt(stepOf(next.key)));
+    expect(thumb(3)).not.toHaveFocus();
+  });
+
+  it('付け替えた先の手が無いときは、見ている手のまま動かず、写真へ渡す依頼も残さない。あとでその迷いの場面が開いても、写真へは移らない', async () => {
+    const { next } = neighbours('k1h1e7');
+    withoutStep.key = next.key;
+    const { user, sessions } = setup({ links: USER_LINKS });
+    await loaded('5');
+    await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
+    await screen.findByLabelText('理由（1行）');
+    const here = pos();
+    await user.click(screen.getByRole('button', { name: '迷い3を次の手に付け替える' }));
+    await waitFor(() => expect(sessions.session(FX4_ID).links.marks['3']).toBe(next.key));
+    // 迷いは付け替わり、見ていた手は迷いの場面ではなくなる。移る先が無いので、手はそのまま
+    await waitFor(() => expect(shots()).toBeNull());
+    expect(pos()).toBe(here);
+    expect(title()).toBe(titleAt(stepOf('k1h1e7')));
+    // 取り消すと、迷いの場面に戻る。キーボードの位置は、写真へ移らない
+    press({ code: 'KeyZ', key: 'z', ctrlKey: true });
+    await waitFor(() => expect(sessions.session(FX4_ID).links.marks['3']).toBe('k1h1e7'));
+    await waitFor(() => expect(shots()).not.toBeNull());
+    expect(thumb(3)).not.toHaveFocus();
+    expect(pos()).toBe(here);
   });
 
   it('「前の手に付け替える」: 前の判断へ。Ctrl+Z で、付け替える前の結びつけに戻る（半荘のページと同じ保存）', async () => {

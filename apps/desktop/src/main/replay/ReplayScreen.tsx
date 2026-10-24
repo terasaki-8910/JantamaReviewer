@@ -110,8 +110,17 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
     const decision = startKey === undefined ? undefined : findDecisionByKey(game, startKey);
     return decision === undefined ? 0 : (timeline.stepOfDecision.get(decision.index) ?? 0);
   });
+  // 迷いを付け替えたあと、付け替えた先の手の写真へキーボードの位置を渡す依頼。移った先の手と組にして持つ（下の `onRelinked`）
+  const [focusRequest, setFocusRequest] = useState<{ markId: number; step: number } | null>(null);
   const last = timeline.steps.length - 1;
-  const go = useCallback((to: number) => setG(Math.max(0, Math.min(last, to))), [last]);
+  const go = useCallback(
+    (to: number) => {
+      setG(Math.max(0, Math.min(last, to)));
+      // どの手へ移るときも、依頼は捨てる（写真が見つからないまま残ると、あとでその迷いの場面を開いたとき、思いがけず写真へ移ってしまう）
+      setFocusRequest(null);
+    },
+    [last],
+  );
   const nav = useMemo(() => replayNav(timeline, stops, g), [timeline, stops, g]);
 
   const step = timeline.steps[g];
@@ -157,15 +166,18 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
     return out.sort((a, b) => a.g - b.g);
   }, [gameTracks, timeline]);
 
-  // 迷いのスクショの欄で、迷いを前・次の手に付け替えたら、付け替えた先の場面へ移る（その場面の、その迷いの写真へ、キーボードの位置を渡す）
-  const [focusMark, setFocusMark] = useState<number | null>(null);
-  const onFocusDone = useCallback(() => setFocusMark(null), []);
+  // 迷いのスクショの欄で、迷いを前・次の手に付け替えたら、付け替えた先の場面へ移る（その場面の、その迷いの写真へ、キーボードの位置を渡す）。
+  // 移る先の手が無いときは、依頼を出さない。出した依頼は、その手にいるあいだだけ渡し、渡し終えたら捨てる
+  const focusMark = focusRequest !== null && focusRequest.step === g ? focusRequest.markId : null;
+  const onFocusDone = useCallback(() => setFocusRequest(null), []);
   const onRelinked = useCallback(
     (mark: ResolvedMark, to: DecisionRef) => {
       const decision = findDecisionByKey(game, to.key);
       const at = decision === undefined ? undefined : timeline.stepOfDecision.get(decision.index);
-      setFocusMark(mark.markId);
-      if (at !== undefined) go(at);
+      if (at === undefined) return;
+      go(at);
+      // `go` が依頼を捨てるので、移ったあとに出す
+      setFocusRequest({ markId: mark.markId, step: at });
     },
     [game, timeline, go],
   );
