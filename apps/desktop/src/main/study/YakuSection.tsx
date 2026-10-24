@@ -10,10 +10,11 @@
  * 説明の文は、見出しのそばの説明のアイコン（InfoTip。R11-1）に置く。見た目は styles/yaku.css（承認済みの見本の部品。色はトークンだけ）。
  */
 import { sortTiles, tileLabel, type YakuBlock, type YakuBox, type YakuPart, type YakuSummary } from '@jantama/engine';
-import { Fragment, useId, useState, type ReactNode } from 'react';
+import { Fragment, useId, type ReactNode } from 'react';
 
 import { Icon } from '../Icon';
 import { InfoTip } from '../InfoTip';
+import { usePersistedFlag } from '../usePersistedFlag';
 import { isDoraTile } from './dora';
 import { Tile } from './Tile';
 
@@ -232,25 +233,12 @@ interface SectionProps {
 export function YakuSection({ box, dora }: SectionProps) {
   const blocks = box.merged ? box.blocks.slice(0, 1) : box.blocks;
   const detailsId = useId();
-  const [open, setOpen] = useState(() => {
-    try {
-      return localStorage.getItem('jantama.yakuOpen') === '1';
-    } catch {
-      return false;
-    }
-  });
+  // 開け閉めは画面の保存領域に覚える（使えなくても、この画面での開け閉めは続ける）
+  const [open, setOpen] = usePersistedFlag('jantama.yakuOpen', false);
   const summaryBlock = box.merged ? blocks[0] : blocks.find((block) => block.tags.includes('自分'));
   const settled = summaryBlock?.text.settled.map((line) => line.name) ?? [];
   const hasDanger = box.blocks.some((block) => block.text.warning?.level === 'danger');
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    try {
-      localStorage.setItem('jantama.yakuOpen', next ? '1' : '0');
-    } catch {
-      // 保存領域が使えなくても、この画面での開け閉めは続ける
-    }
-  };
+  const toggle = () => setOpen(!open);
   return (
     <div className="q-sec" data-ai="yaku-box">
       <div className="sec-head">
