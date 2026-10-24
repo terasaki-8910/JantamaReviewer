@@ -3,8 +3,8 @@
  *
  * 答える前: 場面の情報の 1 行（巡目・向聴数・他家の立直。U-47）、打牌の判断は選んだ牌の表示、ほかの判断（鳴き・リーチ・和了・カン）は
  *   雀魂と同じ並びのボタン。理由（1 行・任意）。答えを選ぶまで「答え合わせ」は押せない（U-2）。この間、AI の候補・確率・順位は、DOM のどこにも出さない（U-1）。
- * 答え合わせのあと: 自分の答え・（解き直しは）正解か次の予定・AI の評価（打牌の判断は、手牌の上の棒で出すので、ここには無い）・
- *   受け入れ枚数（打牌の判断）・差の原因・学んだ原則・MAKA・次へ。
+ * 答え合わせのあと: 自分の答え・（解き直しは）正解か次の予定・AI の評価（打牌の判断は、手牌の上の棒で出すので、ここには無い。
+ *   ただし、棒の出ない過去の盤面を見ている間は、一覧をここに出す）・受け入れ枚数（打牌の判断）・差の原因・学んだ原則・MAKA・次へ。
  *   AI の情報を持つ要素には `data-ai` を付ける（答える前の画面に無いことを、試験が確かめる）。
  * どちらの欄も、いちばん上（スクロールする部分の頭）に、迷いのスクショの欄（`shots`。迷いマークを結びつけた場面だけ。U-45）を置ける。
  */
@@ -72,6 +72,11 @@ export interface AnswerPanelProps {
   shots?: ReactNode;
   /** 「解決」の入切（上の段の先頭。答える前も、答え合わせのあとも出す。F16、U-41）。 */
   resolve?: ResolveControl;
+  /**
+   * 過去の盤面を見ているか（出題の「前の巡目」）。打牌の判断の AI の評価は、手牌の上の棒で出すが、過去の盤面には棒を出さない
+   * （その時点の別の手牌のため）ので、その間は、答え合わせのあとの欄に評価の一覧を出す。
+   */
+  past?: boolean;
 }
 
 /** 「答え合わせ」を押せない理由（何を選ぶと押せるか）。 */
@@ -382,7 +387,7 @@ interface RevealProps extends AnswerPanelProps {
   focusOnMount: boolean;
 }
 
-function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, above, shots, resolve }: RevealProps) {
+function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, above, shots, resolve, past = false }: RevealProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
@@ -440,8 +445,8 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
         </div>
       </div>
       {memoShown !== undefined && <MemoShown memos={memoShown} />}
-      {/* 打牌の判断は、手牌の上の棒で出す（U-43）。鳴き・リーチ・和了・カンの判断は、ここの一覧 */}
-      {!discard && <Evaluation bars={model.bars} discard={false} dora={dora} />}
+      {/* 打牌の判断は、手牌の上の棒で出す（U-43）。棒の出ない過去の盤面の間は、ここの一覧。鳴き・リーチ・和了・カンの判断は、いつもここの一覧 */}
+      {(!discard || past) && <Evaluation bars={model.bars} discard={discard} dora={dora} />}
       {extraTabs.length === 0 ? (
         defaultSections
       ) : (

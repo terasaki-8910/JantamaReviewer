@@ -88,6 +88,7 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
         memoShown={memoShown}
         shots={shots}
         resolve={work.resolve}
+        past={past}
         above={
           view.showing && view.seats !== null ? (
             <OpenHandsBlock me={game.playerId} seats={view.seats} eventIndex={eventIndex} dora={work.dora} tracks={view.tracks} />

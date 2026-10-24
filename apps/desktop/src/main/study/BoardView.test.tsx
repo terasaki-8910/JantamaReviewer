@@ -126,6 +126,104 @@ describe('U-43 AI の評価の棒（打牌の判断。手牌の上）', () => {
     expect(bars()).toHaveLength(14);
   });
 
+  describe('過去の盤面（前の巡目）では、棒の代わりに、右の欄に評価の一覧を出す', () => {
+    /** 右の欄の評価の一覧の行: 印・牌の名前・棒の幅・確率。 */
+    const listRows = () =>
+      [...document.querySelectorAll<HTMLElement>('#answer [data-ai="candidate"]')].map((row) => ({
+        tags: row.querySelector('.btag')?.textContent,
+        tile: row.querySelector('.lab img')?.getAttribute('alt'),
+        width: (row.querySelector('.fill') as HTMLElement).style.width,
+        probability: row.querySelector('.v')?.textContent,
+        kind: row.className,
+      }));
+    const previous = () => screen.getByRole('button', { name: /前の巡目/ });
+    const next = () => screen.getByRole('button', { name: /次の巡目/ });
+
+    it('答え合わせのあとに過去の盤面を見ると、一覧が出る（候補ごとの牌・棒・確率と、自分・実戦・AI の印）。判断の盤面に戻すと、一覧は消えて、棒が出る', async () => {
+      const { user } = renderQuiz();
+      await answer(user);
+      // 判断の盤面: 棒だけ。右の欄に一覧は無い
+      expect(bars()).toHaveLength(14);
+      expect(listRows()).toEqual([]);
+      expect(document.querySelector('[data-ai="eval"], .bars')).toBeNull();
+      // 過去の盤面: 棒の代わりに、一覧（棒の出ない間も、AI の評価が見られる）
+      await user.click(previous());
+      expect(bars()).toHaveLength(0);
+      const panel = document.querySelector('[data-ai="eval"]') as HTMLElement;
+      expect(panel.closest('#answer')).not.toBeNull();
+      expect(within(panel).getByRole('heading', { level: 2, name: 'AIの評価（Mortal）' })).toBeInTheDocument();
+      // 打牌の判断の形（牌の列が狭い）。確率の高い順に、AI の 1 位（7s）・自分の答え（ツモ牌 1s）・ほかの候補・実戦（3m）
+      expect(panel.querySelector('ul.bars')?.classList.contains('call')).toBe(false);
+      expect(listRows()).toEqual([
+        { tags: 'AI', tile: '七索', width: '97.72%', probability: '97.72%', kind: 'bar top' },
+        { tags: '自分', tile: '一索', width: '2.28%', probability: '2.28%', kind: 'bar you' },
+        { tags: '', tile: '六筒', width: '0.6%', probability: '<0.01%', kind: 'bar' },
+        { tags: '', tile: '七筒', width: '0.6%', probability: '<0.01%', kind: 'bar' },
+        { tags: '実戦', tile: '三萬', width: '0.6%', probability: '<0.01%', kind: 'bar act' },
+      ]);
+      // 判断の盤面に戻すと、一覧は消えて、棒が出る。もう一度過去へ行けば、また出る
+      await user.click(next());
+      expect(listRows()).toEqual([]);
+      expect(document.querySelector('[data-ai="eval"], .bars')).toBeNull();
+      expect(bars()).toHaveLength(14);
+      await user.click(previous());
+      expect(listRows()).toHaveLength(5);
+    });
+
+    it('判断の盤面を見ている間は、一覧は出ない（棒だけ）', async () => {
+      const { user } = renderQuiz();
+      await answer(user);
+      expect(bars()).toHaveLength(14);
+      expect(listRows()).toEqual([]);
+      expect(screen.queryByRole('heading', { name: 'AIの評価（Mortal）' })).toBeNull();
+    });
+
+    it('答える前は、過去の盤面を見ても、AI の情報はどこにも出ない（U-1）。選んだだけ・理由を書いただけでも同じ', async () => {
+      const { user } = renderQuiz();
+      await user.click(drawn());
+      await user.type(reasonBox(), '受け入れを広く');
+      await user.click(previous());
+      expect(screen.getByRole('button', { name: /次の巡目/ })).toBeInTheDocument();
+      expect(document.querySelector('.past-flag')).not.toBeNull();
+      expect(document.querySelector('[data-ai]')).toBeNull();
+      expect(document.querySelector('.bars, .ai-bar, .ai-num')).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'AIの評価（Mortal）' })).toBeNull();
+      expect(screen.queryByRole('list', { name: 'AIの評価' })).toBeNull();
+      expect(document.body.textContent).not.toMatch(/\d\s*%|Mortal/);
+    });
+
+    it('解き直しでも、保存してある答えを開いたときでも、過去の盤面では一覧が出る', async () => {
+      const review = renderQuiz({ mode: 'review', previousIntervalDays: 3 });
+      await answer(review.user);
+      await review.user.click(previous());
+      expect(bars()).toHaveLength(0);
+      expect(listRows()).toHaveLength(5);
+      expect(listRows()[0]).toMatchObject({ tags: 'AI', probability: '97.72%' });
+      cleanup();
+      const user = renderQuiz({
+        existing: answerRow({ session_id: 'sess', decision_key: 'k3h0e15', choice: { type: 'dahai', tile: '1s' }, reason: '受け入れを広く' }),
+      }).user;
+      expect(bars()).toHaveLength(14);
+      expect(listRows()).toEqual([]);
+      await user.click(previous());
+      expect(bars()).toHaveLength(0);
+      expect(listRows()).toHaveLength(5);
+    });
+
+    it('鳴きの判断は、いつも一覧（過去の盤面でも、判断の盤面でも同じ）', async () => {
+      const find = (d: Decision) => d.kind === 'call' && d.kyokuLabel === '東2局1本場' && d.junme === 8;
+      const { user } = renderQuiz({ report: 'fx4', find });
+      await user.click(screen.getAllByRole('radio')[0] as HTMLElement);
+      await user.type(reasonBox(), '役牌');
+      await user.click(submit());
+      await revealed();
+      expect(document.querySelectorAll('[data-ai="candidate"]')).toHaveLength(2);
+      await user.click(previous());
+      expect(document.querySelectorAll('[data-ai="candidate"]')).toHaveLength(2);
+      expect(document.querySelectorAll('ul.bars.call')).toHaveLength(1);
+    });
+  });
+
   it('解き直しでも、答え合わせのあとだけ出る', async () => {
     const { user } = renderQuiz({ mode: 'review', previousIntervalDays: 3 });
     expect(bars()).toHaveLength(0);
