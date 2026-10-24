@@ -919,11 +919,12 @@ describe('U-48: 週の集計の AI 一致率・類似度・悪手率（実ブラ
       await region.focus();
       expect(await region.evaluate((el) => el === document.activeElement)).toBe(true);
       const before = await region.evaluate((el) => el.scrollLeft);
+      const max = await region.evaluate((el) => el.scrollWidth - el.clientWidth);
+      expect(max).toBeGreaterThan(100);
       for (let i = 0; i < 40; i += 1) await page.keyboard.press('ArrowRight');
-      const after = await region.evaluate((el) => ({ left: el.scrollLeft, max: el.scrollWidth - el.clientWidth }));
-      expect(after.left).toBeGreaterThan(before);
-      // 40 回押せば、右端に着く（11 列の幅は、390px の窓の 2 倍ほど）
-      expect(after.left).toBeGreaterThanOrEqual(after.max - 1);
+      // キーで動かすスクロールは、滑らかに動く（押し終えてから右端に着くまで、少しかかる）。40 回押せば、右端に着く（11 列の幅は、390px の窓の 2 倍ほど）
+      await expect.poll(() => region.evaluate((el) => el.scrollLeft), { timeout: 10_000, interval: 100 }).toBeGreaterThan(before);
+      await expect.poll(() => region.evaluate((el) => el.scrollLeft), { timeout: 10_000, interval: 100 }).toBeGreaterThanOrEqual(max - 1);
     } finally {
       await context.close();
     }

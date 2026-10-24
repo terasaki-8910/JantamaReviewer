@@ -1247,8 +1247,13 @@ describe('U-1 この画面に AI の答えは出さない（実ブラウザ）',
     try {
       const scan = () =>
         page.evaluate(() => {
-          // MAKA の当てはめの見込みの 1 行（U-31）の「34%」は、AI の確率ではないので、検査から外す（tests/fit-line.ts）
-          const html = document.body.innerHTML.replace(/ src="[^"]*"/g, '').replace(/<p class="tbl-note fit"[\s\S]*?<\/p>/g, '');
+          // MAKA の当てはめの見込みの 1 行（U-31）の「34%」は、AI の確率ではないので、検査から外す（tests/fit-line.ts）。
+          // 見出しの AI 一致率・類似度・悪手率の 1 行（U-48）と、その説明の文（「確率」が入る）も、半荘全体の割合なので、外す
+          const html = document.body.innerHTML
+            .replace(/ src="[^"]*"/g, '')
+            .replace(/<p class="tbl-note fit"[\s\S]*?<\/p>/g, '')
+            .replace(/<div class="head-metrics">[\s\S]*?<\/div>/g, '')
+            .replace(/<span class="infotip-pop"[^>]*>AI（Mortal）と比べた数です[\s\S]*?<\/span>/g, '');
           const attrs = Array.from(document.querySelectorAll('*')).flatMap((el) => el.getAttributeNames());
           return {
             dataAi: /data-ai/i.test(html) || attrs.some((a) => /^data-ai/i.test(a)),
