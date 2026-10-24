@@ -143,8 +143,9 @@ export function TodayPage({ onOpen }: TodayPageProps) {
             </button>
           )}
         </div>
-        {total > 0 && <p className="q-rule">{ruleLine(items, today.sessionCount)}</p>}
-        {total > 0 && (
+        {/* 一覧と説明は、組に問題があるかぎり出す（全部を答えないまま解決しても、「解決」の札を付けた行を残し、開いて解決を切れるように） */}
+        {items.length > 0 && <p className="q-rule">{ruleLine(items, today.sessionCount)}</p>}
+        {items.length > 0 && (
           <ol className="qlist" aria-label="今日の出題">
             {items.map((item, index) => (
               <ProblemRow
@@ -169,7 +170,7 @@ export function TodayPage({ onOpen }: TodayPageProps) {
               {rest.map((problem, index) => (
                 <ProblemRow
                   key={`${problem.sessionId}/${problem.key}`}
-                  n={total + index + 1}
+                  n={items.length + index + 1}
                   problem={problem}
                   answered={false}
                   resolved={false}

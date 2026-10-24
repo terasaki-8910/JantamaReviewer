@@ -3,8 +3,8 @@
  *
  * 答える前: 場面の情報の 1 行（巡目・向聴数・他家の立直。U-47）、打牌の判断は選んだ牌の表示、ほかの判断（鳴き・リーチ・和了・カン）は
  *   雀魂と同じ並びのボタン。理由（1 行・任意）。答えを選ぶまで「答え合わせ」は押せない（U-2）。この間、AI の候補・確率・順位は、DOM のどこにも出さない（U-1）。
- * 答え合わせのあと: 自分の答え・（解き直しは）正解か次の予定・AI の評価（打牌の判断は、手牌の上の棒で出すので、ここには無い）・
- *   受け入れ枚数（打牌の判断）・差の原因・学んだ原則・MAKA・次へ。
+ * 答え合わせのあと: 自分の答え・（解き直しは）正解か次の予定・AI の評価（打牌の判断は、手牌の上の棒で出すので、ここには無い。
+ *   ただし、棒の出ない過去の盤面を見ている間は、一覧をここに出す）・受け入れ枚数（打牌の判断）・差の原因・学んだ原則・MAKA・次へ。
  *   AI の情報を持つ要素には `data-ai` を付ける（答える前の画面に無いことを、試験が確かめる）。
  * どちらの欄も、いちばん上（スクロールする部分の頭）に、迷いのスクショの欄（`shots`。迷いマークを結びつけた場面だけ。U-45）を置ける。
  */
@@ -20,7 +20,7 @@ import {
   type QuizChoice,
   type Tile as TileCode,
 } from '@jantama/engine';
-import { Fragment, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 import type { AnswerMode, AnswerRow } from '../../api/types';
 import { Icon } from '../Icon';
@@ -30,7 +30,7 @@ import { Evaluation } from './Evaluation';
 import { formatElapsed, formatMonthDay } from './labels';
 import { MemoShown } from './MemoShown';
 import { formatProbability, type RevealModel } from './reveal';
-import { riichiOpponents } from './sceneLine';
+import { sceneLine, type LinePart } from './sceneLine';
 import { Tile } from './Tile';
 import { tileName } from './tiles';
 import { AnswerBar, type ResolveControl } from './AnswerBar';
@@ -72,6 +72,11 @@ export interface AnswerPanelProps {
   shots?: ReactNode;
   /** 「解決」の入切（上の段の先頭。答える前も、答え合わせのあとも出す。F16、U-41）。 */
   resolve?: ResolveControl;
+  /**
+   * 過去の盤面を見ているか（出題の「前の巡目」）。打牌の判断の AI の評価は、手牌の上の棒で出すが、過去の盤面には棒を出さない
+   * （その時点の別の手牌のため）ので、その間は、答え合わせのあとの欄に評価の一覧を出す。
+   */
+  past?: boolean;
 }
 
 /** 「答え合わせ」を押せない理由（何を選ぶと押せるか）。 */
@@ -181,34 +186,30 @@ function OptionGroup({ options, choice, calledFrom, dora, onChoose }: OptionGrou
   );
 }
 
+/** 1 項目の部品。値（数・人の名前）は濃い色の印（b）、そのほかは文字のまま。 */
+function LineParts({ parts }: { parts: readonly LinePart[] }) {
+  return <>{parts.map((part, index) => (part.strong ? <b key={index}>{part.text}</b> : part.text))}</>;
+}
+
 /**
  * 答える前の、場面の情報の 1 行（U-47）: 自分の巡目・向聴数（見出しと同じ値）・他家の立直（無ければ「他家の立直なし」、あれば
- * 「対面が立直（9巡目）」を全員。N巡目はその人の宣言牌が河の何枚目か）。数と人の名前は濃い色で、そのほかは静かな色。AI の情報は入れない。
+ * 「対面が立直（9巡目）」を全員。N巡目はその人の宣言牌が河の何枚目か）。言い方は `sceneLine` が決める。
+ * 数と人の名前は濃い色で、そのほかは静かな色。AI の情報は入れない。
  */
 function SceneLine({ decision }: { decision: Decision }) {
-  const opponents = riichiOpponents(decision.board);
+  const line = sceneLine(decision);
   return (
     <p className="scene-line" data-line="scene">
       <span>
-        <b>{decision.junme}</b>巡目
+        <LineParts parts={line.junme} />
       </span>
       {' · '}
-      <span>{decision.shanten <= 0 ? <b>聴牌</b> : <><b>{decision.shanten}</b>向聴</>}</span>
+      <span>
+        <LineParts parts={line.shanten} />
+      </span>
       {' · '}
       <span>
-        {opponents.length === 0
-          ? '他家の立直なし'
-          : opponents.map((opponent, index) => (
-              <Fragment key={opponent.seat}>
-                {index > 0 && '・'}
-                <b>{opponent.relation}</b>が立直
-                {opponent.junme !== null && (
-                  <>
-                    （<b>{opponent.junme}</b>巡目）
-                  </>
-                )}
-              </Fragment>
-            ))}
+        <LineParts parts={line.riichi} />
       </span>
     </p>
   );
@@ -386,7 +387,7 @@ interface RevealProps extends AnswerPanelProps {
   focusOnMount: boolean;
 }
 
-function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, above, shots, resolve }: RevealProps) {
+function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, onNext, focusOnMount, memoShown, above, shots, resolve, past = false }: RevealProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
@@ -444,8 +445,8 @@ function Reveal({ decision, mode, quiz, model, row, dora, threshold, nextLabel, 
         </div>
       </div>
       {memoShown !== undefined && <MemoShown memos={memoShown} />}
-      {/* 打牌の判断は、手牌の上の棒で出す（U-43）。鳴き・リーチ・和了・カンの判断は、ここの一覧 */}
-      {!discard && <Evaluation bars={model.bars} discard={false} dora={dora} />}
+      {/* 打牌の判断は、手牌の上の棒で出す（U-43）。棒の出ない過去の盤面の間は、ここの一覧。鳴き・リーチ・和了・カンの判断は、いつもここの一覧 */}
+      {(!discard || past) && <Evaluation bars={model.bars} discard={discard} dora={dora} />}
       {extraTabs.length === 0 ? (
         defaultSections
       ) : (

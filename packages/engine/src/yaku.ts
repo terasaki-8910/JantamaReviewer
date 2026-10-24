@@ -708,6 +708,19 @@ export function heldYakuhai(shape: Pick<YakuShape, 'counts' | 'seatWind' | 'roun
   return hits;
 }
 
+/**
+ * 副露か手の中の役牌で決まる、確定している役（聴牌していなくても付く）。
+ * 副露の役が先で、そのあとに手の中の役牌の刻子。同じ役がすでにあれば足さない。
+ */
+export function fixedYaku(shape: Pick<YakuShape, 'counts' | 'melds' | 'seatWind' | 'roundWind'>): YakuHit[] {
+  const hits = meldYaku(shape);
+  const ids = new Set(hits.map((hit) => hit.id));
+  for (const held of heldYakuhai(shape)) {
+    if (!ids.has(held.id)) hits.push(held);
+  }
+  return hits;
+}
+
 /** 一部の待ちだけで付く役。 */
 export interface PartialYaku {
   id: YakuId;
@@ -742,17 +755,11 @@ export function settledYaku(shape: YakuShape, riichi = false): SettledYaku {
   const total = shape.counts.reduce((a, b) => a + b, 0);
   if (total % 3 !== 1) throw new RangeError(`確定している役を数えるのは 3n+1 枚の手牌です: ${total}枚`);
   const closed = shape.melds.every((m) => !m.open);
-  const fromMelds = meldYaku(shape);
   const all = waitsOf(shape, riichi);
   const yakumanWaits = all.filter((w) => w.yakuman.length > 0).map((w) => w.kind);
   const waits = all.filter((w) => w.yakuman.length === 0);
   if (waits.length === 0) {
-    const settled = [...fromMelds];
-    const ids = new Set(settled.map((h) => h.id));
-    for (const held of heldYakuhai(shape)) {
-      if (!ids.has(held.id)) settled.push(held);
-    }
-    return { closed, tenpai: all.length > 0, waits: [], settled, partial: [], deadWaits: [], yakumanWaits };
+    return { closed, tenpai: all.length > 0, waits: [], settled: fixedYaku(shape), partial: [], deadWaits: [], yakumanWaits };
   }
   const ids = new Set<YakuId>();
   for (const w of waits) for (const h of w.hits) ids.add(h.id);

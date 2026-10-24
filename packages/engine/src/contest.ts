@@ -1,5 +1,5 @@
 /** AI の上位2候補が拮抗した、終盤の判断（E-47）。 */
-import type { Decision } from './decision';
+import { type Decision, opponentHasRiichi } from './decision';
 
 export interface ContestOptions {
   enabled: boolean;
@@ -25,7 +25,7 @@ export function contestOf(decision: Pick<Decision, 'entry' | 'junme' | 'board'>,
   if (gap > options.maxGap) return null;
   const { board } = decision;
   const lateByJunme = options.minJunme !== null && decision.junme >= options.minJunme;
-  const lateByRiichi = options.afterRiichi && board.riichi.some((state, seat) => seat !== board.playerId && state !== 'none');
+  const lateByRiichi = options.afterRiichi && opponentHasRiichi(board);
   const lateByCalls =
     options.twoCalls &&
     board.melds.some((melds, seat) => seat !== board.playerId && melds.filter((meld) => meld.type !== 'ankan').length >= 2);

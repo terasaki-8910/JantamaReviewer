@@ -117,6 +117,7 @@ pub struct SoundMenuItems(pub Vec<CheckMenuItem<Wry>>);
 
 /// 2 つのメニュー（右クリックとトレイ）の、迷いだけで入れ替わる項目（「取り消し」と「縦長と横長を切り替える」）。
 /// 設定が変わったときに入れ替え、記録の状態が変わったときに「取り消し」の押せる・押せないを合わせる（W-15）。
+/// 「取り消し」の押せる・押せないは、前に合わせた値と変わったときだけ合わせる（`ModeItems::set_can_undo`）。
 pub struct ModeMenus(pub Vec<ModeItems<Wry>>);
 
 /// ウィジェットを動かしたときの位置を、動かし終わってから保存する担当への窓口。
@@ -336,6 +337,7 @@ fn sync_mode_menus<R: Runtime>(app: &AppHandle<R>, doubt_only: bool) {
 }
 
 /// メニューの「取り消し」を、取り消せる記録があるときだけ押せるようにする。
+/// 記録の状態が変わるたびに呼ぶが、合わせるには本体のスレッドを待つので、押せる・押せないが前と同じなら項目には触れない。
 fn sync_undo_menus<R: Runtime>(app: &AppHandle<R>, can_undo: bool) {
     let Some(menus) = app.try_state::<ModeMenus>() else {
         return;

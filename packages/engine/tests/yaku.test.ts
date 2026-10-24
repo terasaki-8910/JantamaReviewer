@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { SHAPE_YAKU, type YakuId, evaluateWin, settledYaku, waitsOf, yakuMeldOf } from '../src/yaku';
+import { countTiles, parseTenhouNotation } from '../src/tiles';
+import { SHAPE_YAKU, type YakuId, type YakuShape, evaluateWin, fixedYaku, settledYaku, waitsOf, yakuMeldOf } from '../src/yaku';
 import { loadFixtureJson } from './helpers/fixtures';
 import { type OracleWin, type YakuOracleFixture, oracleIds, oracleYakuman, shapeOf } from './helpers/yaku-oracle';
 
@@ -107,6 +108,28 @@ describe('役の判定: Python の mahjong ライブラリ（HandCalculator）�
       if (settled.tenpai) tenpai++;
     }
     expect(tenpai).toBeGreaterThan(1200);
+  });
+
+  it('副露か手の中の役牌で決まる役: 副露の役が先、手の中の役牌の刻子があと。同じ役は 1 度だけ。聴牌していない手の確定している役と同じ', () => {
+    // 白をポン。手の中に發と自風の南の刻子（場風は東）
+    const hand = countTiles(parseTenhouNotation('14m25p6s222z666z'));
+    const pon = { type: 'tri', first: 31, open: true } as const;
+    const shape: YakuShape = { counts: hand, melds: [pon], seatWind: 'S', roundWind: 'E' };
+    expect(fixedYaku(shape).map((hit) => [hit.id, hit.han])).toEqual([
+      ['yakuhai-haku', 1],
+      ['yakuhai-hatsu', 1],
+      ['yakuhai-seat', 1],
+    ]);
+    // 副露にも手の中にも同じ役があれば足さない（実際の手では起きないが、足す決まりとして）
+    expect(fixedYaku({ ...shape, melds: [{ type: 'tri', first: 32, open: true }] }).map((hit) => hit.id)).toEqual(['yakuhai-hatsu', 'yakuhai-seat']);
+    // 役牌の無い手・順子だけの副露は、空
+    expect(fixedYaku({ counts: countTiles(parseTenhouNotation('147m258p369s1z')), melds: [{ type: 'seq', first: 0, open: true }], seatWind: 'S', roundWind: 'E' })).toEqual([]);
+    // 聴牌していない 3n+1 枚の手の「確定している役」は、これと同じ
+    const scattered: YakuShape = { ...shape, counts: countTiles(parseTenhouNotation('147m258p3s222z')) };
+    const settled = settledYaku(scattered);
+    expect(settled.tenpai).toBe(false);
+    expect(settled.settled).toEqual(fixedYaku(scattered));
+    expect(settled.settled.map((hit) => hit.id)).toEqual(['yakuhai-haku', 'yakuhai-seat']);
   });
 
   it('副露の変換: 結果 JSON のチー・ポン・槓を、順子・刻子・槓子にする', () => {

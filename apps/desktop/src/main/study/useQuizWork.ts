@@ -61,7 +61,10 @@ export interface QuizWorkState {
   dora: ReadonlySet<number> | null;
   revealed: boolean;
   marks: ReadonlyMap<number, HandMark>;
-  /** 手牌の上の AI の評価の棒。打牌の判断の答え合わせのあと（過去の盤面を除く）だけ。それまでは null（U-1）。 */
+  /**
+   * 手牌の上の AI の評価の棒。打牌の判断の答え合わせのあと（過去の盤面を除く）だけ。それまでは null（U-1）。
+   * 過去の盤面の間は、答えの欄に評価の一覧を出す（`AnswerPanel` の `past`）。
+   */
   bars: HandBars | null;
   used: ReadonlySet<number>;
   /** 手牌の中で選んでいる牌の位置。 */

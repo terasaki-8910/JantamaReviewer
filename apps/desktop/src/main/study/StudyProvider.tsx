@@ -225,12 +225,12 @@ export function useStudyData(sessions: readonly SessionRecord[] | null, reloadSe
   const contest = useMemo(
     () =>
       contestOptionsOf({
-        ...(contestEnabled === undefined ? {} : { contest_enabled: contestEnabled }),
-        ...(contestGap === undefined ? {} : { contest_gap_percent: contestGap }),
-        ...(contestByJunme === undefined ? {} : { contest_by_junme: contestByJunme }),
-        ...(contestMinJunme === undefined ? {} : { contest_min_junme: contestMinJunme }),
-        ...(contestAfterRiichi === undefined ? {} : { contest_after_riichi: contestAfterRiichi }),
-        ...(contestTwoCalls === undefined ? {} : { contest_two_calls: contestTwoCalls }),
+        contest_enabled: contestEnabled,
+        contest_gap_percent: contestGap,
+        contest_by_junme: contestByJunme,
+        contest_min_junme: contestMinJunme,
+        contest_after_riichi: contestAfterRiichi,
+        contest_two_calls: contestTwoCalls,
       }),
     [contestEnabled, contestGap, contestByJunme, contestMinJunme, contestAfterRiichi, contestTwoCalls],
   );
