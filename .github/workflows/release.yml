@@ -1,0 +1,90 @@
+# アプリ内の更新（F21）の配布。版のタグ（v0.2.0 の形）を push すると、Windows 用の署名つきインストーラー（NSIS の setup.exe）と、
+# 更新の情報（latest.json）と、署名のファイル（.sig）を作って、GitHub の Releases に置く。
+# アプリは、起動したときに、Releases の最新の版の latest.json を見て、新しい版を知らせる（src-tauri/src/update/config.rs）。
+#
+# 配るまでに、ユーザーがすること（push とタグの push も、ユーザーが打つ）:
+#   1. 署名の鍵の組を作る:  pnpm --filter @jantama/desktop tauri signer generate -w <秘密鍵のファイル>
+#   2. 公開鍵（<秘密鍵のファイル>.pub の中身）を、src-tauri/src/update/config.rs の UPDATE_PUBLIC_KEY と、
+#      src-tauri/tauri.release.conf.json の plugins.updater.pubkey の両方に、同じ値で入れる
+#   3. GitHub のリポジトリの Settings > Secrets and variables > Actions に、次の 2 つを足す
+#        TAURI_SIGNING_PRIVATE_KEY           秘密鍵のファイルの中身
+#        TAURI_SIGNING_PRIVATE_KEY_PASSWORD  鍵を作るときに決めた合言葉
+#   4. 版を上げる（tauri.conf.json・src-tauri/Cargo.toml・package.json を同じ版にそろえる）→ コミット → push →
+#        git tag v0.2.0 && git push origin v0.2.0
+# 秘密鍵とその合言葉は、Secrets だけに置く（リポジトリには入れない）。リポジトリが非公開のあいだは、アプリが latest.json を取れない。
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Releases を作って、ファイルを置くのに要る
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm の版は、ルートの package.json の packageManager から読む
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: 依存を入れる
+        run: pnpm install --frozen-lockfile
+
+      # 公開鍵が入っていないと、アプリが更新の署名を確かめられない。タグと tauri.conf.json の版が違うと、
+      # 別の版の名前で配ることになる。どちらも、時間のかかる組み立ての前に止める
+      - name: 公開鍵とタグの版を確かめる
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $release = Get-Content apps/desktop/src-tauri/tauri.release.conf.json -Raw | ConvertFrom-Json
+          $pubkey = $release.plugins.updater.pubkey
+          if ([string]::IsNullOrWhiteSpace($pubkey)) {
+            throw 'src-tauri/tauri.release.conf.json の plugins.updater.pubkey が空です。公開鍵を入れてください。'
+          }
+          $rust = Get-Content apps/desktop/src-tauri/src/update/config.rs -Raw
+          if ($rust -notmatch 'UPDATE_PUBLIC_KEY: &str =\s*"([^"]*)";' -or $Matches[1] -ne $pubkey) {
+            throw 'src-tauri/src/update/config.rs の UPDATE_PUBLIC_KEY が、tauri.release.conf.json の公開鍵と違います。同じ値にしてください。'
+          }
+          $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ('v' + $version -ne $env:TAG) {
+            throw "タグ $env:TAG と、tauri.conf.json の版 $version が違います。"
+          }
+
+      # 補助プログラム（jantama-helper.exe）を先に作る。組み立ての設定（tauri.release.conf.json の resources）が、これをインストーラーに入れて、
+      # 本体と同じフォルダに置く（設定ページの「管理者の補助プログラムを設定する」が、そこから探す）
+      - name: 補助プログラムを作る
+        run: cargo build --release --manifest-path apps/desktop/src-tauri/Cargo.toml -p jantama-helper
+
+      # 署名つきのインストーラーと latest.json を作って、Releases に置く。
+      # tauri-action は v0 を使う: v1 は、latest.json のダウンロード先が GitHub の API の URL（api.github.com）になり、
+      # アプリが通信する相手が増えるため（SPEC の S-2）。v0 は、Releases の普通の URL（github.com）を書く。
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          # 更新の署名のファイルを作る設定と、補助プログラムを入れる設定は、組み立ての Actions だけで足す（手元の組み立ては、鍵なしで通る）
+          args: --config src-tauri/tauri.release.conf.json
+          tagName: ${{ github.ref_name }}
+          releaseName: 'JantamaReviewer v__VERSION__'
+          releaseBody: 'JantamaReviewer の新しい版です。インストーラー（setup.exe）で入れられます。入れてあるアプリは、起動したときに、この版を知らせます。'
+          releaseDraft: false
+          # 「v0.3.0-beta.1」のように「-」の入ったタグは、先行版として置く（アプリが見る「最新の版」にならない）
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
