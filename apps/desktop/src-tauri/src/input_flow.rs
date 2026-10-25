@@ -133,6 +133,9 @@ pub enum Input {
     // ---- 補助プログラムの設定・解除・起動 ----
     /// 起動の登録（タスク）があるかを、確かめた。
     InstalledKnown(bool),
+    /// 設定済みの補助プログラムの写しが、本体と一緒に入っている補助プログラムと違うかを、確かめた（F21）。
+    /// 比べられない（設定していない・本体のそばに補助プログラムが無い）ときは `None`。
+    OutdatedKnown(Option<bool>),
     HelperOpStarted(HelperOp),
     HelperOpFinished {
         result: Result<(), String>,
@@ -196,6 +199,10 @@ pub enum HookSource {
 pub struct HelperStatus {
     /// 起動の登録（タスク）があるか。まだ確かめていなければ `None`。
     pub installed: Option<bool>,
+    /// 設定済みの補助プログラムの写し（Program Files の下）が、本体と一緒に入っている補助プログラムと違うか（F21）。
+    /// 本体を入れ直して補助プログラムが変わったとき `Some(true)` になり、画面が「設定し直してください」を出す。
+    /// 設定していない・比べられないときは `None`。
+    pub outdated: Option<bool>,
     /// 動いている（つながって、入力を拾っている）。
     pub running: bool,
     /// 設定・解除・起動の途中なら、そのこと。
@@ -231,6 +238,7 @@ pub struct InputState {
     probe_ms: Option<i64>,
     last_trigger_ms: Option<i64>,
     installed: Option<bool>,
+    outdated: Option<bool>,
     op: Option<HelperOp>,
     op_error: Option<String>,
     message: Option<String>,
@@ -253,6 +261,7 @@ impl InputState {
             probe_ms: None,
             last_trigger_ms: None,
             installed: None,
+            outdated: None,
             op: None,
             op_error: None,
             message: None,
@@ -322,6 +331,7 @@ impl InputState {
             hook,
             helper: HelperStatus {
                 installed: self.installed,
+                outdated: self.outdated,
                 running: self.link == HelperLink::Active,
                 busy: self.op,
                 error: self.op_error.clone().or_else(|| self.helper_error.clone()),
@@ -412,6 +422,9 @@ impl InputState {
             }
             Input::InstalledKnown(installed) => {
                 self.installed = Some(installed);
+            }
+            Input::OutdatedKnown(outdated) => {
+                self.outdated = outdated;
             }
             Input::HelperOpStarted(op) => {
                 self.op = Some(op);
@@ -1064,6 +1077,31 @@ mod tests {
     // ---- 画面に知らせる状態 ----
 
     #[test]
+    fn f21_the_helper_status_says_when_the_installed_copy_differs_from_the_bundled_one() {
+        let mut state = started();
+        // 確かめる前・比べられないときは、どちらでもない
+        assert_eq!(state.status().helper.outdated, None);
+        state.reduce(Input::OutdatedKnown(Some(true)));
+        assert_eq!(state.status().helper.outdated, Some(true));
+        // 設定し直して同じになったら、消える
+        state.reduce(Input::OutdatedKnown(Some(false)));
+        assert_eq!(state.status().helper.outdated, Some(false));
+        state.reduce(Input::OutdatedKnown(None));
+        assert_eq!(state.status().helper.outdated, None);
+        // 変わったときだけ、画面に知らせる
+        let changed = state.reduce(Input::OutdatedKnown(Some(true)));
+        assert_eq!(
+            changed
+                .iter()
+                .filter(|e| matches!(e, Effect::EmitStatus(_)))
+                .count(),
+            1
+        );
+        let same = state.reduce(Input::OutdatedKnown(Some(true)));
+        assert!(!same.iter().any(|e| matches!(e, Effect::EmitStatus(_))));
+    }
+
+    #[test]
     fn the_status_is_emitted_only_when_it_changes() {
         let mut state = InputState::new(Some(X1));
         let first = state.reduce(Input::InProcessHook(true));
@@ -1096,7 +1134,7 @@ mod tests {
         let json = serde_json::to_string(&state.status()).unwrap();
         assert_eq!(
             json,
-            r#"{"registering":false,"probe_ms":null,"hook":"helper","helper":{"installed":true,"running":true,"busy":null,"error":null},"message":null}"#
+            r#"{"registering":false,"probe_ms":null,"hook":"helper","helper":{"installed":true,"outdated":null,"running":true,"busy":null,"error":null},"message":null}"#
         );
         state.reduce(Input::HelperOpStarted(HelperOp::Installing));
         assert!(serde_json::to_string(&state.status())

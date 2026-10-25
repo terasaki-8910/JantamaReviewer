@@ -4,23 +4,48 @@
 //!   補助プログラムが、自分を Program Files の下に写し、確認なしで起動するタスクを登録する（helper/src/install.rs）。
 //! - 起動: 以後は `schtasks /run` でそのタスクを動かすだけ。確認は出ない。本体の起動のときに行う。
 //! - 解除: 同じく管理者の確認つきで、`uninstall` を付けて動かす。
+//! - 写しの新旧（F21）: 本体を入れ直して補助プログラムが変わったとき、Program Files の下の写しは前の版のまま残る。
+//!   本体と一緒に入っている補助プログラムと、写しの中身（SHA-256）が違うかを調べて、設定ページが「設定し直してください」を出す。
 //!
 //! 管理者の確認は、Windows の画面に出る。ここで待つのは、その結果（補助プログラムの終了コード）だけ。
 
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use jantama_input::setup::{
-    exit_message, install_args, join_args, schtasks_query_args, schtasks_run_args, uninstall_args,
-    HELPER_EXE_NAME,
+    exit_message, install_args, installed_exe, join_args, schtasks_query_args, schtasks_run_args,
+    uninstall_args, HELPER_EXE_NAME,
 };
+use sha2::{Digest, Sha256};
 
-pub use win::{install, query_installed, run_task, uninstall};
+pub use win::{install, query_installed, query_outdated, run_task, uninstall};
 
 /// 補助プログラムの実行ファイルの場所（本体の実行ファイルと同じフォルダ）。
 pub fn helper_exe_in(app_dir: &Path) -> PathBuf {
     app_dir.join(HELPER_EXE_NAME)
+}
+
+/// 2 つの実行ファイルの中身が違うか。SHA-256 で比べる（版の情報を持たないため）。大きさが違えば、読まずに違うとする。
+/// どちらかを読めない（無い）ときは、比べられないので `None`。
+pub fn files_differ(bundled: &Path, installed: &Path) -> Option<bool> {
+    let (bundled_meta, installed_meta) =
+        (fs::metadata(bundled).ok()?, fs::metadata(installed).ok()?);
+    if !bundled_meta.is_file() || !installed_meta.is_file() {
+        return None;
+    }
+    if bundled_meta.len() != installed_meta.len() {
+        return Some(true);
+    }
+    Some(digest(bundled).ok()? != digest(installed).ok()?)
+}
+
+fn digest(path: &Path) -> io::Result<[u8; 32]> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    io::copy(&mut file, &mut hasher)?;
+    Ok(hasher.finalize().into())
 }
 
 /// 補助プログラムが見つからないときの文。
@@ -216,6 +241,32 @@ mod win {
             .is_ok_and(|code| code == 0)
     }
 
+    /// 設定済みの写し（Program Files の下）が、本体と一緒に入っている補助プログラムと違うか。
+    /// 設定していない・本体のそばに補助プログラムが無いときは、比べられないので `None`。
+    pub fn query_outdated() -> Option<bool> {
+        let bundled = helper_exe().ok()?;
+        let installed = installed_exe(&program_files()?);
+        files_differ(&bundled, &installed)
+    }
+
+    /// Program Files のフォルダ（Windows に尋ねる）。補助プログラムが自分を写す先（helper/src/install.rs）と同じ尋ね方。
+    pub(super) fn program_files() -> Option<PathBuf> {
+        use std::ffi::c_void;
+
+        use windows::Win32::System::Com::CoTaskMemFree;
+        use windows::Win32::UI::Shell::{
+            FOLDERID_ProgramFiles, SHGetKnownFolderPath, KNOWN_FOLDER_FLAG,
+        };
+        // SAFETY: 返ってきた文字列は、読んだあとに CoTaskMemFree で返す。
+        unsafe {
+            let path =
+                SHGetKnownFolderPath(&FOLDERID_ProgramFiles, KNOWN_FOLDER_FLAG(0), None).ok()?;
+            let text = path.to_string().ok();
+            CoTaskMemFree(Some(path.0 as *const c_void));
+            text.map(PathBuf::from)
+        }
+    }
+
     /// 登録したタスクを動かして、補助プログラムを起動する。確認は出ない。
     /// 起動したあと、補助プログラムが本体につなぎにくる（つながったことは、パイプの側が知らせる）。
     pub fn run_task() -> Result<(), String> {
@@ -343,6 +394,48 @@ mod tests {
         assert!(outcome_of(4).unwrap_err().contains("同じユーザー"));
         assert!(outcome_of(5).unwrap_err().contains("Program Files"));
         assert!(outcome_of(6).unwrap_err().contains("タスクスケジューラ"));
+    }
+
+    #[test]
+    fn f21_the_installed_copy_is_outdated_only_when_its_contents_differ_from_the_bundled_one() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bundled = tmp.path().join("bundled.exe");
+        let installed = tmp.path().join("installed.exe");
+        fs::write(&bundled, b"helper build 2").unwrap();
+        // 同じ中身（別々のファイル）は、新しくない
+        fs::write(&installed, b"helper build 2").unwrap();
+        assert_eq!(files_differ(&bundled, &installed), Some(false));
+        // 同じ大きさで中身が違う・大きさが違う、は新しい補助プログラムがある
+        fs::write(&installed, b"helper build 1").unwrap();
+        assert_eq!(files_differ(&bundled, &installed), Some(true));
+        fs::write(&installed, b"old").unwrap();
+        assert_eq!(files_differ(&bundled, &installed), Some(true));
+        // 設定し直す（写し直す）と、同じになる
+        fs::copy(&bundled, &installed).unwrap();
+        assert_eq!(files_differ(&bundled, &installed), Some(false));
+    }
+
+    #[test]
+    fn f21_a_missing_copy_or_a_missing_bundled_helper_cannot_be_compared() {
+        let tmp = tempfile::tempdir().unwrap();
+        let present = tmp.path().join("present.exe");
+        fs::write(&present, b"helper").unwrap();
+        let missing = tmp.path().join("missing.exe");
+        // 設定していない（写しが無い）・本体のそばに補助プログラムが無い、は比べられない
+        assert_eq!(files_differ(&present, &missing), None);
+        assert_eq!(files_differ(&missing, &present), None);
+        assert_eq!(files_differ(&missing, &missing), None);
+        // フォルダは、実行ファイルではない
+        assert_eq!(files_differ(&present, tmp.path()), None);
+    }
+
+    #[test]
+    fn f21_the_installed_copy_is_looked_for_in_program_files_like_the_helper_installs_it() {
+        // Program Files を尋ねられる。写し先の名前は、補助プログラムの設定（helper/src/install.rs）と同じ
+        let program_files = win::program_files().expect("Program Files を尋ねられる");
+        assert!(program_files.to_string_lossy().contains("Program Files"));
+        let installed = installed_exe(&program_files);
+        assert!(installed.ends_with(Path::new("JantamaReviewer").join(HELPER_EXE_NAME)));
     }
 
     #[test]
