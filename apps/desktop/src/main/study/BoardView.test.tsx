@@ -1,7 +1,7 @@
 /**
  * 盤面の作業（出題・解き直しの画面）の試験:
  * - U-43 AI の評価の棒（打牌の判断。手牌の上）: 答え合わせのあとだけ。高さ・数字・読み上げの一覧。右の欄の一覧は、打牌の判断では出さない（棒の出ない過去の盤面の間だけは出す）
- * - U-44 ドラ表示牌（卓の中央の箱）
+ * - U-44・U-50 王牌の列とドラ表示牌（卓の中央の箱）、フェルトの卓に名札が無いこと
  * - U-47 答える前の欄の、場面の情報の 1 行（巡目・向聴数・他家の立直）
  * - 盤面の見方（卓の上の右端の説明のアイコン。凡例と「過去の盤面」の旗）
  * 通して見る画面（自分の判断の手番の棒・右の欄の一覧）は、replay/Replay.test.tsx。実ブラウザでの高さ・幅・色は、tests/browser/quiz.browser.test.ts。
@@ -257,7 +257,7 @@ describe('U-43 AI の評価の棒（打牌の判断。手牌の上）', () => {
   });
 });
 
-describe('U-44 ドラ表示牌（卓の中央の箱）', () => {
+describe('U-44 ドラ表示牌と王牌の列（卓の中央の箱）', () => {
   /** 盤面のドラ表示牌だけを替えた盤面（牌の種類の変換を、決まった牌で確かめる）。 */
   function boardWith(markers: Tile[]): BoardState {
     return { ...decisionOf('fx1a', { key: 'k3h0e15' }).board, doraMarkers: markers };
@@ -269,19 +269,50 @@ describe('U-44 ドラ表示牌（卓の中央の箱）', () => {
     );
   };
   const row = () => document.querySelector('.center .dora') as HTMLElement;
+  const wall = () => [...row().querySelectorAll('.wall > .tile')];
+  const isBack = (tile: Element) => tile.classList.contains('back');
+  const faceUpAt = () => wall().flatMap((tile, index) => (isBack(tile) ? [] : [index]));
 
-  it('局の名前の下の 1 行「表示 [牌] → ドラ [牌]」。読み上げは「ドラ表示牌 4m、ドラ 5m」。牌の絵は、まとめて読み上げるので個別には読み上げない', () => {
+  it('王牌の列（7 枚）のすぐ右に「→ ドラ [牌]」。読み上げは「ドラ表示牌 4m、ドラ 5m」。牌の絵は個別には読み上げない', () => {
     renderBoard(['4m']);
     expect(row().getAttribute('role')).toBe('group');
     expect(row().getAttribute('aria-label')).toBe('ドラ表示牌 4m、ドラ 5m');
-    expect(row().textContent).toBe('表示→ドラ');
-    const [from, to] = [...row().querySelectorAll('.dora-t')];
-    expect(from?.querySelectorAll('.tile')).toHaveLength(1);
-    expect(to?.querySelectorAll('.tile')).toHaveLength(1);
+    expect(row().textContent).toBe('→ドラ');
+    expect(wall()).toHaveLength(7);
+    expect(row().querySelectorAll('.dora-to .dora-t .tile')).toHaveLength(1);
     expect([...row().querySelectorAll('img')].every((img) => img.getAttribute('alt') === '')).toBe(true);
+    expect(row().firstElementChild?.className).toBe('wall');
+    expect(row().lastElementChild?.className).toBe('dora-to');
     // 中央の箱の中で、狭いときに隠す「.info」の外にある（狭い卓でも出る）
     expect(row().closest('.info')).toBeNull();
     expect(row().parentElement?.className).toBe('center');
+  });
+
+  it('ドラ表示牌は左から 3 枚目（添字 2）だけが表向き。ほかの 6 枚は裏向きで、読み上げない', () => {
+    renderBoard(['4m']);
+    expect(faceUpAt()).toEqual([2]);
+    expect(wall()[2]?.querySelector('img')?.getAttribute('src')).toBe('/tiles/Man4.svg');
+    for (const [index, tile] of wall().entries()) {
+      if (index === 2) continue;
+      expect(isBack(tile), `添字 ${index}`).toBe(true);
+      expect(tile.querySelector('img'), `添字 ${index}`).toBeNull();
+      expect(tile.getAttribute('aria-hidden'), `添字 ${index}`).toBe('true');
+    }
+    expect(row().querySelector('.wall')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('カンドラ表示牌は 4 枚目から続けて表向きになり、最大 5 枚。残りは裏向き', () => {
+    for (const markers of [
+      ['N', 'C'],
+      ['1m', '5pr', 'E'],
+      ['1m', '5pr', 'E', 'S', 'W'],
+    ] as Tile[][]) {
+      const { unmount } = renderBoard(markers);
+      expect(faceUpAt(), markers.join(',')).toEqual(markers.map((_, offset) => 2 + offset));
+      expect(wall().filter(isBack), markers.join(',')).toHaveLength(7 - markers.length);
+      expect(row().querySelectorAll('.dora-to .dora-t .tile'), markers.join(',')).toHaveLength(markers.length);
+      unmount();
+    }
   });
 
   it('牌の種類の変換: 4m→5m、9m→1m、北→東、中→白、赤5m→6m', () => {
@@ -299,15 +330,17 @@ describe('U-44 ドラ表示牌（卓の中央の箱）', () => {
     }
   });
 
-  it('カンでドラ表示牌が増えれば、全部（ドラは 1 枚ずつ対応）。3 枚以上は牌を小さくする印（data-many）', () => {
+  it('カンでドラ表示牌が増えれば、読み上げとドラの牌も 1 枚ずつ対応する', () => {
     const { unmount } = renderBoard(['N', 'C']);
     expect(row().getAttribute('aria-label')).toBe('ドラ表示牌 北・中、ドラ 東・白');
-    expect([...row().querySelectorAll('.dora-t')].map((tiles) => tiles.querySelectorAll('.tile').length)).toEqual([2, 2]);
-    expect(row().getAttribute('data-many')).toBeNull();
+    expect(row().querySelectorAll('.dora-to .dora-t .tile')).toHaveLength(2);
+    expect(row().getAttribute('data-n')).toBe('2');
     unmount();
     renderBoard(['1m', '5pr', 'E']);
     expect(row().getAttribute('aria-label')).toBe('ドラ表示牌 1m・赤5p・東、ドラ 2m・6p・南');
-    expect(row().getAttribute('data-many')).toBe('1');
+    expect(row().querySelectorAll('.dora-to .dora-t .tile')).toHaveLength(3);
+    expect(row().getAttribute('data-n')).toBe('3');
+    expect(row().style.getPropertyValue('--n')).toBe('3');
   });
 
   it('出題の画面: 実際のドラ表示牌（FX-1 a 西1局の北・中 → 東・白）が中央の箱に出る。卓の上の 1 行（.info-strip）には、ドラ表示牌が無い', () => {
@@ -317,6 +350,7 @@ describe('U-44 ドラ表示牌（卓の中央の箱）', () => {
     const expected = `ドラ表示牌 ${markers.map((tile) => tileLabel(tile)).join('・')}、ドラ ${markers.map((tile) => tileLabel(doraOfMarker(tile))).join('・')}`;
     expect(row().getAttribute('aria-label')).toBe(expected);
     expect(expected).toBe('ドラ表示牌 北・中、ドラ 東・白');
+    expect(faceUpAt()).toEqual([2, 3]);
     const strip = document.querySelector('.info-strip') as HTMLElement;
     expect(strip.querySelector('.dora, .dora-t, .tile')).toBeNull();
     expect(strip.textContent).not.toContain('ドラ');
@@ -324,10 +358,26 @@ describe('U-44 ドラ表示牌（卓の中央の箱）', () => {
     expect(strip.textContent).toMatch(/^西1局\d+本場残り\d+枚$/);
   });
 
-  it('設定「ドラを目立たせる」の黄色は、この牌には付けない（手牌・河・副露の牌だけ）', () => {
+  it('設定「ドラを目立たせる」の黄色は、王牌の列にも右のドラの牌にも付けない', () => {
     renderQuiz({ highlightDora: true });
     expect(document.querySelectorAll('.center .dora .is-dora')).toHaveLength(0);
-    expect(document.querySelectorAll('.center .dora .tile').length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelectorAll('.center .dora .tile').length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('4 人の風・親・点数・リーチは、名前の要素を足さず、これまでどおり中央の箱の 4 辺にある', () => {
+    renderBoard(['4m']);
+    const center = document.querySelector('.table .center') as HTMLElement;
+    expect(center.querySelectorAll(':scope > .score')).toHaveLength(4);
+    expect([...center.querySelectorAll(':scope > .score')].map((score) => score.className)).toEqual(['score top', 'score left', 'score right', 'score bottom me']);
+    expect(center.querySelector('.info .round')?.textContent).toBe('東4局');
+    expect(center.querySelector('.info .honba')?.textContent).toMatch(/^\d+本場/);
+    expect(center.querySelector('.info .rest')?.textContent).toMatch(/^残り\d+枚$/);
+    expect(document.querySelector('.table .plate, .table .plates, .table .nm')).toBeNull();
+  });
+
+  it('卓の読み上げ名は変わらない', () => {
+    renderBoard(['4m']);
+    expect(screen.getByRole('group', { name: '卓（4人の河・副露・点数）' })).toBeInTheDocument();
   });
 });
 
