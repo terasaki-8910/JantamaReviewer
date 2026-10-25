@@ -73,7 +73,7 @@ export function NowPanel({ timeline, step, scenes, answered, go, above, evaluati
         </span>
       </div>
       {scenes.length === 0 ? (
-        <p className="quiet">迷いの場面と不一致の場面は、この半荘にはありません。</p>
+        <p className="quiet">迷いの場面と悪手の場面は、この半荘にはありません。</p>
       ) : (
         <ol className="scenes" aria-label="場面の一覧" aria-describedby="sc-hint">
           {scenes.map((scene) => {

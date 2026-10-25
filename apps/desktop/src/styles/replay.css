@@ -201,14 +201,6 @@
   background: transparent;
 }
 
-.jump[data-kind="contest"] .jump-l .shape {
-  width: 14px;
-  height: 4px;
-  margin: 4px 0 4px -1px;
-  background: var(--ink);
-  border-radius: 1px;
-}
-
 .jump .jnext {
   gap: 6px;
 }
@@ -366,18 +358,7 @@
   border-radius: 2px;
 }
 
-/* 拮抗の場面は、帯の下の短い横棒 */
-.pin.cst {
-  color: var(--ink);
-}
-
-.pin.cst::before {
-  width: 16px;
-  height: 6px;
-  border-radius: 1px;
-}
-
-/* AI の1位と違うだけの判断（設定を入れたときだけ出る不一致）は、小さなひし形 */
+/* AI の1位と違うだけの判断（設定を入れたときだけ出る悪手の飛び先）は、小さなひし形 */
 .pin.mis.small::before {
   width: 7px;
   height: 7px;

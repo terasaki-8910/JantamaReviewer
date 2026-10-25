@@ -4,7 +4,7 @@
  *
  * - AI 一致率: 実戦の行動が AI の 1 位と同じだった判断 ÷ 判断（結果の `review.total_matches` ÷ `review.total_reviewed` と同じ数）
  * - 類似度: Mortal の Rating と同じ値（rating.ts。判断ごとの点の平均の 2 乗。AI の 1 位なら満点、違えば AI の評価に応じた部分点）
- * - 悪手率: 実戦の行動の AI の確率が基準（大きな不一致の基準。既定 5%）より低い判断 ÷ 判断。数は `listDisagreements` の total と同じ
+ * - 悪手率: 実戦の行動の AI の確率が基準（悪手の基準。既定 5%）より低い判断 ÷ 判断。数は `listDisagreements` の total と同じ
  *   （設定の「AI の 1 位と違う判断も不一致として出す」で足す判断は、悪手に数えない）
  *
  * 率は 0 から 1（Rating と同じ。文字にするのは `formatRatePercent`・`formatSimilarity`）。判断が 1 つも無いときは、どの値も null（0 ではない）。
@@ -41,7 +41,7 @@ export interface AiMetrics extends AiMetricCounts {
 }
 
 export interface AiMetricsOptions {
-  /** この確率より低い行動を悪手とする（既定 0.05。大きな不一致の基準と同じ）。 */
+  /** この確率より低い行動を悪手とする（既定 0.05。悪手の基準と同じ）。 */
   threshold?: number;
 }
 
@@ -101,3 +101,5 @@ export function formatRatePercent(rate: number): string {
 export function formatSimilarity(similarity: number): string {
   return formatRating(similarity);
 }
+
+

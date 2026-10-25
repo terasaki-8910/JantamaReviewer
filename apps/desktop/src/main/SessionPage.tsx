@@ -64,11 +64,6 @@ interface SessionPageProps {
    */
   fit?: MakaFitState;
   /**
-   * 大きな不一致の基準（確率。設定の「大きな不一致の基準」。検討画面のシェルが渡す）。局の評価の表の行を開いたときの向聴数の推移の、
-   * 大きな不一致の印（菱形）に使う（U-36）。渡さなければ、既定の 5%。
-   */
-  threshold?: number;
-  /**
    * 設定の「迷いだけを記録する」（F0、U-46。検討画面のシェルが渡す）。入なら、〇△✕ を使う部品（局の評価の表の自分の列・付け直し・食い違いの印、
    * 取り込む前の評価の一覧、見出しの下の評価の数）と、終局直後のメモの欄（迷いのカードの「候補」「理由」、迷いマークの無い迷いを足す）を出さない。
    * 記録は消さず、切れば元どおり出る。渡さなければ、切（出す）。
@@ -98,7 +93,6 @@ export function SessionPage({
   rereads = IDLE_REREADS,
   onOpenReplay,
   fit = BASE_FIT_STATE,
-  threshold = DEFAULT_DISAGREEMENT_THRESHOLD,
   doubtOnly = false,
 }: SessionPageProps) {
   const titleId = useId();
@@ -137,7 +131,7 @@ export function SessionPage({
   const resolved = useMemo(() => (report === null ? null : resolveMarks(report, session)), [report, session]);
   const decisions = useMemo<DecisionRef[]>(() => (report === null ? [] : listDecisionRefs(report)), [report]);
   // AI との比べ（F18）: 読み込んだ結果から数える（結果は読み直さない）。基準（threshold）を替えると、悪手率が変わる
-  const aiMetrics = useMemo(() => (report === null ? null : aiMetricsOf(report, { threshold })), [report, threshold]);
+  const aiMetrics = useMemo(() => (report === null ? null : aiMetricsOf(report)), [report]);
   const table = useMemo(
     () => (report === null || ready === null ? null : buildHandTable({ report, summary: ready, session })),
     [report, ready, session],
@@ -152,9 +146,15 @@ export function SessionPage({
   const myTrackBelow = useCallback(
     (row: HandRow) =>
       report === null ? null : (
-        <MyShantenTrack report={report} position={row.position} label={row.label} markKeys={markKeys} threshold={threshold} />
+        <MyShantenTrack
+          report={report}
+          position={row.position}
+          label={row.label}
+          markKeys={markKeys}
+          threshold={DEFAULT_DISAGREEMENT_THRESHOLD}
+        />
       ),
-    [report, markKeys, threshold],
+    [report, markKeys],
   );
 
   // 札を押すと、その迷いのカードへ移って、少しの間目立たせる（キーボードの位置もカードへ移す）
@@ -256,7 +256,7 @@ export function SessionPage({
           </h1>
           <p className="quiet">{subtitle(session, summary, doubtOnly)}</p>
           {/* AI との比べ（F18、U-48）: 結果を取り込んで読めている半荘だけ（段階の印・Rating と同じとき）。迷いだけの設定でも出す */}
-          {ready !== null && aiMetrics !== null && aiMetrics.decisions > 0 && <AiMetricsLine metrics={aiMetrics} threshold={threshold} />}
+          {ready !== null && aiMetrics !== null && aiMetrics.decisions > 0 && <AiMetricsLine metrics={aiMetrics} />}
         </div>
         {(replayable || (ready !== null && ready.grade !== null)) && (
           <div className="head-actions">

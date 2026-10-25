@@ -540,14 +540,12 @@ mod tests {
         let mut f = fixture();
         let mut next = f.core.settings().clone();
         next.daily_count = 9;
-        next.disagreement_percent = 8;
         next.highlight_dora = true;
         let change = f.core.apply_settings(next).unwrap();
         // 出題の設定は、窓・フックに反映するものではない
         assert_eq!(change, SettingsChange::default());
         let reloaded = Core::load(f.config_dir(), FakeCapturer::ok(&[1]), CountingSound::new());
         assert_eq!(reloaded.settings().daily_count, 9);
-        assert_eq!(reloaded.settings().disagreement_percent, 8);
         assert!(reloaded.settings().highlight_dora);
         // 範囲の外は、何も変えずにエラー
         let mut bad = f.core.settings().clone();

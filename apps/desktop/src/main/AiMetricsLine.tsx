@@ -9,18 +9,12 @@ import { formatRatePercent, formatSimilarity, type AiMetrics } from '@jantama/en
 
 import { InfoTip } from './InfoTip';
 
-/** 3 つの意味の説明（InfoTip の文）。`thresholdPercent` は設定の「大きな不一致の基準」（%）、数は半荘のもの。 */
-export function aiMetricsHint(metrics: AiMetrics, thresholdPercent: number): string {
-  return `AI（Mortal）と比べた数です。AI 一致率は、自分の判断のうち、AI の1位と同じだった割合（${metrics.matches}/${metrics.decisions}）。類似度は、Mortal の Rating と同じ値で、AI の1位なら満点、違えば AI の評価に応じた部分点です（NAGA の類似度に当たります）。悪手率は、実戦の行動の AI の確率が ${thresholdPercent}% より低かった判断の割合（${metrics.badMoves}/${metrics.decisions}）で、大きな不一致と同じ基準です（NAGA の悪手と同じ線）。`;
+/** 3 つの意味の説明（InfoTip の文）。数は半荘のもの。 */
+export function aiMetricsHint(metrics: AiMetrics): string {
+  return `AI（Mortal）と比べた数です。AI 一致率は、自分の判断のうち、AI の1位と同じだった割合（${metrics.matches}/${metrics.decisions}）。類似度は、Mortal の Rating と同じ値で、AI の1位なら満点、違えば AI の評価に応じた部分点です（NAGA の類似度に当たります）。悪手率は、実戦の行動の AI の確率が 5% より低かった判断（悪手）の割合（${metrics.badMoves}/${metrics.decisions}）で、NAGA の悪手と同じ線です。`;
 }
 
-interface AiMetricsLineProps {
-  metrics: AiMetrics;
-  /** 大きな不一致の基準（確率。設定の「大きな不一致の基準」）。説明の文には、% にして書く。 */
-  threshold: number;
-}
-
-export function AiMetricsLine({ metrics, threshold }: AiMetricsLineProps) {
+export function AiMetricsLine({ metrics }: { metrics: AiMetrics }) {
   const { matchRate, similarity, badMoveRate } = metrics;
   if (matchRate === null || similarity === null || badMoveRate === null) return null;
   const items = [
@@ -42,7 +36,7 @@ export function AiMetricsLine({ metrics, threshold }: AiMetricsLineProps) {
           </li>
         ))}
       </ul>
-      <InfoTip label="AI 一致率・類似度・悪手率の説明">{aiMetricsHint(metrics, Math.round(threshold * 100))}</InfoTip>
+      <InfoTip label="AI 一致率・類似度・悪手率の説明">{aiMetricsHint(metrics)}</InfoTip>
     </div>
   );
 }

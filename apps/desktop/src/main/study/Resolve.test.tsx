@@ -1,5 +1,5 @@
 /**
- * 解決（F16。ACCEPTANCE の U-41・E-45・D-6 の画面側）と、細かいミス・拮抗の出題（F17。U-42 の出題の見出し）の画面の試験。
+ * 解決（F16。ACCEPTANCE の U-41・E-45・D-6 の画面側）と、細かいミスの出題（F17。U-42 の出題の見出し）の画面の試験。
  * アプリ全体（App）を、半荘の保存先の偽物と、答えの記録の偽物の上で動かして、使う人と同じ操作で確かめる。
  * 解決の入切は、本物と同じく、保存（`set_resolved`）→ 半荘の一覧の読み直し → 画面の更新、の順で動く。
  */
@@ -220,11 +220,11 @@ describe('F16 解決した問題: 今日の出題', () => {
     await openToday(user);
     const texts = todayRows().map((row) => row.textContent);
     expect(texts).toHaveLength(5);
-    // 細かいミスの迷い 2 が除かれ、迷い 1・3・4・5 と、大きな不一致が 1 つ
+    // 細かいミスの迷い 2 が除かれ、迷い 1・3・4・5 と、悪手が 1 つ
     expect(texts[0]).toMatch(/^1東1局 4巡目迷い1/);
     expect(texts.some((text) => text?.includes('迷い2'))).toBe(false);
     expect(texts.filter((text) => text?.includes('迷い'))).toHaveLength(4);
-    // 問題は 28（迷い 5・不一致 4 + 19）から解決の 1 を引いた 27。組が 5 なので、残りは 22
+    // 問題は 28（迷い 5・悪手 4 + 19）から解決の 1 を引いた 27。組が 5 なので、残りは 22
     expect(screen.getByText('残り22問')).toBeInTheDocument();
   });
 
@@ -408,22 +408,4 @@ describe('F17 出題の見出しの札', () => {
     expect(chips().map((chip) => chip.text)).toEqual(['1向聴', '実戦：打5p', '迷い1']);
   });
 
-  it('拮抗の問題の見出しに「拮抗」。今日の出題では、大きな不一致のあと（最後）に入る', async () => {
-    // 差の基準を 100 ポイント・1 巡目以降にして、2 つ以上の候補がある判断はすべて拮抗にする
-    const { user } = setup({
-      only: 'fx4',
-      settings: { contest_enabled: true, contest_gap_percent: 100, contest_min_junme: 1 },
-    });
-    await screen.findByRole('navigation', { name: '半荘の一覧' });
-    await waitFor(() => expect(sideCount(/^今日の出題/)).toBe('5'), LOAD);
-    await openToday(user);
-    // 残りの末尾に、拮抗の問題がある（迷い 5 と不一致 4 を除いた分が、拮抗）
-    await user.click(within(document.querySelector('details.qrest') as HTMLElement).getByText(/^残り\d+問$/));
-    const rest = within(screen.getByRole('list', { name: '残りの出題' })).getAllByRole('button');
-    expect(rest.length).toBeGreaterThan(4);
-    const last = rest[rest.length - 1] as HTMLElement;
-    await user.click(last);
-    await screen.findByLabelText('理由（1行）');
-    expect([...document.querySelectorAll('.q-chips .q-chip')].some((chip) => chip.textContent === '拮抗' && chip.classList.contains('is-mis'))).toBe(true);
-  });
 });

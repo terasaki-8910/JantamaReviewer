@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_CONTEST_OPTIONS } from '../src/contest';
 import { listDisagreements } from '../src/disagreement';
 import { type ImportedGame, importReportText } from '../src/import';
 import { keyOfDecision, listProblems } from '../src/problems';
@@ -20,8 +19,8 @@ const f9da = load('f9da87cbcd7af5e9');
 /** FX-4 の迷い 1〜6 が結びつく判断（ACCEPTANCE E-17・E-27。迷い 6 は、ユーザーが手で選んだ 東3局1本場 11巡目 の打3m）。 */
 const FX4_MARKS = ['k0h0e4', 'k1h0e12', 'k1h1e7', 'k1h1e10', 'k2h1e6', 'k2h1e14'];
 
-describe('E-26 通して見る画面の不一致', () => {
-  it('E-26 既定は、確率 5% 未満の判断（大きな不一致）。FX-4 は 5 件、f9da87cbcd7af5e9 は 19 件', () => {
+describe('E-26 通して見る画面の悪手', () => {
+  it('E-26 既定は、確率 5% 未満の判断（悪手）。FX-4 は 5 件、f9da87cbcd7af5e9 は 19 件', () => {
     expect(replayMismatches(fx4.decisions)).toHaveLength(5);
     expect(replayMismatches(f9da.decisions)).toHaveLength(19);
     for (const found of replayMismatches(f9da.decisions)) {
@@ -31,7 +30,7 @@ describe('E-26 通して見る画面の不一致', () => {
     }
   });
 
-  it('E-26 「AI の1位と違う判断も、不一致として出す」を入れると、AI の1位と違う判断すべて。FX-4 は 8 件、f9da87cbcd7af5e9 は 43 件', () => {
+  it('E-26 「AI の1位と違う判断も、飛び先に入れる」を入れると、AI の1位と違う判断すべて。FX-4 は 8 件、f9da87cbcd7af5e9 は 43 件', () => {
     const fx4All = replayMismatches(fx4.decisions, { includeAll: true });
     const f9daAll = replayMismatches(f9da.decisions, { includeAll: true });
     expect(fx4All).toHaveLength(8);
@@ -51,7 +50,7 @@ describe('E-26 通して見る画面の不一致', () => {
     }
   });
 
-  it('E-26 設定を入れると、既定の件数はすべて含まれ（大きな不一致は big のまま）、増えた分は other（確率が基準以上）', () => {
+  it('E-26 設定を入れると、既定の件数はすべて含まれ（悪手は big のまま）、増えた分は other（確率が基準以上）', () => {
     for (const game of [fx4, f9da]) {
       const base = replayMismatches(game.decisions);
       const all = replayMismatches(game.decisions, { includeAll: true });
@@ -68,17 +67,13 @@ describe('E-26 通して見る画面の不一致', () => {
     }
   });
 
-  it('E-26 並びは半荘の順（確率の順ではない）。基準（threshold）を変えられる', () => {
+  it('E-26 並びは半荘の順（確率の順ではない）', () => {
     const found = replayMismatches(f9da.decisions);
     const indexes = found.map((item) => item.decision.index);
     expect(indexes).toEqual([...indexes].sort((a, b) => a - b));
-    expect(replayMismatches(f9da.decisions, { threshold: 0.01 }).length).toBeLessThan(19);
-    expect(replayMismatches(f9da.decisions, { threshold: 0.2 }).length).toBeGreaterThan(19);
-    // 基準を変えても、AI の1位と違う判断すべてを出すときの件数は、変わらない
-    expect(replayMismatches(f9da.decisions, { threshold: 0.01, includeAll: true })).toHaveLength(43);
   });
 
-  it('E-26 5 半荘すべてで、既定の件数は大きな不一致の一覧（E-4）と同じ判断になる。設定は出題の基準（F2）を変えない', () => {
+  it('E-26 5 半荘すべてで、既定の件数は悪手の一覧（E-4）と同じ判断になる。設定は出題の基準（F2）を変えない', () => {
     for (const id of FX1_IDS) {
       const game = load(id);
       const list = listDisagreements(game.decisions, { limit: 1000 });
@@ -88,7 +83,7 @@ describe('E-26 通して見る画面の不一致', () => {
       );
       // 出題の問題は、設定の影響を受けない（problems.ts は不一致の設定を持たない）
       const sources = [{ sessionId: 's', startedMs: 1, game, markKeys: [] }];
-      expect(listProblems(sources, { threshold: 0.05 }).filter((p) => p.kind === 'disagreement')).toHaveLength(list.total);
+      expect(listProblems(sources).filter((p) => p.kind === 'disagreement')).toHaveLength(list.total);
     }
   });
 
@@ -105,7 +100,7 @@ describe('E-26 通して見る画面の不一致', () => {
   });
 });
 
-describe('F12 場面の一覧（迷いと不一致）', () => {
+describe('F12 場面の一覧（迷いと悪手）', () => {
   const timeline = buildReplayTimeline(fx4);
 
   it('FX-4: 迷い 6・不一致 5（迷い 2 は不一致でもある）で、場面は 10。時間軸の順に並ぶ', () => {
@@ -157,23 +152,19 @@ describe('F12 場面の一覧（迷いと不一致）', () => {
     for (const scene of base) expect(all.find((s) => s.key === scene.key)?.mismatch).toBe(scene.mismatch);
   });
 
-  it('E-45〜E-47 細かいミス・拮抗・解決済みを場面に付け、拮抗だけの場面も入れる', () => {
+  it('E-45・E-46 細かいミスと解決済みを場面に付ける', () => {
     const resolvedKeys = new Set(['k0h0e4']);
     const scenes = listReplayScenes(timeline, fx4.decisions, {
       markKeys: FX4_MARKS,
-      contest: { ...DEFAULT_CONTEST_OPTIONS, maxGap: 1, minJunme: 0 },
       resolvedKeys,
     });
     expect(scenes.find((scene) => scene.key === 'k1h0e12')?.fineMiss).toBe(true);
     expect(scenes.filter((scene) => scene.doubts.length > 0 && scene.key !== 'k1h0e12').every((scene) => !scene.fineMiss)).toBe(true);
     expect(scenes.find((scene) => scene.key === 'k0h0e4')?.resolved).toBe(true);
     expect(scenes.filter((scene) => scene.key !== 'k0h0e4').every((scene) => !scene.resolved)).toBe(true);
-    const contested = scenes.filter((scene) => scene.contest !== null);
-    expect(contested.length).toBeGreaterThan(0);
-    expect(contested.some((scene) => scene.doubts.length === 0 && scene.mismatch === null)).toBe(true);
-
-    const withoutContest = listReplayScenes(timeline, fx4.decisions, { markKeys: FX4_MARKS });
-    expect(withoutContest.every((scene) => scene.contest === null)).toBe(true);
-    expect(withoutContest.every((scene) => !scene.resolved)).toBe(true);
+    const unresolved = listReplayScenes(timeline, fx4.decisions, { markKeys: FX4_MARKS });
+    expect(unresolved.every((scene) => !scene.resolved)).toBe(true);
   });
 });
+
+

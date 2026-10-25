@@ -13,10 +13,10 @@ import { type Tile, parseTenhouNotation } from '../src/tiles';
 import { FX1_IDS, FX4_ID, FX5_ID, loadReportText } from './helpers/fixtures';
 
 // F14・E-41（提案 7）: 自分の向聴数の推移（my-track.ts）。1 局を追って、配牌と自分が切るたびの場面の向聴数、聴牌になった打牌、
-// その局の迷い・大きな不一致の場面の位置を返す。
+// その局の迷い・悪手の場面の位置を返す。
 // 1. 手で作った局: 点の数え方（チー・ポンは点を作らない・カンは巡目が飛ぶ・リーチ）、聴牌の区間、場面を置く点（打牌・鳴き・和了・切らない局）
 // 2. 固定データの 7 半荘: 全部の点が、場面の向聴数（E-21 と同じ数え方。判断の `Decision.shanten`・牌譜から独立に組んだ手）と一致し、
-//    全部の迷い・大きな不一致の場面が、その判断の巡目の点に乗る
+//    全部の迷い・悪手の場面が、その判断の巡目の点に乗る
 
 const tiles = (text: string) => parseTenhouNotation(text);
 const tile = (text: string): Tile => tiles(text)[0] as Tile;
@@ -210,7 +210,7 @@ describe('E-41 手で作った局: 場面を置く点', () => {
     { type: 'dahai', actor: 0, pai: tile('9p'), tsumogiri: true },
   ]);
 
-  it('打牌の判断（ツモの event の直後）は、そのあとの打牌の点。迷いの丸と大きな不一致の菱形は、同じ判断なら両方', () => {
+  it('打牌の判断（ツモの event の直後）は、そのあとの打牌の点。迷いの丸と悪手の菱形は、同じ判断なら両方', () => {
     const track = myTrackOf(game, 0, [scene('a', 1, [3], 'big'), scene('b', 5, [1]), scene('c', 8, [], 'big')]);
     expect(track.scenes.map((s) => [s.scene.key, s.n, s.doubt, s.big])).toEqual([
       ['a', 1, true, true],
@@ -229,7 +229,7 @@ describe('E-41 手で作った局: 場面を置く点', () => {
     expect(myTrackOf(game, 0, [scene('first', 0, [1])]).scenes.map((s) => s.n)).toEqual([1]);
   });
 
-  it('大きな不一致でない不一致（other）と、迷いでも不一致でもない場面と、ほかの局の場面は、置かない。同じ点の場面は判断の順', () => {
+  it('悪手でない不一致（other）と、迷いでも不一致でもない場面と、ほかの局の場面は、置かない。同じ点の場面は判断の順', () => {
     const track = myTrackOf(game, 0, [
       scene('other', 1, [], 'other'),
       scene('none', 1, []),
@@ -390,8 +390,8 @@ describe('E-41 固定データの 7 半荘: 折れ線の点と印', () => {
   });
 });
 
-describe('E-41 固定データの 7 半荘: 迷い・大きな不一致の印は、その場面の巡目に乗る', () => {
-  it('全部の迷い・大きな不一致の場面が、置いた点に 1 つずつ乗る。その点は、判断のあとに自分が最初に切る打牌（打牌・リーチの判断は、判断の巡目と同じ）', () => {
+describe('E-41 固定データの 7 半荘: 迷い・悪手の印は、その場面の巡目に乗る', () => {
+  it('全部の迷い・悪手の場面が、置いた点に 1 つずつ乗る。その点は、判断のあとに自分が最初に切る打牌（打牌・リーチの判断は、判断の巡目と同じ）', () => {
     const counts = { doubts: 0, bigs: 0, both: 0, calls: 0, discards: 0, clamped: 0, kinds: new Set<string>() };
     for (const id of IDS) {
       const game = load(id);
@@ -427,14 +427,14 @@ describe('E-41 固定データの 7 半荘: 迷い・大きな不一致の印は
           placed.add(item.scene.key);
         }
       }
-      // 置かれなかった場面は無い（迷い・大きな不一致の場面は、全部どこかの局に乗る）
+      // 置かれなかった場面は無い（迷い・悪手の場面は、全部どこかの局に乗る）
       expect([...placed].sort(), id).toEqual(wanted.map((s) => s.key).sort());
       // 点は 1 つの局の中だけ。ほかの局の場面を混ぜない
       for (const kyoku of game.kyokus) {
         for (const item of myTrackOf(game, kyoku.position, scenes).scenes) expect(item.scene.decision.kyokuPosition).toBe(kyoku.position);
       }
     }
-    // 迷い・大きな不一致・両方・鳴きの判断・打牌の判断を含み、判断の種類も複数
+    // 迷い・悪手・両方・鳴きの判断・打牌の判断を含み、判断の種類も複数
     expect(counts.doubts).toBeGreaterThan(30);
     expect(counts.bigs).toBeGreaterThan(30);
     expect(counts.both).toBeGreaterThanOrEqual(1);
@@ -443,3 +443,5 @@ describe('E-41 固定データの 7 半荘: 迷い・大きな不一致の印は
     expect(counts.kinds.size).toBeGreaterThanOrEqual(3);
   });
 });
+
+

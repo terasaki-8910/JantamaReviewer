@@ -81,7 +81,7 @@ function ruleLine(items: readonly TodayItem[], sessionCount: number): string {
     days.size === 1 && day !== undefined
       ? `${day}の${sessionCount === 1 ? '' : `${sessionCount}つの`}半荘`
       : `${sessionCount}つの半荘`;
-  return `${where}から${items.length}問。細かいミス（迷ったうえで実戦が AI の1位と違った局面）を先に、次にほかの迷い、AI との差が大きい順の大きな不一致、最後に拮抗した局面を入れています。1日に出す数は設定で変えられます。`;
+  return `${where}から${items.length}問。細かいミス（迷ったうえで実戦が AI の1位と違った局面）を先に、次にほかの迷い、最後に悪手を実戦の確率が低い順で入れています。1日に出す数は設定で変えられます。`;
 }
 
 export function TodayPage({ onOpen }: TodayPageProps) {

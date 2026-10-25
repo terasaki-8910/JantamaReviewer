@@ -35,8 +35,8 @@ interface Item {
   base: string;
 }
 
-/** 表の行: 項目・値・もとの数（見本のとおりの書き方）。`thresholdPercent` は、悪手の基準（設定の「大きな不一致の基準」）。 */
-function itemsOf(t: HanchanStatTotals, ai: AiMetrics, thresholdPercent: number): Item[] {
+/** 表の行: 項目・値・もとの数（見本のとおりの書き方）。 */
+function itemsOf(t: HanchanStatTotals, ai: AiMetrics): Item[] {
   const games = `${t.hanchanCount}半荘`;
   const kyokus = `${t.kyokuCount}局`;
   const decisions = `${ai.decisions}判断`;
@@ -50,7 +50,7 @@ function itemsOf(t: HanchanStatTotals, ai: AiMetrics, thresholdPercent: number):
     { key: 'points', label: '平均和了点', value: pointsText(t.averageWinPoints), base: `和了 ${t.winCount}回の点数の合計 ${groupedNumber(t.winPointsSum)}` },
     { key: 'aiMatch', label: 'AI 一致率', value: rateText(ai.matchRate), base: `${ai.matches}判断 / ${decisions}` },
     { key: 'similarity', label: '類似度', value: similarityText(ai.similarity), base: decisions },
-    { key: 'badMove', label: '悪手率', value: rateText(ai.badMoveRate), base: `${ai.badMoves}判断 / ${decisions}（確率 ${thresholdPercent}% 未満）` },
+    { key: 'badMove', label: '悪手率', value: rateText(ai.badMoveRate), base: `${ai.badMoves}判断 / ${decisions}（確率 5% 未満）` },
   ];
 }
 
@@ -137,7 +137,7 @@ export function ImportedStatsSection({ stats }: { stats: ImportedWeekStats }) {
                 </tr>
               </thead>
               <tbody>
-                {itemsOf(stats.totals, stats.ai, Math.round(stats.threshold * 100)).map((item) => (
+                {itemsOf(stats.totals, stats.ai).map((item) => (
                   <tr key={item.key}>
                     <th scope="row">{item.label}</th>
                     <td className="num">{item.value}</td>

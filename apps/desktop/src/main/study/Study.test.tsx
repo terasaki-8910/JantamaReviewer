@@ -148,7 +148,7 @@ describe('U-15 今日の出題の一覧', () => {
     expect(rows.some((row) => row.className.includes('done') || row.className.includes('next'))).toBe(false);
     // 組の説明の 1 行
     expect(document.querySelector('.q-rule')?.textContent).toBe(
-      '10月9日の半荘から5問。細かいミス（迷ったうえで実戦が AI の1位と違った局面）を先に、次にほかの迷い、AI との差が大きい順の大きな不一致、最後に拮抗した局面を入れています。1日に出す数は設定で変えられます。',
+      '10月9日の半荘から5問。細かいミス（迷ったうえで実戦が AI の1位と違った局面）を先に、次にほかの迷い、AI との差が大きい順の悪手、最後に拮抗した局面を入れています。1日に出す数は設定で変えられます。',
     );
   });
 
@@ -534,3 +534,5 @@ describe('U-10 戻る・進む（出題の画面）', () => {
     expect(await screen.findByRole('heading', { level: 1, name: '今日の出題' })).toBeInTheDocument();
   });
 });
+
+

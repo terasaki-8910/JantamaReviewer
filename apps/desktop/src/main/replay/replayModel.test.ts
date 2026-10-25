@@ -1,7 +1,7 @@
 /**
  * 半荘を通して見る画面の文言・局の選択の数・行き先（replayModel.ts）の試験。FX-4（実際の半荘）の時間軸で確かめる。
  */
-import { DEFAULT_CONTEST_OPTIONS, buildReplayTimeline, listReplayScenes, type KyokuEnd, type Seat } from '@jantama/engine';
+import { buildReplayTimeline, listReplayScenes, type KyokuEnd, type Seat } from '@jantama/engine';
 import { describe, expect, it } from 'vitest';
 
 import { gameOf } from '../../../tests/fake-study';
@@ -29,7 +29,7 @@ const me = timeline.playerId;
 
 /** ユーザーが選んだ迷いの結びつけ（迷い 1〜6 の順）。 */
 const MARK_KEYS = ['k0h0e4', 'k1h0e12', 'k1h1e7', 'k1h1e10', 'k2h1e6', 'k2h1e14'];
-const scenes = listReplayScenes(timeline, game.decisions, { markKeys: MARK_KEYS, threshold: 0.05, includeAll: false });
+const scenes = listReplayScenes(timeline, game.decisions, { markKeys: MARK_KEYS, includeAll: false });
 const stopOf = (key: string): number => {
   const scene = scenes.find((item) => item.key === key);
   if (scene === undefined) throw new Error(key);
@@ -137,9 +137,9 @@ describe('文言', () => {
     ]);
   });
 
-  it('不一致の名前: 基準未満は「大きな不一致」、AI の1位と違うだけは「不一致」', () => {
-    expect(mismatchName('big')).toBe('大きな不一致');
-    expect(mismatchName('other')).toBe('不一致');
+  it('悪手の名前は、確率と設定による区別を画面に出さない', () => {
+    expect(mismatchName('big')).toBe('悪手');
+    expect(mismatchName('other')).toBe('悪手');
   });
 
   it('場面の札: 迷いの番号（複数は「・」でつなぐ）と不一致の名前', () => {
@@ -148,9 +148,9 @@ describe('文言', () => {
     expect(sceneTags({ doubts: [1, 2], mismatch: null })).toEqual([{ kind: 'doubt', text: '迷い1・2' }]);
     expect(sceneTags({ doubts: [2], mismatch: 'big' })).toEqual([
       { kind: 'doubt', text: '迷い2' },
-      { kind: 'mis', text: '大きな不一致' },
+      { kind: 'mis', text: '悪手' },
     ]);
-    expect(sceneTags({ doubts: [], mismatch: 'other' })).toEqual([{ kind: 'mis', text: '不一致' }]);
+    expect(sceneTags({ doubts: [], mismatch: 'other' })).toEqual([{ kind: 'mis', text: '悪手' }]);
   });
 
   it('場面の一覧の 2 行目: 種類と向聴数（0 以下は聴牌）', () => {
@@ -245,7 +245,7 @@ describe('行き先', () => {
     expect(nav.kyoku_start).toBe(timeline.kyokus[4]!.first);
   });
 
-  it('場面の上（迷い 2。大きな不一致でもある）: 前後の迷い・不一致は、自分より前・後だけ。先の数は自分を含まない', () => {
+  it('場面の上（迷い 2。悪手でもある）: 前後の迷い・不一致は、自分より前・後だけ。先の数は自分を含まない', () => {
     const g = stopOf('k1h0e12');
     const nav = replayNav(timeline, stops, g);
     expect(nav.prev_doubt).toBe(stopOf('k0h0e4'));
@@ -280,73 +280,61 @@ describe('行き先', () => {
   });
 });
 
-describe('F16・F17 解決した場面・細かいミス・拮抗（場面の札・局の選択の数・行き先）', () => {
-  /** 差 100 ポイント・1 巡目以降: 2 つ以上の候補がある判断は、すべて拮抗の場面になる（数を増やして確かめるため）。 */
-  const wide = { ...DEFAULT_CONTEST_OPTIONS, maxGap: 1, minJunme: 1 };
-  const withContest = listReplayScenes(timeline, game.decisions, { markKeys: MARK_KEYS, threshold: 0.05, includeAll: false, contest: wide });
+describe('F16・F17 解決した場面・細かいミス（場面の札・局の選択の数・行き先）', () => {
   const resolvedKeys = (...keys: string[]) => new Set(keys);
-  const scenesWith = (resolved: ReadonlySet<string>, contest = wide) =>
-    listReplayScenes(timeline, game.decisions, { markKeys: MARK_KEYS, threshold: 0.05, includeAll: false, contest, resolvedKeys: resolved });
+  const scenesWith = (resolved: ReadonlySet<string>) =>
+    listReplayScenes(timeline, game.decisions, { markKeys: MARK_KEYS, includeAll: false, resolvedKeys: resolved });
 
-  it('場面の札: 細かいミスは迷いの札と同じ形、拮抗は不一致の札と同じ形。迷い → 細かいミス → 不一致 → 拮抗の順', () => {
-    expect(sceneTags({ doubts: [2], mismatch: 'big', fineMiss: true, contest: { gap: 0.1 } })).toEqual([
+  it('場面の札は、迷い → 細かいミス → 悪手の順', () => {
+    expect(sceneTags({ doubts: [2], mismatch: 'big', fineMiss: true })).toEqual([
       { kind: 'doubt', text: '迷い2' },
       { kind: 'doubt', text: '細かいミス' },
-      { kind: 'mis', text: '大きな不一致' },
-      { kind: 'mis', text: '拮抗' },
+      { kind: 'mis', text: '悪手' },
     ]);
-    expect(sceneTags({ doubts: [], mismatch: null, fineMiss: false, contest: { gap: 0 } })).toEqual([{ kind: 'mis', text: '拮抗' }]);
-    expect(sceneTags({ doubts: [3], mismatch: null, fineMiss: false, contest: null })).toEqual([{ kind: 'doubt', text: '迷い3' }]);
+    expect(sceneTags({ doubts: [3], mismatch: null, fineMiss: false })).toEqual([{ kind: 'doubt', text: '迷い3' }]);
   });
 
-  it('場面: 細かいミスは迷い 2 だけ。拮抗の設定が無いと、拮抗の場面は無い。解決していない', () => {
+  it('場面: 細かいミスは迷い 2 だけで、初めは解決していない', () => {
     expect(scenes.filter((scene) => scene.fineMiss).map((scene) => scene.key)).toEqual(['k1h0e12']);
-    expect(scenes.every((scene) => scene.contest === null && !scene.resolved)).toBe(true);
-    expect(withContest.filter((scene) => scene.contest !== null).length).toBeGreaterThan(20);
+    expect(scenes.every((scene) => !scene.resolved)).toBe(true);
   });
 
-  it('局の選択の数: 拮抗の数が入る。解決した場面は、数から除いて「解決 N」に回す', () => {
-    const counts = timeline.kyokus.map((kyoku) => kyokuCounts(timeline, withContest, kyoku.position));
-    expect(counts.every((text) => text.includes('拮抗'))).toBe(true);
+  it('局の選択の数: 解決した場面は、数から除いて「解決 N」に回す', () => {
     const resolved = scenesWith(resolvedKeys('k1h0e12', 'k1h1e6'));
     const after = timeline.kyokus.map((kyoku) => kyokuCounts(timeline, resolved, kyoku.position));
     // 東2局（位置 1）: 迷い 2 を解決 → 迷い 0・細かいミス 0。不一致 1（迷い 2 は不一致でもあった）も除かれ、解決 1
     expect(after[1]).not.toContain('迷い');
     expect(after[1]).not.toContain('細かいミス');
     expect(after[1]).toContain('解決1');
-    // 東2局1本場（位置 2）: 大きな不一致 k1h1e6 を解決
+    // 東2局1本場（位置 2）: 悪手 k1h1e6 を解決
     expect(after[2]).toContain('解決1');
     expect(after[0]).not.toContain('解決');
   });
 
-  it('止まる場所: 解決した場面は、迷い・不一致・拮抗のどれにも入れない。場面の一覧（scenes）には残る', () => {
+  it('止まる場所: 解決した場面は、迷い・悪手のどちらにも入れない。場面の一覧には残る', () => {
     const resolved = scenesWith(resolvedKeys('k1h0e12', 'k1h1e7', 'k2h1e16'));
     expect(resolved.filter((scene) => scene.resolved).map((scene) => scene.key)).toEqual(['k1h0e12', 'k1h1e7', 'k2h1e16']);
     const stops = replayStops(timeline, resolved);
     expect(stops.doubts).toEqual(['k0h0e4', 'k1h1e10', 'k2h1e6', 'k2h1e14'].map(stopOf));
     expect(stops.mismatches).toEqual(['k1h1e6', 'k1h1e9', 'k2h1e2'].map(stopOf));
-    const contestStops = replayStops(timeline, withContest).contests;
-    expect(stops.contests).toHaveLength(contestStops.length - resolved.filter((scene) => scene.resolved && scene.contest !== null).length);
     for (const scene of resolved.filter((item) => item.resolved)) {
       expect(stops.doubts).not.toContain(scene.step);
       expect(stops.mismatches).not.toContain(scene.step);
-      expect(stops.contests).not.toContain(scene.step);
     }
   });
 
-  it('「細かいミスだけ」: 迷いの止まる場所が、細かいミスだけになる。不一致・拮抗は変わらない', () => {
-    const all = replayStops(timeline, withContest);
-    const only = replayStops(timeline, withContest, { fineMissOnly: true });
+  it('「細かいミスだけ」では迷いの止まる場所だけが変わり、悪手は変わらない', () => {
+    const all = replayStops(timeline, scenes);
+    const only = replayStops(timeline, scenes, { fineMissOnly: true });
     expect(all.doubts).toHaveLength(6);
     expect(only.doubts).toEqual([stopOf('k1h0e12')]);
     expect(only.mismatches).toEqual(all.mismatches);
-    expect(only.contests).toEqual(all.contests);
     // 解決した細かいミスは、「細かいミスだけ」でも止まらない
     const resolved = scenesWith(resolvedKeys('k1h0e12'));
     expect(replayStops(timeline, resolved, { fineMissOnly: true }).doubts).toEqual([]);
   });
 
-  it('行き先と数: 前・次の拮抗と、半荘全体の数・先の数は、解決した場面を数えない。いまが解決した場面の上でも、前後の止まる場所へ動ける', () => {
+  it('行き先と数は、解決した場面を数えない。いまが解決した場面の上でも前後へ動ける', () => {
     const resolved = scenesWith(resolvedKeys('k1h0e12'));
     const stops = replayStops(timeline, resolved, {});
     const g = stopOf('k1h0e12');
@@ -356,24 +344,11 @@ describe('F16・F17 解決した場面・細かいミス・拮抗（場面の札
     expect(nav.prev_doubt).toBe(stopOf('k0h0e4'));
     expect(nav.next_doubt).toBe(stopOf('k1h1e7'));
     expect(nav.doubtsAhead).toBe(4);
-    // 不一致は、迷い 2 でもある k1h0e12 を除いた 4 か所
+    // 悪手は、迷い 2 でもある k1h0e12 を除いた 4 か所
     expect(nav.mismatchTotal).toBe(4);
     expect(nav.mismatchesAhead).toBe(4);
     expect(nav.prev_mismatch).toBeNull();
-    // 拮抗
-    expect(nav.contestTotal).toBe(stops.contests.length);
-    expect(nav.next_contest).toBe(stops.contests.find((step) => step > g) ?? null);
-    expect(nav.prev_contest).toBe([...stops.contests].reverse().find((step) => step < g) ?? null);
-    expect(nav.contestsAhead).toBe(stops.contests.filter((step) => step > g).length);
-    // 先頭では、前は無く、次は先頭の拮抗
-    const first = replayNav(timeline, stops, 0);
-    expect(first.prev_contest).toBeNull();
-    expect(first.next_contest).toBe(stops.contests[0]);
-    // 全部の手で、次の拮抗は後ろ・前の拮抗は前
-    for (const step of timeline.steps) {
-      const at = replayNav(timeline, stops, step.index);
-      if (at.next_contest !== null) expect(at.next_contest).toBeGreaterThan(step.index);
-      if (at.prev_contest !== null) expect(at.prev_contest).toBeLessThan(step.index);
-    }
   });
 });
+
+

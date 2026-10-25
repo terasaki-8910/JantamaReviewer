@@ -14,7 +14,7 @@ use super::error::{MassDeleteSide, SyncError};
 use super::local::{LocalAccess, Ports};
 use super::remote::Remote;
 use super::rows::{make_key, Kind};
-use super::testing::{Dev, MemServer};
+use super::testing::{Dev, MemRow, MemServer};
 use crate::capture::{CaptureError, CaptureTarget, Screenshot};
 use crate::settings::{Orientation, Trigger};
 use crate::store::{
@@ -170,12 +170,6 @@ fn populate(dev: &Dev) -> (String, String) {
         // 既定（入）とは違う値にして、設定の行で届くことを確かめる（W-15）
         s.doubt_only = false;
         // 拮抗の場面の設定も、既定とは違う値にする（F17）
-        s.contest_enabled = false;
-        s.contest_gap_percent = 30;
-        s.contest_by_junme = false;
-        s.contest_min_junme = 8;
-        s.contest_after_riichi = false;
-        s.contest_two_calls = false;
         s.daily_count = 9;
         s.orientation = Orientation::Horizontal;
         s.trigger = Trigger::Key {
@@ -330,13 +324,6 @@ fn d4_records_round_trip_through_the_sync_rows_into_another_local_db_identically
     assert!(!b.ports.settings().doubt_only, "迷いだけの設定も届く");
     assert_eq!(b.ports.settings().daily_count, 9);
     // 拮抗の場面の設定も届く（F17）
-    let contest = b.ports.settings();
-    assert!(!contest.contest_enabled && !contest.contest_by_junme);
-    assert!(!contest.contest_after_riichi && !contest.contest_two_calls);
-    assert_eq!(
-        (contest.contest_gap_percent, contest.contest_min_junme),
-        (30, 8)
-    );
     // 解決した局面（D-6）が、同じ時刻のまま届く
     let resolved = b.store().load_resolved(&sa).unwrap();
     assert_eq!(resolved.decisions.len(), 2);
@@ -367,6 +354,47 @@ fn d4_records_round_trip_through_the_sync_rows_into_another_local_db_identically
             0,
             "{report:?}"
         );
+    }
+}
+
+#[test]
+fn e49_old_removed_setting_rows_are_ignored() {
+    let server = MemServer::new();
+    let mut source = Dev::new("d-source", &server);
+    populate(&source);
+    source.cycle(1_000_000).unwrap();
+
+    let legacy = [
+        ("disagreement_percent", "10"),
+        ("contest_enabled", "true"),
+        ("contest_gap_percent", "30"),
+        ("contest_by_junme", "false"),
+        ("contest_min_junme", "8"),
+        ("contest_after_riichi", "false"),
+        ("contest_two_calls", "false"),
+    ];
+    {
+        let mut store = server.store();
+        for (name, value) in legacy {
+            store.rows.insert(
+                make_key(Kind::Setting, &[name]),
+                MemRow {
+                    value: value.to_string(),
+                    deleted: false,
+                    stamp: (1_100_000, "old-client".to_string()),
+                },
+            );
+        }
+    }
+
+    let mut target = Dev::new("d-target", &server);
+    let report = target.cycle(1_200_000).unwrap();
+    assert!(report.warnings.is_empty(), "{report:?}");
+    assert_eq!(target.ports.settings().daily_count, 9);
+
+    let local = target.local.snapshot(&BTreeMap::new()).unwrap();
+    for (name, _) in legacy {
+        assert!(!local.items.contains_key(&make_key(Kind::Setting, &[name])));
     }
 }
 

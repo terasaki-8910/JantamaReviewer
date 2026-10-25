@@ -14,7 +14,6 @@ import {
 } from '../src/problems';
 import { FX4_ID, loadReportText } from './helpers/fixtures';
 import { actualText, choiceText, topChoice } from '../src/quiz-choice';
-import { DEFAULT_CONTEST_OPTIONS } from '../src/contest';
 
 function load(id: string): ImportedGame {
   const r = importReportText(loadReportText(id));
@@ -35,7 +34,7 @@ const source = (sessionId: string, startedMs: number, game: ImportedGame, markKe
   markKeys,
 });
 
-describe('E-24 今日の出題: 迷いの問題を先に、残りを大きな不一致で確率の低い順に、1日に出す数まで', () => {
+describe('E-24・E-49 今日の出題: 細かいミス、ほかの迷い、悪手の順に、1日に出す数まで', () => {
   it('E-24 FX-4 だけを取り込んだ状態では、今日の 5 問は迷い 1〜5 の局面になる（迷い 6 は残り）', () => {
     const problems = listProblems([source('s4', 1000, fx4, FX4_MARKS)]);
     const daily = buildDailySet(problems, new Set(), 5);
@@ -43,15 +42,15 @@ describe('E-24 今日の出題: 迷いの問題を先に、残りを大きな不
     expect(daily.every((p) => p.kind === 'mark')).toBe(true);
     expect(daily.map((p) => p.markNumber)).toEqual([2, 1, 3, 4, 5]);
     const rest = restOfProblems(problems, new Set(), daily);
-    // 迷い 6 が先に来て、そのあとに大きな不一致（迷い 2 は迷いの問題として数えるので、不一致は 5 − 1 = 4 問）
+    // 迷い 6 が先に来て、そのあとに悪手（迷い 2 は迷いの問題として数えるので、不一致は 5 − 1 = 4 問）
     expect(rest[0]?.key).toBe('k2h1e14');
     expect(rest.slice(1).every((p) => p.kind === 'disagreement')).toBe(true);
     expect(rest).toHaveLength(1 + 4);
   });
 
-  it('E-24 迷いと大きな不一致の両方に当たる判断は、1 問（迷いの問題）として数える', () => {
+  it('E-24 迷いと悪手の両方に当たる判断は、1 問（迷いの問題）として数える', () => {
     const problems = listProblems([source('s4', 1000, fx4, FX4_MARKS)]);
-    // FX-4 の大きな不一致は 5 つ。そのうち迷い 2（k1h0e12）は迷いの問題の側に入る
+    // FX-4 の悪手は 5 つ。そのうち迷い 2（k1h0e12）は迷いの問題の側に入る
     expect(listDisagreements(fx4.decisions).total).toBe(5);
     expect(problems.filter((p) => p.key === 'k1h0e12')).toHaveLength(1);
     expect(problems.find((p) => p.key === 'k1h0e12')?.kind).toBe('mark');
@@ -70,7 +69,7 @@ describe('E-24 今日の出題: 迷いの問題を先に、残りを大きな不
     expect(listProblems([source('s4', 1000, fx4, ['k9h9e9'])]).filter((p) => p.kind === 'mark')).toEqual([]);
   });
 
-  it('E-24 迷いの問題は、新しい半荘から、迷いの順。そのあと、大きな不一致が確率の低い順（同じなら新しい半荘から）', () => {
+  it('E-24 迷いの問題は、新しい半荘から、迷いの順。そのあと、悪手が確率の低い順（同じなら新しい半荘から）', () => {
     const older = source('older', 1000, fx4, FX4_MARKS);
     const newer = source('newer', 2000, f9da, [keyOfDecision(f9da.decisions[3] as never), null, keyOfDecision(f9da.decisions[1] as never)]);
     const problems = listProblems([older, newer]);
@@ -86,7 +85,7 @@ describe('E-24 今日の出題: 迷いの問題を先に、残りを大きな不
         if (previous.startedMs === current.startedMs) expect((previous.markNumber ?? 0) < (current.markNumber ?? 0)).toBe(true);
       }
     }
-    // 迷いの問題がすべて先で、大きな不一致が後ろ
+    // 迷いの問題がすべて先で、悪手が後ろ
     const firstDisagreement = problems.findIndex((p) => p.kind === 'disagreement');
     expect(problems.slice(0, firstDisagreement).every((p) => p.kind === 'mark')).toBe(true);
     expect(problems.slice(firstDisagreement).every((p) => p.kind === 'disagreement')).toBe(true);
@@ -98,26 +97,19 @@ describe('E-24 今日の出題: 迷いの問題を先に、残りを大きな不
       expect(a.probability <= b.probability, `${i}`).toBe(true);
       if (a.probability === b.probability) expect(a.startedMs >= b.startedMs).toBe(true);
     }
-    // 2 つの半荘の大きな不一致（19 + 5。迷いにしたものは除く）が、確率だけで混ざって並ぶ
+    // 2 つの半荘の悪手（19 + 5。迷いにしたものは除く）が、確率だけで混ざって並ぶ
     const sessionsInOrder = new Set(disagreements.map((p) => p.sessionId));
     expect(sessionsInOrder).toEqual(new Set(['older', 'newer']));
     expect(disagreements.length).toBeLessThanOrEqual(19 + 5);
   });
 
-  it('E-24 迷いの無い半荘では、大きな不一致が確率の低い順に並び、先頭は 東4局13巡目 の打3m（E-4）', () => {
+  it('E-24 迷いの無い半荘では、悪手が確率の低い順に並び、先頭は 東4局13巡目 の打3m（E-4）', () => {
     const problems = listProblems([source('f', 1000, f9da, [])]);
     expect(problems).toHaveLength(19);
     const first = problems[0];
     expect(first?.decision.kyokuLabel).toBe('東4局');
     expect(first?.decision.junme).toBe(13);
     expect(problems.map((p) => p.key)).toEqual(listDisagreements(f9da.decisions, { limit: 100 }).items.map((it) => keyOfDecision(it.decision)));
-  });
-
-  it('E-24 基準（既定 5%）を変えると、大きな不一致の問題が増減する', () => {
-    const count = (threshold: number) => listProblems([source('f', 1000, f9da, [])], { threshold }).length;
-    expect(count(0.05)).toBe(19);
-    expect(count(0.1)).toBeGreaterThan(19);
-    expect(count(0.01)).toBeLessThan(19);
   });
 
   it('E-24 答えた問題は入らない。1日に出す数（既定 5）まで入り、足りなければ、あるだけ', () => {
@@ -156,17 +148,17 @@ describe('E-24 今日の出題: 迷いの問題を先に、残りを大きな不
     ]);
   });
 
-  it('E-46・E-47 細かいミス、ほかの迷い、大きな不一致、拮抗の順で、判断は重複しない', () => {
-    const problems = listProblems([source('s4', 1000, fx4, FX4_MARKS)], {
-      contest: { ...DEFAULT_CONTEST_OPTIONS, maxGap: 1, minJunme: 0 },
-    });
-    const rank = (problem: (typeof problems)[number]): number => (problem.kind === 'mark' ? (problem.fineMiss ? 0 : 1) : problem.kind === 'disagreement' ? 2 : 3);
+  it('E-49 FX-4 と f9da は、細かいミス、ほかの迷い、悪手の順で、判断が重複しない', () => {
+    const problems = listProblems([
+      source('s4', 1000, fx4, FX4_MARKS),
+      source('f9da', 2000, f9da, []),
+    ]);
+    const rank = (problem: (typeof problems)[number]): number => (problem.kind === 'mark' ? (problem.fineMiss ? 0 : 1) : 2);
     expect(new Set(problems.map(problemId)).size).toBe(problems.length);
     expect(problems.map(rank)).toEqual([...problems.map(rank)].sort((a, b) => a - b));
-    expect(new Set(problems.map((problem) => problem.kind))).toEqual(new Set(['mark', 'disagreement', 'contest']));
-    const contests = problems.filter((problem) => problem.kind === 'contest');
-    expect(contests.every((problem) => problem.contestGap !== null)).toBe(true);
-    for (let i = 1; i < contests.length; i++) expect((contests[i - 1]!.contestGap as number) <= (contests[i]!.contestGap as number)).toBe(true);
+    expect(new Set(problems.map((problem) => problem.kind))).toEqual(new Set(['mark', 'disagreement']));
+    expect(problems.filter((problem) => problem.sessionId === 's4')).toHaveLength(10);
+    expect(problems.filter((problem) => problem.sessionId === 'f9da')).toHaveLength(19);
   });
 
   it('E-45 今日の出題と残りから、解決した問題を除く', () => {
@@ -204,3 +196,5 @@ describe('E-24 今日の出題: 迷いの問題を先に、残りを大きな不
     }
   });
 });
+
+

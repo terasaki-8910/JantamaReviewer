@@ -1,4 +1,4 @@
-import { DEFAULT_CONTEST_OPTIONS, problemId } from '@jantama/engine';
+import { problemId } from '@jantama/engine';
 import { describe, expect, it } from 'vitest';
 
 import { answerRow, gameOf } from '../../../tests/fake-study';
@@ -25,9 +25,9 @@ function games(ids: string[] = [FX4_ID, FX1A_ID]): GameMap {
 }
 
 describe('E-24 問題と今日の組（画面が使う組み立て）', () => {
-  const collected = collectProblems(sessions(), games(), 0.05);
+  const collected = collectProblems(sessions(), games());
 
-  it('問題 = 迷いに結びついた判断と、大きな不一致。両方に当たるものは 1 問（迷いのほう）', () => {
+  it('問題 = 迷いに結びついた判断と、悪手。両方に当たるものは 1 問（迷いのほう）', () => {
     const marks = collected.problems.filter((problem) => problem.kind === 'mark');
     // FX-4: 迷い 1〜5 が推定で結びつく。迷い 6 は読めない（決まっていない）
     // 並びは、細かいミス（迷い 2。実戦は打8p、AI の1位は打9p）が先頭で、あとは迷いの順（E-46）
@@ -61,7 +61,7 @@ describe('E-24 問題と今日の組（画面が使う組み立て）', () => {
 });
 
 describe('U-15 今日の出題の画面のデータ', () => {
-  const collected = collectProblems(sessions(), games(), 0.05);
+  const collected = collectProblems(sessions(), games());
   const daily = plannedSet(collected.problems, [], 5);
   const base = { sessions: sessions(), games: games(), answers: [] as AnswerRow[], threshold: 0.05, daily, today: '2026-10-09' };
 
@@ -110,7 +110,7 @@ describe('U-15 今日の出題の画面のデータ', () => {
         games: games([FX1A_ID]),
         answers: [answerRow({ session_id: FX4_ID, decision_key: daily[0]?.decision_key ?? 'k0h0e0' })],
       },
-      collectProblems(kept, games([FX1A_ID]), 0.05),
+      collectProblems(kept, games([FX1A_ID])),
     );
     expect(model.today.items).toEqual([]);
     expect(model.today.rest.every((problem) => problem.sessionId === FX1A_ID)).toBe(true);
@@ -123,13 +123,13 @@ describe('U-15 今日の出題の画面のデータ', () => {
       [FX4_ID, { status: 'unavailable' as const, reason: '試験' }],
       [FX1A_ID, { status: 'ready' as const, game: gameOf('fx1a') }],
     ]);
-    const model = buildStudyModel({ ...base, games: map, daily: null }, collectProblems(sessions(), map, 0.05));
+    const model = buildStudyModel({ ...base, games: map, daily: null }, collectProblems(sessions(), map));
     expect(model.problems.every((problem) => problem.sessionId === FX1A_ID)).toBe(true);
   });
 });
 
 describe('E-25 解き直しの期限', () => {
-  const collected = collectProblems(sessions(), games(), 0.05);
+  const collected = collectProblems(sessions(), games());
   const a = collected.problems[0];
   const b = collected.problems[1];
   const c = collected.problems[2];
@@ -180,7 +180,7 @@ describe('E-24 問題の数え方（局だけ分かった迷い・崩れた読�
   const fx5Games = (): GameMap => new Map([[FX5_ID, { status: 'ready' as const, game: gameOf('fx5') }]]);
 
   it('局だけ分かった迷い（15:38:10・15:42:37）は、判断を選ぶまで、決まっていない迷いとして数え、問題に入れない。崩れた読み取りの推定は、推定と同じに問題になる', () => {
-    const collected = collectProblems([fx5()], fx5Games(), 0.05);
+    const collected = collectProblems([fx5()], fx5Games());
     const marks = collected.problems.filter((problem) => problem.kind === 'mark');
     // 迷い 13 のうち、局だけ分かった 2 つ（迷いの番号 3・5）を除いた 11 が、問題になる
     // 並びは、細かいミス（迷い 1・4・7・8・9・11・12）が先、ほかの迷い（迷い 2・6・10・13）があと。それぞれ迷いの順（E-46）
@@ -192,18 +192,18 @@ describe('E-24 問題の数え方（局だけ分かった迷い・崩れた読�
 
   it('局だけ分かった迷いを、判断を選ぶと、その判断が問題になり、決まっていない迷いは減る', () => {
     // 15:38:10（迷いの id 4）に、ユーザーが選んだ 東2局8巡目の打9m（k1h0e8）を結びつける
-    const collected = collectProblems([fx5({ '4': 'k1h0e8' })], fx5Games(), 0.05);
+    const collected = collectProblems([fx5({ '4': 'k1h0e8' })], fx5Games());
     const marks = collected.problems.filter((problem) => problem.kind === 'mark');
     expect(marks.map((problem) => problem.markNumber)).toContain(3);
     expect(marks.find((problem) => problem.markNumber === 3)?.key).toBe('k1h0e8');
     expect(collected.undecided).toBe(1);
     // ユーザーが選んだ 7 つ（ACCEPTANCE の FX-5）をすべて結びつけると、決まっていない迷いは 0
-    expect(collectProblems([fx5({ ...FX5_USER_CHOICES })], fx5Games(), 0.05).undecided).toBe(0);
+    expect(collectProblems([fx5({ ...FX5_USER_CHOICES })], fx5Games()).undecided).toBe(0);
   });
 });
 
 describe('E-45 解決した問題（F16）', () => {
-  const collected = collectProblems(sessions(), games(), 0.05);
+  const collected = collectProblems(sessions(), games());
   const daily = plannedSet(collected.problems, [], 5);
   const base = { sessions: sessions(), games: games(), answers: [] as AnswerRow[], threshold: 0.05, daily, today: '2026-10-09' };
   const idOf = (key: string) => problemId({ sessionId: FX4_ID, key });
@@ -214,7 +214,7 @@ describe('E-45 解決した問題（F16）', () => {
     const planned = plannedSet(collected.problems, [], 5, new Set([idOf(first.decision_key)]));
     expect(planned).toHaveLength(5);
     expect(planned.map((ref) => ref.decision_key)).not.toContain(first.decision_key);
-    // 迷いの 4 つが先、そのあとに大きな不一致が 1 つ
+    // 迷いの 4 つが先、そのあとに悪手が 1 つ
     expect(planned.slice(0, 4).map((ref) => ref.decision_key)).toEqual(daily.slice(1).map((ref) => ref.decision_key));
   });
 
@@ -274,35 +274,9 @@ describe('E-45 解決した問題（F16）', () => {
   });
 });
 
-describe('E-46・E-47 細かいミスと拮抗の問題（F17）', () => {
-  const wide = { ...DEFAULT_CONTEST_OPTIONS, maxGap: 1, minJunme: 1 };
-
-  it('拮抗の設定を渡さない・出さないときは、拮抗の問題は入らない。渡すと、大きな不一致のあとに、差の小さい順で入る', () => {
-    const plain = collectProblems(sessions(), games(), 0.05);
-    expect(plain.problems.some((problem) => problem.kind === 'contest')).toBe(false);
-    const off = collectProblems(sessions(), games(), 0.05, { ...wide, enabled: false });
-    expect(off.problems).toHaveLength(plain.problems.length);
-    const on = collectProblems(sessions(), games(), 0.05, wide);
-    const kinds = on.problems.map((problem) => problem.kind);
-    expect(kinds.indexOf('contest')).toBeGreaterThan(kinds.lastIndexOf('disagreement'));
-    expect(kinds.lastIndexOf('mark')).toBeLessThan(kinds.indexOf('disagreement'));
-    const gaps = on.problems.filter((problem) => problem.kind === 'contest').map((problem) => problem.contestGap as number);
-    expect(gaps.length).toBeGreaterThan(10);
-    expect([...gaps].sort((x, y) => x - y)).toEqual(gaps);
-    // 迷いと大きな不一致の問題の数は、拮抗を足しても変わらない（両方に当たるものは、先のほうだけ）
-    expect(on.problems.filter((problem) => problem.kind === 'mark')).toHaveLength(5);
-    expect(on.problems.filter((problem) => problem.kind === 'disagreement')).toHaveLength(4 + 19);
-  });
-
-  it('既定の設定では、f9da の東4局 8巡目 だけが拮抗の問題になる', () => {
-    const on = collectProblems(sessions(), games(), 0.05, { ...DEFAULT_CONTEST_OPTIONS });
-    const contests = on.problems.filter((problem) => problem.kind === 'contest');
-    expect(contests.map((problem) => `${problem.decision.kyokuLabel} ${problem.decision.junme}`)).toEqual(['東4局 8']);
-    expect(contests[0]?.sessionId).toBe(FX1A_ID);
-  });
-
+describe('E-46・E-49 細かいミスと悪手の問題', () => {
   it('迷いの問題は、細かいミスが先頭（新しい半荘から、迷いの順）。細かいミスかどうかが、問題に入っている', () => {
-    const collected = collectProblems(sessions(), games(), 0.05);
+    const collected = collectProblems(sessions(), games());
     const marks = collected.problems.filter((problem) => problem.kind === 'mark');
     expect(marks.map((problem) => [problem.markNumber, problem.fineMiss])).toEqual([
       [2, true],
@@ -314,14 +288,12 @@ describe('E-46・E-47 細かいミスと拮抗の問題（F17）', () => {
     expect(collected.problems.filter((problem) => problem.kind !== 'mark').every((problem) => !problem.fineMiss)).toBe(true);
   });
 
-  it('拮抗の問題を解決すると、組に新しく入れない', () => {
-    const on = collectProblems(sessions(), games(), 0.05, wide);
-    const contest = on.problems.find((problem) => problem.kind === 'contest');
-    if (contest === undefined) throw new Error('拮抗の問題が無い');
-    // 迷い 5 と大きな不一致 23 のあとに、拮抗が並ぶ。組を 40 問まで取ると、拮抗が入る。解決すると、入らない
-    const withContest = plannedSet(on.problems, [], 40);
-    expect(withContest.some((ref) => ref.session_id === contest.sessionId && ref.decision_key === contest.key)).toBe(true);
-    const without = plannedSet(on.problems, [], 40, new Set([problemId(contest)]));
-    expect(without.some((ref) => ref.session_id === contest.sessionId && ref.decision_key === contest.key)).toBe(false);
+  it('今日の出題は、細かいミス → ほかの迷い → 悪手の順', () => {
+    const kinds = collectProblems(sessions(), games()).problems.map((problem) =>
+      problem.kind === 'disagreement' ? 'bad-move' : problem.fineMiss ? 'fine-miss' : 'doubt',
+    );
+    expect(kinds).toEqual([...kinds].sort((a, b) => ['fine-miss', 'doubt', 'bad-move'].indexOf(a) - ['fine-miss', 'doubt', 'bad-move'].indexOf(b)));
   });
 });
+
+

@@ -22,13 +22,13 @@ pub type ReplayKeys = BTreeMap<String, Option<String>>;
 
 /// キーの割り当ての表の版。設定ファイルの `replay_keys_revision` に書く。
 /// 1: 局の頭・局の終わりは、既定ではボタンだけ（R10-3）。2: 局の頭・局の終わりの既定が Home・End（R11-4）。
-pub const KEYS_REVISION: u32 = 2;
+pub const KEYS_REVISION: u32 = 3;
 
 /// 版 2 で、既定がボタンだけ（null）から変わった操作。版 1 のファイルでは、この操作の null は「書いていない」と同じ。
 const CHANGED_IN_REVISION_2: [&str; 2] = ["kyoku_start", "kyoku_end"];
 
 /// 操作と、既定のキー（割り当て無しは `None`）。画面の表と同じ並び・同じ名前（試験が、画面のソースと突き合わせる）。
-pub const ACTIONS: [(&str, Option<&str>); 16] = [
+pub const ACTIONS: [(&str, Option<&str>); 14] = [
     ("step_back", Some("Comma")),
     ("step_forward", Some("Period")),
     ("prev_decision", Some("ArrowLeft")),
@@ -37,8 +37,6 @@ pub const ACTIONS: [(&str, Option<&str>); 16] = [
     ("next_mismatch", Some("ArrowDown")),
     ("prev_doubt", Some("Shift+ArrowUp")),
     ("next_doubt", Some("Shift+ArrowDown")),
-    ("prev_contest", None),
-    ("next_contest", None),
     ("prev_kyoku", Some("Shift+ArrowLeft")),
     ("next_kyoku", Some("Shift+ArrowRight")),
     ("prev_turn", None),
@@ -311,11 +309,9 @@ mod tests {
         assert_eq!(key("next_doubt").as_deref(), Some("Shift+ArrowDown"));
         assert_eq!(key("prev_kyoku").as_deref(), Some("Shift+ArrowLeft"));
         assert_eq!(key("next_kyoku").as_deref(), Some("Shift+ArrowRight"));
-        // 巡目の移動と、拮抗の場面への移動（F17）はボタンだけ（キーは、割り当てで足せる）
+        // 巡目の移動はボタンだけ（キーは、割り当てで足せる）
         assert_eq!(key("prev_turn"), None);
         assert_eq!(key("next_turn"), None);
-        assert_eq!(key("prev_contest"), None);
-        assert_eq!(key("next_contest"), None);
         // 局の頭・局の終わりは、Home・End（R11-4）
         assert_eq!(key("kyoku_start").as_deref(), Some("Home"));
         assert_eq!(key("kyoku_end").as_deref(), Some("End"));
@@ -500,6 +496,23 @@ mod tests {
             ),
             default_keys()
         );
+    }
+
+    #[test]
+    fn e49_old_contest_actions_are_ignored_and_not_normalized_back() {
+        let keys = from_value(
+            Some(&json!({
+                "step_back": "KeyJ",
+                "prev_contest": "KeyH",
+                "next_contest": "KeyL"
+            })),
+            2,
+        );
+        assert_eq!(keys["step_back"].as_deref(), Some("KeyJ"));
+        assert!(!keys.contains_key("prev_contest"));
+        assert!(!keys.contains_key("next_contest"));
+        assert_eq!(normalized(keys.clone()), keys);
+        assert_eq!(validate(&keys), Ok(()));
     }
 
     /// 版 1 のアプリが書き出した割り当て（全部の操作。局の頭・局の終わりは、既定どおり null）。

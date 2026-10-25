@@ -150,7 +150,7 @@ describe('E-48 AI 一致率・類似度・悪手率: 半荘 1 つ', () => {
     expect(aiMetricsOfEntries(entries).matches).toBe(1);
   });
 
-  it('E-48 「AI の1位と違う判断も不一致として出す」で足される判断は、悪手に数えない（大きな不一致の数と同じ）', () => {
+  it('E-48 「AI の1位と違う判断も不一致として出す」で足される判断は、悪手に数えない（悪手の数と同じ）', () => {
     for (const id of IDS) {
       const decisions = gameOf(id).decisions;
       const all = replayMismatches(decisions, { includeAll: true });
@@ -160,8 +160,6 @@ describe('E-48 AI 一致率・類似度・悪手率: 半荘 1 つ', () => {
       expect(other.length, id).toBeGreaterThan(0);
       expect(aiMetricsOf(gameOf(id).report).badMoves, id).toBe(big.length);
       expect(aiMetricsOf(gameOf(id).report).badMoves, id).toBeLessThan(all.length);
-      // 基準を替えたときも同じ
-      expect(aiMetricsOf(gameOf(id).report, { threshold: 0.1 }).badMoves, id).toBe(replayMismatches(decisions, { threshold: 0.1, includeAll: true }).filter((m) => m.kind === 'big').length);
     }
   });
 
@@ -267,3 +265,4 @@ describe('E-48 文字にする', () => {
     expect(formatSimilarity(0.867082033107309)).toBe(formatRating(0.867082033107309));
   });
 });
+
