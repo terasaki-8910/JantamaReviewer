@@ -228,7 +228,7 @@ function ukeireBox(decision: Decision, mineTile: Tile): UkeireBox | null {
   };
 }
 
-/** 答え合わせの内容。`threshold` は、正解とする確率の下限（大きな不一致の基準と同じ。既定 0.05）。 */
+/** 答え合わせの内容。`threshold` は、正解とする確率の下限（悪手の基準と同じ。既定 0.05）。 */
 export function buildReveal(decision: Decision, choice: QuizChoice, threshold?: number): RevealModel {
   const probability = choiceProbability(decision, choice);
   const correct = isCorrectAnswer(probability, threshold);
@@ -268,3 +268,5 @@ export function followOf(tiles: readonly Tile[], discard: Tile): TwoShantenFollo
   if (index < 0) return null;
   return followAfterTwoShanten(tiles.filter((_, i) => i !== index));
 }
+
+

@@ -1,6 +1,6 @@
 /**
  * 自分の向聴数の推移（F14、E-41。提案 7。局の評価の表の行を開いたときの、折れ線）。1 局を牌譜（mjai の event）で追い、
- * 配牌と、自分が切るたびの場面の向聴数、聴牌になった打牌、その局の迷い・大きな不一致の場面が、横軸のどこにあるかを返す。
+ * 配牌と、自分が切るたびの場面の向聴数、聴牌になった打牌、その局の迷い・悪手の場面が、横軸のどこにあるかを返す。
  *
  * - 横軸は、自分の巡目（記録のまま。mjai-reviewer の数え方で、自分のツモとチー・ポンで 1 つずつ増える。`BoardState.junme`）で、0 は配牌。
  *   点は、自分が切る（`dahai`）たびに 1 つ。切る直前の手（ツモ牌・鳴いたあとの手を含む 3n+2 枚）の場面の向聴数（E-21 と同じ数え方
@@ -12,10 +12,10 @@
  *   ツモ和了・ロンは、切らないので点にならない。
  * - 聴牌になった打牌（`tenpai`）は、向聴数が 0 でなかった点から 0 になった点（聴牌の区間ごとに最初の 1 つ。`again` は 2 つ目以降）。
  *   配牌のとき聴牌なら、最初の打牌が最初の区間の始まり（他家の `opponentTracksOf` と同じ規則）。
- * - 場面（迷いか大きな不一致。`listReplayScenes` の `ReplayScene`）は、その判断のあとに自分が最初に切る打牌の点に置く。
+ * - 場面（迷いか悪手。`listReplayScenes` の `ReplayScene`）は、その判断のあとに自分が最初に切る打牌の点に置く。
  *   打牌・リーチ・カンの判断は、そのまま同じ巡目の打牌（カンをしたときは、嶺上牌をツモったあとの打牌）。鳴きの判断（他家の打牌への
  *   チー・ポン・スルー）は、その次の自分の打牌。切る打牌がもう無い判断（ツモ和了・ロンの判断、局の終わりまでに切らなかった鳴き）は、最後の点に置く
- *   （切った打牌が 1 つも無い局は、配牌の点）。「AI の1位と違う判断も出す」設定の `other` は、大きな不一致ではないので置かない。
+ *   （切った打牌が 1 つも無い局は、配牌の点）。「AI の1位と違う判断も出す」設定の `other` は、悪手ではないので置かない。
  * 本人の手だけを追うので、答える前の画面でも使える（他家の手牌は含まない）。
  */
 import type { Decision } from './decision';
@@ -53,7 +53,7 @@ export interface MyTrackSceneInput {
   decision: Pick<Decision, 'kyokuPosition' | 'eventIndex'>;
   /** この判断に結びついた迷いの番号（小さい順。迷いでなければ空）。 */
   doubts: readonly number[];
-  /** 不一致の種類。大きな不一致（`big`）だけを置く。 */
+  /** 不一致の種類。悪手（`big`）だけを置く。 */
   mismatch: ReplayScene['mismatch'];
 }
 
@@ -64,7 +64,7 @@ export interface MyTrackScene<S extends MyTrackSceneInput = MyTrackSceneInput> {
   scene: S;
   /** 迷いか。 */
   doubt: boolean;
-  /** 大きな不一致か。 */
+  /** 悪手か。 */
   big: boolean;
 }
 
@@ -75,7 +75,7 @@ export interface MyKyokuTrack<S extends MyTrackSceneInput = MyTrackSceneInput> {
   points: MyTrackPoint[];
   /** 聴牌になった打牌（切った順）。 */
   tenpai: MyTenpaiMark[];
-  /** この局の迷い・大きな不一致の場面（置く点の順。同じ点なら、判断の順）。 */
+  /** この局の迷い・悪手の場面（置く点の順。同じ点なら、判断の順）。 */
   scenes: Array<MyTrackScene<S>>;
 }
 
@@ -129,3 +129,5 @@ export function myTrackOf<S extends MyTrackSceneInput>(
   placed.sort((a, b) => a.n - b.n || a.scene.decision.eventIndex - b.scene.decision.eventIndex);
   return { kyokuPosition, points, tenpai, scenes: placed };
 }
+
+

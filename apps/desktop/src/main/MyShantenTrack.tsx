@@ -3,7 +3,7 @@
  * （`HandTable` の `detailBelow`）。
  *
  * 折れ線は、他家の向聴数の推移（盤面の「他家の手牌」の欄）と同じ部品（`ShantenChart`）。横軸は自分の巡目（0 は配牌。記録のまま）、縦軸は場面の向聴数
- * （E-21 と同じ数え方。迷いのカードの「1向聴」と同じ）。迷いは点を囲む輪、大きな不一致は点の右の菱形、聴牌になった打牌は三角。
+ * （E-21 と同じ数え方。迷いのカードの「1向聴」と同じ）。迷いは点を囲む輪、悪手は点の右の菱形、聴牌になった打牌は三角。
  * 形だけに頼らないよう、凡例（この局に無い印は「この局は無し」）と、吹き出し・「表で見る」の表に、同じ内容を文字で出す。
  * 図は 1 つの止まり場所（Tab）。矢印キーで点（印のある点を含む）を選ぶと、吹き出しが出る。
  *
@@ -30,7 +30,7 @@ import { ChartTipProvider } from './week/ChartTip';
 
 /** 見出しの説明のアイコンの文。 */
 export const MY_TRACK_HINT =
-  '自分が切るたびの、場面の向聴数です（迷いのカードの「1向聴」と同じ数え方。ツモったあとの手から、いちばん進む打牌のあとの数）。線が上がるほど、聴牌に近づいています。丸は迷い、菱形は大きな不一致、三角は聴牌になった打牌です。矢印キーで点を選ぶ（マウスを乗せる）と、内容が出ます。';
+  '自分が切るたびの、場面の向聴数です（迷いのカードの「1向聴」と同じ数え方。ツモったあとの手から、いちばん進む打牌のあとの数）。線が上がるほど、聴牌に近づいています。丸は迷い、菱形は悪手、三角は聴牌になった打牌です。矢印キーで点を選ぶ（マウスを乗せる）と、内容が出ます。';
 
 /** 取り込んだ結果の牌譜を再生して作る、半荘ごとのもの（開いたときに 1 回だけ作る）。 */
 interface GameModel {
@@ -61,23 +61,21 @@ interface MyShantenTrackProps {
   label: string;
   /** 迷いマークごとに、結びつけた判断の鍵（結びつけが決まっていないものは null。迷いの番号は、並びの位置 + 1）。 */
   markKeys: ReadonlyArray<string | null>;
-  /** 大きな不一致の基準（確率。設定の「大きな不一致の基準」）。 */
-  threshold: number;
 }
 
-export function MyShantenTrack({ report, position, label, markKeys, threshold }: MyShantenTrackProps) {
+export function MyShantenTrack({ report, position, label, markKeys }: MyShantenTrackProps) {
   const id = useId();
   const [shown, setShown] = useState(false);
   const rows = useMemo<TrackRow[] | null>(() => {
     const model = modelOf(report);
     if (model === null) return null;
     try {
-      const scenes = listReplayScenes(model.timeline, model.game.decisions, { markKeys, threshold });
+      const scenes = listReplayScenes(model.timeline, model.game.decisions, { markKeys });
       return trackRowsOf(myTrackOf(model.game, position, scenes));
     } catch {
       return null;
     }
-  }, [report, position, markKeys, threshold]);
+  }, [report, position, markKeys]);
   const points = useMemo<ShantenPoint[]>(
     () =>
       (rows ?? []).map((row) => ({
@@ -122,7 +120,7 @@ export function MyShantenTrack({ report, position, label, markKeys, threshold }:
           <svg viewBox="0 0 14 14" aria-hidden="true" focusable="false">
             <path className="bgm" d="M7 1 13 7 7 13 1 7Z" />
           </svg>
-          大きな不一致{has.big ? '' : none}
+          悪手{has.big ? '' : none}
         </li>
         <li data-kind="tenpai" data-none={has.tenpai ? undefined : '1'}>
           <svg viewBox="0 0 14 14" aria-hidden="true" focusable="false">
@@ -173,3 +171,5 @@ function TrackTable({ id, label, rows }: { id: string; label: string; rows: read
     </div>
   );
 }
+
+

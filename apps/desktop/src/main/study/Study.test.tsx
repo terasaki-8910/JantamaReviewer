@@ -148,7 +148,7 @@ describe('U-15 今日の出題の一覧', () => {
     expect(rows.some((row) => row.className.includes('done') || row.className.includes('next'))).toBe(false);
     // 組の説明の 1 行
     expect(document.querySelector('.q-rule')?.textContent).toBe(
-      '10月9日の半荘から5問。細かいミス（迷ったうえで実戦が AI の1位と違った局面）を先に、次にほかの迷い、AI との差が大きい順の大きな不一致、最後に拮抗した局面を入れています。1日に出す数は設定で変えられます。',
+      '10月9日の半荘から5問。細かいミス（迷ったうえで実戦が AI の1位と違った局面）を先に、次にほかの迷い、最後に悪手を実戦の確率が低い順で入れています。1日に出す数は設定で変えられます。',
     );
   });
 
@@ -344,7 +344,7 @@ describe('U-17 解き直し', () => {
   /** FX-4 の問題のうち、先頭から 3 つを、期限の違う答えとして保存済みにする（古い順に 10/07・10/08・10/09 が期限）。 */
   function dueStudy() {
     const game = gameOf('fx4');
-    const problems = listProblems([{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game, markKeys: [] }], { threshold: 0.05 });
+    const problems = listProblems([{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game, markKeys: [] }]);
     const picked = problems.slice(0, 3);
     const due = ['2026-10-09', '2026-10-07', '2026-10-08'];
     const intervals = [3, 1, 7];
@@ -434,7 +434,7 @@ describe('U-17 解き直し', () => {
 
   it('今日が期限の問題が無いときは、その旨と、次の解き直しの日（あれば）を出す', async () => {
     const game = gameOf('fx4');
-    const [first] = listProblems([{ sessionId: FX4_ID, startedMs: 0, game, markKeys: [] }], { threshold: 0.05 });
+    const [first] = listProblems([{ sessionId: FX4_ID, startedMs: 0, game, markKeys: [] }]);
     const study = new FakeStudyStore([
       answerRow({ session_id: FX4_ID, decision_key: first?.key ?? 'k0h0e0', due_date: '2026-10-12', interval_days: 3 }),
     ]);
@@ -446,7 +446,7 @@ describe('U-17 解き直し', () => {
 
   it('午前 4 時までは、前の日として数える（3 時半の「今日」は 10 月 9 日。10 月 10 日が期限の問題はまだ出ない）', async () => {
     const game = gameOf('fx4');
-    const [first] = listProblems([{ sessionId: FX4_ID, startedMs: 0, game, markKeys: [] }], { threshold: 0.05 });
+    const [first] = listProblems([{ sessionId: FX4_ID, startedMs: 0, game, markKeys: [] }]);
     const study = new FakeStudyStore([answerRow({ session_id: FX4_ID, decision_key: first?.key ?? 'k0h0e0', due_date: '2026-10-10' })]);
     vi.setSystemTime(new Date(2026, 9, 10, 3, 30, 0));
     setup({ study, only: 'fx4' });
@@ -460,7 +460,7 @@ describe('U-9 削除の確認に、解いた問題の数', () => {
 
   it('答えの記録に数えてもらう。解いた問題があれば、その数（問題ごとに 1。出題と解き直しは同じ問題）が確認に出る', async () => {
     const game = gameOf('fx4');
-    const problems = listProblems([{ sessionId: FX4_ID, startedMs: 0, game, markKeys: [] }], { threshold: 0.05 });
+    const problems = listProblems([{ sessionId: FX4_ID, startedMs: 0, game, markKeys: [] }]);
     const [a, b] = problems;
     const study = new FakeStudyStore([
       answerRow({ id: 1, session_id: FX4_ID, decision_key: a?.key ?? '' }),
@@ -534,3 +534,5 @@ describe('U-10 戻る・進む（出題の画面）', () => {
     expect(await screen.findByRole('heading', { level: 1, name: '今日の出題' })).toBeInTheDocument();
   });
 });
+
+

@@ -170,14 +170,13 @@ describe('公開 API（src/index.ts）', () => {
       'choiceText',
       'actualText',
       'isFineMiss',
-      'contestOf',
       'heldYakuhai',
     ] as const) {
       expect(typeof engine[name], name).toBe('function');
     }
     expect(engine.STUDY_DAY_START_HOUR).toBe(4);
     expect(engine.DEFAULT_DAILY_COUNT).toBe(5);
-    expect(engine.DEFAULT_CONTEST_OPTIONS).toEqual({ enabled: true, maxGap: 0.2, minJunme: 12, afterRiichi: true, twoCalls: true });
+    expect(Object.keys(engine).filter((name) => name.toLowerCase().includes('contest'))).toEqual([]);
   });
 
   it('E-26・U-21 半荘を通して見る画面（時間軸・場面・不一致）の入口が使える', () => {

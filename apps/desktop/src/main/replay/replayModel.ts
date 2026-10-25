@@ -106,23 +106,22 @@ export function deltaItems(end: KyokuEnd, me: Seat): Array<{ name: string; text:
   });
 }
 
-/** 不一致の名前。確率が基準未満は「大きな不一致」（R10-4）、AI の1位と違うだけのものは「不一致」。 */
-export function mismatchName(kind: MismatchKind): string {
-  return kind === 'big' ? '大きな不一致' : '不一致';
+/** 悪手の段に入る場面の名前。広げる設定で足した場面も、段の名前にそろえる。 */
+export function mismatchName(_kind: MismatchKind): string {
+  return '悪手';
 }
 
 /**
- * 場面の見出しと一覧に出す札（迷い・細かいミス・不一致・拮抗）。例: 迷い1・2、細かいミス、大きな不一致、拮抗。
- * 細かいミス（迷いの場面で、実戦が AI の1位と違うもの）は迷いの札と同じ形、拮抗は不一致の札と同じ形（F17）。
+ * 場面の見出しと一覧に出す札（迷い・細かいミス・悪手）。例: 迷い1・2、細かいミス、悪手。
+ * 細かいミス（迷いの場面で、実戦が AI の1位と違うもの）は迷いの札と同じ形。
  */
 export function sceneTags(
-  scene: Pick<ReplayScene, 'doubts' | 'mismatch'> & Partial<Pick<ReplayScene, 'fineMiss' | 'contest'>>,
+  scene: Pick<ReplayScene, 'doubts' | 'mismatch'> & Partial<Pick<ReplayScene, 'fineMiss'>>,
 ): Array<{ kind: 'doubt' | 'mis'; text: string }> {
   const tags: Array<{ kind: 'doubt' | 'mis'; text: string }> = [];
   if (scene.doubts.length > 0) tags.push({ kind: 'doubt', text: `迷い${scene.doubts.join('・')}` });
   if (scene.fineMiss === true) tags.push({ kind: 'doubt', text: '細かいミス' });
   if (scene.mismatch !== null) tags.push({ kind: 'mis', text: mismatchName(scene.mismatch) });
-  if (scene.contest !== undefined && scene.contest !== null) tags.push({ kind: 'mis', text: '拮抗' });
   return tags;
 }
 
@@ -132,8 +131,8 @@ export function sceneSubText(decision: Pick<Decision, 'kind' | 'shanten'>, kindN
 }
 
 /**
- * 局の選択に出す、その局の迷い・細かいミス・不一致・拮抗の数と、解決した場面の数。例: 迷い1 · 拮抗2 · 解決1。無ければ空。
- * 解決した場面（F16）は、迷い・細かいミス・不一致・拮抗の数に入れず、「解決」の数に回す。
+ * 局の選択に出す、その局の迷い・細かいミス・悪手の数と、解決した場面の数。無ければ空。
+ * 解決した場面（F16）は、迷い・細かいミス・悪手の数に入れず、「解決」の数に回す。
  */
 export function kyokuCounts(timeline: ReplayTimeline, scenes: readonly ReplayScene[], position: number): string {
   const inKyoku = scenes.filter((scene) => timeline.steps[scene.step]?.kyokuPosition === position);
@@ -141,13 +140,11 @@ export function kyokuCounts(timeline: ReplayTimeline, scenes: readonly ReplaySce
   const doubts = open.filter((scene) => scene.doubts.length > 0).length;
   const fineMisses = open.filter((scene) => scene.fineMiss).length;
   const mismatches = open.filter((scene) => scene.mismatch !== null).length;
-  const contests = open.filter((scene) => scene.contest !== null).length;
   const resolved = inKyoku.length - open.length;
   return [
     doubts > 0 ? `迷い${doubts}` : '',
     fineMisses > 0 ? `細かいミス${fineMisses}` : '',
-    mismatches > 0 ? `不一致${mismatches}` : '',
-    contests > 0 ? `拮抗${contests}` : '',
+    mismatches > 0 ? `悪手${mismatches}` : '',
     resolved > 0 ? `解決${resolved}` : '',
   ]
     .filter((text) => text !== '')
@@ -190,14 +187,13 @@ export function compactBelowHeight(rows: number, riichiAny: boolean, barExtra = 
 // ---- 行き先（どの操作も、いまの手 `g` からの行き先の手の通し番号。無ければ null） ----
 
 /**
- * 迷い・不一致・拮抗・自分の判断がある手の通し番号（昇順）。
- * 解決した場面（F16）は、迷い・不一致・拮抗の止まる場所に入れない（場面の一覧と位置の帯には残り、押せば開ける）。
+ * 迷い・悪手・自分の判断がある手の通し番号（昇順）。
+ * 解決した場面（F16）は、迷い・悪手の止まる場所に入れない（場面の一覧と位置の帯には残り、押せば開ける）。
  */
 export interface ReplayStops {
   decisions: number[];
   doubts: number[];
   mismatches: number[];
-  contests: number[];
 }
 
 export interface ReplayStopsOptions {
@@ -213,7 +209,6 @@ export function replayStops(timeline: ReplayTimeline, scenes: readonly ReplaySce
       .filter((scene) => scene.doubts.length > 0 && (options.fineMissOnly !== true || scene.fineMiss))
       .map((scene) => scene.step),
     mismatches: open.filter((scene) => scene.mismatch !== null).map((scene) => scene.step),
-    contests: open.filter((scene) => scene.contest !== null).map((scene) => scene.step),
   };
 }
 
@@ -227,22 +222,18 @@ export interface ReplayNav {
   next_mismatch: number | null;
   prev_doubt: number | null;
   next_doubt: number | null;
-  prev_contest: number | null;
-  next_contest: number | null;
   prev_kyoku: number | null;
   next_kyoku: number | null;
   prev_turn: number | null;
   next_turn: number | null;
   kyoku_start: number | null;
   kyoku_end: number | null;
-  /** これより後ろの迷い・不一致・拮抗の数（「次の…へ」の数）。解決した場面は数えない。 */
+  /** これより後ろの迷い・悪手の数（「次の…へ」の数）。解決した場面は数えない。 */
   doubtsAhead: number;
   mismatchesAhead: number;
-  contestsAhead: number;
-  /** 半荘全体の迷い・不一致・拮抗の数（「…N か所」の数）。解決した場面は数えない。 */
+  /** 半荘全体の迷い・悪手の数（「…N か所」の数）。解決した場面は数えない。 */
   doubtTotal: number;
   mismatchTotal: number;
-  contestTotal: number;
 }
 
 export function replayNav(timeline: ReplayTimeline, stops: ReplayStops, g: number): ReplayNav {
@@ -258,8 +249,6 @@ export function replayNav(timeline: ReplayTimeline, stops: ReplayStops, g: numbe
     next_mismatch: nextStepIn(stops.mismatches, g),
     prev_doubt: prevStepIn(stops.doubts, g),
     next_doubt: nextStepIn(stops.doubts, g),
-    prev_contest: prevStepIn(stops.contests, g),
-    next_contest: nextStepIn(stops.contests, g),
     prev_kyoku: prevKyokuStep(timeline, g),
     next_kyoku: nextKyokuStep(timeline, g),
     prev_turn: prevTurnStep(timeline, g),
@@ -268,9 +257,7 @@ export function replayNav(timeline: ReplayTimeline, stops: ReplayStops, g: numbe
     kyoku_end: kyoku === undefined || g === kyoku.last ? null : kyoku.last,
     doubtsAhead: countAfter(stops.doubts, g),
     mismatchesAhead: countAfter(stops.mismatches, g),
-    contestsAhead: countAfter(stops.contests, g),
     doubtTotal: stops.doubts.length,
     mismatchTotal: stops.mismatches.length,
-    contestTotal: stops.contests.length,
   };
 }

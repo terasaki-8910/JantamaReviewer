@@ -45,24 +45,10 @@ export interface Settings {
   data_dir: string;
   /** 1 日に出す問題の数（今日の出題。1〜50。既定 5）。 */
   daily_count: number;
-  /** 大きな不一致の基準（AI が実戦の行動に付けた確率が、この %（未満）。1〜50。既定 5）。 */
-  disagreement_percent: number;
   /** ドラ表示牌が指す牌の面を黄色にする（既定は切。U-19）。 */
   highlight_dora: boolean;
-  /** 半荘を通して見る画面で、AI の1位と違う判断もすべて不一致として出す（既定は切。出題の基準は変えない。R10-4、E-26）。 */
+  /** 半荘を通して見る画面で、AI の1位と違う判断も悪手の段の飛び先に入れる（既定は切。出題は変えない。R10-4、E-26）。 */
   show_all_mismatches: boolean;
-  /** 拮抗の場面を出す（既定は入。F17）。切ると、通して見る画面にも今日の出題にも、拮抗の場面を入れない。 */
-  contest_enabled: boolean;
-  /** 拮抗とする、AI の1位と2位の確率の差（ポイント。この値以内。1〜100。既定 20）。 */
-  contest_gap_percent: number;
-  /** 条件「N巡目以降」を使う（既定は入）。 */
-  contest_by_junme: boolean;
-  /** 条件「N巡目以降」の N（1〜24。既定 12）。 */
-  contest_min_junme: number;
-  /** 条件「他家のリーチのあと」を使う（既定は入）。 */
-  contest_after_riichi: boolean;
-  /** 条件「他家に2副露以上の人がいる」（暗槓は数えない）を使う（既定は入）。 */
-  contest_two_calls: boolean;
   /** 半荘を通して見る画面のキーの割り当て（R10-3、U-21）。 */
   replay_keys: ReplayKeys;
   /**

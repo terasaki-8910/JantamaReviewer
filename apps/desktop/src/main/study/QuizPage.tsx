@@ -107,7 +107,7 @@ export function QuizPage({ sessionId, decisionKey, mode, onOpen, onToday, onRevi
       progress={index >= 0 ? { current: index + 1, total: items.length } : null}
       markNumber={problem?.markNumber ?? null}
       fineMiss={problem?.fineMiss ?? false}
-      contest={problem?.kind === 'contest'}
+      badMove={problem?.kind === 'disagreement'}
       existing={existing}
       previousIntervalDays={null}
       nextLabel={nextItem === undefined ? '今日の出題に戻る' : '次の問題へ'}

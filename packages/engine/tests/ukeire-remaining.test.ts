@@ -37,16 +37,16 @@ function load(id: string): ImportedGame {
   return r.value;
 }
 
-describe('E-22 受け入れの残り: FX-4 の迷いと大きな不一致の 10 場面の全打牌が、独立した実装（Python）の値と一致する', () => {
+describe('E-22 受け入れの残り: FX-4 の迷いと悪手の 10 場面の全打牌が、独立した実装（Python）の値と一致する', () => {
   const game = load(FX4_ID);
 
-  it('E-22 正解表は FX-4 の 10 場面（迷い 6 + 大きな不一致 5。迷い 2 は両方）で、Python の mahjong ライブラリで作ってある', () => {
+  it('E-22 正解表は FX-4 の 10 場面（迷い 6 + 悪手 5。迷い 2 は両方）で、Python の mahjong ライブラリで作ってある', () => {
     expect(fixture.library).toMatch(/^mahjong /);
     expect(fixture.report).toBe(FX4_ID);
     expect(fixture.scenes).toHaveLength(10);
     expect(fixture.scenes.filter((s) => s.reasons.some((r) => r.startsWith('迷い')))).toHaveLength(6);
-    expect(fixture.scenes.filter((s) => s.reasons.includes('大きな不一致'))).toHaveLength(5);
-    expect(fixture.scenes.find((s) => s.key === 'k1h0e12')?.reasons).toEqual(['迷い2', '大きな不一致']);
+    expect(fixture.scenes.filter((s) => s.reasons.includes('悪手'))).toHaveLength(5);
+    expect(fixture.scenes.find((s) => s.key === 'k1h0e12')?.reasons).toEqual(['迷い2', '悪手']);
     // 手牌が 14 枚（3n+2）でない場面（鳴きの判断）は、切る牌が無い
     expect(fixture.scenes.filter((s) => s.options.length === 0).map((s) => s.key)).toEqual(['k1h1e10']);
   });
@@ -225,3 +225,5 @@ describe('E-22 判断の鍵', () => {
     expect(findDecisionByKey(game, 'k9h9e9')).toBeUndefined();
   });
 });
+
+

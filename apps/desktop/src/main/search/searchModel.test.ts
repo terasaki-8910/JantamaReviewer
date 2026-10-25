@@ -51,10 +51,10 @@ const gameIds = (patch: Partial<SearchState> = {}, model: SearchModel = MODEL) =
 const problemsOf = (patch: Partial<SearchState> = {}, model: SearchModel = MODEL) => search(patch, model).problems;
 
 describe('U-22: 検索の元になる値', () => {
-  it('半荘は一覧の行と同じ数、問題は今日の出題と同じ一覧（大きな不一致 + 迷いに結びついた判断）。取り込み前の半荘には、問題が無い', () => {
+  it('半荘は一覧の行と同じ数、問題は今日の出題と同じ一覧（悪手 + 迷いに結びついた判断）。取り込み前の半荘には、問題が無い', () => {
     expect(MODEL.games.map((g) => g.id)).toEqual(['g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7']);
     const perGame = (id: string) => MODEL.problems.filter((p) => p.sessionId === id).length;
-    // 取り込み済みの半荘ごとの問題の数: 大きな不一致（FX-1 の件数は ACCEPTANCE の固定データ）と、迷いに結びついた判断の数だけ増える
+    // 取り込み済みの半荘ごとの問題の数: 悪手（FX-1 の件数は ACCEPTANCE の固定データ）と、迷いに結びついた判断の数だけ増える
     expect(perGame('g2')).toBe(19);
     expect(perGame('g3')).toBe(15);
     expect(perGame('g6')).toBe(22);
@@ -353,7 +353,7 @@ describe('U-22: 並べ方（新しい順・古い順・Rating が低い順・AI 
     }
   });
 
-  it('AI との差が大きい順: 半荘は、大きな不一致の問題が多い順（同じ数なら新しい順）', () => {
+  it('AI との差が大きい順: 半荘は、悪手の問題が多い順（同じ数なら新しい順）', () => {
     const counts = new Map(MODEL.games.map((g) => [g.id, g.mismatchCount] as const));
     const ids = gameIds({ sort: 'diff' });
     for (let i = 1; i < ids.length; i += 1) {
@@ -451,3 +451,5 @@ describe('U-22: 日付の当たりの印', () => {
     expect(dateHits(g('g5'), NOW, queryTerms('10/7'))).toEqual({ monthDay: true, relative: false });
   });
 });
+
+

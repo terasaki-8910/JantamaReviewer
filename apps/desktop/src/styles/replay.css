@@ -6,7 +6,7 @@
   方針（サンプルのまま）:
   - 新しい見た目は足さず、既存の部品（.btn、.icon-btn、.pill、.pop、.tag、.sec-title、.track）を言い換えて作る
   - accent は「選択・主な操作・フォーカス」と AI の印。ink は「実戦（実際のゲーム）」。赤は「自分の手」だけ
-  - 迷い = 丸（accent。細かいミスだけ四角）、不一致 = ひし形（ink）、拮抗 = 短い横棒（ink）。色だけで区別しない
+  - 迷い = 丸（accent。細かいミスだけ四角）、悪手 = ひし形（ink）。色だけで区別しない
   - 解決した場面（F16）は、印も一覧の行も薄くする（押せば開ける）
 */
 /* stylelint-disable no-descending-specificity -- 狭いとき（640px 未満）の上書きを、サンプルの並びのまま、各部品の規則のあとにまとめて置く */
@@ -201,14 +201,6 @@
   background: transparent;
 }
 
-.jump[data-kind="contest"] .jump-l .shape {
-  width: 14px;
-  height: 4px;
-  margin: 4px 0 4px -1px;
-  background: var(--ink);
-  border-radius: 1px;
-}
-
 .jump .jnext {
   gap: 6px;
 }
@@ -366,18 +358,7 @@
   border-radius: 2px;
 }
 
-/* 拮抗の場面は、帯の下の短い横棒 */
-.pin.cst {
-  color: var(--ink);
-}
-
-.pin.cst::before {
-  width: 16px;
-  height: 6px;
-  border-radius: 1px;
-}
-
-/* AI の1位と違うだけの判断（設定を入れたときだけ出る不一致）は、小さなひし形 */
+/* AI の1位と違うだけの判断（設定を入れたときだけ出る悪手の飛び先）は、小さなひし形 */
 .pin.mis.small::before {
   width: 7px;
   height: 7px;

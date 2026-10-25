@@ -45,7 +45,7 @@ describe('macOS（段階 2）の設定ページ', () => {
     // 検討画面の設定は、そのまま使える
     expect(screen.getByRole('button', { name: 'フォルダを選ぶ' })).toBeInTheDocument();
     expect(screen.getByLabelText('1日に出す数')).toBeInTheDocument();
-    expect(screen.getByLabelText('大きな不一致の基準')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、飛び先に入れる' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'ドラを目立たせる' })).toBeInTheDocument();
   });
 

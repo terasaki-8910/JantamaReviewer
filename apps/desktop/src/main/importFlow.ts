@@ -181,7 +181,7 @@ export interface ImportSummary {
   /** 半荘全体の段階（例: S-）。 */
   grade: string | null;
   decisionCount: number;
-  /** 大きな不一致（Mortal が実戦の行動に付けた確率が 5% 未満の判断）の数。 */
+  /** 悪手（Mortal が実戦の行動に付けた確率が 5% 未満の判断）の数。 */
   disagreementCount: number;
   /** 結びつけ先の半荘の迷いマークの数。 */
   markCount: number;
@@ -441,3 +441,5 @@ export function shortenMiddle(text: string, head = 18, tail = 4): string {
   if (chars.length <= head + tail + 1) return text;
   return `${chars.slice(0, head).join('')}…${chars.slice(chars.length - tail).join('')}`;
 }
+
+

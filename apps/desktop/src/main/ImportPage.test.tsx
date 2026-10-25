@@ -248,7 +248,7 @@ describe('取り込みの流れ（結果が見つかってから）', () => {
     expect(within(panel).getByText('玉の間・南')).toBeInTheDocument();
     expect(within(panel).getByText('93.0')).toBeInTheDocument();
     expect(panel.textContent).toMatch(/判断 70/);
-    expect(panel.textContent).toMatch(/大きな不一致 \d+/);
+    expect(panel.textContent).toMatch(/悪手 \d+/);
     expect(panel.textContent).toContain('迷い 6');
     expect(panel.textContent).toContain('5つは推定で局面に結びつけました。1つは手で選んでください');
     expect(panel.textContent).toContain('局の評価 5 件のうち、4 件を局に当てはめました');
@@ -729,3 +729,5 @@ describe('「この半荘を取り込みますか」（E-15）', () => {
     expect(screen.queryByRole('button', { name: 'あとで' })).toBeNull();
   });
 });
+
+

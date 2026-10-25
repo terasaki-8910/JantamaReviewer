@@ -42,7 +42,7 @@ interface WeekPageProps {
 
 export function WeekPage({ sessions, summaries }: WeekPageProps) {
   const study = useStudy();
-  const { ready, error, studyDay, answers, locate, gameState, doubtOnly, threshold } = study;
+  const { ready, error, studyDay, answers, locate, gameState, doubtOnly } = study;
   const { problems } = study.model;
   const records = useWeekRecords();
 
@@ -67,11 +67,11 @@ export function WeekPage({ sessions, summaries }: WeekPageProps) {
     return summarizeWeeks(weeks, source);
   }, [ready, sessions, summaries, answers, locate, gameState, problems, weeks]);
 
-  // 取り込んだ半荘から数えた成績（見ている週だけ。週・半荘・読み込みの進み・大きな不一致の基準が替わるたびに数え直す。
-  // 半荘ごとの数は、結果ごとに覚えている。AI 一致率・類似度・悪手率（F18）は、基準が替わると悪手率が変わるので、覚えずに数える）
+  // 取り込んだ半荘から数えた成績（見ている週だけ。週・半荘・読み込みの進みが替わるたびに数え直す。
+  // 半荘ごとの数は、結果ごとに覚えている。AI 一致率・類似度・悪手率（F18）は、週を組み立てるときに数える）
   const imported = useMemo(
-    () => (ready ? buildImportedStats({ sessions, summaries, gameState, week, threshold }) : null),
-    [ready, sessions, summaries, gameState, week, threshold],
+    () => (ready ? buildImportedStats({ sessions, summaries, gameState, week }) : null),
+    [ready, sessions, summaries, gameState, week],
   );
 
   // ← → を押して、押したほうのボタンが使えなくなったら（端の週に着いたら）、もう一方へキーボードの位置を移す

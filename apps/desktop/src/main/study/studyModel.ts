@@ -1,8 +1,8 @@
 /**
  * 出題（今日の出題・解き直し）の、画面に出すもの。取り込んだ半荘・答えの記録・設定・その日の組から、純粋に組み立てる。
  *
- * - 問題: 大きな不一致（基準は設定）と、迷いマークを結びつけた判断（結びつけは、半荘のページと同じ `resolveMarks`）と、
- *   拮抗した判断（設定で出すとき。F17）。並びは、細かいミス → ほかの迷い → 大きな不一致 → 拮抗（E-46）
+ * - 問題: 悪手と、迷いマークを結びつけた判断（結びつけは、半荘のページと同じ `resolveMarks`）。
+ *   並びは、細かいミス → ほかの迷い → 悪手（E-46）
  * - 今日の出題: その日の組（保存してあるもの。まだ無ければ、これから作る組 `plannedSet`）と、「残り」。解決した局面（F16）は、
  *   新しく組に入れず、残りにも出さない（すでに組に入っているものは、印を付けて残す）
  * - 解き直し: 問題ごとの最後の答えの期限が、今日までのもの（期限の古い順）。解決した局面は出さない
@@ -18,7 +18,6 @@ import {
   problemId,
   restOfProblems,
   type AnswerLike,
-  type ContestOptions,
   type Decision,
   type ImportedGame,
   type Problem,
@@ -78,7 +77,7 @@ export interface StudyInput {
   sessions: readonly SessionRecord[];
   games: GameMap;
   answers: readonly AnswerRow[];
-  /** 大きな不一致の基準（確率。0.05 など）。 */
+  /** 悪手の基準（5% 固定）。 */
   threshold: number;
   /** その日の保存してある組。まだ作っていなければ null。 */
   daily: readonly StoredProblemRef[] | null;
@@ -136,7 +135,6 @@ function problemOf(session: SessionRecord, game: ImportedGame, key: string): Pro
     startedMs: session.started_ms,
     probability: actualProbability(decision.entry),
     fineMiss: false,
-    contestGap: null,
     decision,
   };
 }
@@ -178,23 +176,20 @@ export interface CollectedProblems {
 }
 
 /**
- * 結果を読み終えた半荘から、問題を集める（並びは、今日の出題の並び）。`contest` は拮抗の場面の設定（F17）。
- * 渡さない、または「出す」が切のときは、拮抗の問題は入らない。
+ * 結果を読み終えた半荘から、問題を集める（並びは、今日の出題の並び）。
  */
 export function collectProblems(
   sessions: readonly SessionRecord[],
   games: GameMap,
-  threshold: number,
-  contest?: ContestOptions,
 ): CollectedProblems {
   const { sources, undecided } = sourcesOf(sessions, games);
-  return { problems: listProblems(sources, contest === undefined ? { threshold } : { threshold, contest }), undecided };
+  return { problems: listProblems(sources), undecided };
 }
 
 export function buildStudyModel(input: StudyInput, collected?: CollectedProblems): StudyModel {
-  const { sessions, games, answers, threshold, daily, today } = input;
+  const { sessions, games, answers, daily, today } = input;
   const resolved = input.resolved ?? NO_RESOLVED;
-  const { problems, undecided } = collected ?? collectProblems(sessions, games, threshold);
+  const { problems, undecided } = collected ?? collectProblems(sessions, games);
   const byId = new Map(problems.map((p) => [problemId(p), p] as const));
   const sessionById = new Map(sessions.map((s) => [s.id, s] as const));
   const quiz = latestQuizAnswers(answers);

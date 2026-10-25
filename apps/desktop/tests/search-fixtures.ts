@@ -13,7 +13,7 @@ import { gameOf } from './fake-study';
 
 /** 試験の「いま」: 2026 年 10 月 9 日 22:00。 */
 export const SEARCH_NOW = local(2026, 10, 9, 22, 0);
-/** 大きな不一致の基準（確率）。 */
+/** 悪手の基準（確率）。 */
 export const SEARCH_THRESHOLD = 0.05;
 
 export interface SearchSeed {
@@ -68,6 +68,8 @@ export function searchFixture(options: { seeds?: readonly SearchSeed[]; ready?: 
     const markKeys = (seed.marked ?? []).map((index) => keyOfDecision(game.decisions[index] as never));
     return [{ sessionId: seed.id, startedMs: seed.at, game, markKeys }];
   });
-  const problems = options.ready === false ? [] : listProblems(sources, { threshold: SEARCH_THRESHOLD });
+  const problems = options.ready === false ? [] : listProblems(sources);
   return { sessions, rows, summaries, problems, games };
 }
+
+
