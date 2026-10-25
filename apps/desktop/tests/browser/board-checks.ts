@@ -188,10 +188,12 @@ export function expectWallFits(m: BoardMeasure, where: string, options: { marker
   if (m.centerContent.width < threshold) expect(dora.labelShown, `${where} 狭い箱では「ドラ」を隠す`).toBe(false);
 }
 
-/** 答える前後などで、卓と河の牌の大きさが変わらない。 */
+/** 答える前後などで、卓と河の牌の大きさが変わらない。位置は文書の上の位置で比べる（狭い窓では、答えたあとにページがスクロールするため）。 */
 export function expectSameTable(before: BoardMeasure, after: BoardMeasure, where: string): void {
+  const placed = (m: BoardMeasure) => ({ left: m.table.left + m.viewport.scrollX, top: m.table.top + m.viewport.scrollY, width: m.table.width, height: m.table.height });
+  const [a, b] = [placed(before), placed(after)];
   for (const key of ['left', 'top', 'width', 'height'] as const) {
-    expect(Math.abs(before.table[key] - after.table[key]), `${where} 卓の ${key}`).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(a[key] - b[key]), `${where} 卓の ${key}`).toBeLessThanOrEqual(0.5);
   }
   expect(before.riverTile, `${where} 変更前の河の牌`).not.toBeNull();
   expect(after.riverTile, `${where} 変更後の河の牌`).not.toBeNull();

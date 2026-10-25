@@ -2149,6 +2149,8 @@ describe('U-50: フェルトの卓・黄色い牌の背・王牌の列（出題�
 
         await answerCurrent(page);
         const hand = page.locator('.ohand').first();
+        // キーボードで操作したあとの焦点（:focus-visible）として当てる
+        await page.keyboard.press('Shift');
         await hand.focus();
         const focus = await hand.evaluate((el) => ({ outline: getComputedStyle(el).outlineColor, shadow: getComputedStyle(el).boxShadow }));
         expect(focus.shadow, `${scheme} 手牌の焦点の縁`).toContain(board.tokens.surface);

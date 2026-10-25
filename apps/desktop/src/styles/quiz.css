@@ -658,7 +658,7 @@
   --dpre: 24px;
   --wpre: 28px;
   --dlab: 26px;
-  --fix: calc(12px + 8px + 16px + var(--dlab) + 2px * (var(--n, 1) - 1));
+  --fix: calc(16px + 8px + 16px + var(--dlab) + 2px * (var(--n, 1) - 1));
   --avail: calc(100cqw - var(--fix));
   --dtw: clamp(8px, calc((var(--avail) - 7 * 4px) / var(--n, 1)), var(--dpre));
   --wtw: clamp(4px, calc((var(--avail) - var(--n, 1) * var(--dtw)) / 7), var(--wpre));
@@ -761,6 +761,14 @@
 
   .dora[data-n="5"] .dora-l {
     display: none;
+  }
+}
+
+/* いちばん狭い箱（1280×800 の通して見る画面で、河が 4 段の局）では、左右の点数が箱の縁を越えないよう、数字を詰める */
+@container cbox (width < 110px) {
+  .center .score .pts {
+    font-size: 9px;
+    letter-spacing: -0.03em;
   }
 }
 
