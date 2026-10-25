@@ -39,8 +39,6 @@ function imported(): SessionRecord {
 interface SetupOptions {
   /** 取り込んだ結果。既定は FX-4。 */
   report?: keyof typeof REPORT_TEXTS;
-  /** 悪手の基準（確率）。渡さなければ既定の 5%。 */
-  threshold?: number;
 }
 
 function setup(options: SetupOptions = {}) {
@@ -55,12 +53,7 @@ function setup(options: SetupOptions = {}) {
     const summary = useMemo(() => summarizeReportText(REPORT_TEXTS[report]), []);
     return (
       <UndoProvider>
-        <SessionPage
-          session={current}
-          summary={summary}
-          onChanged={reload}
-          {...(options.threshold === undefined ? {} : { threshold: options.threshold })}
-        />
+        <SessionPage session={current} summary={summary} onChanged={reload} />
       </UndoProvider>
     );
   }
@@ -246,15 +239,6 @@ describe('U-36 局の評価の表の行を開く: 向聴数の推移（F14、E-4
       return [...(described.textContent ?? '').matchAll(/迷い(\d+)/g)].map((m) => Number(m[1]));
     });
     expect(marks.sort()).toEqual([1, 2, 3, 4, 5]);
-  });
-
-  it('悪手の基準（設定）を渡すと、菱形の数が変わる。0 なら 1 つも無い。迷いの輪は変わらない', async () => {
-    const { user } = setup({ threshold: 0 });
-    const table = await tableReady();
-    for (const label of KYOKUS) await user.click(opener(table, label));
-    expect(document.querySelectorAll('.hx-trk .shchart-svg .bgm')).toHaveLength(0);
-    expect(document.querySelectorAll('.hx-trk .shchart-svg .dbt')).toHaveLength(5);
-    expect([...document.querySelectorAll('.hx-leg li[data-kind="big"]')].map((li) => li.textContent)).toEqual(Array(5).fill('悪手（この局は無し）'));
   });
 
   it('AI の候補・確率・順位は出さない（図・凡例・表・説明の文のどこにも。SPEC F3）', async () => {

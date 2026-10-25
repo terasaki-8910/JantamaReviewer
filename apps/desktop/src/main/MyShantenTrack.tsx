@@ -61,23 +61,21 @@ interface MyShantenTrackProps {
   label: string;
   /** 迷いマークごとに、結びつけた判断の鍵（結びつけが決まっていないものは null。迷いの番号は、並びの位置 + 1）。 */
   markKeys: ReadonlyArray<string | null>;
-  /** 悪手の基準（確率。設定の「悪手の基準」）。 */
-  threshold: number;
 }
 
-export function MyShantenTrack({ report, position, label, markKeys, threshold }: MyShantenTrackProps) {
+export function MyShantenTrack({ report, position, label, markKeys }: MyShantenTrackProps) {
   const id = useId();
   const [shown, setShown] = useState(false);
   const rows = useMemo<TrackRow[] | null>(() => {
     const model = modelOf(report);
     if (model === null) return null;
     try {
-      const scenes = listReplayScenes(model.timeline, model.game.decisions, { markKeys, threshold });
+      const scenes = listReplayScenes(model.timeline, model.game.decisions, { markKeys });
       return trackRowsOf(myTrackOf(model.game, position, scenes));
     } catch {
       return null;
     }
-  }, [report, position, markKeys, threshold]);
+  }, [report, position, markKeys]);
   const points = useMemo<ShantenPoint[]>(
     () =>
       (rows ?? []).map((row) => ({

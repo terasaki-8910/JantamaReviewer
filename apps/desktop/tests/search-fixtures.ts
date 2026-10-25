@@ -68,7 +68,7 @@ export function searchFixture(options: { seeds?: readonly SearchSeed[]; ready?: 
     const markKeys = (seed.marked ?? []).map((index) => keyOfDecision(game.decisions[index] as never));
     return [{ sessionId: seed.id, startedMs: seed.at, game, markKeys }];
   });
-  const problems = options.ready === false ? [] : listProblems(sources, { threshold: SEARCH_THRESHOLD });
+  const problems = options.ready === false ? [] : listProblems(sources);
   return { sessions, rows, summaries, problems, games };
 }
 

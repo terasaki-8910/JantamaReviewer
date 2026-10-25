@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSessionStore, local, seedSession } from '../../../tests/fake-sessions';
 import { FakeStudyStore, gameOf } from '../../../tests/fake-study';
 import { fx4Ocr, fx4Session } from '../../../tests/import-fixtures';
-import { revealed } from '../../../tests/reveal';
 import { baseSettings, installTauriMock } from '../../../tests/tauri-mock';
 import type { Links, Settings } from '../../api/types';
 import { App } from '../App';
@@ -46,11 +45,18 @@ const USER_LINKS: Links = {
   ratings: {},
   marks: { '1': 'k0h0e4', '2': 'k1h0e12', '3': 'k1h1e7', '4': 'k1h1e10', '5': 'k2h1e6', '6': 'k2h1e14' },
 };
-/** 迷い 1〜6 の順の判断の鍵。 */
-const MARK_KEYS = Object.values(USER_LINKS.marks);
-/** 迷いの場面（迷い 2 だけが細かいミス）。半荘の順。 */
-const DOUBTS = ['k0h0e4', 'k1h0e12', 'k1h1e7', 'k1h1e10', 'k2h1e6', 'k2h1e14'];
 
+const fx4 = gameOf('fx4');
+const timeline = buildReplayTimeline(fx4);
+const stepOf = (key: string): number => {
+  const decision = findDecisionByKey(fx4, key);
+  if (decision === undefined) throw new Error(key);
+  return timeline.stepOfDecision.get(decision.index) as number;
+};
+const posAt = (g: number): string => {
+  const step = timeline.steps[g]!;
+  return `手 ${step.position + 1} / ${timeline.kyokus[step.kyokuPosition]!.steps.length}`;
+};
 
 interface SetupOptions {
   study?: FakeStudyStore;

@@ -333,7 +333,7 @@ describe('F16 解決した問題: 解き直し', () => {
   /** FX-4 の問題の先頭から 3 つを、期限が今日（10/09）の答えとして保存済みにする。 */
   function dueStudy() {
     const game = gameOf('fx4');
-    const problems = listProblems([{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game, markKeys: [] }], { threshold: 0.05 });
+    const problems = listProblems([{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game, markKeys: [] }]);
     const picked = problems.slice(0, 3);
     return {
       picked,

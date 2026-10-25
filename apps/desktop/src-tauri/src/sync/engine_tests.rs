@@ -169,7 +169,6 @@ fn populate(dev: &Dev) -> (String, String) {
         s.sound = false;
         // 既定（入）とは違う値にして、設定の行で届くことを確かめる（W-15）
         s.doubt_only = false;
-        // 拮抗の場面の設定も、既定とは違う値にする（F17）
         s.daily_count = 9;
         s.orientation = Orientation::Horizontal;
         s.trigger = Trigger::Key {
@@ -323,7 +322,6 @@ fn d4_records_round_trip_through_the_sync_rows_into_another_local_db_identically
     assert!(!b.ports.settings().sound);
     assert!(!b.ports.settings().doubt_only, "迷いだけの設定も届く");
     assert_eq!(b.ports.settings().daily_count, 9);
-    // 拮抗の場面の設定も届く（F17）
     // 解決した局面（D-6）が、同じ時刻のまま届く
     let resolved = b.store().load_resolved(&sa).unwrap();
     assert_eq!(resolved.decisions.len(), 2);

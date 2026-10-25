@@ -1,5 +1,5 @@
 /**
- * 半荘を通して見る画面（F12。ACCEPTANCE の U-21。場面での答えは U-1〜U-3・U-16、不一致の場面は E-26）の画面の試験。
+ * 半荘を通して見る画面（F12。ACCEPTANCE の U-21。場面での答えは U-1〜U-3・U-16、悪手の場面は E-26）の画面の試験。
  * アプリ全体（App）を、半荘の保存先の偽物と、答えの記録の偽物の上で動かして、使う人と同じ操作で確かめる。
  * 実ブラウザでの見え方（横スクロール・axe・描かれた色・キー・外への通信）は、tests/browser/replay.browser.test.ts が確かめる。
  */
@@ -319,7 +319,7 @@ describe('U-21 手の進み方: 1 手・巡目・局の頭と終わり・局の�
     expect(pos()).toBe('手 1 / 26');
   });
 
-  it('局の選択: 局の名前と、その局の迷い・不一致の数。選ぶと、その局の頭へ。Esc で閉じて、押したボタンへ位置が戻る', async () => {
+  it('局の選択: 局の名前と、その局の迷い・悪手の数。選ぶと、その局の頭へ。Esc で閉じて、押したボタンへ位置が戻る', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
@@ -335,10 +335,10 @@ describe('U-21 手の進み方: 1 手・巡目・局の頭と終わり・局の�
     ]);
     expect(items.map((item) => item.querySelector('.pi-r')?.textContent ?? '')).toEqual([
       '迷い1',
-      '迷い1 · 細かいミス1 · 不一致1',
-      '迷い2 · 不一致2',
+      '迷い1 · 細かいミス1 · 悪手1',
+      '迷い2 · 悪手2',
       '',
-      '迷い2 · 不一致2',
+      '迷い2 · 悪手2',
     ]);
     expect(items[0]).toHaveAttribute('aria-checked', 'true');
     await user.keyboard('{Escape}');
@@ -443,7 +443,7 @@ describe('U-21 既定のキー（R10-3）', () => {
     expect(prevStepIn(stops, call)).not.toBeNull();
   });
 
-  it('↑ ↓ は前・次の不一致（大きな不一致）。Shift+↑ ↓ は前・次の迷い。Shift+← → は前・次の局の頭', async () => {
+  it('↑ ↓ は前・次の悪手。Shift+↑ ↓ は前・次の迷い。Shift+← → は前・次の局の頭', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
@@ -680,19 +680,16 @@ describe('U-21 キーの説明と割り当ての変更（アイコンを押す�
     await user.click(icon);
     expect(icon).toHaveAttribute('aria-expanded', 'true');
     const rows = [...dialog().querySelectorAll('.kp-row')];
-    expect(rows).toHaveLength(16);
+    expect(rows).toHaveLength(14);
     const text = (label: string) => rowOf(label).querySelector('.kp-key')?.textContent;
     expect(text('1手戻る')).toBe(',');
     expect(text('1手進む')).toBe('.');
     expect(text('前の自分の判断')).toBe('←');
     expect(text('次の自分の判断')).toBe('→');
-    expect(text('前の不一致')).toBe('↑');
-    expect(text('次の不一致')).toBe('↓');
+    expect(text('前の悪手')).toBe('↑');
+    expect(text('次の悪手')).toBe('↓');
     expect(text('前の迷い')).toBe('Shift↑');
     expect(text('次の迷い')).toBe('Shift↓');
-    // 拮抗の場面への移動は、ボタンだけ（キーは割り当てで足せる。F17）
-    expect(text('前の拮抗')).toBe('なし');
-    expect(text('次の拮抗')).toBe('なし');
     expect(text('前の局')).toBe('Shift←');
     expect(text('次の局')).toBe('Shift→');
     expect(text('前の巡目')).toBe('なし');
@@ -883,8 +880,8 @@ describe('U-21 キーの説明と割り当ての変更（アイコンを押す�
   });
 });
 
-describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
-  it('場面の一覧: 10 か所（迷い 6・不一致 5。迷い 2 は不一致でもある）。局・巡目・種類・向聴数・未解答と、札。0 / 10 解答済み', async () => {
+describe('U-21 位置の帯と場面の一覧（迷い・悪手）', () => {
+  it('場面の一覧: 10 か所（迷い 6・悪手 5。迷い 2 は悪手でもある）。局・巡目・種類・向聴数・未解答と、札。0 / 10 解答済み', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
@@ -907,15 +904,15 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
     expect(rows[5]?.querySelector('.sc-sub')?.textContent).toBe('鳴き · 1向聴 · 未解答');
     expect(rows.map((row) => [...row.querySelectorAll('.tag')].map((tag) => tag.textContent))).toEqual([
       ['迷い1'],
-      ['迷い2', '細かいミス', '大きな不一致'],
-      ['大きな不一致'],
+      ['迷い2', '細かいミス', '悪手'],
+      ['悪手'],
       ['迷い3'],
-      ['大きな不一致'],
+      ['悪手'],
       ['迷い4'],
-      ['大きな不一致'],
+      ['悪手'],
       ['迷い5'],
       ['迷い6'],
-      ['大きな不一致'],
+      ['悪手'],
     ]);
     // 操作の説明は、本文に出さず、見出しのそばの (i) に乗せるか選ぶと、重ねて出る（U-25）
     const panel = document.querySelector('.scenes-h') as HTMLElement;
@@ -938,7 +935,7 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
     expect(document.querySelector('.scenes')).toBeNull();
   });
 
-  it('位置の帯: 帯の上に迷いの丸 6、下に不一致のひし形 5。印を押すとその場面へ。いまの場面の印に輪が付く（迷い 2 は、丸もひし形も）', async () => {
+  it('位置の帯: 帯の上に迷いの丸 6、下に悪手のひし形 5。印を押すとその場面へ。いまの場面の印に輪が付く（迷い 2 は、丸もひし形も）', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
@@ -948,13 +945,13 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
     expect(pins.filter((pin) => pin.classList.contains('small'))).toHaveLength(0);
     expect(document.querySelectorAll('.tl-pins.up .pin.dbt')).toHaveLength(6);
     expect(document.querySelectorAll('.tl-pins.down .pin.mis')).toHaveLength(5);
-    expect(pins.map((pin) => pin.getAttribute('aria-label'))).toContain('迷い2（細かいミス） 東2局 11巡目 打牌（大きな不一致でもある）');
+    expect(pins.map((pin) => pin.getAttribute('aria-label'))).toContain('迷い2（細かいミス） 東2局 11巡目 打牌（悪手でもある）');
     // 細かいミスの迷いの印だけ四角（ほかの迷いは丸）。色だけに頼らない（F17、U-42）
     expect([...document.querySelectorAll('.pin.dbt.sq')].map((pin) => pin.getAttribute('data-key'))).toEqual(['k1h0e12']);
     await user.click(document.querySelector('.pin[data-key="k1h0e12"]') as HTMLElement);
     expect(title()).toBe('東2局 11巡目');
     expect([...document.querySelectorAll('.pin[aria-current="true"]')].map((pin) => pin.className)).toHaveLength(2);
-    expect(chips()).toEqual(['1向聴', '実戦：打8p', '迷い2', '細かいミス', '大きな不一致']);
+    expect(chips()).toEqual(['1向聴', '実戦：打8p', '迷い2', '細かいミス', '悪手']);
     await user.click(document.querySelector('.pin[data-key="k2h1e14"]') as HTMLElement);
     expect(title()).toBe('東3局1本場 11巡目');
     expect(document.querySelectorAll('.pin[aria-current="true"]')).toHaveLength(1);
@@ -1012,24 +1009,24 @@ describe('U-21 位置の帯と場面の一覧（迷い・不一致）', () => {
     expect(screen.getByRole('button', { name: '前の迷いへ' })).toBeDisabled();
   });
 
-  it('次の不一致へ ×5 で、大きな不一致の場面を順に開き、最後は押せない。名前は「大きな不一致 5か所」', async () => {
+  it('次の悪手へ ×5 で、悪手の場面を順に開き、最後は押せない。名前は「悪手 5か所」', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
     const row = document.querySelector('.jump[data-kind="mismatch"]') as HTMLElement;
-    expect(row).toHaveTextContent('大きな不一致 5か所');
+    expect(row).toHaveTextContent('悪手 5か所');
     const want = ['k1h0e12', 'k1h1e6', 'k1h1e9', 'k2h1e2', 'k2h1e16'];
     for (const [index, key] of want.entries()) {
-      expect(within(row).getByRole('button', { name: /^次の不一致へ/ }).querySelector('.jc')?.textContent).toBe(String(5 - index));
-      await user.click(within(row).getByRole('button', { name: /^次の不一致へ/ }));
+      expect(within(row).getByRole('button', { name: /^次の悪手へ/ }).querySelector('.jc')?.textContent).toBe(String(5 - index));
+      await user.click(within(row).getByRole('button', { name: /^次の悪手へ/ }));
       expect(pos()).toBe(posAt(stepOf(key)));
     }
-    expect(within(row).getByRole('button', { name: /^次の不一致へ/ })).toBeDisabled();
+    expect(within(row).getByRole('button', { name: /^次の悪手へ/ })).toBeDisabled();
   });
 });
 
 describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
-  it('答える前の DOM に、AI の候補・確率・順位は無い（全 10 場面で。不一致の印と、実戦の行動は出る）', async () => {
+  it('答える前の DOM に、AI の候補・確率・順位は無い（全 10 場面で。悪手の印と、実戦の行動は出る）', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
@@ -1136,7 +1133,7 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     expect(screen.queryByRole('button', { name: '答え合わせ' })).toBeNull();
   });
 
-  it('次の迷いへ・次の不一致へ は、答えた場面も通る（答えた場面は、答え合わせのあとの形で開く）。答えていない次の場面には、AI の情報は出ない', async () => {
+  it('次の迷いへ・次の悪手へ は、答えた場面も通る（答えた場面は、答え合わせのあとの形で開く）。答えていない次の場面には、AI の情報は出ない', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await user.click(await screen.findByRole('button', { name: 'この局面を解く（迷い3）' }));
@@ -1156,12 +1153,12 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
     expect(pos()).toBe(posAt(stepOf('k1h1e10')));
     expect(answeringState()).toBe('answering');
     expect(document.querySelector('[data-ai]')).toBeNull();
-    // 「次の場面へ」は、答えた場面のあと、次の場面（不一致でも）へ
+    // 「次の場面へ」は、答えた場面のあと、次の場面（悪手でも）へ
     await user.click(screen.getByRole('button', { name: /^前の迷いへ/ }));
     expect(answeringState()).toBe('revealed');
     await user.click(screen.getByRole('button', { name: '次の場面へ' }));
     expect(pos()).toBe(posAt(stepOf('k1h1e9')));
-    expect(chips()).toContain('大きな不一致');
+    expect(chips()).toContain('悪手');
   });
 
   it('鳴きの場面（迷い4。東をポン）: ポン・スルーのボタンで答える。保存される答えは、ボタンの鍵', async () => {
@@ -1287,30 +1284,29 @@ describe('U-21 場面で答える（U-1・U-2・U-3・U-16）', () => {
   });
 });
 
-describe('E-26・R10-4 「AI の1位と違う判断も、不一致として出す」', () => {
-  it('切（既定）: 不一致は大きな不一致 5 か所。印は丸 6 とひし形 5 だけ', async () => {
+describe('E-26・R10-4 「AI の1位と違う判断も、飛び先に入れる」', () => {
+  it('切（既定）: 悪手は 5 か所。印は丸 6 とひし形 5 だけ', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
-    expect(document.querySelector('.jump[data-kind="mismatch"]')).toHaveTextContent('大きな不一致 5か所');
+    expect(document.querySelector('.jump[data-kind="mismatch"]')).toHaveTextContent('悪手 5か所');
     expect(document.querySelectorAll('.pin.mis')).toHaveLength(5);
     expect(document.querySelectorAll('.pin.small')).toHaveLength(0);
     expect(sceneRows()).toHaveLength(10);
   });
 
-  it('入: AI の1位と違う判断すべて（FX-4 は 8）が不一致の場面になる。増えた分は小さなひし形・一覧に「不一致」。↑ ↓ もそこに止まる', async () => {
+  it('入: AI の1位と違う判断すべて（FX-4 は 8）が悪手の段の場面になる。増えた分は小さなひし形・一覧に「悪手」。↑ ↓ もそこに止まる', async () => {
     const { user } = setup({ links: USER_LINKS, settings: { show_all_mismatches: true } });
     await loaded('5');
     await openReplay(user);
-    expect(document.querySelector('.jump[data-kind="mismatch"]')).toHaveTextContent('不一致 8か所');
+    expect(document.querySelector('.jump[data-kind="mismatch"]')).toHaveTextContent('悪手 8か所');
     expect(document.querySelectorAll('.pin.mis')).toHaveLength(8);
     expect(document.querySelectorAll('.pin.mis.small')).toHaveLength(3);
     expect(document.querySelectorAll('.pin.dbt')).toHaveLength(6);
     // 迷いの数は変わらない。場面は、10 から増える（増えた 3 つのうち、迷いと重なるものは増えない）
     expect(sceneRows().length).toBeGreaterThan(10);
     const tags = sceneRows().flatMap((row) => [...row.querySelectorAll('.tag')].map((tag) => tag.textContent));
-    expect(tags.filter((tag) => tag === '大きな不一致')).toHaveLength(5);
-    expect(tags.filter((tag) => tag === '不一致')).toHaveLength(3);
+    expect(tags.filter((tag) => tag === '悪手')).toHaveLength(8);
     // ↓ で、8 か所すべてに止まる（半荘の順）
     const seen: string[] = [];
     for (let i = 0; i < 8; i += 1) {
@@ -1325,7 +1321,7 @@ describe('E-26・R10-4 「AI の1位と違う判断も、不一致として出�
     const extra = document.querySelector<HTMLElement>('.pin.mis.small');
     await user.click(extra as HTMLElement);
     expect(answeringState()).toBe('answering');
-    expect(chips().at(-1)).toBe('不一致');
+    expect(chips().at(-1)).toBe('悪手');
     expect(document.querySelector('[data-ai]')).toBeNull();
     expect(screen.getByRole('button', { name: '答え合わせ' })).toBeDisabled();
   });
@@ -1499,7 +1495,7 @@ describe('U-35 他家の手牌（通して見る画面。R15-5・R16-7: 盤面�
     expect(handButtons()[1]).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('答える場面（迷い・不一致）では、答えるまで押せず、表の牌は DOM にも出ない（開いたまま着いても）。答えると押せて、開いたままなら出る。答え合わせのタブに「他家の手牌」は無い', async () => {
+  it('答える場面（迷い・悪手）では、答えるまで押せず、表の牌は DOM にも出ない（開いたまま着いても）。答えると押せて、開いたままなら出る。答え合わせのタブに「他家の手牌」は無い', async () => {
     const { user, study } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
@@ -1560,7 +1556,7 @@ describe('U-35 他家の手牌（通して見る画面。R15-5・R16-7: 盤面�
     await press1(user);
     expect(shown()).toEqual(expected(stepOf('k1h1e7')));
     // 次の場面（答えていない）へ
-    await user.click(screen.getByRole('button', { name: /^次の不一致へ/ }));
+    await user.click(screen.getByRole('button', { name: /^次の悪手へ/ }));
     expect(answeringState()).toBe('answering');
     for (const button of handButtons()) expect(button).toBeDisabled();
     noFaceUp();
@@ -1674,7 +1670,7 @@ describe('U-43 AI の評価（通して見る画面）: 答える場面でない
     await loaded('5');
     await openReplay(user);
     expect(bars()).toHaveLength(0);
-    // 次の自分の判断へ（東1局 1巡目。迷いでも不一致でもない）
+    // 次の自分の判断へ（東1局 1巡目。迷いでも悪手でもない）
     press(arrow('Right'));
     expect(pos()).toBe(posAt(stepOf('k0h0e0')));
     expect(answeringState()).toBe('browse');
@@ -1765,7 +1761,7 @@ describe('U-45 迷いのスクショ（通して見る画面）', () => {
   const shots = () => document.querySelector<HTMLElement>('[data-shots="block"]');
   const thumb = (n: number) => screen.getByRole('button', { name: `迷い${n}の画像を大きく見る` });
 
-  it('迷いの場面は、答える前から、答えの欄のいちばん上に出る。写真・迷い3・札・読んだ値・付け替えのボタン。迷いの無い場面（不一致だけ）と、見ているだけの手には出ない', async () => {
+  it('迷いの場面は、答える前から、答えの欄のいちばん上に出る。写真・迷い3・札・読んだ値・付け替えのボタン。迷いの無い場面（悪手だけ）と、見ているだけの手には出ない', async () => {
     const { user } = setup({ links: USER_LINKS });
     await loaded('5');
     await openReplay(user);
@@ -1791,7 +1787,7 @@ describe('U-45 迷いのスクショ（通して見る画面）', () => {
     await user.click(screen.getByRole('button', { name: '答え合わせ' }));
     await revealed();
     expect(document.querySelector('.answer-scroll')?.firstElementChild).toBe(shots());
-    // 不一致だけの場面（迷いが結びつかない）と、見ているだけの手には無い
+    // 悪手だけの場面（迷いが結びつかない）と、見ているだけの手には無い
     await user.click(document.querySelector('.pin[data-key="k1h1e6"]') as HTMLElement);
     expect(shots()).toBeNull();
     press(PERIOD);

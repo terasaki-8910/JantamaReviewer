@@ -537,8 +537,14 @@ mod tests {
         ] {
             assert!(!object.contains_key(removed), "{removed}");
         }
-        assert!(!value["replay_keys"].as_object().unwrap().contains_key("prev_contest"));
-        assert!(!value["replay_keys"].as_object().unwrap().contains_key("next_contest"));
+        assert!(!value["replay_keys"]
+            .as_object()
+            .unwrap()
+            .contains_key("prev_contest"));
+        assert!(!value["replay_keys"]
+            .as_object()
+            .unwrap()
+            .contains_key("next_contest"));
     }
 
     #[test]

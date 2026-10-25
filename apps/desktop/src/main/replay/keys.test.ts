@@ -27,7 +27,7 @@ const event = (code: string, init: { ctrl?: boolean; alt?: boolean; shift?: bool
 });
 
 describe('U-21 通して見る画面のキーの既定（R10-3、R11-4）', () => {
-  it('U-21 既定のキー: , . で 1 手、← → で自分の判断、↑ ↓ で不一致、Shift+↑ ↓ で迷い、Shift+← → で局、Home・End で局の頭・局の終わり。巡目はボタンだけ', () => {
+  it('U-21 既定のキー: , . で 1 手、← → で自分の判断、↑ ↓ で悪手、Shift+↑ ↓ で迷い、Shift+← → で局、Home・End で局の頭・局の終わり。巡目はボタンだけ', () => {
     const keys = defaultReplayKeys();
     expect(keys).toEqual({
       step_back: 'Comma',
@@ -38,8 +38,6 @@ describe('U-21 通して見る画面のキーの既定（R10-3、R11-4）', () =
       next_mismatch: 'ArrowDown',
       prev_doubt: 'Shift+ArrowUp',
       next_doubt: 'Shift+ArrowDown',
-      prev_contest: null,
-      next_contest: null,
       prev_kyoku: 'Shift+ArrowLeft',
       next_kyoku: 'Shift+ArrowRight',
       prev_turn: null,

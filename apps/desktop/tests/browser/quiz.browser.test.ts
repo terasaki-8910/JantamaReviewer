@@ -102,9 +102,7 @@ function dueAnswers(keys?: readonly string[], sessionId: string = FX4_ID): unkno
   if (!imported.ok) throw new Error('FX-4 を読めません');
   const problems =
     keys ??
-    listProblems([{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game: imported.value, markKeys: [] }], {
-      threshold: 0.05,
-    })
+    listProblems([{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game: imported.value, markKeys: [] }])
       .slice(0, 3)
       .map((problem) => problem.key);
   return problems.map((key, index) => ({
@@ -2343,4 +2341,3 @@ describe('U-44: ドラ表示牌の行は折り返さず、中央の箱の点数�
     }
   });
 });
-

@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeSessionStore, REPORT_TEXTS, local, seedSession, type ReportKey } from '../../tests/fake-sessions';
 import { installTauriMock } from '../../tests/tauri-mock';
 import type { SessionRecord } from '../api/types';
-import { App } from './App';
 import { SessionPage } from './SessionPage';
 import { summarizeReportText, type SummaryState } from './sessionSummaries';
 import { UndoProvider } from './undo/UndoProvider';

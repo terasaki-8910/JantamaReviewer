@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
-import { DEFAULT_DISAGREEMENT_THRESHOLD, aiMetricsOf, listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
+import { aiMetricsOf, listDecisionRefs, type DecisionRef, type Grade } from '@jantama/engine';
 
 import { api } from '../api/tauri';
 import type { RatingEntry, SelfRatingValue, SessionRecord } from '../api/types';
@@ -130,7 +130,7 @@ export function SessionPage({
 
   const resolved = useMemo(() => (report === null ? null : resolveMarks(report, session)), [report, session]);
   const decisions = useMemo<DecisionRef[]>(() => (report === null ? [] : listDecisionRefs(report)), [report]);
-  // AI との比べ（F18）: 読み込んだ結果から数える（結果は読み直さない）。基準（threshold）を替えると、悪手率が変わる
+  // AI との比べ（F18）: 読み込んだ結果から数える（結果は読み直さない）。悪手の基準は 5% に固定（F19）
   const aiMetrics = useMemo(() => (report === null ? null : aiMetricsOf(report)), [report]);
   const table = useMemo(
     () => (report === null || ready === null ? null : buildHandTable({ report, summary: ready, session })),
@@ -146,13 +146,7 @@ export function SessionPage({
   const myTrackBelow = useCallback(
     (row: HandRow) =>
       report === null ? null : (
-        <MyShantenTrack
-          report={report}
-          position={row.position}
-          label={row.label}
-          markKeys={markKeys}
-          threshold={DEFAULT_DISAGREEMENT_THRESHOLD}
-        />
+        <MyShantenTrack report={report} position={row.position} label={row.label} markKeys={markKeys} />
       ),
     [report, markKeys],
   );
