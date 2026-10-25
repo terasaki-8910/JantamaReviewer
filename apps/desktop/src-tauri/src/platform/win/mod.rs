@@ -96,6 +96,10 @@ impl HelperHost for WindowsHelper {
         helper_setup::query_installed()
     }
 
+    fn outdated(&self) -> Option<bool> {
+        helper_setup::query_outdated()
+    }
+
     fn run_task(&self) -> Result<(), String> {
         helper_setup::run_task()
     }

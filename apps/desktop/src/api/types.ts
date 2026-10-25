@@ -56,6 +56,11 @@ export interface Settings {
    * 試験の設定の見本には無くてよい。
    */
   replay_keys_revision?: number;
+  /**
+   * 更新の知らせで「この版は飛ばす」を押した版（F21）。この PC だけの値で、同期にも書き出しにも入れない。画面は、受け取ったものを
+   * そのまま返すだけ（飛ばすときは `updateApi.skipUpdateVersion`）。試験の設定の見本には無くてよい。
+   */
+  skipped_update_version?: string | null;
 }
 
 /** idle =半荘がまだ始まっていない、recording = 記録中、error = 保存先を開けない。 */
@@ -294,6 +299,11 @@ export type HelperOp = 'installing' | 'removing' | 'starting';
 export interface HelperStatus {
   /** 起動の登録（タスク）があるか。まだ確かめていなければ null。 */
   installed: boolean | null;
+  /**
+   * 設定済みの補助プログラムの写し（Program Files の下）が、本体と一緒に入っている補助プログラムと違うか（F21）。
+   * 本体を入れ直して補助プログラムが変わったとき true。設定していない・比べられないときは null。試験の見本には無くてよい。
+   */
+  outdated?: boolean | null;
   /** 動いている（つながって、入力を拾っている）。 */
   running: boolean;
   busy: HelperOp | null;

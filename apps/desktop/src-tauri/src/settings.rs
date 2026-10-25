@@ -3,7 +3,8 @@
 //! 保存する項目: 迷いマークのボタン（マウスのボタン、または修飾キー付きのキー）、ウィジェットの形と位置、音、
 //! 迷いだけを記録する（既定は入。ウィジェットが 48px 角の「迷い」ボタン 1 つになり、〇△✕ と終局直後メモの画面の部品を出さない）、
 //! 雀魂の窓を探す語、データの保存先、出題の設定（1 日に出す数・ドラを目立たせる）、
-//! 半荘を通して見る画面の設定（AI の1位と違う判断も飛び先に入れる・キーの割り当て）。
+//! 半荘を通して見る画面の設定（AI の1位と違う判断も飛び先に入れる・キーの割り当て）、
+//! 更新の知らせで「この版は飛ばす」を押した版（この PC だけの値。データの保存先・窓の位置と同じく、同期にも書き出しにも入れない）。
 
 use std::ffi::OsString;
 use std::fs;
@@ -161,6 +162,9 @@ pub struct Settings {
     /// `replay_keys` の表の版（`replay_keys::KEYS_REVISION`）。読み込みと保存のたびに、いまの版にそろえる。
     /// 版 1 のファイル（この項目が無い）の、局の頭・局の終わりの null を、「書いていない」と読み分けるために書く（R11-4）。
     pub replay_keys_revision: u32,
+    /// 更新の知らせで「この版は飛ばす」を押した版（F21、E-50）。この版では知らせを出さず、もっと新しい版が出たら、また出す。
+    /// この PC だけの値なので、同期（`sync::local::SETTING_NAMES`）にも書き出し（`PortableSettings`）にも入れない。無ければ `None`。
+    pub skipped_update_version: Option<String>,
 }
 
 impl Default for Settings {
@@ -181,6 +185,7 @@ impl Default for Settings {
             show_all_mismatches: false,
             replay_keys: replay_keys::default_keys(),
             replay_keys_revision: replay_keys::KEYS_REVISION,
+            skipped_update_version: None,
         }
     }
 }
@@ -265,6 +270,9 @@ impl Settings {
                 field::<u32>(value, "replay_keys_revision").unwrap_or(0),
             ),
             replay_keys_revision: replay_keys::KEYS_REVISION,
+            // 無い・文字でない値は、「飛ばした版は無い」として読む（前の版の設定ファイルには、この項目が無い）。
+            skipped_update_version: field::<Option<String>>(value, "skipped_update_version")
+                .flatten(),
         }
     }
 
@@ -282,6 +290,12 @@ impl Settings {
         // キーの割り当ては、足りない操作に既定を入れ、書き方をそろえる（使えないものは、`validate` が断る）。
         self.replay_keys = replay_keys::normalized(std::mem::take(&mut self.replay_keys));
         self.replay_keys_revision = replay_keys::KEYS_REVISION;
+        // 飛ばした版の前後の空白を取り、空なら「無い」にする。
+        self.skipped_update_version = self
+            .skipped_update_version
+            .take()
+            .map(|version| version.trim().to_string())
+            .filter(|version| !version.is_empty());
         self
     }
 
@@ -545,6 +559,76 @@ mod tests {
             .as_object()
             .unwrap()
             .contains_key("next_contest"));
+    }
+
+    #[test]
+    fn f21_the_skipped_update_version_is_none_by_default_and_a_file_without_it_reads_as_none() {
+        assert_eq!(Settings::default().skipped_update_version, None);
+        // 前の版の設定ファイル（この項目が無い）は、飛ばした版なしとして読む。ほかの項目は守る。
+        let old = Settings::from_json_str(r#"{ "sound": false, "daily_count": 8 }"#).unwrap();
+        assert_eq!(old.skipped_update_version, None);
+        assert!(!old.sound);
+        assert_eq!(old.daily_count, 8);
+        // 画面から届く設定にこの項目が無くても（`#[serde(default)]`）、飛ばした版なしになる。
+        let from_page: Settings = serde_json::from_str(r#"{ "sound": false }"#).unwrap();
+        assert_eq!(from_page.skipped_update_version, None);
+        // null も、文字でない値も、飛ばした版なし。ほかの項目は守る
+        for bad in ["null", "7", "true", r#"{ "v": "0.2.1" }"#] {
+            let s = Settings::from_json_str(&format!(
+                r#"{{ "skipped_update_version": {bad}, "sound": false }}"#
+            ))
+            .unwrap();
+            assert_eq!(s.skipped_update_version, None, "{bad}");
+            assert!(!s.sound, "{bad}");
+        }
+    }
+
+    #[test]
+    fn f21_the_skipped_update_version_is_saved_and_read_back_and_always_written_to_the_file() {
+        let dir = temp_dir();
+        let path = settings_path(dir.path());
+        // 飛ばした版が無いときも、項目は null で書く（settings.json の形が、いつも同じ）
+        Settings::default().save(&path).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"skipped_update_version\": null"), "{text}");
+        let saved = Settings {
+            skipped_update_version: Some("0.2.1".to_string()),
+            ..Settings::default()
+        };
+        saved.save(&path).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert_eq!(loaded, saved);
+        assert_eq!(loaded.skipped_update_version.as_deref(), Some("0.2.1"));
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("\"skipped_update_version\": \"0.2.1\""),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn f21_the_skipped_update_version_is_trimmed_and_an_empty_one_is_none() {
+        let spaced = Settings {
+            skipped_update_version: Some(
+                "  0.2.1 
+"
+                .to_string(),
+            ),
+            ..Settings::default()
+        }
+        .normalized();
+        assert_eq!(spaced.skipped_update_version.as_deref(), Some("0.2.1"));
+        let empty = Settings {
+            skipped_update_version: Some("   ".to_string()),
+            ..Settings::default()
+        }
+        .normalized();
+        assert_eq!(empty.skipped_update_version, None);
+        let from_file = Settings::from_json_str(r#"{ "skipped_update_version": "" }"#)
+            .unwrap()
+            .normalized();
+        assert_eq!(from_file.skipped_update_version, None);
+        assert_eq!(spaced.validate(), Ok(()));
     }
 
     #[test]

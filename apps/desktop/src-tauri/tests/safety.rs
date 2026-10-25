@@ -269,6 +269,56 @@ const NETWORK_BELOW_SYNC_CLIENT: &[(&str, &str)] = &[
     ),
 ];
 
+/// アプリ内の更新（F21）の通信の部品（`tauri-plugin-updater`）を使ってよい場所（ファイル名とその理由）。使えるのはここだけで、
+/// 本体のクレートの依存にだけ置く。通信するのは、画面が呼ぶ 2 つの命令（確かめる `check_update`・入れ直す `install_update`。
+/// どちらも検討画面だけ。入れ直しは記録中は断る）の中だけ。取り先は、`config.rs` の 1 つの URL（https の github.com）だけ。
+/// 画面（webview）には、この部品の命令を使う権限を与えない（どの capability にも `updater` が無い）。
+const ALLOWED_UPDATER_FILES: &[(&str, &str)] = &[(
+    "src/update/updater.rs",
+    "F21・E-50: GitHub の Releases から更新の情報（latest.json）を取り、ユーザーが「今すぐ入れ直す」を押したときだけ、インストーラーをダウンロードして、署名を確かめて入れ直す。取り先・公開鍵は config.rs の定数で、公開鍵が空のあいだは通信しない",
+)];
+
+/// 更新の取り先の URL を書いてよい場所（ファイル名とその理由）。ほかの Rust のソースには、URL を書かない。
+const ALLOWED_UPDATER_URL_FILES: &[(&str, &str)] = &[(
+    "src/update/config.rs",
+    "F21: 更新の情報（latest.json）の置き場所の URL 1 つと、更新の署名を確かめる公開鍵。URL は https の github.com だけ",
+)];
+
+/// 更新の部品の名前（Rust のソースでの書き方）。
+const UPDATER_RUST: &str = "tauri_plugin_updater";
+/// 更新の部品のクレート名（Cargo.toml での書き方）。
+const UPDATER_CRATE: &str = "tauri-plugin-updater";
+
+/// 更新の取り先の URL の、書き出し。ソースに書く URL は、これで始まるものだけ（github.com の自分のリポジトリの Releases）。
+const UPDATER_URL_PREFIX: &str = "https://github.com/terasaki-8910/JantamaReviewer/releases/";
+
+/// 更新のために通信してよいホスト（F21。ACCEPTANCE の S-2）。取り先は github.com で、Releases のファイル（インストーラー）は、
+/// GitHub が自分の置き場所へ移して配る。移し先は、2025 年に `objects.githubusercontent.com` から `release-assets.githubusercontent.com`
+/// に替わった。どちらも GitHub のもの。ソースに書くのは取り先の github.com だけで、ほかのホストの名前は、ソースのどこにも書かない
+/// （この一覧は、通信してよい相手の記録。ダウンロードの署名の確かめは、置き場所によらない）。
+const UPDATER_HOSTS: &[&str] = &[
+    "github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+];
+
+/// 通信の部品のうち、更新の部品の下にだけ入ってよいもの（クレート名とその理由）。
+/// 実行時の依存の一覧では、これらが更新の部品（`tauri-plugin-updater`）の直下からだけ入ることを確かめる。
+const NETWORK_BELOW_UPDATER: &[(&str, &str)] = &[
+    (
+        "reqwest",
+        "更新の部品が使う HTTP のクライアント（更新の情報とインストーラーの取得。GET だけ）",
+    ),
+    (
+        "hyper",
+        "reqwest の下の HTTP の部品（更新の部品の通信）",
+    ),
+    (
+        "native-tls",
+        "reqwest の https の通信に使う（Windows では SChannel、macOS では Security.framework。OS の証明書の一覧を使い、同梱の証明書を持たない）",
+    ),
+];
+
 /// 文字認識のクレート（`ocr`）を使ってよい本体のソース（ファイル名とその理由）。取り込みのときだけ動く読み取りの 1 か所。
 /// ウィジェット・ボタンを拾う部分・撮影・記録・補助プログラムのコードは、文字認識に触れない（S-3）。
 const ALLOWED_OCR_FILES: &[(&str, &str)] = &[(
@@ -556,6 +606,20 @@ fn allowed_opener_file(path: &Path) -> bool {
         .any(|(file, _reason)| name.ends_with(file))
 }
 
+fn allowed_updater_file(path: &Path) -> bool {
+    let name = path.to_string_lossy().replace('\\', "/");
+    ALLOWED_UPDATER_FILES
+        .iter()
+        .any(|(file, _reason)| name.ends_with(file))
+}
+
+fn allowed_updater_url_file(path: &Path) -> bool {
+    let name = path.to_string_lossy().replace('\\', "/");
+    ALLOWED_UPDATER_URL_FILES
+        .iter()
+        .any(|(file, _reason)| name.ends_with(file))
+}
+
 fn allowed_http_client_file(path: &Path) -> bool {
     let name = path.to_string_lossy().replace('\\', "/");
     ALLOWED_HTTP_CLIENT_FILES
@@ -749,7 +813,20 @@ fn s2_no_rust_source_uses_a_network_client() {
         if allowed_http_client_file(&file) {
             hits.retain(|(_, what)| what != HTTP_CLIENT_RUST);
         }
-        hits.extend(scan_lines(&text, URL_SCHEMES, false));
+        if allowed_updater_file(&file) {
+            hits.retain(|(_, what)| what != UPDATER_RUST);
+        }
+        // URL は書かない。例外は、更新の取り先の 1 行だけ（自分のリポジトリの Releases。ほかの URL・ほかの場所は、違反）
+        let lines: Vec<&str> = text.lines().collect();
+        for (line, what) in scan_lines(&text, URL_SCHEMES, false) {
+            let updater_endpoint = allowed_updater_url_file(&file)
+                && lines
+                    .get(line - 1)
+                    .is_some_and(|text| text.contains(UPDATER_URL_PREFIX));
+            if !updater_endpoint {
+                hits.push((line, what));
+            }
+        }
         if !hits.is_empty() {
             violations.push(report("S-2 Rust", &file, &hits));
         }
@@ -815,6 +892,10 @@ fn s2_cargo_toml_declares_no_network_dependency() {
         for (line, name) in forbidden_crates_in_manifest(&toml, &network) {
             // HTTP クライアントは、本体のクレートの依存にだけ置く（理由は ALLOWED_HTTP_CLIENT_FILES）。
             if dir == crate_dir() && name == HTTP_CLIENT_CRATE {
+                continue;
+            }
+            // 更新の部品も、本体のクレートの依存にだけ置く（理由は ALLOWED_UPDATER_FILES）。
+            if dir == crate_dir() && name == UPDATER_CRATE {
                 continue;
             }
             violations.push(format!(
@@ -1080,6 +1161,7 @@ fn s2_s3_the_runtime_dependency_graph_has_no_network_or_vision_crates() {
         crates.contains(&OCR_CRATE),
         "文字認識のクレートが依存に無い"
     );
+    assert!(crates.contains(&UPDATER_CRATE), "更新の部品が依存に無い");
 
     let network = [
         "reqwest",
@@ -1110,8 +1192,9 @@ fn s2_s3_the_runtime_dependency_graph_has_no_network_or_vision_crates() {
 }
 
 /// 実行時の依存の中の通信の部品 `名前@版` が、許していない経路で入っていないかを調べる（`cargo tree -i` の逆向きの木）。
-/// 許す経路は 2 つだけ: 本体のクレートが直接宣言した HTTP クライアント自身（`ALLOWED_HTTP_CLIENT_FILES`）と、
-/// その下にだけ現れる TLS の窓口（`TLS_BELOW_HTTP_CLIENT`）。補助プログラム・共有の部品（input）・文字認識のクレートの下、
+/// 許す経路は 4 つだけ: 本体のクレートが直接宣言した HTTP クライアント自身（`ALLOWED_HTTP_CLIENT_FILES`）と、
+/// その下にだけ現れる TLS の窓口（`TLS_BELOW_HTTP_CLIENT`）、同期のクライアント（`turso`）の下の部品（`NETWORK_BELOW_SYNC_CLIENT`）、
+/// 更新の部品（`tauri-plugin-updater`）の下の部品（`NETWORK_BELOW_UPDATER`）。補助プログラム・共有の部品（input）・文字認識のクレートの下、
 /// ほかの部品を通って入るものは、違反。
 fn network_crate_violations(name: &str, version: &str) -> Vec<String> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
@@ -1183,7 +1266,13 @@ fn network_crate_violations(name: &str, version: &str) -> Vec<String> {
                     && NETWORK_BELOW_SYNC_CLIENT
                         .iter()
                         .any(|(allowed, reason)| *allowed == name && !reason.is_empty());
-                below_http || below_sync
+                // 更新の通信の部品は、更新の部品（本体のクレートが直接使う `tauri-plugin-updater`）の直下からだけ入る。
+                let below_updater = path.len() >= 3
+                    && path[path.len() - 2] == UPDATER_CRATE
+                    && NETWORK_BELOW_UPDATER
+                        .iter()
+                        .any(|(allowed, reason)| *allowed == name && !reason.is_empty());
+                below_http || below_sync || below_updater
             };
         if !allowed {
             violations.push(format!(
@@ -1192,6 +1281,273 @@ fn network_crate_violations(name: &str, version: &str) -> Vec<String> {
         }
     }
     violations
+}
+
+// ---- S-2: アプリ内の更新（F21）の通信は、決めた 1 か所だけ ----
+
+/// 更新の Tauri コマンド（Rust の名前と、画面側の窓口の名前）。ウィジェットのコードは、どれにも触れない。
+const UPDATE_COMMANDS: &[&str] = &[
+    "get_update_info",
+    "check_update",
+    "install_update",
+    "skip_update_version",
+];
+const UPDATE_API_NAMES: &[&str] = &[
+    "getUpdateInfo",
+    "checkUpdate",
+    "installUpdate",
+    "skipUpdateVersion",
+    "updateApi",
+];
+
+fn update_file(name: &str) -> String {
+    read(&crate_dir().join("src").join("update").join(name))
+}
+
+/// 文字列の定数 `const NAME: &str = "…";`（改行を挟んでもよい）の中身。
+fn string_const(text: &str, name: &str) -> String {
+    let at = text
+        .find(&format!("const {name}: &str ="))
+        .unwrap_or_else(|| panic!("{name} の定数が無い"));
+    let rest = &text[at..];
+    let open = rest.find('"').expect("文字列の始まり");
+    let body = &rest[open + 1..];
+    let close = body.find('"').expect("文字列の終わり");
+    body[..close].to_string()
+}
+
+/// 更新の部品（`tauri-plugin-updater`）は、許した 1 か所だけが使い、本体のクレートだけが、既定の機能を切り、版を固定して宣言する。
+#[test]
+fn s2_the_updater_is_used_from_its_one_file_and_declared_once_by_the_main_crate() {
+    let mut users: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        if product_part(&read(&file)).contains(UPDATER_RUST) {
+            users.push(file.to_string_lossy().replace('\\', "/"));
+        }
+    }
+    assert_eq!(users.len(), ALLOWED_UPDATER_FILES.len(), "{users:?}");
+    for user in &users {
+        assert!(
+            ALLOWED_UPDATER_FILES
+                .iter()
+                .any(|(file, reason)| user.ends_with(file) && !reason.is_empty()),
+            "許していない場所が更新の部品を使っている: {user}"
+        );
+    }
+    // 共有の部品・補助プログラム・文字認識のクレートは、宣言しない
+    for dir in [
+        crate_dir().join("input"),
+        crate_dir().join("helper"),
+        ocr_dir(),
+    ] {
+        let toml = read(&dir.join("Cargo.toml"));
+        assert!(
+            forbidden_crates_in_manifest(&toml, &[UPDATER_CRATE]).is_empty(),
+            "{} が更新の部品を宣言している",
+            dir.display()
+        );
+    }
+    // 本体のクレートの宣言は 1 つで、既定の機能（rustls・v1 の圧縮形式）を切り、TLS は OS のもの（native-tls）にし、
+    // 版を `~` で固定する（新しい版の部品が、より新しい tauri を要ると、tauri・wry・tao まで上がってしまうため）
+    let main_toml = read(&crate_dir().join("Cargo.toml"));
+    let declared: Vec<&str> = main_toml
+        .lines()
+        .filter(|l| l.trim_start().starts_with(&format!("{UPDATER_CRATE} = ")))
+        .collect();
+    assert_eq!(declared.len(), 1, "{declared:?}");
+    assert!(
+        declared[0].contains("default-features = false")
+            && declared[0].contains("\"native-tls\"")
+            && declared[0].contains("version = \"~2."),
+        "更新の部品は、既定の機能を切って、OS の TLS（native-tls）にし、版を ~ で固定する: {}",
+        declared[0]
+    );
+    assert!(
+        !declared[0].contains("rustls") && !declared[0].contains("\"zip\""),
+        "{}",
+        declared[0]
+    );
+    // 実際に入る版は、Cargo.lock の 2.14 系で、tauri は上がっていない（版の固定が効いている）
+    let lock = read(&crate_dir().join("Cargo.lock")).replace("\r\n", "\n");
+    assert!(
+        lock.contains("name = \"tauri-plugin-updater\"\nversion = \"2.14."),
+        "更新の部品の版が 2.14 系でない"
+    );
+    assert!(
+        lock.contains("name = \"tauri\"\nversion = \"2.12."),
+        "tauri の版が 2.12 系でない"
+    );
+}
+
+/// 更新の取り先は、https の github.com の自分のリポジトリの Releases の URL が 1 つだけ。公開鍵は、空か minisign の公開鍵。
+/// 更新のホストの名前は、取り先を書いたファイルのほか、どのソースにも書かない。
+#[test]
+fn s2_the_update_destination_is_one_github_releases_url_and_the_key_is_empty_or_a_minisign_key() {
+    let config = update_file("config.rs");
+    let product = product_part(&config);
+    // URL を含む行は、取り先の 1 行だけ
+    let url_lines: Vec<&str> = product
+        .lines()
+        .filter(|line| !scan_lines(line, URL_SCHEMES, false).is_empty())
+        .collect();
+    assert_eq!(url_lines.len(), 1, "{url_lines:?}");
+    let endpoint = string_const(product, "UPDATE_ENDPOINT");
+    assert!(
+        endpoint.starts_with(UPDATER_URL_PREFIX) && endpoint.ends_with("/download/latest.json"),
+        "更新の取り先は、自分のリポジトリの Releases の latest.json: {endpoint}"
+    );
+    let host = endpoint
+        .strip_prefix("https://")
+        .and_then(|rest| rest.split('/').next())
+        .unwrap_or("");
+    assert_eq!(host, UPDATER_HOSTS[0], "取り先のホストは github.com だけ");
+    assert!(
+        !endpoint.contains(['@', '?', '#', ' ']),
+        "取り先に、認証・問い合わせ・空白を入れない: {endpoint}"
+    );
+    // 公開鍵: 空（まだ設定されていない）か、minisign の公開鍵のファイルの中身（"untrusted comment:" から始まる文を base64 にしたもの）
+    let key = string_const(product, "UPDATE_PUBLIC_KEY");
+    assert!(
+        key.is_empty()
+            || (key.starts_with("dW50cnVzdGVkIGNvbW1lbnQ6")
+                && key.len() >= 100
+                && key
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')),
+        "公開鍵は、空か、署名の鍵の組の公開鍵（.pub の中身）: {key}"
+    );
+    // 通信してよいホストの一覧は、GitHub のものだけ
+    for host in UPDATER_HOSTS {
+        assert!(
+            *host == "github.com" || host.ends_with(".githubusercontent.com"),
+            "{host}"
+        );
+    }
+    // 取り先以外のホストの名前は、どの製品のソースにも書かない（更新のために通信する相手が、増えていないことの確認）
+    for file in rust_sources().into_iter().chain(ts_sources()) {
+        if allowed_updater_url_file(&file) {
+            continue;
+        }
+        let text = read(&file);
+        for host in UPDATER_HOSTS {
+            assert!(
+                !text.contains(host),
+                "{}: 更新のホスト {host} の名前を書いている",
+                file.display()
+            );
+        }
+    }
+}
+
+/// 更新の命令は、検討画面だけが呼べて、確かめる・入れ直すは、画面が呼んだときだけ。入れ直しは、記録中は断り、押されるまで始めない。
+#[test]
+fn s2_the_update_commands_serve_only_the_main_window_and_install_only_when_asked() {
+    let commands = update_file("commands.rs");
+    let product = product_part(&commands);
+    let declared = product.matches("#[tauri::command]").count();
+    assert_eq!(
+        declared,
+        UPDATE_COMMANDS.len(),
+        "命令の数が、一覧と合わない"
+    );
+    // どの命令も、検討画面（main）の窓から呼ばれたかを、最初に確かめる
+    assert_eq!(product.matches("ensure_main(&window)?;").count(), declared);
+    assert!(product.contains("window.label() == MAIN_LABEL"));
+    for name in UPDATE_COMMANDS {
+        assert!(
+            product.contains(&format!("pub async fn {name}(")),
+            "{name} がある"
+        );
+    }
+    // 入れ直しは、記録中を断ってから始める
+    let install = product
+        .split("pub async fn install_update(")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("install_update がある");
+    let refuse = install
+        .find("ensure_not_recording(status)?;")
+        .expect("記録中は断る");
+    let start = install.find("super::install(").expect("入れ直しを始める");
+    assert!(refuse < start, "記録中の断りは、入れ直しを始める前");
+    // 確かめる・入れ直す関数を呼ぶのは、この 2 つの命令だけ（起動の処理・タイマーなどから、勝手に呼ばない）
+    for file in rust_sources() {
+        let name = file.to_string_lossy().replace('\\', "/");
+        if name.contains("src/update/") {
+            continue;
+        }
+        let text = read(&file);
+        let text = product_part(&text);
+        for needle in ["update::check(", "update::install(", "UpdateSource::"] {
+            assert!(!text.contains(needle), "{name}: {needle} を呼んでいる");
+        }
+    }
+    assert_eq!(product.matches("super::check(").count(), 1);
+    assert_eq!(product.matches("super::install(").count(), 1);
+    // 入れ直す前に、閉じるときと同じ片づけをする（インストーラーを動かして終わると、終了の知らせが来ないため）
+    assert!(product.contains("crate::flush_before_exit(&handle)"));
+    // 更新の部品の命令は、画面（webview）に権限を与えない。どの権限の一覧にも、更新の部品の名前が無い
+    let capabilities = files_under(&crate_dir().join("capabilities"), &|p| {
+        has_ext(p, &["json"])
+    });
+    assert!(!capabilities.is_empty());
+    for file in capabilities {
+        let text = read(&file);
+        assert!(!text.contains("updater"), "{}", file.display());
+        for name in UPDATE_COMMANDS {
+            assert!(!text.contains(name), "{}: {name}", file.display());
+        }
+    }
+    // ウィジェットの画面のソースは、更新の窓口の名前に触れない
+    let widget_dir = repo_root()
+        .join("apps")
+        .join("desktop")
+        .join("src")
+        .join("widget");
+    for file in files_under(&widget_dir, &|p| {
+        has_ext(p, &["ts", "tsx"]) && !is_test_file(p)
+    }) {
+        let text = read(&file);
+        for name in UPDATE_COMMANDS.iter().chain(UPDATE_API_NAMES) {
+            assert!(
+                !text.contains(name),
+                "{}: ウィジェットが更新の窓口 {name} に触れている",
+                file.display()
+            );
+        }
+    }
+}
+
+/// 更新の確かめ・入れ直しの命令を画面から呼ぶのは、更新の状態を持つ 1 つのファイルだけ（確かめるのは、起動のときと、設定の
+/// 「更新を確かめる」を押したときだけ。入れ直すのは、「今すぐ入れ直す」を押したときだけ）。
+#[test]
+fn s2_the_screens_call_the_update_commands_from_one_state_file_only() {
+    let screen_src = repo_root().join("apps").join("desktop").join("src");
+    let relative = |file: &Path| {
+        file.strip_prefix(&screen_src)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/")
+    };
+    let mut callers: Vec<String> = Vec::new();
+    let mut users: Vec<String> = Vec::new();
+    for file in ts_sources() {
+        let text = read(&file);
+        if UPDATE_COMMANDS
+            .iter()
+            .any(|name| text.contains(&format!("'{name}'")))
+        {
+            callers.push(relative(&file));
+        }
+        if UPDATE_API_NAMES
+            .iter()
+            .any(|name| text.contains(&format!("updateApi.{name}(")))
+        {
+            users.push(relative(&file));
+        }
+    }
+    assert_eq!(callers, vec!["api/update.ts"], "{callers:?}");
+    assert_eq!(users, vec!["main/update/UpdateProvider.tsx"], "{users:?}");
 }
 
 // ---- S-2: 記録の同期（F15）の通信は、決めた 1 か所だけ ----
@@ -2609,6 +2965,29 @@ fn u9_the_trash_is_emptied_when_the_app_exits_when_it_starts_and_when_the_data_d
         "終了の知らせを受けていない"
     );
     assert!(lib.contains("recycle_deleted_sessions(app)"));
+    // 閉じるときの片づけ（同期を止める・置き場をごみ箱へ送る）は 1 つの関数（`flush_before_exit`）にまとめ、閉じるときと、
+    // 更新を入れ直すとき（インストーラーを動かして終わるので、終了の知らせが来ない。F21）の両方が呼ぶ。
+    let exit_at = lib.find("tauri::RunEvent::Exit").expect("終了の知らせ");
+    assert!(
+        lib[exit_at..]
+            .lines()
+            .take(3)
+            .any(|line| line.contains("flush_before_exit(app)")),
+        "閉じるときに、片づけの関数を呼ぶ"
+    );
+    let flush = lib
+        .split("fn flush_before_exit(")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(
+                "
+}
+",
+            )
+            .next()
+        })
+        .expect("片づけの関数がある");
+    assert!(flush.contains("sync.shutdown()") && flush.contains("recycle_deleted_sessions(app)"));
     // 起動のとき（落ちたあとの片づけ）。置き場を片づけてから、記録の担当を作る前ではなく、設定を読んだあと。
     let setup_at = lib.find("fn setup(").expect("setup がある");
     let load_at = lib[setup_at..].find("Core::load(").expect("設定を読む");

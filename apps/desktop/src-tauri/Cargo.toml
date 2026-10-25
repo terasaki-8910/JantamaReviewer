@@ -1,6 +1,6 @@
 [package]
 name = "jantama-reviewer"
-version = "0.1.0"
+version = "0.2.0"
 description = "雀魂の半荘を、AIの答えを見る前に自分の考えを確定させて検討するための個人用ツール"
 license = "MIT"
 edition = "2021"
@@ -36,6 +36,12 @@ png = "0.18"
 tauri-plugin-opener = "2"
 # 画面の遷移先の判定（navigation.rs）。URL の文字列を調べるだけ。
 url = "2"
+# アプリ内の更新（F21）。更新の情報を GitHub の Releases から取り、署名を確かめて、入れ直す。
+# src/update/ の中だけで使う（通信するのは、ここと report_fetch.rs・sync/ だけ。tests/safety.rs の S-2 が、通信先と使える場所を確かめる）。
+# 版は `~` で 2.14 に固定する: 本体の tauri（2.12）のまま使える最新の版。新しい版の部品は、より新しい tauri を要ることがあり、
+# `cargo add` や `cargo update` が tauri・wry・tao まで黙って上げてしまうため。TLS は ureq と同じく OS のもの（native-tls）にし、
+# 既定の rustls と、v1 の圧縮形式（zip）は入れない。画面（webview）には権限を与えず、更新の操作は src/update/commands.rs の命令だけが行う。
+tauri-plugin-updater = { version = "~2.14", default-features = false, features = ["native-tls", "system-proxy"] }
 # ボタンを拾う部品（判定・補助プログラムとの連絡・Windows のフックとパイプ）。補助プログラムと共有する。
 jantama-input = { path = "input" }
 # 取り込みのときだけ使う文字認識（保存済みのスクリーンショットを読む。S-3）。src/import/ocr_job.rs の 1 か所からだけ使う。
@@ -93,6 +99,8 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 
 [dev-dependencies]
 tempfile = "3"
+# 更新の層の検査（tests/update_layer.rs）が、偽の実行環境（MockRuntime）でアプリを組み立てるのに使う。製品のビルドには入らない。
+tauri = { version = "2", features = ["test"] }
 
 # フックの結合試験（tests/hook_integration.rs）が、マウスとキーの入力を注入するのに使う。
 [target.'cfg(windows)'.dev-dependencies]

@@ -30,6 +30,7 @@ pub mod store;
 pub mod study;
 pub mod sync;
 pub mod trash;
+pub mod update;
 pub mod webview_data;
 pub mod webview_policy;
 pub mod widget_window;
@@ -62,6 +63,8 @@ pub const SHOW_MAIN_ARG: &str = "--show-main";
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // アプリ内の更新（F21）。画面（webview）には部品の命令を使う権限を与えず、update::commands の命令だけが更新を扱う。
+        .plugin(update::plugin())
         .invoke_handler(tauri::generate_handler![
             commands::get_platform_info,
             commands::get_state,
@@ -89,6 +92,10 @@ pub fn run() {
             commands::setup_helper,
             commands::remove_helper,
             commands::start_helper,
+            update::commands::get_update_info,
+            update::commands::check_update,
+            update::commands::install_update,
+            update::commands::skip_update_version,
             import::commands::read_clipboard_text,
             import::commands::open_mjai_window,
             import::commands::close_mjai_window,
@@ -141,21 +148,30 @@ pub fn run() {
         .on_menu_event(|app, event| menu::handle_menu_event(app, event.id().as_ref()))
         .on_window_event(on_window_event)
         .setup(setup);
+    // 更新の部品の設定は、tauri.conf.json には書かず、ここで入れる（公開鍵が空でも起動できるように。update::plugin_config）。
+    let mut context = tauri::generate_context!();
+    update::prepare_config(context.config_mut());
     // macOS だけ、アプリ全体のメニュー（メニューバー）を付ける。Windows では何もしない。
     let app = platform::with_app_menu(builder)
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("アプリを起動できませんでした");
     app.run(|app, event| {
         // アプリを閉じるとき: 消した半荘のフォルダを、OS のごみ箱へ送る（U-9）。落ちたときは、次の起動で送る。
         if let tauri::RunEvent::Exit = event {
-            if let Some(sync) = app.try_state::<sync::service::SyncService>() {
-                sync.shutdown();
-            }
-            recycle_deleted_sessions(app);
+            flush_before_exit(app);
         }
         // macOS: Dock のアイコンを押したときに、検討画面を開く（OS ごとの知らせは platform に任せる）。
         platform::on_run_event(app, &event);
     });
+}
+
+/// アプリを閉じる前の片づけ（同期を止める・消した半荘をごみ箱へ送る）。閉じるとき（`RunEvent::Exit`）と、更新を入れ直すとき
+/// （インストーラーを動かしてすぐ終わるので、`RunEvent::Exit` が来ない）の両方で呼ぶ。
+pub(crate) fn flush_before_exit(app: &tauri::AppHandle) {
+    if let Some(sync) = app.try_state::<sync::service::SyncService>() {
+        sync.shutdown();
+    }
+    recycle_deleted_sessions(app);
 }
 
 /// 消した半荘の置き場を、ごみ箱へ送る。保存先は、設定から読む（記録の錠を取れなければ、あきらめる。次の起動で送る）。
@@ -237,6 +253,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     app.manage(import::mjai_window::MjaiWindowState::default());
     // 答え・解き直しの予定・今日の出題を置く SQLite の接続（検討画面だけが使う。最初に呼ばれたとき開く）。
     app.manage(study::commands::SharedStudy::new());
+    // 見つけた更新（「今すぐ入れ直す」が、確かめたときに見つけた更新をそのまま入れるため。F21）。
+    app.manage(update::PendingUpdate::default());
     commands::allow_asset_dir(&handle, &settings.data_dir);
     // 記録の同期（F15）。使わない設定なら、裏のスレッドは何もしない。
     sync::commands::start(&handle, config_dir(app)?);

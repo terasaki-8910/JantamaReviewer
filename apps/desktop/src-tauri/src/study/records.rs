@@ -100,6 +100,8 @@ impl PortableSettings {
             show_all_mismatches: self.show_all_mismatches,
             replay_keys: self.replay_keys.clone(),
             replay_keys_revision: self.replay_keys_revision,
+            // 飛ばした更新の版も、この PC だけの値（書き出しに入れず、いまのまま）
+            skipped_update_version: current.skipped_update_version.clone(),
         }
         .normalized()
     }
@@ -730,6 +732,7 @@ mod tests {
             show_all_mismatches: true,
             replay_keys: replay,
             replay_keys_revision: replay_keys::KEYS_REVISION,
+            skipped_update_version: None,
         }
         .normalized()
     }

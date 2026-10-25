@@ -113,6 +113,11 @@ pub trait HelperHost: Send + Sync {
     fn uninstall(&self) -> Result<(), String>;
     /// 起動の登録があるか。
     fn query_installed(&self) -> bool;
+    /// 設定済みの補助プログラムの写しが、本体と一緒に入っている補助プログラムと違うか（本体を入れ直して、補助プログラムが変わったか。F21）。
+    /// 設定していない・比べられないときは `None`。補助プログラムの無い OS は、いつも `None`。
+    fn outdated(&self) -> Option<bool> {
+        None
+    }
     /// 設定済みの補助プログラムを起動する（確認は出ない）。
     fn run_task(&self) -> Result<(), String>;
 }

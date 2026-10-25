@@ -696,6 +696,16 @@ pub async fn start_helper(input: State<'_, InputHandle>) -> Result<(), String> {
     Ok(())
 }
 
+/// 起動の登録（タスク）があるかと、設定済みの写しが本体と一緒に入っている補助プログラムと違うか（F21）を調べて、入力の流れに知らせる。
+/// 起動の登録があったか（`query_installed` の答え）を返す。写しの比べは、設定してあるときだけ行う。
+fn announce_installed(tx: &Sender<Input>, helper: &dyn HelperHost) -> bool {
+    let installed = helper.query_installed();
+    let _ = tx.send(Input::InstalledKnown(installed));
+    let outdated = if installed { helper.outdated() } else { None };
+    let _ = tx.send(Input::OutdatedKnown(outdated));
+    installed
+}
+
 /// 起動の登録（タスク）があるかを、裏で確かめて、入力の流れに知らせる。
 pub fn refresh_installed(tx: &Sender<Input>, helper: &Arc<dyn HelperHost>) {
     let tx = tx.clone();
@@ -703,7 +713,7 @@ pub fn refresh_installed(tx: &Sender<Input>, helper: &Arc<dyn HelperHost>) {
     let spawned = thread::Builder::new()
         .name("helper-installed".to_string())
         .spawn(move || {
-            let _ = tx.send(Input::InstalledKnown(helper.query_installed()));
+            announce_installed(&tx, helper.as_ref());
         });
     if let Err(e) = spawned {
         eprintln!("補助プログラムの登録を確かめるスレッドを起こせませんでした: {e}");
@@ -718,8 +728,7 @@ pub fn start_helper_at_launch(tx: &Sender<Input>, helper: &Arc<dyn HelperHost>) 
     let spawned = thread::Builder::new()
         .name("helper-launch".to_string())
         .spawn(move || {
-            let installed = helper.query_installed();
-            let _ = tx.send(Input::InstalledKnown(installed));
+            let installed = announce_installed(&tx, helper.as_ref());
             if installed {
                 if let Err(e) = helper.run_task() {
                     eprintln!("{e}");
@@ -765,7 +774,7 @@ fn perform_helper_op(
     match op {
         HelperOp::Installing => {
             helper.install()?;
-            let _ = tx.send(Input::InstalledKnown(helper.query_installed()));
+            announce_installed(tx, helper);
             // 設定できたら、そのまま起動する（アプリを開き直さなくてよい）。
             helper
                 .run_task()
@@ -773,7 +782,7 @@ fn perform_helper_op(
         }
         HelperOp::Removing => {
             let result = helper.uninstall();
-            let _ = tx.send(Input::InstalledKnown(helper.query_installed()));
+            announce_installed(tx, helper);
             result
         }
         HelperOp::Starting => helper.run_task(),

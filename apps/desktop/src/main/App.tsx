@@ -26,6 +26,8 @@ import { QuizPage } from './study/QuizPage';
 import { ReviewPage } from './study/ReviewPage';
 import { StudyProvider, useStudyData, type StudyValue } from './study/StudyProvider';
 import { TodayPage } from './study/TodayPage';
+import { UpdateBanner } from './update/UpdateBanner';
+import { UpdateProvider } from './update/UpdateProvider';
 import { WeekPage } from './week/WeekPage';
 import { TOAST_MS, Toast, type ToastModel } from './Toast';
 import { UndoProvider, useUndo, useUndoEvents } from './undo/UndoProvider';
@@ -62,15 +64,18 @@ export function App({ solvedProblems = solvedProblemCount }: AppProps = {}) {
   // 記録を置き換えたとき（設定の「読み込む」。D-2）は、画面のデータも、取り消しの履歴も、すべて読み直す。`key` を変えて、
   // シェルごと作り直す（読み込んだあとの設定のページを開いて、「読み込みました…」を出す）。履歴の取り消しは、置き換える前の記録を指すので、持ち越さない。
   const [boot, setBoot] = useState<{ epoch: number; notice: string | null }>({ epoch: 0, notice: null });
+  // 更新の状態（F21）は、シェルの作り直しで「起動のとき」の確かめが繰り返されないよう、作り直す対象の外に置く
   return (
-    <UndoProvider key={boot.epoch}>
-      <Shell
-        solvedProblems={solvedProblems}
-        recordsNotice={boot.notice}
-        startOnSettings={boot.epoch > 0}
-        onRecordsReplaced={(notice) => setBoot((current) => ({ epoch: current.epoch + 1, notice }))}
-      />
-    </UndoProvider>
+    <UpdateProvider>
+      <UndoProvider key={boot.epoch}>
+        <Shell
+          solvedProblems={solvedProblems}
+          recordsNotice={boot.notice}
+          startOnSettings={boot.epoch > 0}
+          onRecordsReplaced={(notice) => setBoot((current) => ({ epoch: current.epoch + 1, notice }))}
+        />
+      </UndoProvider>
+    </UpdateProvider>
   );
 }
 
@@ -494,6 +499,8 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
           {flow.offer && view.kind !== 'import' && (
             <ImportOffer link={flow.offer} onAccept={acceptImportOffer} onDismiss={flow.dismissOffer} />
           )}
+          {/* 新しい版の知らせ（F21）。設定のページは、同じ案内を「更新」の欄に出す */}
+          <UpdateBanner hidden={view.kind === 'settings'} />
           {view.kind === 'settings' && (
             <SettingsPage
               onRecordsModal={setRecordsModal}
