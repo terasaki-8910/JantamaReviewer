@@ -99,6 +99,8 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 
 [dev-dependencies]
 tempfile = "3"
+# 更新の層の検査（tests/update_layer.rs）が、偽の実行環境（MockRuntime）でアプリを組み立てるのに使う。製品のビルドには入らない。
+tauri = { version = "2", features = ["test"] }
 
 # フックの結合試験（tests/hook_integration.rs）が、マウスとキーの入力を注入するのに使う。
 [target.'cfg(windows)'.dev-dependencies]

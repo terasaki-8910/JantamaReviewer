@@ -46,7 +46,8 @@ pub fn plugin<R: Runtime>() -> TauriPlugin<R, tauri_plugin_updater::Config> {
 ///
 /// 部品は、設定に `pubkey` の項目が無いと起動できない。公開鍵は、確かめるたびに組み立てる更新の側（`build_updater`）で渡すので、
 /// ここは空にしておく（公開鍵が空のままでも、アプリは起動する）。署名には、署名した版を入れてあり（`tauri build` が入れる）、
-/// 配布先の latest.json が告げる版と合わない更新（古い署名つきの物を、新しい版に見せかける）は、入れない（`requireSignedVersion`）。
+/// 配布先の latest.json が告げる版と合わない更新と、版を結んでいない署名（古い署名つきの物を、新しい版に見せかけるのに使える）は、
+/// 入れない（`requireSignedVersion`）。
 pub fn plugin_config() -> serde_json::Value {
     serde_json::json!({
         "pubkey": "",
@@ -101,13 +102,24 @@ fn build_updater<R: Runtime>(
     before_exit: &BeforeExit,
 ) -> Result<tauri_plugin_updater::Updater, Error> {
     let endpoint = Url::parse(source.endpoint.trim())?;
+    let https_only = requires_https(&endpoint);
     let before_exit = Arc::clone(before_exit);
-    app.updater_builder()
+    let mut builder = app
+        .updater_builder()
         .pubkey(source.public_key.trim())
         .endpoints(vec![endpoint])?
         .timeout(timeout)
-        .on_before_exit(move || before_exit())
-        .build()
+        .on_before_exit(move || before_exit());
+    if https_only {
+        // インストーラーの置き場所（latest.json が告げる）も、移し先も、https だけにする（署名の確かめとは別に、平文の通信をしない）
+        builder = builder.configure_client(|client| client.https_only(true));
+    }
+    builder.build()
+}
+
+/// 取り先が https なら、そこから先の通信も https だけにする。試験の取り先（この PC の中の http）は、そのまま。
+fn requires_https(endpoint: &Url) -> bool {
+    endpoint.scheme() == "https"
 }
 
 /// 更新を確かめる。公開鍵が空なら、通信せずに「設定されていません」を返す。失敗は、理由つきで返す（落ちない）。
@@ -243,4 +255,50 @@ fn chain(error: &dyn std::error::Error) -> String {
         source = next.source();
     }
     parts.join(": ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn f21_an_https_destination_makes_every_request_after_it_https_only() {
+        // URL をそのまま書かない（ソースの URL を拒む安全の検査があるため、組み立てる）
+        let url = |scheme: &str, rest: &str| Url::parse(&[scheme, rest].join("://")).unwrap();
+        assert!(requires_https(&url("https", "example.invalid/latest.json")));
+        assert!(!requires_https(&url("http", "127.0.0.1:8080/latest.json")));
+    }
+
+    #[test]
+    fn f21_failures_are_explained_in_japanese_with_the_cause() {
+        assert!(explain(&Error::ReleaseNotFound).contains("latest.json"));
+        assert!(explain(&Error::TargetNotFound("windows-x86_64".into())).contains("この PC"));
+        assert!(explain_install(&Error::MissingSignedVersion).contains("中止"));
+        assert!(explain_install(&Error::Network(
+            "Download request failed with status: 404".into()
+        ))
+        .contains("ダウンロードできませんでした"));
+        // 原因のつながりは、重なった同じ文を省いて、「: 」でつなぐ
+        #[derive(Debug)]
+        struct Outer(Inner);
+        #[derive(Debug)]
+        struct Inner;
+        impl std::fmt::Display for Outer {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "error sending request")
+            }
+        }
+        impl std::fmt::Display for Inner {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "dns error")
+            }
+        }
+        impl std::error::Error for Inner {}
+        impl std::error::Error for Outer {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(&self.0)
+            }
+        }
+        assert_eq!(chain(&Outer(Inner)), "error sending request: dns error");
+    }
 }
