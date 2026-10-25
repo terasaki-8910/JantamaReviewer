@@ -1435,7 +1435,10 @@ mod tests {
         drop(service);
         // ワーカーは、窓口がすべて無くなるまで動く。読み取り用の窓口を持ったまま、処理が済むのを待つ。
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        while reader.status().helper.installed != Some(true) && std::time::Instant::now() < deadline
+        // 2 つの入力は順に処理されるので、どちらも済むまで待つ（片方だけ済んだ状態を読んで、落ちないように）
+        while !(reader.status().helper.installed == Some(true)
+            && reader.status().hook == HookSource::InProcess)
+            && std::time::Instant::now() < deadline
         {
             thread::sleep(Duration::from_millis(5));
         }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { UpdateCheck } from '../../api/update';
+import type { UpdateCheck, UpdateOutcome } from '../../api/update';
 import {
   compareVersions,
   displayVersion,
@@ -94,8 +94,7 @@ describe('更新の判断: 知らせを出すか（E-50）', () => {
 });
 
 describe('更新の判断: 確かめた結果の出し方（E-50）', () => {
-  const check = (outcome: Omit<UpdateCheck, 'current_version'>, current = '0.2.0'): UpdateCheck =>
-    ({ current_version: current, ...outcome }) as UpdateCheck;
+  const check = (outcome: UpdateOutcome, current = '0.2.0'): UpdateCheck => ({ current_version: current, ...outcome });
 
   it('確かめの失敗は、設定から確かめたときは「確かめられませんでした」（理由つき）になり、起動のときは何も出さない', () => {
     const failed = check({ kind: 'failed', message: '通信できませんでした' });

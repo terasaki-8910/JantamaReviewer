@@ -16,7 +16,6 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
-const TAURI_DIR = join(ROOT, 'apps', 'desktop', 'src-tauri');
 
 function read(...parts: string[]): string {
   return readFileSync(join(ROOT, ...parts), 'utf8').replace(/\r\n/g, '\n');
