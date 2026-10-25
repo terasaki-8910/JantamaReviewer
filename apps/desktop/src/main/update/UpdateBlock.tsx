@@ -1,4 +1,4 @@
-import { useId, useRef } from 'react';
+import { useRef } from 'react';
 
 import { sameVersion, shouldOfferUpdate } from './updateDecision';
 import { useUpdate, type UpdateValue } from './UpdateProvider';
@@ -12,7 +12,6 @@ import {
   LATER_NOTE,
   NOT_CHECKED_TEXT,
   NOT_CONFIGURED_TEXT,
-  RECORDING_REASON,
   ROW_CURRENT,
   ROW_RESULT,
   SKIPPED_NOTE,
@@ -60,15 +59,13 @@ function resultLine(update: UpdateValue): ResultLine {
  */
 export function UpdateBlock() {
   const update = useUpdate();
-  const reasonId = useId();
   const checkRef = useRef<HTMLButtonElement>(null);
   if (update === null || update.info === null) return null;
-  const { info, view, installing, recording, error } = update;
+  const { info, view, installing, error } = update;
   const line = resultLine(update);
   const available = view.kind === 'available' ? view : null;
   const skipped = available !== null && !shouldOfferUpdate(info.current_version, available.version, update.skipped);
   const later = available !== null && update.later !== null && sameVersion(update.later, available.version);
-  const blocked = available !== null && recording && !installing;
   return (
     <div className="setting" role="group" aria-labelledby="update-lbl">
       <div className="ex-head">
@@ -114,8 +111,7 @@ export function UpdateBlock() {
             <button
               type="button"
               className="btn primary"
-              disabled={installing || recording}
-              aria-describedby={blocked ? reasonId : undefined}
+              disabled={installing}
               onClick={() => void update.install()}
             >
               {INSTALL_LABEL}
@@ -147,11 +143,6 @@ export function UpdateBlock() {
         )}
       </div>
 
-      {blocked && (
-        <p className="quiet" id={reasonId}>
-          {RECORDING_REASON}
-        </p>
-      )}
       {error !== null && (
         <p className="error selectable" role="alert">
           {error}

@@ -2,7 +2,7 @@
 //!
 //! 呼べるのは検討画面だけ（ウィジェットの窓から呼ばれたら断る。ウィジェットの窓には、更新に触れる理由が無い）。
 //! 確かめる（`check_update`）は、起動のとき（1 回）と、設定の「更新を確かめる」を押したときだけ。入れ直す（`install_update`）は、
-//! 「今すぐ入れ直す」を押したときだけで、記録中（ウィジェットが半荘を記録している間）は断る。
+//! 「今すぐ入れ直す」を押したときだけ。
 //! 実際の確かめ・ダウンロード・入れ直しは `updater.rs` に任せ、ここは薄い層にとどめる。
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,13 +11,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use super::{BeforeExit, PendingUpdate, UpdateCheck, UpdateInfo, UpdateSource};
-use crate::app_core::Status;
 use crate::commands::{set_settings_now, SharedCore};
 use crate::settings::Settings;
 use crate::widget_window::{MAIN_LABEL, WIDGET_LABEL};
-
-/// 記録中に、入れ直しを断る理由。画面の帯の文と同じ。
-pub const RECORDING_MESSAGE: &str = "記録中は入れ直せません（対局のあとで）";
 
 /// 検討画面の窓から呼ばれたか。
 fn ensure_main(window: &WebviewWindow) -> Result<(), String> {
@@ -25,14 +21,6 @@ fn ensure_main(window: &WebviewWindow) -> Result<(), String> {
         Ok(())
     } else {
         Err("アプリの更新は、検討画面からだけ扱えます".to_string())
-    }
-}
-
-/// 記録中でなければ通す。記録中（ウィジェットの半荘が開いている間）は、入れ直しを断る。
-fn ensure_not_recording(status: Status) -> Result<(), String> {
-    match status {
-        Status::Recording => Err(RECORDING_MESSAGE.to_string()),
-        Status::Idle | Status::Error => Ok(()),
     }
 }
 
@@ -93,17 +81,14 @@ pub async fn check_update(
 
 /// 見つけた更新を、ダウンロードして、署名を確かめて、入れ直す。「今すぐ入れ直す」を押したときだけ呼ぶ。
 /// Windows では、インストーラーを動かして、ここでアプリが終わる（インストーラーが、入れ終えたあとに開き直す）。
-/// 記録中は断る。書きかけのメモなどは、画面が先に保存してから呼ぶ。
+/// 書きかけのメモなどは、画面が先に保存してから呼ぶ。
 #[tauri::command]
 pub async fn install_update(
     app: AppHandle,
     window: WebviewWindow,
-    core: State<'_, SharedCore>,
     pending: State<'_, PendingUpdate>,
 ) -> Result<(), String> {
     ensure_main(&window)?;
-    let status = core.lock().app_state().status;
-    ensure_not_recording(status)?;
     let ran = Arc::new(AtomicBool::new(false));
     let hook = exit_hook(&app, Arc::clone(&ran));
     let result = super::install(&app, &pending, &hook).await;
@@ -133,17 +118,6 @@ pub async fn skip_update_version(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn f21_installing_is_refused_only_while_recording() {
-        assert_eq!(
-            ensure_not_recording(Status::Recording),
-            Err("記録中は入れ直せません（対局のあとで）".to_string())
-        );
-        assert_eq!(ensure_not_recording(Status::Idle), Ok(()));
-        // 保存先を開けず記録できないとき（ウィジェットは半荘を記録していない）は、入れ直せる
-        assert_eq!(ensure_not_recording(Status::Error), Ok(()));
-    }
 
     #[test]
     fn f21_skipping_a_version_keeps_every_other_setting() {

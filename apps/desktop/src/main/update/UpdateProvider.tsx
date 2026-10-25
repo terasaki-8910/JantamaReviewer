@@ -2,17 +2,17 @@
  * アプリ内の更新（F21、U-51）の状態を、検討画面のシェルの上で 1 つだけ持ち、更新の帯（`UpdateBanner`）と設定の「更新」の欄
  * （`UpdateBlock`）に配る。
  *
- * - 起動のとき、1 回だけ、裏で確かめる（画面を止めない）。更新の仕組みが設定されていないとき・記録中（ウィジェットが半荘を記録している間）は、
- *   確かめない。通信に失敗しても、何も出さない（設定の「更新を確かめる」で確かめたときだけ、失敗を出す）
+ * - 起動のとき、1 回だけ、裏で確かめる（画面を止めない）。更新の仕組みが設定されていないときは確かめない。通信に失敗しても、何も出さない
+ *   （設定の「更新を確かめる」で確かめたときだけ、失敗を出す）
  * - 帯に出すのは、新しい版があり（`shouldOfferUpdate`）、飛ばした版でなく、「あとで」を押していない版。「あとで」は起動し直すまで（メモリの中だけ）、
  *   「この版は飛ばす」は設定（settings.json）に覚える
- * - 「今すぐ入れ直す」を押したときだけ、入れ直しの命令を呼ぶ。記録中は押せない（Rust 側も断る）
+ * - 「今すぐ入れ直す」を押したときだけ、入れ直しの命令を呼ぶ
  *
  * シェルの作り直し（記録の読み込み）で「起動のとき」が繰り返されないよう、シェルの外（`App`）に置く。シェルの外（部品だけの試験）では、無い（null）。
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { api, errorMessage, onSettingsChanged, onStateChanged } from '../../api/tauri';
+import { api, errorMessage, onSettingsChanged } from '../../api/tauri';
 import { updateApi, type UpdateCheck, type UpdateInfo } from '../../api/update';
 import { sameVersion, shouldOfferUpdate, viewOfCheck, type CheckSource, type CheckView } from './updateDecision';
 import { installFailedText, skipFailedText } from './updateText';
@@ -29,8 +29,6 @@ export interface UpdateValue {
   skipped: string | null;
   /** 「あとで」を押した版（起動し直すまで）。 */
   later: string | null;
-  /** 記録中か（ウィジェットが半荘を記録している間）。記録中は、入れ直せない。 */
-  recording: boolean;
   installing: boolean;
   /** 入れ直し・飛ばす設定の保存に失敗した理由。 */
   error: string | null;
@@ -84,7 +82,6 @@ export function useUpdateController(): UpdateValue {
   const [found, setFound] = useState<string | null>(null);
   const [skipped, setSkipped] = useState<string | null>(null);
   const [later, setLater] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 起動のときの確かめを始めたか（開発のときの二重の実行や、再描画で、繰り返さない）
@@ -120,30 +117,7 @@ export function useUpdateController(): UpdateValue {
     };
   }, []);
 
-  // 記録中か。ウィジェットが半荘を記録している間は、入れ直せない
-  useEffect(() => {
-    let alive = true;
-    let dispose: (() => void) | null = null;
-    const apply = (state: unknown) => {
-      if (isRecord(state) && typeof state.status === 'string') setRecording(state.status === 'recording');
-    };
-    void api
-      .getState()
-      .then((state) => {
-        if (alive) apply(state);
-      })
-      .catch(() => undefined);
-    void onStateChanged(apply).then((fn) => {
-      if (alive) dispose = fn;
-      else fn();
-    });
-    return () => {
-      alive = false;
-      dispose?.();
-    };
-  }, []);
-
-  // 起動のとき、1 回だけ、裏で確かめる。設定されていなければ通信しない。記録中は確かめない。失敗は、黙っている
+  // 起動のとき、1 回だけ、裏で確かめる。設定されていなければ通信しない。失敗は、黙っている
   useEffect(() => {
     if (launched.current) return;
     launched.current = true;
@@ -155,8 +129,6 @@ export function useUpdateController(): UpdateValue {
         setView({ kind: 'not_configured' });
         return;
       }
-      const state = await api.getState().catch(() => null);
-      if (isRecord(state) && state.status === 'recording') return;
       const check = await updateApi.checkUpdate().catch(() => null);
       if (isUpdateCheck(check)) applyCheck(check, 'launch');
     })();
@@ -174,7 +146,7 @@ export function useUpdateController(): UpdateValue {
   }, [applyCheck]);
 
   const install = useCallback(async () => {
-    if (installing || recording) return;
+    if (installing) return;
     setInstalling(true);
     setError(null);
     try {
@@ -186,7 +158,7 @@ export function useUpdateController(): UpdateValue {
       setInstalling(false);
       setError(installFailedText(errorMessage(failure)));
     }
-  }, [installing, recording]);
+  }, [installing]);
 
   const postpone = useCallback(() => setLater(found), [found]);
 
@@ -211,8 +183,8 @@ export function useUpdateController(): UpdateValue {
       : null;
 
   return useMemo(
-    () => ({ info, view, found, offer, skipped, later, recording, installing, error, checkNow, install, postpone, skip }),
-    [info, view, found, offer, skipped, later, recording, installing, error, checkNow, install, postpone, skip],
+    () => ({ info, view, found, offer, skipped, later, installing, error, checkNow, install, postpone, skip }),
+    [info, view, found, offer, skipped, later, installing, error, checkNow, install, postpone, skip],
   );
 }
 
