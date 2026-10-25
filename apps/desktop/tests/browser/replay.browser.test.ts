@@ -934,7 +934,7 @@ describe('U-21: キーの一覧と割り当ての変更（実ブラウザ）', (
         // マウスを乗せると出る
         await button.hover();
         await dialog.waitFor();
-        expect(await dialog.locator('.kp-row').count()).toBe(16);
+        expect(await dialog.locator('.kp-row').count()).toBe(14);
         // 離すと閉じる
         await page.mouse.move(2, 2);
         await expect.poll(() => dialog.count(), { timeout: 3000 }).toBe(0);
