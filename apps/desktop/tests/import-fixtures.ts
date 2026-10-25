@@ -85,6 +85,7 @@ export function fx4Session(
     maka: { kyokus: {} },
     memos: { marks: {}, extras: [] },
     resolved: { decisions: {} },
+    naga: null,
     ...overrides,
   };
 }
@@ -168,6 +169,7 @@ export function fx5Session(id: string = FX5_ID, startedMs: number = FX5_STARTED,
     maka: { kyokus: {} },
     memos: { marks: {}, extras: [] },
     resolved: { decisions: {} },
+    naga: null,
     ...overrides,
   };
 }

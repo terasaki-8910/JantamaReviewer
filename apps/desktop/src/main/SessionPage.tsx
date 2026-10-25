@@ -12,6 +12,7 @@ import { ExtraMemos } from './ExtraMemos';
 import { buildHandTable, type HandRow } from './handRows';
 import { HandTable, MARK_CHIPS_HINT, MARK_CHIPS_HINT_ID } from './HandTable';
 import { makaCommand, selfRatingCommand } from './hanchanEdits';
+import { Icon } from './Icon';
 import { initialFitState, type MakaFitState } from './makaFit';
 import { useSessionReport } from './hanchanReport';
 import type { ViewerItem, ViewerRequest } from './Lightbox';
@@ -21,6 +22,8 @@ import { MarkCard } from './MarkCard';
 import { MarkMemoFields } from './MarkMemoFields';
 import { MyShantenTrack } from './MyShantenTrack';
 import { MEMO_INTRO, memoOfMark } from './memos';
+import { NAGA_OPEN_LABEL } from './naga';
+import { NagaSection } from './NagaSection';
 import { ReplayIcon } from './replay/ReplayIcons';
 import { IDLE_REREADS, type Rereads } from './rereadStore';
 import type { SummaryState } from './sessionSummaries';
@@ -112,6 +115,8 @@ export function SessionPage({
   const report = reportState.status === 'ready' ? reportState.report : null;
   // 結果を取り込んで、読めている半荘は、通して見られる
   const replayable = onOpenReplay !== undefined && session.report_path !== null && ready !== null;
+  // NAGA の結果の URL を保存してあれば、見出しから開ける（F22 段 2。「NAGA の結果」の欄は、結果を読めている半荘だけ）
+  const nagaUrl = ready !== null ? (session.naga?.url ?? null) : null;
   const when = formatSessionTitle(session.started_ms);
   // この半荘に取り込む（U-14）: 取り込み前なら、主な操作を見出しに出す。始められなかった理由は、ページの上に出す。
   const [importNotice, setImportNotice] = useState<string | null>(null);
@@ -252,13 +257,19 @@ export function SessionPage({
           {/* AI との比べ（F18、U-48）: 結果を取り込んで読めている半荘だけ（段階の印・Rating と同じとき）。迷いだけの設定でも出す */}
           {ready !== null && aiMetrics !== null && aiMetrics.decisions > 0 && <AiMetricsLine metrics={aiMetrics} />}
         </div>
-        {(replayable || (ready !== null && ready.grade !== null)) && (
+        {(replayable || nagaUrl !== null || (ready !== null && ready.grade !== null)) && (
           <div className="head-actions">
             {replayable && (
               <button type="button" className="btn primary" onClick={() => onOpenReplay?.(session.id)}>
                 <ReplayIcon name="play" />
                 この半荘を通して見る
               </button>
+            )}
+            {nagaUrl !== null && (
+              <a className="btn" href={nagaUrl} target="_blank" rel="noopener noreferrer">
+                <Icon name="external" />
+                {NAGA_OPEN_LABEL}
+              </a>
             )}
             {ready !== null && ready.grade !== null && (
               <div className="head-score">
@@ -379,6 +390,8 @@ export function SessionPage({
               )}
             </section>
           )}
+          {/* NAGA の結果の URL（F22 段 2）: 結果を取り込んで読めている半荘だけ。ページの終わりに置く */}
+          {ready !== null && <NagaSection session={session} reload={onChanged} />}
         </div>
       </div>
     </>

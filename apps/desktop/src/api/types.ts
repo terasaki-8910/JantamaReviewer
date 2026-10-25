@@ -227,6 +227,15 @@ export interface ResolvedDecisions {
 }
 
 /**
+ * NAGA の結果のページの URL（`naga.json`。F22 段 2）。`url` は NAGA のサイトの https の URL（Rust 側が確かめて、整えて保存する）、
+ * `saved_ms` は保存した時刻（ミリ秒）。半荘ごとに 1 つ。消すとファイルも消え、半荘の `naga` が null になる。
+ */
+export interface NagaResult {
+  url: string;
+  saved_ms: number;
+}
+
+/**
  * 半荘 1 つ分。取り消された記録は marks / ratings に含まれない。
  * 結果だけの半荘（記録の無いまま取り込んだもの）は、marks・ratings が空で、`report_path` がある。
  */
@@ -252,6 +261,8 @@ export interface SessionRecord {
   memos: Memos;
   /** 解決した局面（出題・解き直し・通して見る画面で「解決」を入れたもの。F16）。 */
   resolved: ResolvedDecisions;
+  /** NAGA の結果のページの URL（半荘のページで貼ったもの。無ければ null。F22 段 2）。 */
+  naga: NagaResult | null;
 }
 
 /** 文字認識の結果の写しを、半荘ごとに返したもの（`ocr_sessions` の返り値）。 */

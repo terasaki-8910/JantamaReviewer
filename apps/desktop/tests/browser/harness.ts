@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { createLogger, createServer, type ViteDevServer } from 'vite';
 
+import { NAGA_HOST, NAGA_URL_INVALID } from '../../src/main/naga';
+
 const APP_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const requireFromHere = createRequire(import.meta.url);
 
@@ -280,6 +282,8 @@ export function tauriMockScript(scenario: Scenario): string {
   var failDelete = scenario.failDelete || null;
   var failRestore = scenario.failRestore || null;
   var records = scenario.records || {};
+  var nagaHost = ${JSON.stringify(NAGA_HOST)};
+  var nagaInvalid = ${JSON.stringify(NAGA_URL_INVALID)};
   // 同期（F15）の偽物。Rust 側と同じ決まり: URL を貼ると同期先のホスト名が付き、トークンを貼ると保管庫に入った扱いになる
   // （トークンの文字は、状態に出ない）。「今すぐ同期」は、同期中の知らせのあと、待機の知らせを出す
   var syncScenario = scenario.sync || {};
@@ -363,6 +367,15 @@ export function tauriMockScript(scenario: Scenario): string {
       case 'set_resolved': mutate(args.sessionId, function (s) {
         if (!s.resolved) s.resolved = { decisions: {} };
         if (args.resolved) s.resolved.decisions[args.decisionKey] = Date.now(); else delete s.resolved.decisions[args.decisionKey];
+      }); return null;
+      case 'set_naga_url': mutate(args.sessionId, function (s) {
+        // NAGA の結果の URL（F22 段 2）。Rust 側と同じく、空なら消し、NAGA のサイトの https の URL だけを、整えて保存する
+        var text = String(args.url == null ? '' : args.url).trim();
+        if (text === '') { s.naga = null; return; }
+        var parsed = null;
+        try { parsed = new URL(text); } catch (e) { parsed = null; }
+        if (!parsed || parsed.protocol !== 'https:' || parsed.hostname !== nagaHost || parsed.username || parsed.password || parsed.port) throw nagaInvalid;
+        s.naga = { url: parsed.href, saved_ms: Date.now() };
       }); return null;
       case 'set_maka_hanchan': mutate(args.sessionId, function (s) { s.maka.hanchan = args.grade; }); return null;
       case 'clear_maka_hanchan': mutate(args.sessionId, function (s) { delete s.maka.hanchan; }); return null;

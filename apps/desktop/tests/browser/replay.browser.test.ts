@@ -11,6 +11,7 @@
  * - U-50: フェルトの卓・黄色い牌の背・王牌の列。中央の点数を保ち、名札は置かない
  * - U-41・U-42・U-49: 解決した場面（薄い印・一覧の「解決」）と、2 つの段（悪手・迷い。「細かいミスだけ」つき）の操作の段が、各幅で 1 行に収まる。
  *   拮抗の段は無い（F19）
+ * - U-52: 操作の段の 1 段目の「NAGA の結果を開く」リンク（URL を保存してあるときだけ）が、各幅で収まり、操作の段を高くしない
  * jsdom の試験（src/main/replay/Replay.test.tsx）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
 import type { Browser, BrowserContext, Page } from 'playwright-core';
@@ -76,13 +77,14 @@ const USER_LINKS: Links = {
 const SCENE_KEYS = ['k0h0e4', 'k1h0e12', 'k1h1e6', 'k1h1e7', 'k1h1e9', 'k1h1e10', 'k2h1e2', 'k2h1e6', 'k2h1e14', 'k2h1e16'];
 
 /** FX-4（読み取りの写しつき）と、f9da（河の段が多い長い局がある）。`resolved` は、最初から解決している FX-4 の判断の鍵。 */
-function sessions(resolved: readonly string[] = []) {
+function sessions(resolved: readonly string[] = [], naga?: string) {
   return [
     fx4Session(FX4_ID, local(2026, 10, 9, 19, 9), {
       report_path: `C:\\data\\games\\${FX4_ID}\\report.json`,
       ocr: fx4Ocr(),
       links: USER_LINKS,
       resolved: { decisions: Object.fromEntries(resolved.map((key) => [key, 1_760_000_000_000])) },
+      ...(naga === undefined ? {} : { naga: { url: naga, saved_ms: 1_760_000_000_000 } }),
     }),
     seedSession(local(2026, 10, 9, 17, 12), { id: FX1A_ID, report: 'fx1a' }).session,
   ];
@@ -96,6 +98,8 @@ interface ScenarioOptions {
   doubtOnly?: boolean;
   /** 最初から解決している FX-4 の判断の鍵（F16）。 */
   resolved?: readonly string[];
+  /** FX-4 に保存してある NAGA の結果の URL（F22 段 2）。 */
+  naga?: string;
 }
 
 function scenario(options: ScenarioOptions = {}): Scenario {
@@ -110,7 +114,7 @@ function scenario(options: ScenarioOptions = {}): Scenario {
       doubt_only: options.doubtOnly === true,
     },
     inputStatus: null,
-    sessions: sessions(options.resolved),
+    sessions: sessions(options.resolved, options.naga),
     reports: { [FX4_ID]: REPORT_TEXTS.fx4, [FX1A_ID]: REPORT_TEXTS.fx1a },
     thumb: TINY_PNG,
     answers: [],
@@ -2065,6 +2069,179 @@ describe('U-41: 答えの欄の上の段の「解決」（実ブラウザ）', (
         await page.emulateMedia({ colorScheme: scheme });
         expect(seriousViolations(await runAxe(page)), scheme).toEqual([]);
       }
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('F22・U-52: 通して見る画面の操作の段の「NAGA の結果を開く」（実ブラウザ）', () => {
+  const REPORT_URL = 'https://naga.dmv.nico/htmls/report_viewer.html?report_id=abc';
+
+  /** 操作の段の 1 段目の、リンクとキーの一覧のアイコンの位置と、操作の段・文書の高さ。 */
+  const measureBar = (page: Page) =>
+    page.evaluate(() => {
+      const box = (el: Element | null) => {
+        if (el === null) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+      };
+      const link = document.querySelector('.naga-btn');
+      return {
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth,
+        documentHeight: document.documentElement.scrollHeight,
+        windowHeight: window.innerHeight,
+        bar: box(document.querySelector('.pbar')),
+        row: box(document.querySelector('.pb-row.top')),
+        link: box(link),
+        key: box(document.querySelector('.key-btn')),
+        steps: box(document.querySelector('.pb-steps')),
+        kyoku: box(document.querySelector('.kyoku-btn')),
+        jumps: box(document.querySelector('.pb-jumps')),
+        strip: box(document.querySelector('.pbar .tl')),
+        rpStyle: document.querySelector('.rp')?.getAttribute('style') ?? '',
+        label: link?.getAttribute('aria-label') ?? null,
+        title: link?.getAttribute('title') ?? null,
+        href: link?.getAttribute('href') ?? null,
+        target: link?.getAttribute('target') ?? null,
+        rel: link?.getAttribute('rel') ?? null,
+        tag: link?.tagName ?? null,
+      };
+    });
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 768, 1280] as const) {
+      it(`幅 ${width}px ${scheme}: URL を保存してあると、1 段目のキーの一覧のアイコンのすぐ左に、同じ大きさのリンク。窓に収まり、横スクロールが無く、axe の重大な違反が 0 件。Tab で届く。外へ通信しない`, { timeout: 90_000 }, async () => {
+        const { context, page, problems, external } = await open({ width, scheme, scenario: scenario({ naga: REPORT_URL }) });
+        try {
+          await openReplay(page);
+          const m = await measureBar(page);
+          expect(m).toMatchObject({ tag: 'A', label: 'NAGA の結果を開く', title: 'NAGA の結果を開く', href: REPORT_URL, target: '_blank' });
+          expect(m.rel).toMatch(/noopener/);
+          expect(m.rel).toMatch(/noreferrer/);
+          const link = m.link!;
+          const key = m.key!;
+          const row = m.row!;
+          // キーの一覧のアイコンと同じ大きさ・同じ高さで、そのすぐ左（隙間は小さい）。1 段目の中に収まる
+          expect(link.width).toBe(key.width);
+          expect(link.height).toBe(key.height);
+          expect(Math.abs(link.top - key.top)).toBeLessThanOrEqual(1);
+          expect(link.right).toBeLessThanOrEqual(key.left);
+          expect(key.left - link.right).toBeLessThanOrEqual(12);
+          expect(link.left).toBeGreaterThanOrEqual(row.left - 0.5);
+          expect(key.right).toBeLessThanOrEqual(row.right + 0.5);
+          expect(boxesOverlap(link, key)).toBe(false);
+          // 進める・戻るの段や局の選択と重ならない
+          expect(boxesOverlap(link, m.steps!)).toBe(false);
+          expect(boxesOverlap(link, m.kyoku!)).toBe(false);
+          expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+          expect(m.body).toBeLessThanOrEqual(m.client);
+
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          const reach = await unreachableByTab(page);
+          expect(reach.missed).toEqual([]);
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('URL が無いときは、リンクは出ない（操作の段は、これまでと同じ）', { timeout: 60_000 }, async () => {
+    const { context, page } = await open({ width: 1280, height: 800 });
+    try {
+      await openReplay(page);
+      expect(await page.locator('.naga-btn').count()).toBe(0);
+      expect(await page.getByRole('link', { name: 'NAGA の結果を開く' }).count()).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('リンクを足しても、操作の段は高くならない: 幅 390〜1500 のどの幅でも、リンクが有るときの操作の段は、無いときより高くない。標準の窓（390・768・1120・1280・1366・1440・1920）では、操作の段・1 段目・位置の帯・文書の高さ・卓の大きさの指定が同じで、1280×800 と 1920×1080 では文書が窓の高さに収まる（U-39）', { timeout: 240_000 }, async () => {
+    const without = await open({ width: 1280, height: 800 });
+    const withUrl = await open({ width: 1280, height: 800, scenario: scenario({ naga: REPORT_URL }) });
+    try {
+      await openReplay(without.page);
+      await openReplay(withUrl.page);
+      // 同じ高さを求める標準の窓
+      const standard: Array<[number, number]> = [
+        [390, 844],
+        [768, 1024],
+        [1120, 800],
+        [1280, 800],
+        [1366, 768],
+        [1440, 900],
+        [1920, 1080],
+      ];
+      // それ以外は、20px ごとに、「高くならない」ことだけを確かめる
+      const sweep: Array<[number, number]> = [];
+      for (let width = 400; width <= 1500; width += 20) sweep.push([width, 800]);
+      const isStandard = (width: number, height: number) => standard.some(([w, h]) => w === width && h === height);
+      // 窓の大きさを替えたあと、測った値が 2 回続けて同じになるまで待つ（卓の大きさの指定は、大きさの変化を見る仕組みで、少し遅れて決まる）
+      const settled = async (page: Page) => {
+        let last = JSON.stringify(await measureBar(page));
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          await page.waitForTimeout(80);
+          const next = JSON.stringify(await measureBar(page));
+          if (next === last) break;
+          last = next;
+        }
+        return JSON.parse(last) as Awaited<ReturnType<typeof measureBar>>;
+      };
+      for (const [width, height] of [...standard, ...sweep]) {
+        for (const { page } of [without, withUrl]) await page.setViewportSize({ width, height });
+        const a = await settled(without.page);
+        const b = await settled(withUrl.page);
+        const at = `${width}×${height}`;
+        expect(a.link, `${at}: 無いとき`).toBeNull();
+        expect(b.link, `${at}: 有るとき`).not.toBeNull();
+        expect(b.scroll, `${at}: 横スクロール`).toBeLessThanOrEqual(b.client);
+        expect(b.bar!.height, `${at}: 操作の段が高くならない`).toBeLessThanOrEqual(a.bar!.height);
+        if (!isStandard(width, height)) continue;
+        expect(b.bar!.height, `${at}: 操作の段の高さ`).toBe(a.bar!.height);
+        expect(b.row!.height, `${at}: 1 段目の高さ`).toBe(a.row!.height);
+        expect(b.strip!.top, `${at}: 位置の帯の位置`).toBe(a.strip!.top);
+        expect(b.jumps!.top, `${at}: 悪手・迷いの段の位置`).toBe(a.jumps!.top);
+        expect(b.steps!.top, `${at}: 進める・戻るの位置`).toBe(a.steps!.top);
+        expect(b.rpStyle, `${at}: 卓の大きさの指定`).toBe(a.rpStyle);
+        expect(b.documentHeight, `${at}: 文書の高さ`).toBe(a.documentHeight);
+        if ((width === 1280 && height === 800) || (width === 1920 && height === 1080)) {
+          expect(b.documentHeight, `${at}: 文書が窓の高さに収まる`).toBeLessThanOrEqual(b.windowHeight);
+        }
+      }
+    } finally {
+      await without.context.close();
+      await withUrl.context.close();
+    }
+  });
+
+  it('半荘のページで貼って保存すると、通して見る画面にリンクが出て、消すと消える（実際の操作）', { timeout: 90_000 }, async () => {
+    const { context, page, problems, external } = await open({ width: 1280, height: 800 });
+    try {
+      await page.getByRole('textbox', { name: 'NAGA の結果の URL' }).fill(REPORT_URL);
+      await page.getByRole('button', { name: '保存' }).click();
+      await page.getByRole('link', { name: REPORT_URL }).waitFor();
+      await openReplay(page);
+      const link = page.getByRole('link', { name: 'NAGA の結果を開く' });
+      await link.waitFor();
+      expect(await link.getAttribute('href')).toBe(REPORT_URL);
+      // 通して見る画面でも、Ctrl+Z / Ctrl+Y はアプリの取り消し（消すのを戻す前に、いったん戻って消す）
+      await page.keyboard.press('Alt+ArrowLeft');
+      await page.getByRole('button', { name: '消す' }).click();
+      await page.getByRole('textbox', { name: 'NAGA の結果の URL' }).waitFor();
+      await openReplay(page);
+      expect(await page.getByRole('link', { name: 'NAGA の結果を開く' }).count()).toBe(0);
+      await page.keyboard.press('Control+z');
+      await link.waitFor();
+      expect(await link.getAttribute('href')).toBe(REPORT_URL);
+      expect(problems).toEqual([]);
+      expect(external).toEqual([]);
     } finally {
       await context.close();
     }

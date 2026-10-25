@@ -16,11 +16,12 @@ use super::remote::Remote;
 use super::rows::{make_key, Kind};
 use super::testing::{Dev, MemRow, MemServer};
 use crate::capture::{CaptureError, CaptureTarget, Screenshot};
+use crate::naga::sample_url;
 use crate::settings::{Orientation, Trigger};
 use crate::store::{
-    ExtraMemo, Links, MemoPosition, MemoText, Memos, OcrCache, OcrEntry, Rating, SelfRating,
-    EVENTS_FILE, LINKS_FILE, MAKA_FILE, MEMOS_FILE, OCR_FILE, REPORT_FILE, RESOLVED_FILE,
-    SELF_RATINGS_FILE, SESSION_GAP_MS,
+    ExtraMemo, Links, MemoPosition, MemoText, Memos, NagaResult, OcrCache, OcrEntry, Rating,
+    SelfRating, EVENTS_FILE, LINKS_FILE, MAKA_FILE, MEMOS_FILE, NAGA_FILE, OCR_FILE, REPORT_FILE,
+    RESOLVED_FILE, SELF_RATINGS_FILE, SESSION_GAP_MS,
 };
 use crate::study::{AnswerMode, NewAnswer, ProblemRef, StudyDb, WeekRecord, WeekStats};
 
@@ -106,6 +107,10 @@ fn populate(dev: &Dev) -> (String, String) {
     store.set_resolved(&a, "k0h0e3", true, T0 + 4_000).unwrap();
     store.set_resolved(&a, "k1h0e4", true, T0 + 4_100).unwrap();
     store.set_resolved(&b, "k0h0e2", true, T0 + 4_200).unwrap();
+    // NAGA の結果の URL は、半荘 a だけ（半荘 b は無い）
+    store
+        .set_naga_url(&a, Some(&sample_url("a1")), T0 + 4_300)
+        .unwrap();
     store.set_memo(&a, 1, "3m・6p", "東を残したい").unwrap();
     let pos = MemoPosition {
         kyoku: 2,
@@ -213,6 +218,7 @@ fn logical(dev: &Dev) -> Logical {
                 maka: session.maka,
                 memos: session.memos,
                 resolved: session.resolved,
+                naga: session.naga,
             },
         );
     }
@@ -331,6 +337,13 @@ fn d4_records_round_trip_through_the_sync_rows_into_another_local_db_identically
         b.store().load_resolved(&sb).unwrap().decisions["k0h0e2"],
         T0 + 4_200
     );
+    // NAGA の結果の URL（F22 段 2）が、保存した時刻も同じまま届く。URL の無い半荘には、ファイルを作らない
+    let naga = b.store().load_naga(&sa).unwrap().unwrap();
+    assert_eq!(naga.url, sample_url("a1"));
+    assert_eq!(naga.saved_ms, T0 + 4_300);
+    assert_eq!(b.store().load_naga(&sb).unwrap(), None);
+    assert!(session_dir(&b, &sa).join(NAGA_FILE).is_file());
+    assert!(!session_dir(&b, &sb).join(NAGA_FILE).exists());
     // 同期しない: スクショ・ウィジェットの記録・文字認識の写し
     let folder = session_dir(&b, &sa);
     assert!(!folder.join(EVENTS_FILE).exists());
@@ -409,6 +422,7 @@ fn d4_a_record_never_changes_when_it_goes_to_the_sync_db_and_back() {
     assert_eq!(xa.self_ratings, xb.self_ratings);
     assert_eq!(xa.maka, xb.maka);
     assert_eq!(xa.resolved, xb.resolved);
+    assert_eq!(xa.naga, xb.naga);
     assert_eq!(xa.memos.marks, xb.memos.marks);
     let strip = |memos: &Memos| -> Vec<(Option<String>, Option<MemoPosition>, String, String)> {
         memos
@@ -585,6 +599,130 @@ fn d6_a_decision_unresolved_on_one_device_stays_unresolved_when_the_other_syncs_
             .decisions
             .contains_key("k1h0e4"));
     }
+}
+
+#[test]
+fn f22_saving_replacing_and_removing_a_naga_url_on_one_device_reaches_the_other() {
+    let (server, mut a, mut b, sa, sb) = pair();
+    let file = |dev: &Dev, id: &str| session_dir(dev, id).join(NAGA_FILE);
+    assert!(file(&b, &sa).is_file());
+    assert!(!file(&b, &sb).exists());
+    // A が URL を替える: B にも、新しい URL と、保存した時刻が届く
+    a.store()
+        .set_naga_url(&sa, Some(&sample_url("a2")), T0 + 50_000)
+        .unwrap();
+    a.reconcile(2_000_000).unwrap();
+    settle(&mut a, &mut b, 3_000_000);
+    for dev in [&a, &b] {
+        let naga = dev.store().load_naga(&sa).unwrap().unwrap();
+        assert_eq!(naga.url, sample_url("a2"));
+        assert_eq!(naga.saved_ms, T0 + 50_000);
+    }
+    // 行は 1 半荘に 1 つ
+    let key = make_key(Kind::Naga, &[&sa]);
+    assert!(server.value(&key).unwrap().contains(&sample_url("a2")));
+    // B が、URL の無かった半荘 b に URL を貼る: A にも届く
+    b.store()
+        .set_naga_url(&sb, Some(&sample_url("b1")), T0 + 60_000)
+        .unwrap();
+    b.reconcile(4_000_000).unwrap();
+    settle(&mut a, &mut b, 5_000_000);
+    for dev in [&a, &b] {
+        let naga = dev.store().load_naga(&sb).unwrap().unwrap();
+        assert_eq!(naga.url, sample_url("b1"));
+        assert_eq!(naga.saved_ms, T0 + 60_000);
+    }
+    // A が半荘 a の URL を消す: どちらの端末でも、ファイルが消える。半荘 b の URL は残る
+    a.store().set_naga_url(&sa, None, T0 + 70_000).unwrap();
+    a.reconcile(6_000_000).unwrap();
+    settle(&mut a, &mut b, 7_000_000);
+    assert!(!file(&a, &sa).exists() && !file(&b, &sa).exists());
+    assert_eq!(b.store().load_naga(&sa).unwrap(), None);
+    assert!(file(&b, &sb).is_file());
+    assert_eq!(logical(&a), logical(&b));
+}
+
+#[test]
+fn f22_a_naga_url_removed_on_one_device_stays_removed_when_the_other_syncs_later() {
+    let (_server, mut a, mut b, sa, _sb) = pair();
+    // A が消したあと、B は何もしないまま同期する: 消したままになり、B が入れ直したりしない
+    a.store()
+        .set_naga_url(&sa, Some("  "), T0 + 80_000)
+        .unwrap();
+    a.reconcile(2_000_000).unwrap();
+    b.cycle(3_000_000).unwrap();
+    settle(&mut a, &mut b, 4_000_000);
+    for dev in [&a, &b] {
+        assert_eq!(dev.store().load_naga(&sa).unwrap(), None);
+        assert!(!session_dir(dev, &sa).join(NAGA_FILE).exists());
+    }
+}
+
+#[test]
+fn f22_the_later_naga_url_wins_when_both_devices_changed_it() {
+    for b_pushes_first in [false, true] {
+        let (_server, mut a, mut b, sa, _sb) = pair();
+        a.store()
+            .set_naga_url(&sa, Some(&sample_url("from-a")), T0 + 90_000)
+            .unwrap();
+        a.reconcile(2_000_000).unwrap();
+        b.store()
+            .set_naga_url(&sa, Some(&sample_url("from-b")), T0 + 91_000)
+            .unwrap();
+        b.reconcile(2_500_000).unwrap();
+        if b_pushes_first {
+            b.cycle(3_000_000).unwrap();
+            a.cycle(3_010_000).unwrap();
+        } else {
+            a.cycle(3_000_000).unwrap();
+            b.cycle(3_010_000).unwrap();
+        }
+        settle(&mut a, &mut b, 4_000_000);
+        for dev in [&a, &b] {
+            let naga = dev.store().load_naga(&sa).unwrap().unwrap();
+            assert_eq!(
+                naga.url,
+                sample_url("from-b"),
+                "b_pushes_first={b_pushes_first}"
+            );
+            assert_eq!(naga.saved_ms, T0 + 91_000);
+        }
+        assert_eq!(logical(&a), logical(&b));
+    }
+}
+
+#[test]
+fn f22_a_naga_file_that_is_not_a_naga_url_is_never_taken_for_a_deletion_or_sent() {
+    let (server, mut a, mut b, sa, _sb) = pair();
+    // A の naga.json が、NAGA のページでない URL に書き換えられた（手で直した、など）
+    let other = NagaResult {
+        url: format!("{}://other.example/", "https"),
+        saved_ms: T0,
+    };
+    fs::write(
+        session_dir(&a, &sa).join(NAGA_FILE),
+        serde_json::to_string_pretty(&other).unwrap(),
+    )
+    .unwrap();
+    let report = a.cycle(2_000_000).unwrap();
+    assert_eq!(report.remote_tombstones, 0, "{report:?}");
+    let sent = server.value(&make_key(Kind::Naga, &[&sa])).unwrap();
+    assert!(
+        sent.contains(&sample_url("a1")),
+        "同期用の DB の URL は、そのまま: {sent}"
+    );
+    assert!(
+        report.warnings.iter().any(|w| w.contains("読めない")),
+        "{report:?}"
+    );
+    // 画面の一覧には、NAGA のページでない URL を出さない
+    assert_eq!(a.store().load_naga(&sa).unwrap(), None);
+    // B には、元の URL が残る
+    b.cycle(2_100_000).unwrap();
+    assert_eq!(
+        b.store().load_naga(&sa).unwrap().unwrap().url,
+        sample_url("a1")
+    );
 }
 
 #[test]
