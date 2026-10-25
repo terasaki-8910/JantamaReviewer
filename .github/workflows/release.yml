@@ -78,6 +78,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
+          # pnpm の lock ファイルはリポジトリの直下にあり、apps/desktop には無いので、tauri-action が自分で選ぶと npm で動かしてしまう。pnpm を指定する
+          tauriScript: pnpm tauri
           # 更新の署名のファイルを作る設定と、補助プログラムを入れる設定は、組み立ての Actions だけで足す（手元の組み立ては、鍵なしで通る）
           args: --config src-tauri/tauri.release.conf.json
           tagName: ${{ github.ref_name }}
