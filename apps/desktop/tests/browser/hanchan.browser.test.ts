@@ -59,7 +59,13 @@ const settings = {
  * `ocr` と `marks` で、読み取りの写しと、ユーザーが選んだ結びつけ（迷いの番号 → 判断の鍵）を替えられる。
  */
 function importedSession(
-  extra: { maka?: { kyokus: Record<string, string>; hanchan?: string }; ocr?: OcrCache; marks?: Record<string, string> } = {},
+  extra: {
+    maka?: { kyokus: Record<string, string>; hanchan?: string };
+    ocr?: OcrCache;
+    marks?: Record<string, string>;
+    /** 保存してある NAGA の結果の URL（F22 段 2）。 */
+    naga?: string;
+  } = {},
 ) {
   const base = fx4Session(ID, local(2026, 10, 9, 19, 9), {
     report_path: `C:\\data\\games\\${ID}\\report.json`,
@@ -71,6 +77,7 @@ function importedSession(
     },
     self_ratings: { kyokus: {} },
     maka: extra.maka ?? { kyokus: {} },
+    ...(extra.naga === undefined ? {} : { naga: { url: extra.naga, saved_ms: 1_760_000_000_000 } }),
   });
   const ratings = ['fair', 'bad', 'fair', 'bad', 'bad'] as const;
   return { ...base, ratings: base.ratings.map((r, i) => ({ ...r, rating: ratings[i] ?? r.rating })) };
@@ -1743,6 +1750,238 @@ describe('U-48: AI 一致率・類似度・悪手率の1行（実ブラウザ。
       expect((await measureHead(page)).text).toBe(LINE);
       expect(await page.getByRole('button', { name: 'AI 一致率・類似度・悪手率の説明' }).count()).toBe(1);
       expect(problems).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('F22・U-52: 半荘のページの「NAGA の結果」の欄（実ブラウザ）', () => {
+  const REPORT_URL = 'https://naga.dmv.nico/htmls/report_viewer.html?report_id=abc';
+  /** 窓の幅より長い URL（折り返さず、末尾を省いて 1 行に収める）。 */
+  const LONG_URL = `https://naga.dmv.nico/htmls/report_viewer.html?report_id=${'0123456789abcdef'.repeat(8)}`;
+  const HELP =
+    'NAGA（ニコニコの麻雀 AI）で、この半荘の牌譜を解析した結果のページの URL を貼っておくと、ここと半荘を通して見る画面から開けます。申し込みと支払いは、NAGA のページで行います。';
+
+  const savedScenario = (url: string) => scenario({ sessions: [importedSession({ naga: url }), recordedSession()] });
+  const section = (page: Page) => page.getByRole('region', { name: 'NAGA の結果' });
+  const urlInput = (page: Page) => page.getByRole('textbox', { name: 'NAGA の結果の URL' });
+
+  /** 欄の箱と中身の位置・形（見える位置へ動かしたあと）。 */
+  const measure = (page: Page) =>
+    page.evaluate(() => {
+      const box = (el: Element | null): BoxRect | null => {
+        if (el === null) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      };
+      const root = document.querySelector('section.naga') as HTMLElement;
+      const link = root.querySelector<HTMLElement>('.naga-url');
+      const input = root.querySelector<HTMLElement>('input');
+      return {
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth,
+        root: box(root),
+        form: box(root.querySelector('.naga-form')),
+        saved: box(root.querySelector('.naga-saved')),
+        input: box(input),
+        button: box(root.querySelector('.naga-form button')),
+        link: box(link),
+        acts: box(root.querySelector('.naga-acts')),
+        open: box(root.querySelector('.naga-acts a')),
+        remove: box(root.querySelector('.naga-acts button')),
+        alert: box(root.querySelector('[role="alert"]')),
+        linkStyle:
+          link === null
+            ? null
+            : {
+                overflow: getComputedStyle(link).overflowX,
+                textOverflow: getComputedStyle(link).textOverflow,
+                whiteSpace: getComputedStyle(link).whiteSpace,
+                truncated: link.scrollWidth > link.clientWidth,
+              },
+      };
+    });
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 768, 1280] as const) {
+      it(`幅 ${width}px ${scheme}: URL が無いとき、入力欄と「保存」が 1 行に並び、窓に収まる。横スクロールが無く、axe の重大な違反が 0 件。Tab で入力欄・保存に届く`, async () => {
+        const { context, page, problems, external } = await open({ width, scheme });
+        try {
+          await section(page).scrollIntoViewIfNeeded();
+          await page.waitForTimeout(100);
+          const m = await measure(page);
+          const input = m.input as BoxRect;
+          const button = m.button as BoxRect;
+          const form = m.form as BoxRect;
+          // 入力欄と保存は、同じ高さの 1 行。欄は窓の中に収まる
+          expect(Math.abs(input.top - button.top)).toBeLessThanOrEqual(1);
+          expect(Math.abs(input.bottom - button.bottom)).toBeLessThanOrEqual(1);
+          expect(input.right).toBeLessThanOrEqual(button.left);
+          expect(form.right).toBeLessThanOrEqual(m.client);
+          expect(form.left).toBeGreaterThanOrEqual(0);
+          expect(input.right - input.left).toBeGreaterThan(width === 390 ? 180 : 300);
+          expect(m.saved).toBeNull();
+          expect(m.alert).toBeNull();
+          expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+          expect(m.body).toBeLessThanOrEqual(m.client);
+          expect(await urlInput(page).getAttribute('placeholder')).toBe('https://naga.dmv.nico/…');
+          expect(await urlInput(page).getAttribute('type')).toBe('url');
+
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          const reach = await unreachableByTab(page);
+          expect(reach.missed).toEqual([]);
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+
+      it(`幅 ${width}px ${scheme}: 長い URL を保存してあるとき、リンクは 1 行に収まり末尾を省く（…）。「開く」「消す」と見出しの「NAGA の結果を開く」は窓の中に見え、重ならない。横スクロールが無く、axe の重大な違反が 0 件`, async () => {
+        const { context, page, problems, external } = await open({ width, scheme, scenario: savedScenario(LONG_URL) });
+        try {
+          await section(page).scrollIntoViewIfNeeded();
+          await page.waitForTimeout(100);
+          const m = await measure(page);
+          const link = m.link as BoxRect;
+          const saved = m.saved as BoxRect;
+          const acts = m.acts as BoxRect;
+          // リンクは入れ物の中に収まり、末尾が省かれる（折り返さず、1 行）
+          expect(m.linkStyle).toMatchObject({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', truncated: true });
+          expect(link.left).toBeGreaterThanOrEqual(saved.left - 0.5);
+          expect(link.right).toBeLessThanOrEqual(saved.right + 0.5);
+          expect(link.bottom - link.top).toBeLessThanOrEqual(30);
+          // 操作は窓の中。リンクと重ならない
+          expect(acts.right).toBeLessThanOrEqual(m.client);
+          expect(boxesOverlap(link, acts)).toBe(false);
+          expect(boxesOverlap(m.open as BoxRect, m.remove as BoxRect)).toBe(false);
+          expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+          expect(m.body).toBeLessThanOrEqual(m.client);
+          expect(m.form).toBeNull();
+          // 全文は、リンクの文字と href にある（見た目だけ省く）
+          const anchor = section(page).getByRole('link', { name: LONG_URL });
+          expect(await anchor.getAttribute('href')).toBe(LONG_URL);
+          expect(await anchor.getAttribute('target')).toBe('_blank');
+
+          // 見出しの操作の「NAGA の結果を開く」（このページは、通して見る画面を渡していないので、「この半荘を通して見る」は無い）
+          await page.evaluate(() => window.scrollTo(0, 0));
+          const head = page.getByRole('link', { name: 'NAGA の結果を開く' });
+          expect(await head.getAttribute('href')).toBe(LONG_URL);
+          const headBox = await head.boundingBox();
+          expect(headBox).not.toBeNull();
+          expect((headBox?.x ?? -1) + (headBox?.width ?? 0)).toBeLessThanOrEqual(width);
+          expect(headBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+          // 見出しの操作は、ボタンと同じ見た目（下線が無い）
+          expect(await head.evaluate((el) => getComputedStyle(el).textDecorationLine)).toBe('none');
+
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          expect(axe.passes.find((p) => p.id === 'color-contrast')?.nodes ?? 0).toBeGreaterThan(5);
+          const reach = await unreachableByTab(page);
+          expect(reach.missed).toEqual([]);
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+
+      it(`幅 ${width}px ${scheme}: NAGA のサイトでない URL を保存しようとすると、理由が出る（role=alert）。窓に収まり、横スクロールが無く、axe の重大な違反が 0 件`, async () => {
+        const { context, page, problems } = await open({ width, scheme });
+        try {
+          await section(page).scrollIntoViewIfNeeded();
+          await urlInput(page).fill('https://evil.example/htmls/report_viewer.html?report_id=abc');
+          await section(page).getByRole('button', { name: '保存' }).click();
+          const alert = section(page).getByRole('alert');
+          await alert.waitFor();
+          expect(await alert.textContent()).toBe('NAGA の結果のページの URL（https://naga.dmv.nico/ で始まるもの）を貼ってください');
+          expect(await urlInput(page).getAttribute('aria-invalid')).toBe('true');
+          await page.waitForTimeout(100);
+          const m = await measure(page);
+          const box = m.alert as BoxRect;
+          expect(box.left).toBeGreaterThanOrEqual(0);
+          expect(box.right).toBeLessThanOrEqual(m.client);
+          expect(box.top).toBeGreaterThanOrEqual((m.form as BoxRect).bottom - 1);
+          expect(m.scroll).toBeLessThanOrEqual(m.client);
+          expect(m.body).toBeLessThanOrEqual(m.client);
+          expect(await calls(page, 'set_naga_url')).toEqual([]);
+          expect(seriousViolations(await runAxe(page))).toEqual([]);
+          expect(problems).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('実際のキーとマウス: 貼って保存 → リンクが出る → Ctrl+Z で保存前に戻る → Ctrl+Y で戻る → 「消す」で入力欄に戻り、Ctrl+Z で消す前に戻る。外へ通信しない', async () => {
+    const { context, page, problems, external } = await open();
+    try {
+      await section(page).scrollIntoViewIfNeeded();
+      await urlInput(page).fill(`  ${REPORT_URL}  `);
+      await urlInput(page).press('Enter');
+      const link = section(page).getByRole('link', { name: REPORT_URL });
+      await link.waitFor();
+      expect(await calls(page, 'set_naga_url')).toEqual([{ sessionId: ID, url: REPORT_URL }]);
+      expect(await isFocused(link)).toBe(true);
+      expect(await page.getByRole('link', { name: 'NAGA の結果を開く' }).getAttribute('href')).toBe(REPORT_URL);
+      expect(await toastText(page)).toBe('NAGA の結果を保存しました');
+      // Ctrl+Z: 保存前
+      await page.keyboard.press('Control+z');
+      await urlInput(page).waitFor();
+      expect(await page.getByRole('link', { name: 'NAGA の結果を開く' }).count()).toBe(0);
+      expect(await toastText(page)).toBe('NAGA の結果の保存を元に戻しました');
+      // Ctrl+Y: もう一度保存
+      await page.keyboard.press('Control+y');
+      await link.waitFor();
+      // 「消す」: 入力欄に戻る。キーボードの位置は見出し（Ctrl+Z が使える）
+      await section(page).getByRole('button', { name: '消す' }).click();
+      await urlInput(page).waitFor();
+      expect(await urlInput(page).inputValue()).toBe('');
+      expect(await toastText(page)).toBe('NAGA の結果を消しました');
+      await page.keyboard.press('Control+z');
+      await link.waitFor();
+      expect(await page.getByRole('link', { name: 'NAGA の結果を開く' }).count()).toBe(1);
+      expect(problems).toEqual([]);
+      expect(external).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('説明のアイコン: 乗せると、承認された説明の文が窓の中に出る。Esc で閉じる', async () => {
+    for (const width of [390, 1280] as const) {
+      const { context, page, problems } = await open({ width });
+      try {
+        await section(page).scrollIntoViewIfNeeded();
+        const icon = page.getByRole('button', { name: 'NAGA の結果の説明' });
+        await icon.hover();
+        await page.getByRole('tooltip').waitFor();
+        const m = await measureInfoTip(page, 'section.naga');
+        expect(m, `${width}`).not.toBeNull();
+        expect(m!.text).toBe(HELP);
+        expect(m!.tip.left).toBeGreaterThanOrEqual(7);
+        expect(m!.tip.right).toBeLessThanOrEqual(m!.innerWidth - 7);
+        expect(m!.tip.top).toBeGreaterThanOrEqual(0);
+        expect(m!.tip.bottom).toBeLessThanOrEqual(m!.innerHeight);
+        expect(boxesOverlap(m!.tip, m!.icon)).toBe(false);
+        await page.keyboard.press('Escape');
+        expect(await page.getByRole('tooltip').count()).toBe(0);
+        expect(problems).toEqual([]);
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('取り込む前の半荘には、欄も見出しの操作も無い', async () => {
+    const { context, page } = await open({ session: 'older', scenario: savedScenario(REPORT_URL) });
+    try {
+      expect(await section(page).count()).toBe(0);
+      expect(await page.getByRole('link', { name: 'NAGA の結果を開く' }).count()).toBe(0);
     } finally {
       await context.close();
     }

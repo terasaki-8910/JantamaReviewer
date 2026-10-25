@@ -1386,25 +1386,29 @@ body.lb-open {
   min-width: 0;
 }
 
+/* 貼り間違いの理由を出しているときは、入力欄の枠を濃くする（色は足さない。理由の文が、すぐ下にある） */
+.naga-form .input[aria-invalid="true"] {
+  border-color: var(--ink);
+}
+
 .naga-saved {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--s2) var(--s3);
-  max-width: 640px;
+  gap: var(--s3);
+  max-width: 960px;
   min-width: 0;
 }
 
-/* 狭い幅でも、リンクは行の中で縮む（末尾を省く）。操作は、入りきらないときだけ下の行に回る */
+/* リンクは、全文が入るときはそのまま、入らないときは行の中で縮む（1 行のまま、末尾を省く）。操作は、リンクのすぐ右 */
 .naga-url {
   display: block;
-  flex: 1 1 14em;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 28px;
   text-decoration: underline;
   text-decoration-color: var(--line-strong);
   text-overflow: ellipsis;
