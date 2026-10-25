@@ -593,6 +593,25 @@
   border-color: var(--accent);
 }
 
+/*
+  NAGA の結果を開くリンク（F22 段 2）: URL を保存してあるときだけ、キーの一覧のアイコンの左に、同じ形で並べる（右端に寄せる）。
+  操作の段の高さ・並びは変えない（アイコン 1 つぶんの幅だけ、1 段目に足す）
+*/
+.naga-btn {
+  margin-left: auto;
+  border-color: var(--line-strong);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.naga-btn:hover {
+  border-color: var(--ink);
+}
+
+.naga-btn + .keyhelp {
+  margin-left: 0;
+}
+
 .keypanel {
   position: fixed;
   z-index: 80;
@@ -824,6 +843,11 @@
     gap: 6px;
   }
 
+  /* NAGA の結果を開くリンクがあるときは、キーの一覧のアイコンの左の列に置く */
+  .pb-row.top:has(.naga-btn) {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
   .pb-row.top .pb-steps {
     grid-column: 1 / -1;
     grid-row: 2;
@@ -860,7 +884,18 @@
     margin-left: 0;
   }
 
-  .key-btn {
+  .naga-btn {
+    grid-column: 2;
+    grid-row: 1;
+    margin-left: 0;
+  }
+
+  .naga-btn + .keyhelp {
+    grid-column: 3;
+  }
+
+  .key-btn,
+  .naga-btn {
     width: 38px;
     height: 38px;
   }

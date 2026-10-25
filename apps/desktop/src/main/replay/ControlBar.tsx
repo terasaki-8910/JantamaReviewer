@@ -1,6 +1,7 @@
 /**
  * 半荘を通して見る画面の操作の段（F12）。
- * 1 段目: 局の選択（迷いと悪手の数つき）・局の頭・前の巡目・1手戻る・「手 34 / 48」・1手進む・次の巡目・局の終わり・キーの一覧のアイコン
+ * 1 段目: 局の選択（迷いと悪手の数つき）・局の頭・前の巡目・1手戻る・「手 34 / 48」・1手進む・次の巡目・局の終わり・
+ *   NAGA の結果を開くリンク（URL を保存してあるときだけ。F22 段 2）・キーの一覧のアイコン
  * 2 段目: 前・次の悪手（あと何か所）・前・次の迷い（あと何か所。「細かいミスだけ」の切り替えつき）
  * 解決した場面（F16）は、飛ぶ先にも、数にも入れない。
  * 3 段目: 位置の帯
@@ -14,6 +15,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import type { ReplayKeys } from '../../api/types';
 import { Icon } from '../Icon';
 import { MenuSelect } from '../MenuSelect';
+import { NAGA_OPEN_LABEL } from '../naga';
 import { KeyHelp } from './KeyHelp';
 import { formatChord, type ReplayAction } from './keys';
 import { kyokuCounts, turnLabel, type ReplayNav } from './replayModel';
@@ -36,6 +38,8 @@ interface ControlBarProps {
   /** 「細かいミスだけ」を入れているか（迷いの段の切り替え。F17）。 */
   fineMissOnly: boolean;
   onFineMissOnly: (on: boolean) => void;
+  /** 半荘に保存した NAGA の結果の URL（F22 段 2）。あれば、1 段目のキーの一覧のアイコンの左に、いつものブラウザで開くリンクを出す。 */
+  nagaUrl?: string | null;
 }
 
 /** 「飛ぶ」段ごとの、前・次の操作と、場面の呼び名。 */
@@ -58,7 +62,7 @@ const PAIR: Partial<Record<ReplayAction, ReplayAction>> = {
   next_doubt: 'prev_doubt',
 };
 
-export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKey, go, onChangeKeys, ticks, fineMissOnly, onFineMissOnly }: ControlBarProps) {
+export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKey, go, onChangeKeys, ticks, fineMissOnly, onFineMissOnly, nagaUrl = null }: ControlBarProps) {
   const step = timeline.steps[g];
   const kyoku = step === undefined ? undefined : timeline.kyokus[step.kyokuPosition];
   const buttons = useRef(new Map<ReplayAction, HTMLButtonElement>());
@@ -238,6 +242,18 @@ export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKe
             </>
           ), 'b-kend')}
         </div>
+        {nagaUrl !== null && (
+          <a
+            className="icon-btn naga-btn"
+            href={nagaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={NAGA_OPEN_LABEL}
+            title={NAGA_OPEN_LABEL}
+          >
+            <Icon name="external" />
+          </a>
+        )}
         <KeyHelp keys={keys} onChange={onChangeKeys} />
       </div>
       <div className="pb-jumps">

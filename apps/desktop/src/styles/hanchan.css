@@ -1352,3 +1352,84 @@ body.lb-open {
     padding: 0;
   }
 }
+
+/*
+  ================= NAGA の結果（F22 段 2） =================
+  半荘のページの終わりの欄。新しい見た目は足さず、既存の部品（.sec-head・.input・.btn・.btn.sm・.error）を言い換える。
+  使わないときは静かに（入力欄と「保存」だけ）。保存したあとは、URL のリンク（長いときは、1 行に収めて末尾を省く）と「開く」「消す」。
+  リンクの見た目は、天鳳牌理のリンク（.q-link）と同じ: ink の文字・下線は静かな線。色はトークンだけ。
+*/
+.naga {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.naga .sec-head {
+  margin-bottom: 0;
+}
+
+/* 消したあとに、キーボードの位置を見出しへ移す（そのとき、枠は出さない） */
+.naga .sec-title:focus {
+  outline: none;
+}
+
+.naga-form {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s2);
+  max-width: 640px;
+}
+
+.naga-form .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.naga-saved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  max-width: 640px;
+  min-width: 0;
+}
+
+/* 狭い幅でも、リンクは行の中で縮む（末尾を省く）。操作は、入りきらないときだけ下の行に回る */
+.naga-url {
+  display: block;
+  flex: 1 1 14em;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-overflow: ellipsis;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.naga-url:hover {
+  text-decoration-color: var(--ink);
+}
+
+.naga-acts {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
+}
+
+/* リンクのボタン（見出しの「NAGA の結果を開く」・欄の「開く」）は、ボタンと同じに見せる: 下線を付けない */
+a.btn,
+a.btn:hover {
+  text-decoration: none;
+}
+
+.naga-acts .naga-ic {
+  width: 14px;
+  height: 14px;
+}
