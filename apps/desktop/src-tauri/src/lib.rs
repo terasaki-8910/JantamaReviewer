@@ -18,6 +18,7 @@ pub mod input_effects;
 pub mod input_flow;
 pub mod memo;
 pub mod menu;
+pub mod naga;
 pub mod navigation;
 pub mod platform;
 pub mod ready;
@@ -116,6 +117,7 @@ pub fn run() {
             memo::clear_memo,
             memo::set_extra_memo,
             memo::clear_extra_memo,
+            naga::set_naga_url,
             study::commands::record_answer,
             study::commands::update_answer_notes,
             study::commands::list_answers,

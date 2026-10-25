@@ -606,6 +606,9 @@ mod tests {
             .unwrap();
         store.set_maka_grade(&id, "k0h0", "A").unwrap();
         store.set_resolved(&id, "k0h0e1", true, T0 + 9).unwrap();
+        store
+            .set_naga_url(&id, Some(&crate::naga::sample_url("a1")), T0 + 10)
+            .unwrap();
         id
     }
 
@@ -697,6 +700,7 @@ mod tests {
             "self-ratings.json",
             "maka.json",
             "resolved.json",
+            "naga.json",
             "report.json",
             "events.jsonl",
         ] {

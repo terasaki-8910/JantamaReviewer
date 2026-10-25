@@ -19,6 +19,7 @@
 //! | `mk:<半荘>:<局の鍵>` | 局の MAKA の評価 |
 //! | `mh:<半荘>` | 半荘全体の MAKA の評価 |
 //! | `rv:<半荘>:<判断の鍵>` | 局面の解決（解決を入れた時刻。F16） |
+//! | `na:<半荘>` | 半荘の NAGA の結果の URL（URL と保存した時刻。F22 段 2） |
 //! | `mm:<半荘>:<迷いマークの番号>` | 迷いマークのメモ（候補・理由） |
 //! | `xm:<半荘>:<uid>` | 迷いマークの無い迷いのメモ |
 //! | `r:<半荘>` | 結果のファイル（report.json）。中身は、圧縮して別の表に置く |
@@ -44,6 +45,7 @@ pub enum Kind {
     MakaKyoku,
     MakaHanchan,
     Resolved,
+    Naga,
     MarkMemo,
     ExtraMemo,
     Report,
@@ -63,6 +65,7 @@ impl Kind {
             Kind::MakaKyoku => "mk",
             Kind::MakaHanchan => "mh",
             Kind::Resolved => "rv",
+            Kind::Naga => "na",
             Kind::MarkMemo => "mm",
             Kind::ExtraMemo => "xm",
             Kind::Report => "r",
@@ -82,6 +85,7 @@ impl Kind {
             "mk" => Kind::MakaKyoku,
             "mh" => Kind::MakaHanchan,
             "rv" => Kind::Resolved,
+            "na" => Kind::Naga,
             "mm" => Kind::MarkMemo,
             "xm" => Kind::ExtraMemo,
             "r" => Kind::Report,
@@ -100,6 +104,7 @@ impl Kind {
                 | Kind::MakaKyoku
                 | Kind::MakaHanchan
                 | Kind::Resolved
+                | Kind::Naga
                 | Kind::MarkMemo
                 | Kind::ExtraMemo
                 | Kind::Report
@@ -140,7 +145,7 @@ pub fn parse_key(key: &str) -> Option<ParsedKey<'_>> {
         };
         let needs_rest = !matches!(
             kind,
-            Kind::RatingsVersion | Kind::MakaHanchan | Kind::Report
+            Kind::RatingsVersion | Kind::MakaHanchan | Kind::Naga | Kind::Report
         );
         if session.is_empty()
             || (needs_rest && rest.is_empty())
@@ -276,6 +281,12 @@ mod tests {
                 Some("20261009-190953"),
                 "k2h1e14",
             ),
+            (
+                make_key(Kind::Naga, &["20261009-190953"]),
+                Kind::Naga,
+                Some("20261009-190953"),
+                "",
+            ),
         ];
         for (key, kind, session, rest) in cases {
             let parsed = parse_key(&key).unwrap_or_else(|| panic!("{key}"));
@@ -300,6 +311,8 @@ mod tests {
             "mh:S:extra",
             "rv:S",
             "rv:S:",
+            "na:S:extra",
+            "na:",
             "lm:S:",
         ] {
             assert_eq!(parse_key(key), None, "{key}");

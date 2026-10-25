@@ -482,6 +482,41 @@ fn every_memo_command_is_registered_and_none_of_them_writes_the_recording() {
 }
 
 #[test]
+fn the_naga_command_is_registered_and_never_writes_the_recording_or_opens_the_page() {
+    // naga.rs（NAGA の結果の URL の保存。F22 段 2）の `#[tauri::command]` が、すべて登録されている（登録の忘れを防ぐ）。
+    let lib = read(crate_dir().join("src").join("lib.rs"));
+    let source = read(crate_dir().join("src").join("naga.rs"));
+    let mut names = Vec::new();
+    let mut lines = source.lines();
+    while let Some(line) = lines.next() {
+        if line.trim() == "#[tauri::command]" {
+            let signature = lines.next().expect("関数が続く");
+            let name = signature
+                .trim_start_matches("pub async fn ")
+                .split('(')
+                .next()
+                .expect("関数名");
+            names.push(name.to_string());
+        }
+    }
+    assert_eq!(names, ["set_naga_url"]);
+    for name in &names {
+        assert!(
+            lib.contains(&format!("naga::{name},")),
+            "{name} を generate_handler に登録していない"
+        );
+    }
+    // ウィジェットの記録（追記だけの events.jsonl）は、ここからは書き換えない。
+    for forbidden in ["add_mark", "add_rating", "undo(", "append", "EVENTS_FILE"] {
+        assert!(!source.contains(forbidden), "naga.rs に {forbidden} がある");
+    }
+    // URL を開くのは、画面のリンクを押したときの、いつものブラウザ（external.rs）だけ。ここは、URL を調べて保存するだけ
+    for forbidden in ["open_url", "open_in_default_browser", "external::"] {
+        assert!(!source.contains(forbidden), "naga.rs に {forbidden} がある");
+    }
+}
+
+#[test]
 fn the_records_commands_are_registered_and_the_records_module_never_touches_the_widget_files() {
     // 記録の書き出し・読み込み（D-2）の `#[tauri::command]` が、すべて登録されている（登録の忘れを防ぐ）。
     let lib = read(crate_dir().join("src").join("lib.rs"));
