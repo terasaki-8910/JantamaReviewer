@@ -186,6 +186,15 @@ describe('手元の組み立ての設定と、Actions だけの設定', () => {
   });
 });
 
+describe('文言', () => {
+  it('記録中に入れ直せない理由の文は、画面（帯・設定の欄）と Rust（入れ直しを断る文）で同じ', () => {
+    const screen = /RECORDING_REASON =\s*'([^']+)'/.exec(read('apps', 'desktop', 'src', 'main', 'update', 'updateText.ts'))?.[1];
+    const server = /RECORDING_MESSAGE: &str = "([^"]+)"/.exec(read('apps', 'desktop', 'src-tauri', 'src', 'update', 'commands.rs'))?.[1];
+    expect(screen).toBe('記録中は入れ直せません（対局のあとで）');
+    expect(server).toBe(screen);
+  });
+});
+
 describe('版の番号', () => {
   /** Cargo.toml の `[package]` の version。 */
   function cargoVersion(): string {
