@@ -8,6 +8,7 @@
  *   止まり場所が 1 つで、矢印キーで動く）
  * - U-18: 小窓は、行のそばに出て、行に重ならない。幅 390px では画面の下から出て、幅いっぱい。Esc・外の押下で閉じ、押した行へ戻る
  * - U-19: ドラ表示牌が指す牌の面が黄色（描いた色を読む）。牌の図柄と黄色のコントラストは 3:1 以上
+ * - U-50: フェルトの卓・黄色い牌の背・王牌の列。中央の点数を保ち、名札は置かない
  * - U-33: 役の欄は、答え合わせのあとの受け入れ枚数の欄の下に出て、幅 390・768・1280px で欄の中身がはみ出さない。警告（札「役無し」・太字の文）は、
  *   色以外（濃い枠・字の太さ）でも見分けられる。説明のアイコンは、Tab で受け入れ枚数のあと・差の原因の前に届く。axe の重大は、上の状態の検査に含まれる
  * - U-34: 答え合わせのタブ。待ちと打点・守備のタブは、場面に関係があるときだけ出る（守備は他家のリーチがある場面だけ）。← → Home End で選べて、Tab の止まり場所は
@@ -15,7 +16,7 @@
  * - U-1: 答える前の DOM に AI の情報は無い。牌の画像はすべて読み込めて、引きずれない（N-8）。外へ通信しない
  * jsdom の試験（src/main/study）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
-import { importReportText, listProblems } from '@jantama/engine';
+import { importReportText, keyOfDecision, listProblems } from '@jantama/engine';
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -39,6 +40,7 @@ import {
   type PageServer,
   type Scenario,
 } from './harness';
+import { expectBoardContrast, expectNoHorizontalScroll, expectSameTable, expectWallFits, measureBoard } from './board-checks';
 import { faceColor, multiply, patternColors } from './tile-colors';
 
 const SCHEMES = ['light', 'dark'] as const;
@@ -2008,86 +2010,154 @@ describe('U-39: 棒の帯と印の行を取ったあとも、文書はスクロ�
   }
 });
 
-describe('U-44: ドラ表示牌（卓の中央の箱。実ブラウザ）', () => {
-  /** 中央の箱の「表示 → ドラ」の行の位置・牌の幅・文字（ページの中で測る）。 */
-  async function doraMetrics(page: Page) {
-    return page.evaluate(() => {
-      const box = (el: Element) => {
-        const r = el.getBoundingClientRect();
-        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
-      };
-      const colorOf = (css: string) => {
-        const probe = document.createElement('i');
-        probe.style.color = css;
-        document.body.append(probe);
-        const color = getComputedStyle(probe).color;
-        probe.remove();
-        return color;
-      };
-      const row = document.querySelector('.center .dora') as HTMLElement | null;
-      const center = document.querySelector('.table .center') as HTMLElement;
-      const strip = document.querySelector('.info-strip') as HTMLElement;
-      const label = row?.querySelector('.dora-l') as HTMLElement | null;
-      return {
-        row: row === null ? null : box(row),
-        center: box(center),
-        visible: row !== null && row.checkVisibility(),
-        scores: Array.from(document.querySelectorAll('.table .center .score')).map(box),
-        info: box(document.querySelector('.table .center .info') as Element),
-        infoShown: getComputedStyle(document.querySelector('.table .center .info') as Element).display !== 'none',
-        tiles: Array.from(row?.querySelectorAll('.tile') ?? []).map((tile) => box(tile).width),
-        label: label === null ? null : { size: getComputedStyle(label).fontSize, color: getComputedStyle(label).color, text: label.textContent },
-        muted: colorOf('var(--muted)'),
-        aria: row?.getAttribute('aria-label') ?? '',
-        stripText: strip.textContent ?? '',
-        stripHasDora: strip.querySelector('.dora, .dora-t, .tile') !== null,
-        stripShown: getComputedStyle(strip).display !== 'none',
-        scroll: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
-      };
-    });
-  }
-
-  for (const [width, height, wide] of [
-    [1440, 900, true],
-    [1280, 800, false],
-    [768, 900, false],
-    [390, 900, false],
+describe('U-44: 王牌の列とドラ表示牌（卓の中央の箱。実ブラウザ）', () => {
+  for (const [width, height] of [
+    [1440, 900],
+    [1280, 800],
+    [768, 900],
+    [390, 900],
   ] as const) {
-    it(`幅 ${width}px: 局の名前の下の「表示 → ドラ」が中央の箱に出る。牌は ${wide ? '24px（広い卓）' : '18px（狭い卓）'}。点数・箱の外にはみ出さない。卓の上の 1 行には無い`, { timeout: 90_000 }, async () => {
+    it(`${width}×${height}: 7 枚の王牌と「→ ドラ」が中央の箱に収まり、4 人の点数と重ならない`, { timeout: 120_000 }, async () => {
       for (const scheme of SCHEMES) {
         const { context, page } = await open({ width, height, scheme });
         try {
           await openRow(page, 1);
-          const m = await doraMetrics(page);
-          expect(m.visible, `${width} ${scheme}`).toBe(true);
-          expect(m.row, `${width} ${scheme}`).not.toBeNull();
-          const row = m.row as Box;
-          // 中央の箱の中。左右・上下の点数と重ならない
-          expect(row.left, `${width} ${scheme} 箱の左`).toBeGreaterThanOrEqual(m.center.left - 0.5);
-          expect(row.right, `${width} ${scheme} 箱の右`).toBeLessThanOrEqual(m.center.right + 0.5);
-          expect(row.top, `${width} ${scheme} 箱の上`).toBeGreaterThanOrEqual(m.center.top - 0.5);
-          expect(row.bottom, `${width} ${scheme} 箱の下`).toBeLessThanOrEqual(m.center.bottom + 0.5);
-          for (const score of m.scores) expect(boxesOverlap(row, score), `${width} ${scheme} 点数と重なる`).toBe(false);
-          if (m.infoShown) expect(boxesOverlap(row, m.info), `${width} ${scheme} 局の名前と重なる`).toBe(false);
-          // 牌の幅（ドラ表示牌 1 枚 + ドラ 1 枚）
-          expect(m.tiles).toHaveLength(2);
-          for (const tileWidth of m.tiles) expect(Math.abs(tileWidth - (wide ? 24 : 18)), `${width} ${scheme} 牌の幅`).toBeLessThanOrEqual(0.6);
-          // 文字: 10.5px の静かな色
-          expect(m.label).toEqual({ size: '10.5px', color: m.muted, text: '表示' });
-          expect(m.aria).toMatch(/^ドラ表示牌 .+、ドラ .+$/);
-          // 狭い卓は、局の名前（短い）と、この行だけ。広い卓は、局・本場・残りの組（.info）の下
-          expect(m.infoShown).toBe(wide);
-          // 卓の上の 1 行（狭いときだけ出る）には、ドラ表示牌が無い
-          expect(m.stripHasDora).toBe(false);
-          expect(m.stripText).not.toContain('ドラ');
-          expect(m.stripShown).toBe(!wide);
-          expect(m.scroll[0]).toBeLessThanOrEqual(m.scroll[1] as number);
+          const m = await measureBoard(page);
+          expectWallFits(m, `${width}×${height} ${scheme}`, { markers: 1 });
+          expect(m.dora?.mapped[0]?.width).toBeLessThanOrEqual((width >= 1280 && height >= 900 ? 24 : 18) + 0.6);
+          const strip = await page.locator('.info-strip').evaluate((el) => ({ text: el.textContent ?? '', hasTile: el.querySelector('.dora, .tile') !== null }));
+          expect(strip.hasTile).toBe(false);
+          expect(strip.text).not.toContain('ドラ');
         } finally {
           await context.close();
         }
       }
     });
   }
+
+  it('カンのあと: 左から 3・4 枚目が表向きで、右のドラも 2 枚', { timeout: 90_000 }, async () => {
+    const imported = importReportText(REPORT_TEXTS.fx1a);
+    if (!imported.ok) throw new Error('FX-1 a を読めません');
+    const two = imported.value.decisions.find((decision) => decision.board.doraMarkers.length >= 2);
+    if (two === undefined) throw new Error('ドラ表示牌が 2 つの判断がありません');
+    for (const width of [1280, 390]) {
+      const { context, page } = await open({ width, height: 900, scenario: scenario({ dueKeys: [keyOfDecision(two)], dueSession: FX1A_ID }) });
+      try {
+        await openReview(page);
+        const m = await measureBoard(page);
+        expectWallFits(m, `ドラ表示牌 2 枚 ${width}`, { markers: 2 });
+        expect(m.dora?.aria).toBe('ドラ表示牌 北・中、ドラ 東・白');
+      } finally {
+        await context.close();
+      }
+    }
+  });
+});
+
+describe('U-50: フェルトの卓・黄色い牌の背・王牌の列（出題・解き直し。実ブラウザ）', () => {
+  async function expectBoard(page: Page, where: string) {
+    const m = await measureBoard(page);
+    expectNoHorizontalScroll(m, where);
+    expectBoardContrast(m, where);
+    expectWallFits(m, where);
+    expect(seriousViolations(await runAxe(page)), `${where} axe`).toEqual([]);
+    return m;
+  }
+
+  for (const [width, height] of [
+    [390, 844],
+    [768, 1024],
+    [1280, 800],
+    [1440, 900],
+    [1920, 1080],
+  ] as const) {
+    it(`${width}×${height}: 出題の答える前後と解き直しを、ライト・ダークで検査する`, { timeout: 300_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const quiz = await open({ width, height, scheme });
+        try {
+          await openRow(quiz.page, 1);
+          const before = await expectBoard(quiz.page, `${width}×${height} ${scheme} 出題 答える前`);
+          await answerCurrent(quiz.page);
+          const after = await expectBoard(quiz.page, `${width}×${height} ${scheme} 出題 答えたあと`);
+          expectSameTable(before, after, `${width}×${height} ${scheme} 出題`);
+          if (width >= 1280) {
+            expect(before.viewport.scrollHeight).toBeLessThanOrEqual(height);
+            expect(after.viewport.scrollHeight).toBeLessThanOrEqual(height);
+          }
+          expect(quiz.problems).toEqual([]);
+        } finally {
+          await quiz.context.close();
+        }
+        const review = await open({ width, height, scheme, scenario: scenario({ due: true }) });
+        try {
+          await openReview(review.page);
+          const before = await expectBoard(review.page, `${width}×${height} ${scheme} 解き直し 答える前`);
+          await answerCurrent(review.page);
+          const after = await expectBoard(review.page, `${width}×${height} ${scheme} 解き直し 答えたあと`);
+          expectSameTable(before, after, `${width}×${height} ${scheme} 解き直し`);
+          if (width >= 1280) {
+            expect(before.viewport.scrollHeight).toBeLessThanOrEqual(height);
+            expect(after.viewport.scrollHeight).toBeLessThanOrEqual(height);
+          }
+        } finally {
+          await review.context.close();
+        }
+      }
+    });
+  }
+
+  it('鳴かれた河の牌は布を透かさず、以前の面の上で opacity 0.38 にした色と同じ。ツモ切りの暗さも同じ', { timeout: 120_000 }, async () => {
+    for (const scheme of SCHEMES) {
+      const { context, page } = await open({ width: 1280, height: 800, scheme });
+      try {
+        await openRow(page, 1);
+        const surface = parseCssColor((await measureBoard(page)).tokens.surface);
+        const plain = page.locator('.table .rt > .tile:not(.called):not(.tg):not(.target):not(.latest):not(.tp)').first();
+        const called = page.locator('.table .rt:has(> .tile.called:not(.tg)) > .tile.called').first();
+        const tsumogiri = page.locator('.table .rt > .tile.tg:not(.called)').first();
+        expect(await called.count(), `${scheme} 鳴かれた牌`).toBe(1);
+        expect(await tsumogiri.count(), `${scheme} ツモ切り`).toBe(1);
+        const face = await faceColor(page, plain);
+        const dimmed = await faceColor(page, called);
+        const dark = await faceColor(page, tsumogiri);
+        for (const channel of ['r', 'g', 'b'] as const) {
+          expect(Math.abs(dimmed[channel] - (0.38 * face[channel] + 0.62 * surface[channel])), `${scheme} 鳴かれた牌 ${channel}`).toBeLessThanOrEqual(2);
+          expect(Math.abs(dark[channel] - 0.8 * face[channel]), `${scheme} ツモ切り ${channel}`).toBeLessThanOrEqual(2);
+        }
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it('鳴ける牌と他家の手牌の焦点は、--surface の縁を介して布の上で 3:1 以上見分けられる', { timeout: 120_000 }, async () => {
+    for (const scheme of SCHEMES) {
+      const { context, page } = await open({ width: 1280, height: 800, scheme });
+      try {
+        await openRow(page, 4);
+        const board = await measureBoard(page);
+        const felt = parseCssColor(board.felt);
+        const surface = parseCssColor(board.tokens.surface);
+        const rgbOf = (color: { r: number; g: number; b: number }) => ({ r: color.r, g: color.g, b: color.b });
+        const shadow = await page.locator('.table .tile.target').first().evaluate((el) => getComputedStyle(el).boxShadow);
+        const layers = [...shadow.matchAll(/(rgba?\([^)]+\))\s+0px 0px 0px (\d+)px/g)].map((match) => ({ color: parseCssColor(match[1] as string), spread: Number(match[2]) }));
+        expect(layers, `${scheme} 鳴ける牌の 2 重輪`).toHaveLength(2);
+        const [ring, halo] = layers as [(typeof layers)[number], (typeof layers)[number]];
+        expect([halo.color.r, halo.color.g, halo.color.b], `${scheme} 外側の縁`).toEqual([surface.r, surface.g, surface.b]);
+        const visible = contrast(rgbOf(ring.color), rgbOf(felt)) >= 3 || (contrast(rgbOf(halo.color), rgbOf(felt)) >= 3 && contrast(rgbOf(ring.color), rgbOf(halo.color)) >= 3);
+        expect(visible, `${scheme} 鳴ける牌の輪`).toBe(true);
+
+        await answerCurrent(page);
+        const hand = page.locator('.ohand').first();
+        await hand.focus();
+        const focus = await hand.evaluate((el) => ({ outline: getComputedStyle(el).outlineColor, shadow: getComputedStyle(el).boxShadow }));
+        expect(focus.shadow, `${scheme} 手牌の焦点の縁`).toContain(board.tokens.surface);
+        expect(contrast(rgbOf(parseCssColor(focus.outline)), rgbOf(surface)), `${scheme} 焦点の輪と縁`).toBeGreaterThanOrEqual(3);
+      } finally {
+        await context.close();
+      }
+    }
+  });
 });
 
 describe('盤面の見方（卓の上の右端の説明のアイコン。実ブラウザ）と、U-47 場面の 1 行', () => {
@@ -2271,73 +2341,6 @@ describe('U-45: 迷いのスクショの欄（出題。実ブラウザ）', () =
       await answerCurrent(page);
       await page.locator('[data-shots="block"]').waitFor();
       expect(await page.locator('.answer-scroll').evaluate((el) => el.firstElementChild?.getAttribute('data-shots'))).toBe('block');
-    } finally {
-      await context.close();
-    }
-  });
-});
-
-/**
- * 中央の箱のドラ表示牌の行を測って、決まりを確かめる（U-44）: 折り返さない（牌の上端がそろう）・行の箱が、中央の箱の中の点数・席の名前・
- * リーチの札・局の名前・本場・残りの箱と重ならない・行の中身が行からあふれない。箱が狭くて 2 語（表示・ドラ）を入れられないときは、2 語は見えない
- * （見えているときは、行に収まっている）。読み上げの名前（aria-label）は、どちらでも残る。
- */
-async function expectDoraRowFits(page: Page, where: string): Promise<{ centre: number; labels: boolean; tiles: number }> {
-  const m = await page.evaluate(() => {
-    const box = (el: Element) => {
-      const r = el.getBoundingClientRect();
-      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
-    };
-    const center = document.querySelector('.table .center') as HTMLElement;
-    const row = center.querySelector('.dora') as HTMLElement;
-    const shown = (el: Element) => (el as HTMLElement).checkVisibility();
-    const others: Array<{ name: string; box: ReturnType<typeof box> }> = [];
-    for (const selector of ['.score .who', '.score .pts', '.score .rch', '.round', '.round-s', '.honba', '.rest']) {
-      for (const el of Array.from(center.querySelectorAll(selector))) if (shown(el)) others.push({ name: selector, box: box(el) });
-    }
-    const labels = Array.from(row.querySelectorAll('.dora-l'));
-    return {
-      centre: center.clientWidth,
-      center: box(center),
-      row: box(row),
-      others,
-      tileTops: Array.from(row.querySelectorAll('.tile')).map((tile) => tile.getBoundingClientRect().top),
-      labelsShown: labels.length > 0 && labels.every(shown),
-      labelsHidden: labels.every((label) => !shown(label)),
-      scroll: [row.scrollWidth, row.clientWidth],
-      aria: row.getAttribute('aria-label') ?? '',
-    };
-  });
-  // 牌は 1 行（上端がそろう）。ドラ表示牌とドラの 2 つ以上の牌
-  expect(m.tileTops.length, `${where} 牌の数`).toBeGreaterThanOrEqual(2);
-  expect(Math.max(...m.tileTops) - Math.min(...m.tileTops), `${where} 牌の上端`).toBeLessThanOrEqual(0.5);
-  // 中央の箱の中。点数・席の名前・局の名前と重ならない
-  expect(m.row.left, `${where} 箱の左`).toBeGreaterThanOrEqual(m.center.left - 0.5);
-  expect(m.row.right, `${where} 箱の右`).toBeLessThanOrEqual(m.center.right + 0.5);
-  expect(m.row.bottom, `${where} 箱の下`).toBeLessThanOrEqual(m.center.bottom + 0.5);
-  for (const other of m.others) {
-    const hit = m.row.left < other.box.right && other.box.left < m.row.right && m.row.top < other.box.bottom && other.box.top < m.row.bottom;
-    expect(hit, `${where} ${other.name} と重なる`).toBe(false);
-  }
-  // 行の中身は、行からあふれない。2 語は、全部見えるか、全部隠れるか
-  expect(m.scroll[0], `${where} あふれ`).toBeLessThanOrEqual((m.scroll[1] as number) + 0.5);
-  expect(m.labelsShown || m.labelsHidden, `${where} 2 語は、そろって出るか、そろって隠れる`).toBe(true);
-  expect(m.aria, `${where} 読み上げ`).toMatch(/^ドラ表示牌 .+、ドラ .+$/);
-  // 箱が狭い（牌 1 枚の行の 2 語が入らない 124px 未満）ときは 2 語を隠し、広い（200px 以上）ときは出す
-  if (m.centre < 124) expect(m.labelsHidden, `${where} 狭い箱（${m.centre}px）では 2 語を隠す`).toBe(true);
-  if (m.centre >= 200) expect(m.labelsShown, `${where} 広い箱（${m.centre}px）では 2 語を出す`).toBe(true);
-  return { centre: m.centre, labels: m.labelsShown, tiles: m.tileTops.length };
-}
-
-describe('U-44: ドラ表示牌の行は折り返さず、中央の箱の点数・局の名前と重ならない（出題。実ブラウザ）', () => {
-  it('1280×800: 出題の 1 問目（答える前・答えたあと）で、行は 1 行・重ならない', { timeout: 90_000 }, async () => {
-    const { context, page } = await open({ width: 1280, height: 800, scheme: 'dark' });
-    try {
-      await openRow(page, 1);
-      const before = await expectDoraRowFits(page, '答える前');
-      expect(before.tiles).toBe(2);
-      await answerCurrent(page);
-      await expectDoraRowFits(page, '答えたあと');
     } finally {
       await context.close();
     }
