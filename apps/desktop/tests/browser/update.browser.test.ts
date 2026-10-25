@@ -194,7 +194,7 @@ describe('更新の帯（U-51）', () => {
             await waitForMainReady(page);
             const region = page.getByRole('region', { name: REGION });
             await region.waitFor();
-            await expect(region.getByText('新しい版 0.2.1 があります')).toBeVisible();
+            await region.getByText('新しい版 0.2.1 があります').waitFor();
             const install = region.getByRole('button', { name: '今すぐ入れ直す' });
             expect(await install.isEnabled()).toBe(true);
 

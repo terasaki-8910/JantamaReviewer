@@ -151,6 +151,12 @@ describe('手元の組み立ての設定と、Actions だけの設定', () => {
     );
   });
 
+  it('補助プログラムは、同じソースから同じ中身になるよう作る（/Brepro）。そうでないと、配るたびに「新しい補助プログラムがあります」が出る', () => {
+    // 設定済みの写しとの比べは、中身（SHA-256）で行う（実行ファイルは、版の情報を持たない）。リンクの時刻が入ると、同じソースでも、毎回違う中身になる
+    expect(read('apps', 'desktop', 'src-tauri', 'helper', 'build.rs')).toContain('cargo:rustc-link-arg-bins=/Brepro');
+    expect(read('apps', 'desktop', 'src-tauri', 'src', 'platform', 'win', 'helper_setup.rs')).toContain('Sha256');
+  });
+
   it('手元の組み立ての命令（pnpm のスクリプト）は、Actions だけの設定を使わない', () => {
     const scripts = JSON.parse(read('package.json')).scripts as Record<string, string>;
     for (const [name, command] of Object.entries(scripts)) {

@@ -107,10 +107,14 @@ pub async fn install_update(
     let ran = Arc::new(AtomicBool::new(false));
     let hook = exit_hook(&app, Arc::clone(&ran));
     let result = super::install(&app, &pending, &hook).await;
-    if result.is_err() && ran.load(Ordering::SeqCst) {
-        show_windows_again(&app);
+    // インストーラーを動かす直前の片づけまで済んでから失敗したとき（まれ）: 隠した窓を見せ直す。片づけで止めた同期などは戻せないので、開き直してもらう
+    match result {
+        Err(reason) if ran.load(Ordering::SeqCst) => {
+            show_windows_again(&app);
+            Err(format!("{reason}。アプリを開き直してください"))
+        }
+        other => other,
     }
-    result
 }
 
 /// 「この版は飛ばす」: 版を設定（settings.json の `skipped_update_version`）に覚える。同期にも書き出しにも入れない（この PC だけ）。

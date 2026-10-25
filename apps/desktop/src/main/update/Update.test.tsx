@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeSessionStore } from '../../../tests/fake-sessions';
@@ -132,6 +133,19 @@ describe('更新の帯（U-51）', () => {
     await banner();
     expect(mock.count('get_update_info')).toBe(1);
     await settle(mock);
+    expect(mock.count('check_update')).toBe(1);
+  });
+
+  it('開発のときの二重の実行（StrictMode）でも、起動のときの確かめは 1 回だけ', async () => {
+    const mock = setup();
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+    await banner();
+    await settle(mock);
+    expect(mock.count('get_update_info')).toBe(1);
     expect(mock.count('check_update')).toBe(1);
   });
 
