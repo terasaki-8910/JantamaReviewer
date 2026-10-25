@@ -8,8 +8,10 @@
  *   同じキーの割り当ては、割り当てずに断る。変えたキーは、設定に保存され、開き直しても働く
  * - U-1: 答える前の DOM に、AI の情報は無い（全場面。悪手の段の飛び先を広げる設定のときの、増えた場面も）。外へ通信しない
  * - U-19: ドラを目立たせる設定が、通して見る画面でも効く
+ * - U-50: フェルトの卓・黄色い牌の背・王牌の列。中央の点数を保ち、名札は置かない
  * - U-41・U-42・U-49: 解決した場面（薄い印・一覧の「解決」）と、2 つの段（悪手・迷い。「細かいミスだけ」つき）の操作の段が、各幅で 1 行に収まる。
  *   拮抗の段は無い（F19）
+ * - U-52: 操作の段の 1 段目の「NAGA の結果を開く」リンク（URL を保存してあるときだけ）が、各幅で収まり、操作の段を高くしない
  * jsdom の試験（src/main/replay/Replay.test.tsx）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
 import type { Browser, BrowserContext, Page } from 'playwright-core';
@@ -37,6 +39,7 @@ import {
   type PageServer,
   type Scenario,
 } from './harness';
+import { expectBoardContrast, expectNoHorizontalScroll, expectSameTable, expectWallFits, measureBoard } from './board-checks';
 import { faceColor, multiply, patternColors } from './tile-colors';
 
 const SCHEMES = ['light', 'dark'] as const;
@@ -74,13 +77,14 @@ const USER_LINKS: Links = {
 const SCENE_KEYS = ['k0h0e4', 'k1h0e12', 'k1h1e6', 'k1h1e7', 'k1h1e9', 'k1h1e10', 'k2h1e2', 'k2h1e6', 'k2h1e14', 'k2h1e16'];
 
 /** FX-4（読み取りの写しつき）と、f9da（河の段が多い長い局がある）。`resolved` は、最初から解決している FX-4 の判断の鍵。 */
-function sessions(resolved: readonly string[] = []) {
+function sessions(resolved: readonly string[] = [], naga?: string) {
   return [
     fx4Session(FX4_ID, local(2026, 10, 9, 19, 9), {
       report_path: `C:\\data\\games\\${FX4_ID}\\report.json`,
       ocr: fx4Ocr(),
       links: USER_LINKS,
       resolved: { decisions: Object.fromEntries(resolved.map((key) => [key, 1_760_000_000_000])) },
+      ...(naga === undefined ? {} : { naga: { url: naga, saved_ms: 1_760_000_000_000 } }),
     }),
     seedSession(local(2026, 10, 9, 17, 12), { id: FX1A_ID, report: 'fx1a' }).session,
   ];
@@ -94,6 +98,8 @@ interface ScenarioOptions {
   doubtOnly?: boolean;
   /** 最初から解決している FX-4 の判断の鍵（F16）。 */
   resolved?: readonly string[];
+  /** FX-4 に保存してある NAGA の結果の URL（F22 段 2）。 */
+  naga?: string;
 }
 
 function scenario(options: ScenarioOptions = {}): Scenario {
@@ -108,7 +114,7 @@ function scenario(options: ScenarioOptions = {}): Scenario {
       doubt_only: options.doubtOnly === true,
     },
     inputStatus: null,
-    sessions: sessions(options.resolved),
+    sessions: sessions(options.resolved, options.naga),
     reports: { [FX4_ID]: REPORT_TEXTS.fx4, [FX1A_ID]: REPORT_TEXTS.fx1a },
     thumb: TINY_PNG,
     answers: [],
@@ -1574,26 +1580,20 @@ describe('U-44・盤面の見方: 通して見る画面（実ブラウザ）', (
     [768, 900],
     [390, 900],
   ] as const) {
-    it(`幅 ${width}px: ドラ表示牌の行が中央の箱に出る（卓の上の 1 行には無い）。盤面の見方のアイコンは卓の上の右端。凡例は重なりの中`, { timeout: 90_000 }, async () => {
+    it(`幅 ${width}px: 王牌の列とドラが中央の箱に出る（卓の上の 1 行には無い）。盤面の見方のアイコンは卓の上の右端。凡例は重なりの中`, { timeout: 90_000 }, async () => {
       const { context, page } = await open({ width, height });
       try {
         await openReplay(page);
+        const board = await measureBoard(page);
+        expectWallFits(board, `${width}×${height}`, { markers: 1 });
         const m = await page.evaluate(() => {
           const box = (el: Element) => {
             const r = el.getBoundingClientRect();
             return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width };
           };
-          const row = document.querySelector('.center .dora') as HTMLElement | null;
-          const center = document.querySelector('.table .center') as Element;
           const strip = document.querySelector('.info-strip') as HTMLElement;
           const icon = document.querySelector('.board-tools .infotip-btn') as Element;
           return {
-            row: row === null ? null : box(row),
-            visible: row !== null && row.checkVisibility(),
-            center: box(center),
-            scores: Array.from(document.querySelectorAll('.table .center .score')).map(box),
-            tiles: Array.from(row?.querySelectorAll('.tile') ?? []).map((tile) => tile.getBoundingClientRect().width),
-            aria: row?.getAttribute('aria-label') ?? '',
             stripHasDora: strip.querySelector('.dora, .tile') !== null || (strip.textContent ?? '').includes('ドラ'),
             icon: box(icon),
             column: box(document.querySelector('.board-col') as Element),
@@ -1602,17 +1602,6 @@ describe('U-44・盤面の見方: 通して見る画面（実ブラウザ）', (
             scroll: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
           };
         });
-        expect(m.visible).toBe(true);
-        const row = m.row as { left: number; right: number; top: number; bottom: number };
-        expect(row.left).toBeGreaterThanOrEqual(m.center.left - 0.5);
-        expect(row.right).toBeLessThanOrEqual(m.center.right + 0.5);
-        expect(row.top).toBeGreaterThanOrEqual(m.center.top - 0.5);
-        expect(row.bottom).toBeLessThanOrEqual(m.center.bottom + 0.5);
-        for (const score of m.scores) expect(boxesOverlap(row, score)).toBe(false);
-        expect(m.tiles).toHaveLength(2);
-        // 通して見る画面の卓は、窓の高さが足りないと小さい配置（狭い卓）になる: 18px、広い卓は 24px
-        for (const tile of m.tiles) expect([18, 24].some((size) => Math.abs(tile - size) <= 0.6)).toBe(true);
-        expect(m.aria).toMatch(/^ドラ表示牌 .+、ドラ .+$/);
         expect(m.stripHasDora).toBe(false);
         expect(m.icon.right).toBeLessThanOrEqual(m.column.right + 1);
         expect(m.icon.right).toBeGreaterThanOrEqual(m.column.right - 8);
@@ -1728,71 +1717,27 @@ describe('U-45: 迷いのスクショ（通して見る画面。実ブラウザ�
   });
 });
 
-/**
- * 中央の箱のドラ表示牌の行を測って、決まりを確かめる（U-44）: 折り返さない（牌の上端がそろう）・行の箱が、中央の箱の中の点数・席の名前・
- * リーチの札・局の名前・本場・残りの箱と重ならない・行の中身が行からあふれない。箱が狭くて 2 語（表示・ドラ）を入れられないときは、2 語は見えない
- * （見えているときは、行に収まっている）。読み上げの名前（aria-label）は、どちらでも残る。
- */
+/** 王牌の列と「→ ドラ」の行を測り、折り返し・重なり・あふれが無いことを確かめる。 */
 async function expectDoraRowFits(page: Page, where: string): Promise<{ centre: number; labels: boolean; tiles: number }> {
-  const m = await page.evaluate(() => {
-    const box = (el: Element) => {
-      const r = el.getBoundingClientRect();
-      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
-    };
-    const center = document.querySelector('.table .center') as HTMLElement;
-    const row = center.querySelector('.dora') as HTMLElement;
-    const shown = (el: Element) => (el as HTMLElement).checkVisibility();
-    const others: Array<{ name: string; box: ReturnType<typeof box> }> = [];
-    for (const selector of ['.score .who', '.score .pts', '.score .rch', '.round', '.round-s', '.honba', '.rest']) {
-      for (const el of Array.from(center.querySelectorAll(selector))) if (shown(el)) others.push({ name: selector, box: box(el) });
-    }
-    const labels = Array.from(row.querySelectorAll('.dora-l'));
-    return {
-      centre: center.clientWidth,
-      center: box(center),
-      row: box(row),
-      others,
-      tileTops: Array.from(row.querySelectorAll('.tile')).map((tile) => tile.getBoundingClientRect().top),
-      labelsShown: labels.length > 0 && labels.every(shown),
-      labelsHidden: labels.every((label) => !shown(label)),
-      scroll: [row.scrollWidth, row.clientWidth],
-      aria: row.getAttribute('aria-label') ?? '',
-    };
-  });
-  // 牌は 1 行（上端がそろう）。ドラ表示牌とドラの 2 つ以上の牌
-  expect(m.tileTops.length, `${where} 牌の数`).toBeGreaterThanOrEqual(2);
-  expect(Math.max(...m.tileTops) - Math.min(...m.tileTops), `${where} 牌の上端`).toBeLessThanOrEqual(0.5);
-  // 中央の箱の中。点数・席の名前・局の名前と重ならない
-  expect(m.row.left, `${where} 箱の左`).toBeGreaterThanOrEqual(m.center.left - 0.5);
-  expect(m.row.right, `${where} 箱の右`).toBeLessThanOrEqual(m.center.right + 0.5);
-  expect(m.row.bottom, `${where} 箱の下`).toBeLessThanOrEqual(m.center.bottom + 0.5);
-  for (const other of m.others) {
-    const hit = m.row.left < other.box.right && other.box.left < m.row.right && m.row.top < other.box.bottom && other.box.top < m.row.bottom;
-    expect(hit, `${where} ${other.name} と重なる`).toBe(false);
-  }
-  // 行の中身は、行からあふれない。2 語は、全部見えるか、全部隠れるか
-  expect(m.scroll[0], `${where} あふれ`).toBeLessThanOrEqual((m.scroll[1] as number) + 0.5);
-  expect(m.labelsShown || m.labelsHidden, `${where} 2 語は、そろって出るか、そろって隠れる`).toBe(true);
-  expect(m.aria, `${where} 読み上げ`).toMatch(/^ドラ表示牌 .+、ドラ .+$/);
-  // 箱が狭い（牌 1 枚の行の 2 語が入らない 124px 未満）ときは 2 語を隠し、広い（200px 以上）ときは出す
-  if (m.centre < 124) expect(m.labelsHidden, `${where} 狭い箱（${m.centre}px）では 2 語を隠す`).toBe(true);
-  if (m.centre >= 200) expect(m.labelsShown, `${where} 広い箱（${m.centre}px）では 2 語を出す`).toBe(true);
-  return { centre: m.centre, labels: m.labelsShown, tiles: m.tileTops.length };
+  const m = await measureBoard(page);
+  expectWallFits(m, where);
+  const dora = m.dora as NonNullable<typeof m.dora>;
+  return { centre: m.centerContent.width, labels: dora.labelShown, tiles: dora.wall.length + dora.mapped.length };
 }
 
-describe('U-44: ドラ表示牌の行は折り返さず、中央の箱の点数・局の名前と重ならない（通して見る画面。実ブラウザ）', () => {
+describe('U-44: 王牌の列と「→ ドラ」の行は折り返さず、中央の箱の点数・局の名前と重ならない（通して見る画面。実ブラウザ）', () => {
   for (const [width, height] of [
     [1280, 800],
     [1440, 900],
   ] as const) {
-    it(`${width}×${height}: 迷いの場面（東2局 11巡目）と、東3局1本場の局の終わり（鳴きが卓にある）で、行は 1 行・重ならない。箱が狭ければ「表示」「ドラ」は隠れる`, { timeout: 120_000 }, async () => {
+    it(`${width}×${height}: 迷いの場面と局の終わりで、行は 1 行・重ならない。箱が狭ければ「ドラ」は隠れる`, { timeout: 120_000 }, async () => {
       const { context, page } = await open({ width, height, scheme: 'dark' });
       try {
         await openReplay(page);
         await gotoScene(page, 'k1h0e12');
         await answerCurrent(page);
         const scene = await expectDoraRowFits(page, `場面 ${width}×${height}`);
-        expect(scene.tiles).toBe(2);
+        expect(scene.tiles).toBe(8);
         await goToKyokuEnd(page, 4);
         await expectDoraRowFits(page, `東3局1本場の局の終わり ${width}×${height}`);
       } finally {
@@ -1800,7 +1745,7 @@ describe('U-44: ドラ表示牌の行は折り返さず、中央の箱の点数�
       }
     });
 
-    it(`${width}×${height}: ドラ表示牌が 2 つの局（f9da の西1局の終わり）でも、1 行・重ならない`, { timeout: 120_000 }, async () => {
+    it(`${width}×${height}: ドラ表示牌が 2 つ以上の局でも、3 枚目から続けて表向きになり、1 行・重ならない`, { timeout: 120_000 }, async () => {
       const { context, page } = await open({ width, height, scheme: 'dark' });
       try {
         await openReplay(page, 'f9da');
@@ -1811,12 +1756,102 @@ describe('U-44: ドラ表示牌の行は折り返さず、中央の箱の点数�
         await page.locator('.now-res').waitFor();
         expect(await page.getByRole('heading', { level: 1 }).textContent()).toContain('西1局');
         const result = await expectDoraRowFits(page, `f9da 西1局 ${width}×${height}`);
-        expect(result.tiles).toBeGreaterThanOrEqual(4);
+        expect(result.tiles).toBeGreaterThanOrEqual(9);
       } finally {
         await context.close();
       }
     });
   }
+});
+
+describe('U-50: フェルトの卓・黄色い牌の背・王牌の列（通して見る画面。実ブラウザ）', () => {
+  async function expectBoard(page: Page, where: string) {
+    const m = await measureBoard(page);
+    expectNoHorizontalScroll(m, where);
+    expectBoardContrast(m, where);
+    expectWallFits(m, where);
+    expect(seriousViolations(await runAxe(page)), `${where} axe`).toEqual([]);
+    return m;
+  }
+
+  for (const [width, height] of [
+    [390, 844],
+    [768, 1024],
+    [1280, 800],
+    [1440, 900],
+    [1920, 1080],
+  ] as const) {
+    it(`${width}×${height}: 局の終わり・他家の手牌を開いたところ・迷いの答える前後を、ライト・ダークで検査する`, { timeout: 300_000 }, async () => {
+      for (const scheme of SCHEMES) {
+        const browse = await open({ width, height, scheme });
+        try {
+          await openReplay(browse.page);
+          await goToKyokuEnd(browse.page, 2);
+          const closed = await expectBoard(browse.page, `${width}×${height} ${scheme} 局の終わり`);
+          if (width >= 1280) expect(closed.viewport.scrollHeight).toBeLessThanOrEqual(height);
+          await goToKyokuEnd(browse.page, 0);
+          await browse.page.locator('.ohand').first().click();
+          await browse.page.locator('[data-open-hands="block"]').waitFor();
+          await expectBoard(browse.page, `${width}×${height} ${scheme} 他家の手牌を開いたところ`);
+          expect(browse.problems).toEqual([]);
+        } finally {
+          await browse.context.close();
+        }
+        const scene = await open({ width, height, scheme });
+        try {
+          await openReplay(scene.page);
+          await gotoScene(scene.page, 'k1h1e7');
+          const before = await expectBoard(scene.page, `${width}×${height} ${scheme} 迷い 答える前`);
+          await answerCurrent(scene.page);
+          const after = await expectBoard(scene.page, `${width}×${height} ${scheme} 迷い 答えたあと`);
+          expectSameTable(before, after, `${width}×${height} ${scheme} 迷い`);
+          if (width >= 1280) {
+            expect(before.viewport.scrollHeight).toBeLessThanOrEqual(height);
+            expect(after.viewport.scrollHeight).toBeLessThanOrEqual(height);
+          }
+        } finally {
+          await scene.context.close();
+        }
+      }
+    });
+  }
+
+  it('聴牌になった打牌の枠は --surface の外縁つき。直前の打牌とリーチの横向きも布の上で見分けられる', { timeout: 120_000 }, async () => {
+    for (const scheme of SCHEMES) {
+      const { context, page } = await open({ width: 1280, height: 800, scheme });
+      try {
+        await openReplay(page);
+        await goToKyokuEnd(page, 0);
+        await page.locator('.ohand').first().click();
+        await page.locator('[data-open-hands="block"]').waitFor();
+        const board = await measureBoard(page);
+        const felt = parseCssColor(board.felt);
+        const surface = parseCssColor(board.tokens.surface);
+        const rgbOf = (color: { r: number; g: number; b: number }) => ({ r: color.r, g: color.g, b: color.b });
+        const shadow = await page.locator('.table .tile.tp').first().evaluate((el) => getComputedStyle(el).boxShadow);
+        const layers = [...shadow.matchAll(/(rgba?\([^)]+\))\s+0px 0px 0px (\d+)px/g)].map((match) => ({ color: parseCssColor(match[1] as string), spread: Number(match[2]) }));
+        expect(layers, `${scheme} 聴牌の 2 重枠`).toHaveLength(2);
+        const [ring, halo] = layers as [(typeof layers)[number], (typeof layers)[number]];
+        expect([halo.color.r, halo.color.g, halo.color.b], `${scheme} 外縁`).toEqual([surface.r, surface.g, surface.b]);
+        const visible = contrast(rgbOf(ring.color), rgbOf(felt)) >= 3 || (contrast(rgbOf(halo.color), rgbOf(felt)) >= 3 && contrast(rgbOf(ring.color), rgbOf(halo.color)) >= 3);
+        expect(visible, `${scheme} 聴牌の枠`).toBe(true);
+
+        const sideways = page.locator('.table .rt.sw .tile').first();
+        expect(await sideways.count(), `${scheme} リーチ宣言牌`).toBe(1);
+        expect(await sideways.evaluate((el) => getComputedStyle(el).transform), `${scheme} リーチ宣言牌は横向き`).not.toBe('none');
+
+        await page.locator('#b-kstart').click();
+        await page.getByRole('button', { name: '次の巡目へ' }).click();
+        await page.getByRole('button', { name: '1手進む' }).click();
+        const latest = page.locator('.table .tile.latest').first();
+        expect(await latest.count(), `${scheme} 直前の打牌`).toBe(1);
+        const ink = parseCssColor(await latest.evaluate((el) => getComputedStyle(el).boxShadow.match(/rgba?\([^)]+\)/)?.[0] ?? ''));
+        expect(contrast(rgbOf(ink), rgbOf(felt)), `${scheme} 直前の打牌`).toBeGreaterThanOrEqual(3);
+      } finally {
+        await context.close();
+      }
+    }
+  });
 });
 
 describe('U-41・U-42・U-49: 操作の段の 2 つの段（悪手・迷い）と、解決した場面の薄い印', () => {
@@ -2034,6 +2069,179 @@ describe('U-41: 答えの欄の上の段の「解決」（実ブラウザ）', (
         await page.emulateMedia({ colorScheme: scheme });
         expect(seriousViolations(await runAxe(page)), scheme).toEqual([]);
       }
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+describe('F22・U-52: 通して見る画面の操作の段の「NAGA の結果を開く」（実ブラウザ）', () => {
+  const REPORT_URL = 'https://naga.dmv.nico/htmls/report_viewer.html?report_id=abc';
+
+  /** 操作の段の 1 段目の、リンクとキーの一覧のアイコンの位置と、操作の段・文書の高さ。 */
+  const measureBar = (page: Page) =>
+    page.evaluate(() => {
+      const box = (el: Element | null) => {
+        if (el === null) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+      };
+      const link = document.querySelector('.naga-btn');
+      return {
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth,
+        documentHeight: document.documentElement.scrollHeight,
+        windowHeight: window.innerHeight,
+        bar: box(document.querySelector('.pbar')),
+        row: box(document.querySelector('.pb-row.top')),
+        link: box(link),
+        key: box(document.querySelector('.key-btn')),
+        steps: box(document.querySelector('.pb-steps')),
+        kyoku: box(document.querySelector('.kyoku-btn')),
+        jumps: box(document.querySelector('.pb-jumps')),
+        strip: box(document.querySelector('.pbar .tl')),
+        rpStyle: document.querySelector('.rp')?.getAttribute('style') ?? '',
+        label: link?.getAttribute('aria-label') ?? null,
+        title: link?.getAttribute('title') ?? null,
+        href: link?.getAttribute('href') ?? null,
+        target: link?.getAttribute('target') ?? null,
+        rel: link?.getAttribute('rel') ?? null,
+        tag: link?.tagName ?? null,
+      };
+    });
+
+  for (const scheme of SCHEMES) {
+    for (const width of [390, 768, 1280] as const) {
+      it(`幅 ${width}px ${scheme}: URL を保存してあると、1 段目のキーの一覧のアイコンのすぐ左に、同じ大きさのリンク。窓に収まり、横スクロールが無く、axe の重大な違反が 0 件。Tab で届く。外へ通信しない`, { timeout: 90_000 }, async () => {
+        const { context, page, problems, external } = await open({ width, scheme, scenario: scenario({ naga: REPORT_URL }) });
+        try {
+          await openReplay(page);
+          const m = await measureBar(page);
+          expect(m).toMatchObject({ tag: 'A', label: 'NAGA の結果を開く', title: 'NAGA の結果を開く', href: REPORT_URL, target: '_blank' });
+          expect(m.rel).toMatch(/noopener/);
+          expect(m.rel).toMatch(/noreferrer/);
+          const link = m.link!;
+          const key = m.key!;
+          const row = m.row!;
+          // キーの一覧のアイコンと同じ大きさ・同じ高さで、そのすぐ左（隙間は小さい）。1 段目の中に収まる
+          expect(link.width).toBe(key.width);
+          expect(link.height).toBe(key.height);
+          expect(Math.abs(link.top - key.top)).toBeLessThanOrEqual(1);
+          expect(link.right).toBeLessThanOrEqual(key.left);
+          expect(key.left - link.right).toBeLessThanOrEqual(12);
+          expect(link.left).toBeGreaterThanOrEqual(row.left - 0.5);
+          expect(key.right).toBeLessThanOrEqual(row.right + 0.5);
+          expect(boxesOverlap(link, key)).toBe(false);
+          // 進める・戻るの段や局の選択と重ならない
+          expect(boxesOverlap(link, m.steps!)).toBe(false);
+          expect(boxesOverlap(link, m.kyoku!)).toBe(false);
+          expect(m.scroll, `scrollWidth ${m.scroll} > clientWidth ${m.client}`).toBeLessThanOrEqual(m.client);
+          expect(m.body).toBeLessThanOrEqual(m.client);
+
+          const axe = await runAxe(page);
+          expect(seriousViolations(axe)).toEqual([]);
+          const reach = await unreachableByTab(page);
+          expect(reach.missed).toEqual([]);
+          expect(problems).toEqual([]);
+          expect(external).toEqual([]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  it('URL が無いときは、リンクは出ない（操作の段は、これまでと同じ）', { timeout: 60_000 }, async () => {
+    const { context, page } = await open({ width: 1280, height: 800 });
+    try {
+      await openReplay(page);
+      expect(await page.locator('.naga-btn').count()).toBe(0);
+      expect(await page.getByRole('link', { name: 'NAGA の結果を開く' }).count()).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('リンクを足しても、操作の段は高くならない: 幅 390〜1500 のどの幅でも、リンクが有るときの操作の段は、無いときより高くない。標準の窓（390・768・1120・1280・1366・1440・1920）では、操作の段・1 段目・位置の帯・文書の高さ・卓の大きさの指定が同じで、1280×800 と 1920×1080 では文書が窓の高さに収まる（U-39）', { timeout: 240_000 }, async () => {
+    const without = await open({ width: 1280, height: 800 });
+    const withUrl = await open({ width: 1280, height: 800, scenario: scenario({ naga: REPORT_URL }) });
+    try {
+      await openReplay(without.page);
+      await openReplay(withUrl.page);
+      // 同じ高さを求める標準の窓
+      const standard: Array<[number, number]> = [
+        [390, 844],
+        [768, 1024],
+        [1120, 800],
+        [1280, 800],
+        [1366, 768],
+        [1440, 900],
+        [1920, 1080],
+      ];
+      // それ以外は、20px ごとに、「高くならない」ことだけを確かめる
+      const sweep: Array<[number, number]> = [];
+      for (let width = 400; width <= 1500; width += 20) sweep.push([width, 800]);
+      const isStandard = (width: number, height: number) => standard.some(([w, h]) => w === width && h === height);
+      // 窓の大きさを替えたあと、測った値が 2 回続けて同じになるまで待つ（卓の大きさの指定は、大きさの変化を見る仕組みで、少し遅れて決まる）
+      const settled = async (page: Page) => {
+        let last = JSON.stringify(await measureBar(page));
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          await page.waitForTimeout(80);
+          const next = JSON.stringify(await measureBar(page));
+          if (next === last) break;
+          last = next;
+        }
+        return JSON.parse(last) as Awaited<ReturnType<typeof measureBar>>;
+      };
+      for (const [width, height] of [...standard, ...sweep]) {
+        for (const { page } of [without, withUrl]) await page.setViewportSize({ width, height });
+        const a = await settled(without.page);
+        const b = await settled(withUrl.page);
+        const at = `${width}×${height}`;
+        expect(a.link, `${at}: 無いとき`).toBeNull();
+        expect(b.link, `${at}: 有るとき`).not.toBeNull();
+        expect(b.scroll, `${at}: 横スクロール`).toBeLessThanOrEqual(b.client);
+        expect(b.bar!.height, `${at}: 操作の段が高くならない`).toBeLessThanOrEqual(a.bar!.height);
+        if (!isStandard(width, height)) continue;
+        expect(b.bar!.height, `${at}: 操作の段の高さ`).toBe(a.bar!.height);
+        expect(b.row!.height, `${at}: 1 段目の高さ`).toBe(a.row!.height);
+        expect(b.strip!.top, `${at}: 位置の帯の位置`).toBe(a.strip!.top);
+        expect(b.jumps!.top, `${at}: 悪手・迷いの段の位置`).toBe(a.jumps!.top);
+        expect(b.steps!.top, `${at}: 進める・戻るの位置`).toBe(a.steps!.top);
+        expect(b.rpStyle, `${at}: 卓の大きさの指定`).toBe(a.rpStyle);
+        expect(b.documentHeight, `${at}: 文書の高さ`).toBe(a.documentHeight);
+        if ((width === 1280 && height === 800) || (width === 1920 && height === 1080)) {
+          expect(b.documentHeight, `${at}: 文書が窓の高さに収まる`).toBeLessThanOrEqual(b.windowHeight);
+        }
+      }
+    } finally {
+      await without.context.close();
+      await withUrl.context.close();
+    }
+  });
+
+  it('半荘のページで貼って保存すると、通して見る画面にリンクが出て、消すと消える（実際の操作）', { timeout: 90_000 }, async () => {
+    const { context, page, problems, external } = await open({ width: 1280, height: 800 });
+    try {
+      await page.getByRole('textbox', { name: 'NAGA の結果の URL' }).fill(REPORT_URL);
+      await page.getByRole('button', { name: '保存' }).click();
+      await page.getByRole('link', { name: REPORT_URL }).waitFor();
+      await openReplay(page);
+      const link = page.getByRole('link', { name: 'NAGA の結果を開く' });
+      await link.waitFor();
+      expect(await link.getAttribute('href')).toBe(REPORT_URL);
+      // 通して見る画面でも、Ctrl+Z / Ctrl+Y はアプリの取り消し（消すのを戻す前に、いったん戻って消す）
+      await page.keyboard.press('Alt+ArrowLeft');
+      await page.getByRole('button', { name: '消す' }).click();
+      await page.getByRole('textbox', { name: 'NAGA の結果の URL' }).waitFor();
+      await openReplay(page);
+      expect(await page.getByRole('link', { name: 'NAGA の結果を開く' }).count()).toBe(0);
+      await page.keyboard.press('Control+z');
+      await link.waitFor();
+      expect(await link.getAttribute('href')).toBe(REPORT_URL);
+      expect(problems).toEqual([]);
+      expect(external).toEqual([]);
     } finally {
       await context.close();
     }

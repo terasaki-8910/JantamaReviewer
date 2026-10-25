@@ -239,6 +239,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
         ticks={ticks}
         fineMissOnly={fineMissOnly}
         onFineMissOnly={setFineMissOnly}
+        nagaUrl={session.naga?.url ?? null}
       />
       {scene === null ? (
         <BrowseWork

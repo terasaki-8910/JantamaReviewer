@@ -23,9 +23,9 @@ use super::rows::{canon, make_key, parse_key, ExtraValue, Kind, ReportMeta};
 use crate::ids::{new_uid, sha256_hex};
 use crate::settings::Settings;
 use crate::store::{
-    valid_session_id, write_atomic, ExtraMemo, Links, Maka, MemoText, Memos, Resolved, SelfRating,
-    SelfRatings, SessionRecords, GAMES_DIR, LINKS_FILE, MAKA_FILE, MEMOS_FILE, REPORT_FILE,
-    RESOLVED_FILE, SELF_RATINGS_FILE, TRASH_DIR,
+    valid_session_id, write_atomic, ExtraMemo, Links, Maka, MemoText, Memos, NagaResult, Resolved,
+    SelfRating, SelfRatings, SessionRecords, GAMES_DIR, LINKS_FILE, MAKA_FILE, MEMOS_FILE,
+    NAGA_FILE, REPORT_FILE, RESOLVED_FILE, SELF_RATINGS_FILE, TRASH_DIR,
 };
 use crate::study::uid::legacy_extra_uid;
 use crate::study::{
@@ -224,7 +224,7 @@ fn list_session_dirs(root: &Path, sub: &str) -> BTreeSet<String> {
     ids
 }
 
-/// 半荘のフォルダの 5 つの記録のファイルを読む。
+/// 半荘のフォルダの 6 つの記録のファイルを読む。
 fn read_session_records(dir: &Path) -> Result<SessionRecords, String> {
     Ok(SessionRecords {
         links: read_strict::<Links>(&dir.join(LINKS_FILE))?.unwrap_or_default(),
@@ -232,10 +232,22 @@ fn read_session_records(dir: &Path) -> Result<SessionRecords, String> {
         maka: read_strict::<Maka>(&dir.join(MAKA_FILE))?.unwrap_or_default(),
         memos: read_strict::<Memos>(&dir.join(MEMOS_FILE))?.unwrap_or_default(),
         resolved: read_strict::<Resolved>(&dir.join(RESOLVED_FILE))?.unwrap_or_default(),
+        naga: read_naga_strict(&dir.join(NAGA_FILE))?,
     })
 }
 
-/// 5 つのファイルのうち、中身が変わったものだけを書く（空になった種類のファイルは消す）。
+/// `naga.json` を、厳しく読む。NAGA のページの URL でないもの（手で書き換えたファイル）は、壊れたファイルと同じに扱う
+/// （読めない半荘として見送る。他の端末へ送らず、消した印も作らない）。
+fn read_naga_strict(path: &Path) -> Result<Option<NagaResult>, String> {
+    read_strict::<NagaResult>(path)?
+        .map(|naga| {
+            naga.checked()
+                .map_err(|e| format!("{}: {e}", file_label(path)))
+        })
+        .transpose()
+}
+
+/// 6 つのファイルのうち、中身が変わったものだけを書く（空になった種類のファイルは消す）。
 fn write_changed_records(dir: &Path, records: &SessionRecords) -> Result<(), String> {
     let files = records.files().map_err(|e| e.to_string())?;
     for (name, text) in files {
@@ -319,6 +331,9 @@ fn session_rows(
             RESOLVED_FILE,
         ));
     }
+    if let Some(naga) = &records.naga {
+        rows.push((make_key(Kind::Naga, &[session]), canon(naga), NAGA_FILE));
+    }
     for (id, memo) in &records.memos.marks {
         rows.push((
             make_key(Kind::MarkMemo, &[session, id]),
@@ -347,6 +362,7 @@ fn session_value(records: &SessionRecords, kind: Kind, rest: &str) -> Option<Str
         Kind::MakaKyoku => records.maka.kyokus.get(rest).map(canon),
         Kind::MakaHanchan => records.maka.hanchan.as_ref().map(canon),
         Kind::Resolved => records.resolved.decisions.get(rest).map(canon),
+        Kind::Naga => records.naga.as_ref().map(canon),
         Kind::MarkMemo => records.memos.marks.get(rest).map(canon),
         Kind::ExtraMemo => records
             .memos
@@ -440,6 +456,10 @@ fn set_session_row(
         (Kind::Resolved, None) => {
             records.resolved.decisions.remove(rest);
         }
+        (Kind::Naga, Some(v)) => {
+            records.naga = Some(parse_value::<NagaResult>(v, "NAGA の結果")?);
+        }
+        (Kind::Naga, None) => records.naga = None,
         (Kind::MarkMemo, Some(v)) => {
             records
                 .memos
@@ -1232,6 +1252,7 @@ pub fn change_marker(data_dir: &Path, settings_file: &Path) -> String {
                     MAKA_FILE,
                     MEMOS_FILE,
                     RESOLVED_FILE,
+                    NAGA_FILE,
                     REPORT_FILE,
                 ] {
                     stat(&dir.join(file), &mut parts);

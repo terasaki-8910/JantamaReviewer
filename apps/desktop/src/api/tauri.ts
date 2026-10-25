@@ -194,6 +194,13 @@ export const api = {
   setResolved: (sessionId: string, decisionKey: string, resolved: boolean) =>
     invoke<void>('set_resolved', { sessionId, decisionKey, resolved }),
 
+  // ---- NAGA の結果の URL（F22 段 2）。半荘のフォルダの naga.json に保存する。アプリは、この URL にアクセスしない ----
+  /**
+   * 半荘の NAGA の結果の URL を保存する・消す。`url` が null か、空（前後の空白を除いて）なら消す（naga.json も消える。取り消しにも使う）。
+   * NAGA のサイトの https の URL でなければ、理由の文を投げて、何も保存しない。
+   */
+  setNagaUrl: (sessionId: string, url: string | null) => invoke<void>('set_naga_url', { sessionId, url }),
+
   // ---- 終局直後のメモ（F4、U-28）。ウィジェットの記録は書き換えず、半荘のフォルダの memos.json に保存する ----
   /** 迷いマークのメモを書く（置き換える）。「候補」も「理由」も空なら、メモを消す。 */
   setMemo: (sessionId: string, markId: number, memo: MemoEntry) =>

@@ -24,6 +24,7 @@ use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 
 use crate::capture::{CaptureError, CaptureTarget, Screenshot};
+use crate::naga::{checked_naga_url, invalid_url_message};
 
 /// 半荘のフォルダを入れるフォルダ名。
 pub const GAMES_DIR: &str = "games";
@@ -55,6 +56,8 @@ pub const MAKA_FILE: &str = "maka.json";
 pub const MEMOS_FILE: &str = "memos.json";
 /// 解決した局面（判断の鍵ごとに、解決を入れた時刻）のファイル名（半荘のフォルダの中。F16）。
 pub const RESOLVED_FILE: &str = "resolved.json";
+/// NAGA の結果のページの URL（半荘ごとに 1 つ）のファイル名（半荘のフォルダの中。F22 段 2）。
+pub const NAGA_FILE: &str = "naga.json";
 /// 読み込んだ記録のうち、この保存先にまだフォルダの無い半荘の分を、フォルダが現れるまで取っておくファイル名（保存先の直下。D-2）。
 pub const PENDING_FILE: &str = "pending-records.json";
 /// メモの「候補」の長さの上限（文字数）。「3m・6p」のような短い文。
@@ -468,6 +471,48 @@ pub struct Resolved {
     pub decisions: BTreeMap<String, i64>,
 }
 
+/// NAGA の結果のページの URL（`naga.json`。F22 段 2）。半荘ごとに 1 つ。`url` は NAGA のサイトの https の URL
+/// （`naga::checked_naga_url` を通ったもの）、`saved_ms` は保存した時刻（UNIX エポックからのミリ秒）。
+/// URL を消すとファイルも消す（空のファイルは持たない）。無ければ、URL は無い。知らない項目があっても読める。
+///
+/// ```json
+/// { "url": "<NAGA の結果のページの URL>", "saved_ms": 1760000000123 }
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NagaResult {
+    pub url: String,
+    #[serde(default)]
+    pub saved_ms: i64,
+}
+
+impl NagaResult {
+    /// 保存する値を確かめて、保存する形（URL を整えた形）にする。URL が NAGA のサイトのものでない・時刻が負のときは断る。
+    pub fn checked(self) -> Result<NagaResult, StoreError> {
+        if self.saved_ms < 0 {
+            return Err(StoreError::InvalidNaga(
+                "NAGA の結果を保存した時刻が正しくありません".to_string(),
+            ));
+        }
+        let url = checked_naga_url(&self.url).ok_or_else(|| {
+            StoreError::InvalidNaga(format!(
+                "NAGA の結果の URL が NAGA のページのものではありません: {:?}",
+                self.url
+            ))
+        })?;
+        Ok(NagaResult {
+            url,
+            saved_ms: self.saved_ms,
+        })
+    }
+}
+
+/// 半荘のフォルダの `naga.json`。無い・読めない・NAGA のページの URL でないときは `None`
+/// （手で書き換えたファイルの URL を、画面のリンクにしない）。
+fn read_naga(dir: &Path) -> Option<NagaResult> {
+    read_json_file::<NagaResult>(&dir.join(NAGA_FILE))
+        .filter(|naga| checked_naga_url(&naga.url).is_some())
+}
+
 fn links_empty(links: &Links) -> bool {
     links.marks.is_empty() && links.ratings.is_empty() && links.ratings_version.is_none()
 }
@@ -488,8 +533,8 @@ fn resolved_empty(resolved: &Resolved) -> bool {
     resolved.decisions.is_empty()
 }
 
-/// 半荘 1 つの、書き出し・読み込み（D-2）の対象の記録: 結びつけ・局の自己評価の付け直し・MAKA の評価・メモ・解決した局面
-/// （それぞれ、半荘のフォルダの `links.json`・`self-ratings.json`・`maka.json`・`memos.json`・`resolved.json` の中身）。
+/// 半荘 1 つの、書き出し・読み込み（D-2）の対象の記録: 結びつけ・局の自己評価の付け直し・MAKA の評価・メモ・解決した局面・NAGA の結果の URL
+/// （それぞれ、半荘のフォルダの `links.json`・`self-ratings.json`・`maka.json`・`memos.json`・`resolved.json`・`naga.json` の中身）。
 /// 空の種類は書き出さず、読み込むときは、無い種類を空として読む。
 /// ウィジェットの記録（`events.jsonl`）・取り込んだ結果（`report.json`）・文字認識の写し（`ocr.json`）・画像は含まない。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -504,6 +549,8 @@ pub struct SessionRecords {
     pub memos: Memos,
     #[serde(default, skip_serializing_if = "resolved_empty")]
     pub resolved: Resolved,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub naga: Option<NagaResult>,
 }
 
 /// 結びつけ・メモの鍵（迷いマーク・評価の番号を、10 進の文字列にしたもの）の形か。ストアが書く形（先頭に 0 を付けない）だけを通す。
@@ -519,10 +566,11 @@ impl SessionRecords {
             && maka_empty(&self.maka)
             && memos_empty(&self.memos)
             && resolved_empty(&self.resolved)
+            && self.naga.is_none()
     }
 
     /// 半荘のフォルダに置くファイルの名前と中身（JSON）。空の種類は `None`（ファイルを置かない）。
-    pub fn files(&self) -> Result<[(&'static str, Option<String>); 5], StoreError> {
+    pub fn files(&self) -> Result<[(&'static str, Option<String>); 6], StoreError> {
         fn text<T: Serialize>(value: &T, empty: bool) -> Result<Option<String>, StoreError> {
             if empty {
                 Ok(None)
@@ -541,6 +589,13 @@ impl SessionRecords {
             (
                 RESOLVED_FILE,
                 text(&self.resolved, resolved_empty(&self.resolved))?,
+            ),
+            (
+                NAGA_FILE,
+                match &self.naga {
+                    Some(naga) => text(naga, false)?,
+                    None => None,
+                },
             ),
         ])
     }
@@ -583,6 +638,7 @@ impl SessionRecords {
                 )));
             }
         }
+        let naga = self.naga.map(NagaResult::checked).transpose()?;
         let mut marks = BTreeMap::new();
         for (key, text) in &self.memos.marks {
             if !is_record_key(key) {
@@ -626,6 +682,7 @@ impl SessionRecords {
             maka: self.maka,
             memos: Memos { marks, extras },
             resolved: self.resolved,
+            naga,
         })
     }
 }
@@ -667,6 +724,8 @@ pub struct SessionRecord {
     pub memos: Memos,
     /// 解決した局面（出題・解き直し・通して見る画面で「解決」を入れたもの。F16）。
     pub resolved: Resolved,
+    /// NAGA の結果のページの URL（半荘のページで貼ったもの。無ければ `None`。F22 段 2）。
+    pub naga: Option<NagaResult>,
 }
 
 #[derive(Debug)]
@@ -695,6 +754,8 @@ pub enum StoreError {
     InvalidEvaluation(String),
     /// 終局直後のメモの値が正しくない。
     InvalidMemo(String),
+    /// NAGA の結果の URL が正しくない（NAGA のサイトの https の URL ではない、など。F22 段 2）。理由は、画面に出す文。
+    InvalidNaga(String),
     /// 消した半荘の置き場に、同じ名前の半荘が残っている（消せない。置き場は、アプリを開き直すと片づく）。
     TrashOccupied(String),
     /// 消した半荘の中に、その名前が無い（戻せない）。
@@ -735,6 +796,7 @@ impl fmt::Display for StoreError {
                 write!(f, "局の評価の値が正しくありません: {reason}")
             }
             StoreError::InvalidMemo(reason) => write!(f, "メモの値が正しくありません: {reason}"),
+            StoreError::InvalidNaga(reason) => f.write_str(reason),
             StoreError::TrashOccupied(id) => write!(
                 f,
                 "消した半荘の置き場に、同じ名前の半荘が残っているため、消せません: {id}。アプリを開き直すと片づきます。"
@@ -1115,7 +1177,7 @@ impl Store {
         self.scan_sessions()
     }
 
-    /// 書き出す記録: 一覧に出る半荘（`list_sessions` と同じ決まり）ごとの、結びつけ・自己評価・MAKA の評価・メモ・解決した局面。
+    /// 書き出す記録: 一覧に出る半荘（`list_sessions` と同じ決まり）ごとの、結びつけ・自己評価・MAKA の評価・メモ・解決した局面・NAGA の結果の URL。
     /// 消した半荘（`trash/`）は入らない。何も書き換えない（取っておいた記録も付けない）。
     pub fn session_records(&self) -> Result<BTreeMap<String, SessionRecords>, StoreError> {
         Ok(self
@@ -1130,6 +1192,7 @@ impl Store {
                         maka: session.maka,
                         memos: session.memos,
                         resolved: session.resolved,
+                        naga: session.naga,
                     },
                 )
             })
@@ -1317,6 +1380,7 @@ impl Store {
                 maka: read_json_file::<Maka>(&dir.join(MAKA_FILE)).unwrap_or_default(),
                 memos: read_json_file::<Memos>(&dir.join(MEMOS_FILE)).unwrap_or_default(),
                 resolved: read_json_file::<Resolved>(&dir.join(RESOLVED_FILE)).unwrap_or_default(),
+                naga: read_naga(&dir),
             });
         }
         sessions.sort_by(|a, b| {
@@ -1803,6 +1867,44 @@ impl Store {
         Ok(())
     }
 
+    // ---- NAGA の結果の URL（F22 段 2）: 半荘ごとに 1 つ。events.jsonl は書き換えない ----
+
+    /// NAGA の結果の URL。まだ無い・読めない・NAGA のページの URL でないときは `None`。
+    pub fn load_naga(&self, session_id: &str) -> Result<Option<NagaResult>, StoreError> {
+        let dir = self.session_path(session_id)?;
+        Ok(read_naga(&dir))
+    }
+
+    /// NAGA の結果の URL を保存する・消す。`url` が `None` か、前後の空白を除いて空なら、消す
+    /// （ファイルも消す。空のファイルは持たない。無い URL を消してもエラーにならない）。
+    /// 入れるときは、NAGA のサイトの https の URL かを確かめて（そうでなければ `InvalidNaga` を返し、何も書かない）、
+    /// 整えた URL と、`t_ms`（いま）を保存した時刻にして置く（すでにあれば置き換える）。
+    pub fn set_naga_url(
+        &self,
+        session_id: &str,
+        url: Option<&str>,
+        t_ms: i64,
+    ) -> Result<(), StoreError> {
+        let dir = self.session_path(session_id)?;
+        let path = dir.join(NAGA_FILE);
+        let Some(text) = url.map(str::trim).filter(|text| !text.is_empty()) else {
+            return match fs::remove_file(&path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e.into()),
+            };
+        };
+        let url =
+            checked_naga_url(text).ok_or_else(|| StoreError::InvalidNaga(invalid_url_message()))?;
+        let value = NagaResult {
+            url,
+            saved_ms: t_ms.max(0),
+        };
+        let text = serde_json::to_string_pretty(&value)?;
+        write_atomic(&path, text.as_bytes())?;
+        Ok(())
+    }
+
     /// 半荘のフォルダの JSON のファイルを読んで（無い・読めないときは空）、`change` で書き換えて、書き戻す。
     fn update_json<T>(
         &self,
@@ -1853,7 +1955,7 @@ fn move_all(
     Ok(())
 }
 
-/// 半荘のフォルダの記録のファイル（結びつけ・自己評価・MAKA・メモ・解決）を、`records` の内容にそろえる（空の種類のファイルは消す）。
+/// 半荘のフォルダの記録のファイル（結びつけ・自己評価・MAKA・メモ・解決・NAGA の結果の URL）を、`records` の内容にそろえる（空の種類のファイルは消す）。
 fn write_session_records(dir: &Path, records: &SessionRecords) -> Result<(), StoreError> {
     for (file, text) in records.files()? {
         match text {
@@ -4207,6 +4309,222 @@ mod tests {
         assert_eq!(
             store.load_resolved(&older).unwrap().decisions.get("k0h0e1"),
             Some(&RESOLVED_AT)
+        );
+    }
+
+    // ---- F22 段 2: NAGA の結果の URL の保存（naga.json） ----
+    // URL の文字列は、ソースに書けない（tests/safety.rs の S-2）ので、`naga::sample_url` で組み立てる。
+    // 受け付ける URL・断る URL の細かい決まりは、`tests/naga_url.rs`。
+
+    use crate::naga::{sample_url, NAGA_HOST};
+
+    /// NAGA のサイトの https の URL ではない文字の見本。スキーム・ホストを部品から組み立てる。
+    fn not_naga_urls() -> Vec<String> {
+        vec![
+            format!("{}://{NAGA_HOST}/x", "http"),
+            format!("{}://other.example/x", "https"),
+            format!("{}://{NAGA_HOST}.other.example/x", "https"),
+            format!("{}://{NAGA_HOST}@other.example/x", "https"),
+            format!("{}://user@{NAGA_HOST}/x", "https"),
+            format!("{}://{NAGA_HOST}:8443/x", "https"),
+            format!("javascript:alert(\"{NAGA_HOST}\")"),
+            format!("{NAGA_HOST}/x"),
+            "not a url".to_string(),
+        ]
+    }
+
+    #[test]
+    fn f22_a_naga_url_can_be_saved_replaced_and_removed_and_the_file_goes_when_it_is_removed() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let path = session_dir_of(&store, &id).join(NAGA_FILE);
+        assert_eq!(store.load_naga(&id).unwrap(), None);
+        assert_eq!(only_session(&store).naga, None);
+        assert!(!path.exists(), "入れるまでは、ファイルを作らない");
+
+        store
+            .set_naga_url(&id, Some(&sample_url("a1")), T0 + 5)
+            .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"url": sample_url("a1"), "saved_ms": T0 + 5})
+        );
+        let loaded = store.load_naga(&id).unwrap().unwrap();
+        assert_eq!(loaded.url, sample_url("a1"));
+        assert_eq!(loaded.saved_ms, T0 + 5);
+        assert_eq!(only_session(&store).naga, Some(loaded), "一覧にも入る");
+
+        // 入れ直すと、URL と保存した時刻が替わる。前後の空白は除く
+        store
+            .set_naga_url(&id, Some(&format!("  {}\t\n", sample_url("a2"))), T0 + 9)
+            .unwrap();
+        let loaded = store.load_naga(&id).unwrap().unwrap();
+        assert_eq!(loaded.url, sample_url("a2"));
+        assert_eq!(loaded.saved_ms, T0 + 9);
+
+        // 消す: `None` でも、空白だけでも。消すとファイルも無くなり、無い URL を消してもエラーにならない
+        store.set_naga_url(&id, None, T0 + 10).unwrap();
+        assert!(!path.exists());
+        assert_eq!(only_session(&store).naga, None);
+        store.set_naga_url(&id, None, T0 + 11).unwrap();
+        store
+            .set_naga_url(&id, Some(&sample_url("a3")), T0 + 12)
+            .unwrap();
+        assert!(path.is_file());
+        store
+            .set_naga_url(&id, Some(" \u{3000} "), T0 + 13)
+            .unwrap();
+        assert!(
+            !path.exists(),
+            "空白だけは、消す（正しくない URL ではない）"
+        );
+        store.set_naga_url(&id, Some(""), T0 + 14).unwrap();
+        assert!(!path.with_file_name("naga.json.tmp").exists());
+
+        // 時刻が負でも、0 として保存する
+        store
+            .set_naga_url(&id, Some(&sample_url("a4")), -5)
+            .unwrap();
+        assert_eq!(store.load_naga(&id).unwrap().unwrap().saved_ms, 0);
+    }
+
+    #[test]
+    fn f22_a_url_that_is_not_a_naga_page_is_refused_with_the_reason_and_writes_nothing() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let path = session_dir_of(&store, &id).join(NAGA_FILE);
+        for bad in not_naga_urls() {
+            match store.set_naga_url(&id, Some(&bad), T0) {
+                Err(StoreError::InvalidNaga(reason)) => {
+                    assert_eq!(reason, crate::naga::invalid_url_message(), "{bad:?}");
+                    assert!(reason.contains(NAGA_HOST), "{reason}");
+                }
+                other => panic!("{bad:?} は断る: {other:?}"),
+            }
+            assert!(!path.exists(), "{bad:?}");
+        }
+        // 保存してある URL は、断ったときに、そのまま残る
+        store
+            .set_naga_url(&id, Some(&sample_url("a1")), T0 + 1)
+            .unwrap();
+        let before = fs::read(&path).unwrap();
+        for bad in not_naga_urls() {
+            assert!(
+                store.set_naga_url(&id, Some(&bad), T0 + 2).is_err(),
+                "{bad:?}"
+            );
+        }
+        assert_eq!(fs::read(&path).unwrap(), before);
+        // 半荘の名前が正しくないときも、断る（消すときも）
+        for bad in ["", "..", "../x", "a/b", "x y", "20991231-235959"] {
+            assert!(
+                matches!(
+                    store.set_naga_url(bad, Some(&sample_url("a1")), T0),
+                    Err(StoreError::UnknownSession(_))
+                ),
+                "{bad:?}"
+            );
+            assert!(store.set_naga_url(bad, None, T0).is_err(), "{bad:?}");
+            assert!(store.load_naga(bad).is_err(), "{bad:?}");
+        }
+        assert!(!store
+            .root()
+            .join(GAMES_DIR)
+            .join("20991231-235959")
+            .exists());
+    }
+
+    #[test]
+    fn f22_a_naga_write_never_touches_the_recording_or_the_other_record_files() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        store.set_maka_hanchan(&id, "A+").unwrap();
+        store.set_mark_link(&id, 1, "k0h0e1").unwrap();
+        store.set_resolved(&id, "k0h0e1", true, T0).unwrap();
+        let dir = session_dir_of(&store, &id);
+        let others: Vec<(&str, Vec<u8>)> = [MAKA_FILE, LINKS_FILE, RESOLVED_FILE]
+            .into_iter()
+            .map(|name| (name, fs::read(dir.join(name)).unwrap()))
+            .collect();
+        let before = event_lines(&store);
+        let view_before = store.view();
+        store
+            .set_naga_url(&id, Some(&sample_url("a1")), T0 + 1)
+            .unwrap();
+        store.set_naga_url(&id, None, T0 + 2).unwrap();
+        assert_eq!(event_lines(&store), before);
+        assert_eq!(store.view(), view_before);
+        for (name, bytes) in &others {
+            assert_eq!(&fs::read(dir.join(name)).unwrap(), bytes, "{name}");
+        }
+        // 記録の続きは、これまでどおり同じ半荘に入る
+        store.add_mark(T0 + 5, shot()).unwrap();
+        assert_eq!(store.current_session_id(), Some(id.as_str()));
+    }
+
+    #[test]
+    fn f22_a_broken_or_foreign_naga_file_reads_as_no_url_and_the_next_write_replaces_it() {
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let dir = session_dir_of(&store, &id);
+        // 手で書き換えた、NAGA のページでない URL は、画面のリンクにしない
+        let foreign = serde_json::json!({
+            "url": format!("{}://other.example/x", "https"),
+            "saved_ms": 1
+        });
+        for broken in [
+            "{broken".to_string(),
+            "[]".to_string(),
+            "42".to_string(),
+            String::new(),
+            r#"{"url": 7}"#.to_string(),
+            r#"{"saved_ms": 1}"#.to_string(),
+            foreign.to_string(),
+        ] {
+            fs::write(dir.join(NAGA_FILE), &broken).unwrap();
+            assert_eq!(only_session(&store).naga, None, "{broken:?}");
+            assert_eq!(store.load_naga(&id).unwrap(), None, "{broken:?}");
+        }
+        fs::write(dir.join(NAGA_FILE), "{broken").unwrap();
+        store
+            .set_naga_url(&id, Some(&sample_url("a1")), T0)
+            .unwrap();
+        assert_eq!(
+            store.load_naga(&id).unwrap().map(|naga| naga.url),
+            Some(sample_url("a1"))
+        );
+        // 知らない項目があっても読める。保存した時刻が無いファイルは、0 として読む
+        fs::write(
+            dir.join(NAGA_FILE),
+            serde_json::json!({"url": sample_url("a9"), "later": [1]}).to_string(),
+        )
+        .unwrap();
+        let loaded = store.load_naga(&id).unwrap().unwrap();
+        assert_eq!((loaded.url, loaded.saved_ms), (sample_url("a9"), 0));
+    }
+
+    #[test]
+    fn f22_the_naga_file_moves_with_the_session_folder_when_it_is_deleted_and_restored() {
+        let (_tmp, mut store) = open_store();
+        let (older, _newer) = two_sessions(&mut store);
+        store
+            .set_naga_url(&older, Some(&sample_url("a1")), T0 + 1)
+            .unwrap();
+        store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+        assert!(store
+            .root()
+            .join(TRASH_DIR)
+            .join(&older)
+            .join(NAGA_FILE)
+            .is_file());
+        store
+            .restore_sessions(std::slice::from_ref(&older))
+            .unwrap();
+        assert_eq!(
+            store.load_naga(&older).unwrap().map(|naga| naga.url),
+            Some(sample_url("a1"))
         );
     }
 

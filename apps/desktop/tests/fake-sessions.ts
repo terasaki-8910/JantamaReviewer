@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { ExtraMemo, Links, MemoPosition, OcrCache, SelfRatingValue, SessionRecord } from '../src/api/types';
+import { NAGA_URL_INVALID, isNagaUrl } from '../src/main/naga';
 
 const REPORTS_DIR = resolve(import.meta.dirname, '../../../packages/engine/tests/fixtures/reports');
 
@@ -74,6 +75,7 @@ export function seedSession(startedMs: number, options: SeedOptions = {}): { ses
     maka: { kyokus: {} },
     memos: { marks: {}, extras: [] },
     resolved: { decisions: {} },
+    naga: null,
   };
   return options.report ? { session, report: options.report } : { session };
 }
@@ -97,6 +99,8 @@ export class FakeSessionStore {
   failNextMemo: string | null = null;
   /** 解決の保存の呼び出しの記録（'on:半荘:k0h0e3'・'off:半荘:k0h0e3'）。 */
   readonly resolveCalls: string[] = [];
+  /** NAGA の結果の URL の保存の呼び出しの記録（'set:半荘:URL'・'clear:半荘'）。 */
+  readonly nagaCalls: string[] = [];
 
   constructor(seeds: Array<{ session: SessionRecord; report?: ReportKey }>) {
     this.active = seeds.map((s) => s.session);
@@ -223,6 +227,20 @@ export class FakeSessionStore {
         else delete decisions[decisionKey];
         return { ...s, resolved: { decisions } };
       });
+      return undefined;
+    },
+    // NAGA の結果の URL（F22 段 2）。Rust 側と同じく、null か空白だけなら消し、NAGA のサイトの https の URL だけを、整えて保存する
+    // （そうでなければ、画面に出す理由の文を投げる）。呼ばれた順は `nagaCalls`
+    set_naga_url: (args) => {
+      const { sessionId, url } = args as { sessionId: string; url: string | null };
+      const text = (url ?? '').trim();
+      this.nagaCalls.push(text === '' ? `clear:${sessionId}` : `set:${sessionId}:${text}`);
+      if (text === '') {
+        this.update(sessionId, (s) => ({ ...s, naga: null }));
+        return undefined;
+      }
+      if (!isNagaUrl(text)) throw NAGA_URL_INVALID;
+      this.update(sessionId, (s) => ({ ...s, naga: { url: new URL(text).href, saved_ms: Date.now() } }));
       return undefined;
     },
     // 終局直後のメモ（F4、U-28）。Rust 側と同じく、前後の空白を除き、「候補」も「理由」も空なら消す。迷いマークの無い迷いのメモは、名前ごとに置き換える

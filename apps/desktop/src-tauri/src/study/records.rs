@@ -638,22 +638,25 @@ mod tests {
 
     use super::*;
     use crate::capture::{CaptureError, CaptureTarget, Screenshot};
+    use crate::naga::sample_url;
     use crate::replay_keys;
     use crate::settings::WidgetPosition;
     use crate::store::{
-        Links, Maka, MemoPosition, OcrCache, OcrEntry, Rating, SelfRating, SESSION_GAP_MS,
+        Links, Maka, MemoPosition, NagaResult, OcrCache, OcrEntry, Rating, SelfRating,
+        SESSION_GAP_MS,
     };
     use crate::study::{AnswerMode, NewAnswer, ProblemRef, WeekStats};
 
     const T0: i64 = 1_760_000_000_123;
     const REPORT_SENTINEL: &str = "REPORT-SENTINEL-4f2a";
     const OCR_SENTINEL: &str = "OCR-SENTINEL-9b1c";
-    const RECORD_FILES: [&str; 5] = [
+    const RECORD_FILES: [&str; 6] = [
         "links.json",
         "self-ratings.json",
         "maka.json",
         "memos.json",
         "resolved.json",
+        "naga.json",
     ];
 
     fn shot() -> Result<Screenshot, CaptureError> {
@@ -783,6 +786,9 @@ mod tests {
         store.set_maka_hanchan(&a, "B+").unwrap();
         store.set_resolved(&a, "k0h0e3", true, T0 + 5_000).unwrap();
         store.set_resolved(&a, "k2h1e14", true, T0 + 6_000).unwrap();
+        store
+            .set_naga_url(&a, Some(&sample_url("a1")), T0 + 7_000)
+            .unwrap();
         store.set_memo(&a, 1, "3m・6p", "東を残したい").unwrap();
         let pos = MemoPosition {
             kyoku: 2,
@@ -893,7 +899,7 @@ mod tests {
             }
         }
 
-        /// 半荘のフォルダの 4 つの記録のファイルと、取っておいた記録のファイル、答え・出題・週を、すべて消す。
+        /// 半荘のフォルダの 6 つの記録のファイルと、取っておいた記録のファイル、答え・出題・週を、すべて消す。
         fn wipe(&mut self) {
             for id in self.store.local_session_ids().unwrap() {
                 let dir = self.store.session_folder(&id).unwrap();
@@ -946,7 +952,7 @@ mod tests {
         }
     }
 
-    /// `src` の保存先の半荘のフォルダから、記録の 4 つのファイル以外（events.jsonl・report.json・画像など）を、`dst` の保存先へ写す。
+    /// `src` の保存先の半荘のフォルダから、記録の 6 つのファイル以外（events.jsonl・report.json・画像など）を、`dst` の保存先へ写す。
     fn copy_session_without_records(src: &Path, dst: &Path, id: &str) {
         copy_dir(
             &src.join("games").join(id),
@@ -1000,6 +1006,15 @@ mod tests {
         assert_eq!(a.resolved.decisions.len(), 2);
         assert_eq!(a.resolved.decisions["k0h0e3"], T0 + 5_000);
         assert_eq!(a.resolved.decisions["k2h1e14"], T0 + 6_000);
+        // NAGA の結果の URL（F22 段 2）: 半荘 a だけ。URL と保存した時刻
+        assert_eq!(
+            a.naga,
+            Some(NagaResult {
+                url: sample_url("a1"),
+                saved_ms: T0 + 7_000
+            })
+        );
+        assert_eq!(exported.sessions[&fx.b].naga, None);
         assert_eq!(a.memos.marks["1"].reason, "東を残したい");
         assert_eq!(a.memos.extras.len(), 3);
         assert!(a.memos.extras[0].decision.is_none() && a.memos.extras[0].position.is_some());
@@ -1102,20 +1117,26 @@ mod tests {
                 "trigger"
             ]
         );
-        // 半荘ごとの項目は、5 種類の記録だけ（空の種類は書かない）
+        // 半荘ごとの項目は、6 種類の記録だけ（空の種類は書かない）
         for session in value["sessions"].as_object().unwrap().values() {
             for key in session.as_object().unwrap().keys() {
                 assert!(
-                    ["links", "self_ratings", "maka", "memos", "resolved"].contains(&key.as_str()),
+                    ["links", "self_ratings", "maka", "memos", "resolved", "naga"]
+                        .contains(&key.as_str()),
                     "{key}"
                 );
             }
         }
         assert!(value["sessions"][&fx.b].get("maka").is_none());
         assert!(value["sessions"][&fx.b].get("resolved").is_none());
+        assert!(value["sessions"][&fx.b].get("naga").is_none());
         assert_eq!(
             value["sessions"][&fx.a]["resolved"],
             json!({"decisions": {"k0h0e3": T0 + 5_000, "k2h1e14": T0 + 6_000}})
+        );
+        assert_eq!(
+            value["sessions"][&fx.a]["naga"],
+            json!({"url": sample_url("a1"), "saved_ms": T0 + 7_000})
         );
     }
 
@@ -1123,6 +1144,10 @@ mod tests {
     fn d2_screenshots_mortal_results_widget_records_ocr_and_machine_values_are_not_in_the_file() {
         let fx = fixture();
         let text = fx.export_text();
+        // NAGA の結果の URL（「report」を含む名前のページ）は、記録として入る。以下の走査からは除く
+        let naga_url = sample_url("a1");
+        assert!(text.contains(&naga_url));
+        let text = text.replace(&naga_url, "<naga>");
         // 結果・文字認識の写しの中身
         assert!(!text.contains(REPORT_SENTINEL));
         assert!(!text.contains(OCR_SENTINEL));
@@ -1391,6 +1416,21 @@ mod tests {
                 "時刻",
             ),
             (
+                "NAGA の結果の URL が NAGA のページではない",
+                edited(&base, |v| {
+                    v["sessions"][a.as_str()]["naga"]["url"] =
+                        json!(format!("{}://other.example/", "https"));
+                }),
+                "NAGA のページのものではありません",
+            ),
+            (
+                "NAGA の結果を保存した時刻が負",
+                edited(&base, |v| {
+                    v["sessions"][a.as_str()]["naga"]["saved_ms"] = json!(-1);
+                }),
+                "保存した時刻",
+            ),
+            (
                 "メモの理由が長すぎる",
                 edited(&base, |v| {
                     v["sessions"][a.as_str()]["memos"]["marks"]["1"]["reason"] = json!(long_reason);
@@ -1486,6 +1526,30 @@ mod tests {
         let applied = file.settings.applied_to(&Settings::default());
         assert!(applied.doubt_only);
         assert_eq!(applied.validate(), Ok(()));
+    }
+
+    #[test]
+    fn f22_an_export_from_before_naga_still_reads_and_a_naga_url_is_tidied_when_read() {
+        // NAGA の結果の URL が無かった版の書き出し: URL は無いものとして読める
+        let fx = fixture();
+        let base = fx.export();
+        let old = edited(&base, |v| {
+            for session in v["sessions"].as_object_mut().unwrap().values_mut() {
+                session.as_object_mut().unwrap().remove("naga");
+            }
+        });
+        let file = parse_records(old.as_bytes()).unwrap();
+        assert!(file.sessions.values().all(|s| s.naga.is_none()));
+        // 大文字のホスト名・前後の空白は、保存する形（整えた URL）で読む
+        let loud = edited(&base, |v| {
+            v["sessions"][fx.a.as_str()]["naga"]["url"] =
+                json!(format!("  {}://NAGA.DMV.NICO/x  ", "HTTPS"));
+        });
+        let file = parse_records(loud.as_bytes()).unwrap();
+        assert_eq!(
+            file.sessions[&fx.a].naga.as_ref().unwrap().url,
+            format!("{}://{}/x", "https", crate::naga::NAGA_HOST)
+        );
     }
 
     #[test]
@@ -1719,6 +1783,8 @@ mod tests {
         assert_eq!(listed_a.memos.extras.len(), 3);
         assert_eq!(listed_a.maka.hanchan.as_deref(), Some("B+"));
         assert_eq!(listed_a.resolved.decisions.len(), 2);
+        assert_eq!(listed_a.naga, originals[&fx.a].naga);
+        assert!(listed_a.naga.is_some());
     }
 
     #[test]
