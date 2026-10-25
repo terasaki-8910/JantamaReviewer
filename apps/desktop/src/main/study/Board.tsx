@@ -258,10 +258,15 @@ function tilesText(tiles: readonly TileCode[]): string {
   return tiles.map((tile) => tileLabel(tile)).join('・');
 }
 
+/** 王牌の列の牌の数と、ドラ表示牌の最初の位置（左から 3 枚目）。 */
+const WALL_SIZE = 7;
+const WALL_FIRST_MARKER = 2;
+
 /**
- * 中央の箱の、ドラ表示牌とそれが指すドラ（U-44）。「表示 [4m] → ドラ [5m]」。カンでドラ表示牌が増えれば、並べて出す（ドラは 1 枚ずつ対応）。
+ * 中央の箱の、王牌の列と、ドラ表示牌が指すドラ（U-44）。列の左から 3 枚目が最初の表示牌で、カンドラは右へ続く（最大 5 枚）。
+ * ほかは裏向きの飾りとして、列のすぐ右に「→ ドラ」と、各表示牌が指すドラを並べる。
  * 窓が狭く卓が小さいときも、中央の箱に出す。設定「ドラを目立たせる」の黄色は、この牌には付けない（手牌・河・副露の牌だけ）。
- * 牌の画像は飾り（名前は、まとめて 1 つの文で読み上げる）。行は折り返さず、箱が狭いときは、牌を小さくし、「表示」「ドラ」の 2 語を隠す（quiz.css の cbox）。
+ * 牌の画像は飾り（名前は、まとめて 1 つの文で読み上げる）。行は折り返さず、箱が狭いときは「ドラ」を隠し、牌を小さくする（quiz.css の cbox）。
  */
 function DoraRow({ markers }: { markers: readonly TileCode[] }) {
   if (markers.length === 0) return null;
@@ -271,19 +276,14 @@ function DoraRow({ markers }: { markers: readonly TileCode[] }) {
       className="dora"
       role="group"
       aria-label={`ドラ表示牌 ${tilesText(markers)}、ドラ ${tilesText(doras)}`}
-      data-many={markers.length >= 3 ? '1' : undefined}
-      data-n={Math.min(markers.length, 3)}
+      data-n={Math.min(markers.length, WALL_SIZE - WALL_FIRST_MARKER)}
       style={{ '--n': markers.length } as CSSProperties}
     >
-      <span className="dora-from">
-        <span className="dora-l" aria-hidden="true">
-          表示
-        </span>
-        <span className="dora-t">
-          {markers.map((marker, index) => (
-            <Tile key={`${index}${marker}`} tile={marker} alt="" />
-          ))}
-        </span>
+      <span className="wall" aria-hidden="true">
+        {Array.from({ length: WALL_SIZE }, (_, index) => {
+          const marker = index < WALL_FIRST_MARKER ? undefined : markers[index - WALL_FIRST_MARKER];
+          return marker === undefined ? <BackFace key={index} /> : <Tile key={index} tile={marker} alt="" />;
+        })}
       </span>
       <span className="dora-to">
         <span className="dora-arrow" aria-hidden="true">

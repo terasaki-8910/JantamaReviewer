@@ -242,8 +242,9 @@
   z-index: 1;
 }
 
+/* 伏せた牌の背は、厚み・影・グラデーションのない平らな 1 色。共通の 1px の縁は、布の外にある暗槓でも背を見分けるために残す。 */
 .tile.back {
-  background: var(--accent-bar);
+  background: var(--tile-back);
 }
 
 /* ---------- 卓 ---------- */
@@ -293,7 +294,7 @@
     "hleft tl top tr hright" var(--side)
     "hleft left center right hright" var(--river-w)
     "hleft bl bottom br hright" var(--side) / var(--hh) var(--side) var(--river-w) var(--side) var(--hh);
-  background: var(--surface);
+  background: var(--felt);
   border: 1px solid var(--line);
   border-radius: var(--r3);
 }
@@ -371,6 +372,7 @@
 .ohand:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+  box-shadow: 0 0 0 5px var(--surface);
 }
 
 .ohand:disabled {
@@ -527,7 +529,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   container: cbox / inline-size;
   padding: 6px;
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: var(--r1);
 }
@@ -646,17 +648,20 @@
 }
 
 /*
-  ドラ表示牌とそれが指すドラ（U-44）: 局の名前の下の 1 行「表示 [4m] → ドラ [5m]」。中央の箱の幅いっぱい（左右の点数の下）に置く。
+  王牌の列（7 枚。ドラ表示牌は左から 3 枚目から表向き）と、それが指すドラ（U-44）を、中央の箱の幅いっぱい（左右の点数の下）に置く。
   この行は、どの大きさの卓でも折り返さない（1 行のまま）。箱の幅（中央の箱自身が持つ container「cbox」の幅。窓の幅ではない）で、次のように収める:
-  - 牌の幅 --dtw は、広い卓で 24px（ドラ表示牌が 3 枚以上なら 18px）、狭い卓で 18px（同じく 16px）を上限に、箱の幅に入る大きさまで小さくする
-    （牌の数 --n、牌の間・矢印の分 4px × n + 24px、「表示」「ドラ」の分 --dlab を引いて、2 × n 枚で割る）
-  - 箱が、「表示」「ドラ」の 2 語を入れるには狭いとき（牌が 1 枚で 124px 未満・2 枚で 184px 未満・3 枚以上で 200px 未満）は、2 語を隠して「[牌] → [牌]」だけにする
-    （読み上げは、行の aria-label が受け持つので、2 語は隠してよい）
+  - ドラの牌の幅 --dtw は、広い卓で 24px（狭い卓で 18px）を上限に、箱の幅に入る大きさまで小さくする
+  - 王牌の幅 --wtw は、残りの幅を 7 枚で分けた大きさ（広い卓で 28px、狭い卓で 18px が上限）
+  - 箱が狭いときは「ドラ」を隠して矢印を残す。読み上げは、行の aria-label が受け持つ
 */
 .dora {
   --dpre: 24px;
-  --dlab: 54px;
-  --dtw: clamp(8px, calc((100cqw - 4px * var(--n, 1) - 24px - var(--dlab)) / (2 * var(--n, 1))), var(--dpre));
+  --wpre: 28px;
+  --dlab: 26px;
+  --fix: calc(16px + 8px + 16px + var(--dlab) + 2px * (var(--n, 1) - 1));
+  --avail: calc(100cqw - var(--fix));
+  --dtw: clamp(8px, calc((var(--avail) - 7 * 4px) / var(--n, 1)), var(--dpre));
+  --wtw: clamp(4px, calc((var(--avail) - var(--n, 1) * var(--dtw)) / 7), var(--wpre));
 
   grid-column: 1 / -1;
   grid-row: 3;
@@ -669,15 +674,18 @@
   padding: 3px 0 0;
 }
 
-.dora[data-many] {
-  --dpre: 18px;
-}
-
-.dora-from,
+.wall,
 .dora-to {
   display: inline-flex;
   flex: none;
   align-items: center;
+}
+
+.wall {
+  gap: 2px;
+}
+
+.dora-to {
   gap: 4px;
 }
 
@@ -698,11 +706,15 @@
   gap: 2px;
 }
 
-.dora .tile {
+.wall .tile {
+  --tw: var(--wtw);
+}
+
+.dora-t .tile {
   --tw: var(--dtw);
 }
 
-@container cbox (width < 124px) {
+@container cbox (width < 176px) {
   .dora[data-n="1"] {
     --dlab: 0px;
   }
@@ -712,7 +724,7 @@
   }
 }
 
-@container cbox (width < 184px) {
+@container cbox (width < 194px) {
   .dora[data-n="2"] {
     --dlab: 0px;
   }
@@ -722,13 +734,41 @@
   }
 }
 
-@container cbox (width < 200px) {
+@container cbox (width < 212px) {
   .dora[data-n="3"] {
     --dlab: 0px;
   }
 
   .dora[data-n="3"] .dora-l {
     display: none;
+  }
+}
+
+@container cbox (width < 230px) {
+  .dora[data-n="4"] {
+    --dlab: 0px;
+  }
+
+  .dora[data-n="4"] .dora-l {
+    display: none;
+  }
+}
+
+@container cbox (width < 248px) {
+  .dora[data-n="5"] {
+    --dlab: 0px;
+  }
+
+  .dora[data-n="5"] .dora-l {
+    display: none;
+  }
+}
+
+/* いちばん狭い箱（1280×800 の通して見る画面で、河が 4 段の局）では、左右の点数が箱の縁を越えないよう、数字を詰める */
+@container cbox (width < 110px) {
+  .center .score .pts {
+    font-size: 9px;
+    letter-spacing: -0.03em;
   }
 }
 
@@ -784,12 +824,9 @@
 
   .dora {
     --dpre: 18px;
+    --wpre: 18px;
 
     padding-top: 1px;
-  }
-
-  .dora[data-many] {
-    --dpre: 16px;
   }
 
   .score .rel {
@@ -2198,6 +2235,35 @@ li:has(> .qrow.next) + li > .qrow {
 
 .legend .tile.tp {
   --tw: 18px;
+}
+
+/* 布の上の accent の輪には、外側へ面の色の縁を足し、ライト・ダークのどちらでも境を見分けられるようにする。 */
+.table .tile.target {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 0 4px var(--surface);
+}
+
+.table .tile.tp {
+  box-shadow:
+    0 0 0 3px var(--accent),
+    0 0 0 5px var(--surface);
+}
+
+/* 鳴かれた河の牌は不透明のまま、以前の面の色を重ねて、布が透けない同じ薄さにする。 */
+.table .tile.called {
+  opacity: 1;
+}
+
+.table .rt:has(> .tile.called)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: calc(var(--rw) * 0.1);
+  background: var(--surface);
+  opacity: 0.62;
+  pointer-events: none;
 }
 
 .hands-hint {

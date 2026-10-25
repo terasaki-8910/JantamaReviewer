@@ -99,6 +99,15 @@
   */
   --dora-fill: #FFE680;
 
+  /*
+    M リーグの牌譜に寄せた卓の色（2026-10-23。色の見本の答え: 「A 青緑」。伏せた牌の背だけ黄色系）。
+    --felt      : 卓の布（青緑）。河・副露・中央の箱・他家の手牌は、この上に置く。
+    --tile-back : 伏せた牌の背（他家の手牌・暗槓・王牌の列）。平らな 1 色で、厚み・影・グラデーションは付けない。
+    背は --felt に対して、非テキストのコントラストが 3:1 以上（ライト約 3.2:1、ダーク約 4.4:1）。この 2 つは、ほかには使わない。
+  */
+  --felt: #2A7D88;
+  --tile-back: #F2CF5B;
+
   color-scheme: light;
 }
 
@@ -141,6 +150,8 @@
     --gr8-fg: var(--grade-on-deep);
     --gr9-fg: var(--grade-on-deep);
     --dora-fill: #FFE680;
+    --felt: #1B4F57;
+    --tile-back: #D9AE3A;
     color-scheme: dark;
   }
 }
@@ -183,6 +194,8 @@
   --gr8-fg: var(--grade-on-deep);
   --gr9-fg: var(--grade-on-deep);
   --dora-fill: #FFE680;
+  --felt: #1B4F57;
+  --tile-back: #D9AE3A;
   color-scheme: dark;
 }
 
