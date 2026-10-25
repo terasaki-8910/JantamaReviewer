@@ -3,8 +3,8 @@
  * 実ブラウザで、アプリ内の更新（F21）の画面を検査する（U-51）。
  *
  * - 更新の帯（検討画面の上）: 幅 390・768・1280px、ライト・ダークで、横スクロールが無く、axe の重大（serious・critical）が 0 件で、
- *   Tab キーだけですべてのボタンに届く。見つけた直後・記録中（入れ直せない理由つき）・入れている間・入れ直しに失敗した直後の 4 つの形
- * - 設定の「更新」の欄: 確かめる前・最新・新しい版がある・確かめられなかった（長い理由）・まだ設定されていない、の 5 つの形
+ *   Tab キーだけですべてのボタンに届く。見つけた直後・記録中（入れ直せる）・入れている間・入れ直しに失敗した直後の 4 つの形
+ * - 設定の「更新」の欄: 最新・新しい版がある・確かめられなかった（長い理由）・まだ設定されていない、の 4 つの形
  * - 外へ通信しない（更新の層は、ページの中の偽物。本物の通信は、Rust 側が行う）
  */
 import type { Browser, BrowserContext, Page } from 'playwright-core';
@@ -176,7 +176,7 @@ async function expectClean(page: Page, problems: string[], external: string[]): 
 const REGION = 'アプリの更新';
 
 describe('更新の帯（U-51）', () => {
-  const BANNER_VARIANTS = ['見つけた直後', '記録中（入れ直せない）', '入れている間', '入れ直しに失敗した直後'] as const;
+  const BANNER_VARIANTS = ['見つけた直後', '記録中（入れ直せる）', '入れている間', '入れ直しに失敗した直後'] as const;
   for (const scheme of SCHEMES) {
     for (const width of [390, 768, 1280] as const) {
       for (const variant of BANNER_VARIANTS) {
@@ -189,7 +189,11 @@ describe('更新の帯（U-51）', () => {
                 ? '更新の署名を確かめられませんでした。安全のため、入れ直しを中止しました'
                 : undefined,
           };
-          const { context, page, problems, external } = await open({ width, height: 800 }, scheme, answers);
+          const state =
+            variant === '記録中（入れ直せる）'
+              ? { ...idleState, status: 'recording', session_id: '20261009-161200' }
+              : idleState;
+          const { context, page, problems, external } = await open({ width, height: 800 }, scheme, answers, { state });
           try {
             await waitForMainReady(page);
             const region = page.getByRole('region', { name: REGION });
@@ -198,12 +202,22 @@ describe('更新の帯（U-51）', () => {
             const install = region.getByRole('button', { name: '今すぐ入れ直す' });
             expect(await install.isEnabled()).toBe(true);
 
-            if (variant === '記録中（入れ直せない）') {
-              await page.evaluate((state) => {
-                (window as unknown as { __jrEmit: (e: string, p: unknown) => void }).__jrEmit('state-changed', state);
-              }, { ...idleState, status: 'recording', session_id: '20261009-161200' });
-              await region.getByText('記録中は入れ直せません（対局のあとで）').waitFor();
-              expect(await install.isDisabled()).toBe(true);
+            if (variant === '記録中（入れ直せる）') {
+              const checks = await page.evaluate(
+                () =>
+                  (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.filter(
+                    (call) => call.cmd === 'check_update',
+                  ).length,
+              );
+              expect(checks).toBe(1);
+              await install.click();
+              const installs = await page.evaluate(
+                () =>
+                  (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.filter(
+                    (call) => call.cmd === 'install_update',
+                  ).length,
+              );
+              expect(installs).toBe(1);
             }
             if (variant === '入れている間') {
               await install.click();
@@ -262,12 +276,6 @@ describe('設定の「更新」の欄（U-51）', () => {
     expected: string;
   }
   const VARIANTS: SettingsVariant[] = [
-    {
-      name: '確かめる前（記録中で、起動のときは確かめていない）',
-      answers: { check: AVAILABLE },
-      press: false,
-      expected: 'まだ確かめていません',
-    },
     { name: '最新です', answers: { check: { current_version: CURRENT, kind: 'up_to_date' } }, press: true, expected: '最新です' },
     { name: '新しい版がある', answers: { check: AVAILABLE }, press: true, expected: '新しい版 0.2.1 があります' },
     {
@@ -298,9 +306,7 @@ describe('設定の「更新」の欄（U-51）', () => {
     for (const width of [390, 768, 1280] as const) {
       for (const variant of VARIANTS) {
         it(`${variant.name} 幅${width}px ${scheme}: 横スクロールが無く、重大な a11y 違反が無く、Tab で全部に届く`, async () => {
-          // 「確かめる前」は、記録中にして、起動のときの確かめを止める。ほかは、記録していない状態で、押して確かめる
-          const state = variant.press || variant.answers.info !== undefined ? idleState : { ...idleState, status: 'recording' };
-          const { context, page, problems, external } = await open({ width, height: 900 }, scheme, variant.answers, { state });
+          const { context, page, problems, external } = await open({ width, height: 900 }, scheme, variant.answers);
           try {
             await waitForMainReady(page);
             await ensureSidebar(page);

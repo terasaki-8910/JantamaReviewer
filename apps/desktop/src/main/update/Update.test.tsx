@@ -80,12 +80,6 @@ async function settle(mock: TauriMock, checks = 1) {
   });
 }
 
-function recordingNow(mock: TauriMock, status: AppState['status']) {
-  act(() => {
-    mock.emit('state-changed', { ...baseState, status } satisfies AppState);
-  });
-}
-
 beforeEach(() => {
   vi.useRealTimers();
 });
@@ -278,36 +272,17 @@ describe('更新の帯（U-51）', () => {
     await waitFor(() => expect(mock.count('install_update')).toBe(2));
   });
 
-  it('記録中は「今すぐ入れ直す」を押せず、理由が出る。記録が終わると押せる（確かめるのは、起動のときの 1 回のまま）', async () => {
+  it('記録中でも、起動のときに 1 回確かめ、「今すぐ入れ直す」を押すと入れ直しを 1 回呼ぶ', async () => {
     const user = userEvent.setup();
-    const mock = setup();
+    const mock = setup({ status: 'recording', install: () => new Promise(() => {}) });
     render(<App />);
     const region = await banner();
-    recordingNow(mock, 'recording');
     const install = await within(region).findByRole('button', { name: '今すぐ入れ直す' });
-    await waitFor(() => expect(install).toBeDisabled());
-    expect(within(region).getByText('記録中は入れ直せません（対局のあとで）')).toBeInTheDocument();
-    expect(install).toHaveAccessibleDescription('記録中は入れ直せません（対局のあとで）');
-    // 「あとで」「この版は飛ばす」は、記録中でも押せる
+    expect(install).toBeEnabled();
     expect(within(region).getByRole('button', { name: 'あとで' })).toBeEnabled();
-    await user.click(install);
-    expect(mock.count('install_update')).toBe(0);
-    recordingNow(mock, 'idle');
-    await waitFor(() => expect(within(region).getByRole('button', { name: '今すぐ入れ直す' })).toBeEnabled());
-    expect(within(region).queryByText('記録中は入れ直せません（対局のあとで）')).toBeNull();
     expect(mock.count('check_update')).toBe(1);
-  });
-
-  it('記録中の起動では、確かめない（通信しない）', async () => {
-    const mock = setup({ status: 'recording' });
-    render(<App />);
-    await waitFor(() => expect(mock.count('get_update_info')).toBe(1));
-    await waitFor(() => expect(mock.count('get_state')).toBeGreaterThan(0));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 30));
-    });
-    expect(mock.count('check_update')).toBe(0);
-    expect(screen.queryByRole('region', { name: REGION })).toBeNull();
+    await user.click(install);
+    await waitFor(() => expect(mock.count('install_update')).toBe(1));
   });
 
   it('更新の仕組みが設定されていなければ、確かめない', async () => {
@@ -387,7 +362,7 @@ describe('設定の「更新」の欄（U-51）', () => {
     return screen.findByRole('group', { name: '更新' });
   }
 
-  it('今の版と「更新を確かめる」がある。確かめる前は、確かめていないと分かる', async () => {
+  it('今の版と「更新を確かめる」があり、起動のときに確かめた結果が出る', async () => {
     const user = userEvent.setup();
     setup({ status: 'recording', check: UP_TO_DATE });
     render(<App />);
@@ -395,7 +370,7 @@ describe('設定の「更新」の欄（U-51）', () => {
     expect(within(group).getByText('今の版')).toBeInTheDocument();
     expect(within(group).getByText(CURRENT)).toBeInTheDocument();
     expect(within(group).getByRole('button', { name: '更新を確かめる' })).toBeEnabled();
-    expect(within(group).getByText('まだ確かめていません')).toBeInTheDocument();
+    expect(await within(group).findByText('最新です')).toBeInTheDocument();
   });
 
   it('押すと確かめて、「最新です」が出る', async () => {
@@ -405,7 +380,7 @@ describe('設定の「更新」の欄（U-51）', () => {
     const group = await openSettings(user);
     await user.click(within(group).getByRole('button', { name: '更新を確かめる' }));
     expect(await within(group).findByText('最新です')).toBeInTheDocument();
-    expect(mock.count('check_update')).toBe(1);
+    expect(mock.count('check_update')).toBe(2);
     expect(screen.queryByRole('region', { name: REGION })).toBeNull();
   });
 
@@ -425,18 +400,16 @@ describe('設定の「更新」の欄（U-51）', () => {
     expect(within(group).getByRole('button', { name: '更新を確かめる' })).toBeDisabled();
   });
 
-  it('記録中は「今すぐ入れ直す」が押せず、理由が出る', async () => {
+  it('記録中でも、設定の「今すぐ入れ直す」が押せる', async () => {
     const user = userEvent.setup();
-    const mock = setup({ status: 'recording', check: available('0.2.1') });
+    const mock = setup({ status: 'recording', check: available('0.2.1'), install: () => new Promise(() => {}) });
     render(<App />);
     const group = await openSettings(user);
-    await user.click(within(group).getByRole('button', { name: '更新を確かめる' }));
     await within(group).findByText('新しい版 0.2.1 があります');
     const install = within(group).getByRole('button', { name: '今すぐ入れ直す' });
-    expect(install).toBeDisabled();
-    expect(within(group).getByText('記録中は入れ直せません（対局のあとで）')).toBeInTheDocument();
+    expect(install).toBeEnabled();
     await user.click(install);
-    expect(mock.count('install_update')).toBe(0);
+    await waitFor(() => expect(mock.count('install_update')).toBe(1));
   });
 
   it('起動のときに見つかった版が、そのまま欄に出ている。「あとで」を押すと一言が付き、確かめ直しても変わらない', async () => {

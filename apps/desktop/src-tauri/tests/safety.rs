@@ -271,7 +271,7 @@ const NETWORK_BELOW_SYNC_CLIENT: &[(&str, &str)] = &[
 
 /// アプリ内の更新（F21）の通信の部品（`tauri-plugin-updater`）を使ってよい場所（ファイル名とその理由）。使えるのはここだけで、
 /// 本体のクレートの依存にだけ置く。通信するのは、画面が呼ぶ 2 つの命令（確かめる `check_update`・入れ直す `install_update`。
-/// どちらも検討画面だけ。入れ直しは記録中は断る）の中だけ。取り先は、`config.rs` の 1 つの URL（https の github.com）だけ。
+/// どちらも検討画面だけ）の中だけ。取り先は、`config.rs` の 1 つの URL（https の github.com）だけ。
 /// 画面（webview）には、この部品の命令を使う権限を与えない（どの capability にも `updater` が無い）。
 const ALLOWED_UPDATER_FILES: &[(&str, &str)] = &[(
     "src/update/updater.rs",
@@ -1439,7 +1439,7 @@ fn s2_the_update_destination_is_one_github_releases_url_and_the_key_is_empty_or_
     }
 }
 
-/// 更新の命令は、検討画面だけが呼べて、確かめる・入れ直すは、画面が呼んだときだけ。入れ直しは、記録中は断り、押されるまで始めない。
+/// 更新の命令は、検討画面だけが呼べて、確かめる・入れ直すは、画面が呼んだときだけ。入れ直しは、押されるまで始めない。
 #[test]
 fn s2_the_update_commands_serve_only_the_main_window_and_install_only_when_asked() {
     let commands = update_file("commands.rs");
@@ -1459,17 +1459,12 @@ fn s2_the_update_commands_serve_only_the_main_window_and_install_only_when_asked
             "{name} がある"
         );
     }
-    // 入れ直しは、記録中を断ってから始める
     let install = product
         .split("pub async fn install_update(")
         .nth(1)
         .and_then(|rest| rest.split("\n}\n").next())
         .expect("install_update がある");
-    let refuse = install
-        .find("ensure_not_recording(status)?;")
-        .expect("記録中は断る");
-    let start = install.find("super::install(").expect("入れ直しを始める");
-    assert!(refuse < start, "記録中の断りは、入れ直しを始める前");
+    assert!(install.contains("super::install("), "入れ直しを始める");
     // 確かめる・入れ直す関数を呼ぶのは、この 2 つの命令だけ（起動の処理・タイマーなどから、勝手に呼ばない）
     for file in rust_sources() {
         let name = file.to_string_lossy().replace('\\', "/");

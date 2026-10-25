@@ -17,9 +17,6 @@ export const INSTALL_LABEL = '今すぐ入れ直す';
 export const LATER_LABEL = 'あとで';
 export const SKIP_LABEL = 'この版は飛ばす';
 
-/** 記録中に、「今すぐ入れ直す」が押せない理由。Rust 側の断りの文（`RECORDING_MESSAGE`）と同じ。 */
-export const RECORDING_REASON = '記録中は入れ直せません（対局のあとで）';
-
 export function installFailedText(reason: string): string {
   return `入れ直せませんでした: ${reason}`;
 }
