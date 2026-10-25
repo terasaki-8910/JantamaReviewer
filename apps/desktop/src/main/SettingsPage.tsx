@@ -13,6 +13,7 @@ import { platform } from '../shared/platform';
 import { describeTrigger, formatClock } from './format';
 import { RecordsBlock } from './RecordsBlock';
 import { SyncBlock } from './SyncBlock';
+import { UpdateBlock } from './update/UpdateBlock';
 
 const ORIENTATION_CHOICES: ReadonlyArray<{ value: Orientation; label: string }> = [
   { value: 'vertical', label: '縦長' },
@@ -29,6 +30,9 @@ const MODIFIER_CODE = /^(Control|Shift|Alt|Meta|OS)(Left|Right)$|^AltGraph$/;
 
 /** 窓の中のキーとして本体に知らせない `KeyboardEvent.key`（画面の操作に使うキー）。 */
 const PASS_THROUGH_KEYS: ReadonlySet<string> = new Set(['Tab', 'Enter', ' ', 'Escape']);
+
+/** 本体を入れ直して補助プログラムが変わったとき、補助プログラムの行に出す一言（F21）。 */
+const HELPER_OUTDATED_TEXT = '新しい補助プログラムがあります。設定し直してください';
 
 /** 補助プログラムの状態の行に出す文（承認済みの見本に無い部分は、同じ静かな書き方で足している）。 */
 function helperStateText(helper: HelperStatus): string {
@@ -474,6 +478,7 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
             </p>
           </div>
 
+          <UpdateBlock />
         </div>
         {error && (
           <p className="error selectable" role="alert">
@@ -501,6 +506,8 @@ interface HelperRowProps {
 function HelperRow({ helper, run }: HelperRowProps) {
   const busy = helper.busy !== null;
   const installed = helper.installed === true;
+  // 設定済みの写し（Program Files の下）が、本体と一緒に入っている補助プログラムと違う（F21）。設定し直すと、写しを替える（Windows の確認が出る）
+  const outdated = installed && helper.outdated === true;
   return (
     <>
       <div className="helper-row">
@@ -530,6 +537,16 @@ function HelperRow({ helper, run }: HelperRowProps) {
             起動する
           </button>
         )}
+        {outdated && (
+          <button
+            type="button"
+            className="btn sm"
+            disabled={busy}
+            onClick={() => run(api.setupHelper)}
+          >
+            設定し直す
+          </button>
+        )}
         {installed && (
           <button
             type="button"
@@ -541,6 +558,11 @@ function HelperRow({ helper, run }: HelperRowProps) {
           </button>
         )}
       </div>
+      {outdated && !busy && (
+        <p className="quiet helper-outdated" role="status">
+          {HELPER_OUTDATED_TEXT}
+        </p>
+      )}
       {helper.error && (
         <p className="error selectable" role="alert">
           {helper.error}

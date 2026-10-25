@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "target/release/jantama-helper.exe": "jantama-helper.exe"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": ""
+    }
+  }
+}
