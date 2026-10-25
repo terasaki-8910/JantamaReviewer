@@ -48,7 +48,7 @@ export interface QuizAnswerOptions {
   decision: Decision;
   sessionId: string;
   mode: AnswerMode;
-  /** 正解とする確率の下限（設定の「大きな不一致の基準」）。 */
+  /** 正解とする確率の下限（設定の「悪手の基準」）。 */
   threshold: number;
   /** 解き直しのとき、前の答えのあとの間隔（日）。出題では null。 */
   previousIntervalDays: number | null;
@@ -197,3 +197,5 @@ export function useQuizAnswer(options: QuizAnswerOptions): QuizAnswer {
 
   return { stage, choice, reason, setReason, choose, reselects, canReveal, reveal, elapsedSec, row, model, verdict, error };
 }
+
+

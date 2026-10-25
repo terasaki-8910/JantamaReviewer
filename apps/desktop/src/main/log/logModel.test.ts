@@ -162,8 +162,7 @@ describe('U-29 行（問題ごとの、いちばん新しい答え）', () => {
   it('行の中身: 局・巡目・半荘・種類・印・正誤・原因・原則・時間・選び直し・次の日。迷いの番号は問題の一覧から', () => {
     const decision = findDecisionByKey(fx4, 'k2h1e14') as Decision;
     const problems = listProblems(
-      [{ sessionId: FX4_ID, startedMs: (sessions[FX4_ID] as SessionRecord).started_ms, game: fx4, markKeys: ['k2h1e14'] }],
-      { threshold: 0.05 },
+      [{ sessionId: FX4_ID, startedMs: (sessions[FX4_ID] as SessionRecord).started_ms, game: fx4, markKeys: ['k2h1e14'] }]
     );
     const answer = answerFor(FX4_ID, decision, {
       id: 7,

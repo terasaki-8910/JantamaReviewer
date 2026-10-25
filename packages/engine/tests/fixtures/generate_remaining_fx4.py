@@ -1,11 +1,11 @@
-"""E-22（受け入れの残り）の正解表を作る（FX-4 の迷いと大きな不一致の 10 場面）。
+"""E-22（受け入れの残り）の正解表を作る（FX-4 の迷いと悪手の 10 場面）。
 
 独立した実装として、Python の `mahjong` ライブラリの向聴計算と、結果 JSON の牌譜（`mjai_log`）の素朴な再生を使う。
 TypeScript 側の実装（packages/engine/src/ukeire-remaining.ts、牌譜の再生 replay.ts）には依存しない。
 
 場面: FX-4（結果 5b821c8a048ff791）の
 - 迷いマーク 6 つが結びつく判断（ACCEPTANCE E-17・E-27 の、ユーザーが本物のデータで選んだもの）
-- 大きな不一致（AI が実戦の行動に付けた確率が 5% 未満の判断。5 つ。迷い 2 は両方に当たる）
+- 悪手（AI が実戦の行動に付けた確率が 5% 未満の判断。5 つ。迷い 2 は両方に当たる）
 のうち、手牌が 3n+2 枚の判断（打牌の判断）。それぞれの場面で、切る牌（種類）ごとに、切ったあとの向聴数・受け入れ牌・
 受け入れ牌ごとの「手牌だけの枚数」と「残り」を出す。
 
@@ -215,7 +215,7 @@ def main() -> None:
         entry = scene["entry"]
         probability = entry["details"][entry["actual_index"]]["prob"]
         if probability < THRESHOLD:
-            chosen.setdefault(key, []).append("大きな不一致")
+            chosen.setdefault(key, []).append("悪手")
     assert len(chosen) == 10, sorted(chosen)
 
     out_scenes = []
@@ -236,7 +236,7 @@ def main() -> None:
         print(key, chosen[key], "tiles", len(hand), "options", len(options))
 
     document = {
-        "description": "E-22: FX-4 の迷いと大きな不一致の 10 場面の、切る牌ごとの受け入れ（手牌だけの枚数と残り）の正解表（Python）",
+        "description": "E-22: FX-4 の迷いと悪手の 10 場面の、切る牌ごとの受け入れ（手牌だけの枚数と残り）の正解表（Python）",
         "generator": "generate_remaining_fx4.py",
         "library": "mahjong " + version("mahjong"),
         "report": REPORT_ID,
@@ -261,3 +261,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+

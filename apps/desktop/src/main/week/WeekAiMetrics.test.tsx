@@ -1,7 +1,7 @@
 /**
  * 週の集計の「取り込んだ半荘から数えた値（参考）」の、AI 一致率・類似度・悪手率（ACCEPTANCE の U-48。SPEC の F18）の、画面の試験。
  * アプリ全体（App）を、半荘の保存先の偽物と、答えの記録の偽物の上で動かして、使う人と同じ操作で確かめる。
- * 数え方は、エンジンの ai-metrics.test.ts（E-48）と importedStats.test.ts（どの半荘がどの週に入るか・基準が届くか）。
+ * 数え方は、エンジンの ai-metrics.test.ts（E-48）と importedStats.test.ts（どの半荘がどの週に入るか）。
  * 実ブラウザでの見え方（横スクロール・axe・幅 390px）は tests/browser/week.browser.test.ts。
  */
 import { aiMetricsOf, formatRatePercent, formatSimilarity, parseReportText, totalAiMetrics } from '@jantama/engine';
@@ -79,11 +79,11 @@ async function gameRows(user: ReturnType<typeof userEvent.setup>, root: HTMLElem
 }
 
 /** 同じ結果を、エンジンの関数で数え直した値（画面に出る書き方）。 */
-function expected(threshold: number) {
+function expected() {
   const each = WEEK.map((seed) => {
     const parsed = parseReportText(REPORT_TEXTS[seed.key]);
     if (!parsed.ok) throw new Error(parsed.error.message);
-    return aiMetricsOf(parsed.value, { threshold });
+    return aiMetricsOf(parsed.value);
   });
   const total = totalAiMetrics(each);
   const texts = (m: (typeof each)[number]) => [formatRatePercent(m.matchRate ?? Number.NaN), formatSimilarity(m.similarity ?? Number.NaN), formatRatePercent(m.badMoveRate ?? Number.NaN)];
@@ -102,7 +102,7 @@ describe('U-48 週の集計: AI 一致率・類似度・悪手率', () => {
       ['悪手率', '8.8%', '102判断 / 1159判断（確率 5% 未満）'],
     ]);
     // 画面の値 = 同じ結果をエンジンで数えた値
-    const { total, totalTexts } = expected(0.05);
+    const { total, totalTexts } = expected();
     expect([total.decisions, total.matches, total.badMoves]).toEqual([1159, 920, 102]);
     expect(table.slice(7).map((row) => row[1])).toEqual(totalTexts);
     expect(within(statTable(root)).getAllByRole('columnheader').map((cell) => textOf(cell))).toEqual(['項目', '値', 'もとの数']);
@@ -143,37 +143,9 @@ describe('U-48 週の集計: AI 一致率・類似度・悪手率', () => {
       ['81.6%', '92.1', '7.2%'],
       ['88.6%', '93.0', '7.1%'],
     ]);
-    expect(body.map((row) => row.slice(8))).toEqual(expected(0.05).eachTexts);
+    expect(body.map((row) => row.slice(8))).toEqual(expected().eachTexts);
     // 既存の列は、そのまま
     expect(body[0]?.slice(1, 8)).toEqual(['3位', '12', '2', '1', '1', '7', '6,500']);
-  });
-
-  it('設定の基準を 10% にすると、悪手率が替わる（週: 10.6%、「確率 10% 未満」）。基準を 5% に戻す（settings-changed）と、8.8% に戻る。一致率と類似度は変わらない', async () => {
-    const { user, mock } = setup({ disagreement_percent: 10 });
-    await openWeek(user);
-    const bad = () => rows(statTable(section(HEADING))).slice(7);
-    await waitFor(() => expect(bad()[2]).toEqual(['悪手率', '10.6%', '123判断 / 1159判断（確率 10% 未満）']), LOAD);
-    expect(bad().slice(0, 2)).toEqual([
-      ['AI 一致率', '79.4%', '920判断 / 1159判断'],
-      ['類似度', '88.9', '1159判断'],
-    ]);
-    const root = section(HEADING);
-    expect((await gameRows(user, root)).map((row) => row.slice(8))).toEqual([
-      ['75.8%', '86.7', '14.0%'],
-      ['80.2%', '90.2', '10.2%'],
-      ['76.3%', '83.3', '10.9%'],
-      ['81.4%', '91.9', '9.5%'],
-      ['77.2%', '87.3', '12.4%'],
-      ['81.6%', '92.1', '7.2%'],
-      ['88.6%', '93.0', '7.1%'],
-    ]);
-    expect(expected(0.1).totalTexts).toEqual(['79.4%', '88.9', '10.6%']);
-
-    act(() => {
-      mock.emit('settings-changed', { ...baseSettings, disagreement_percent: 5 } satisfies Settings);
-    });
-    await waitFor(() => expect(bad()[2]).toEqual(['悪手率', '8.8%', '102判断 / 1159判断（確率 5% 未満）']), LOAD);
-    expect((await gameRows(user, section(HEADING))).map((row) => row[10])).toEqual(['10.7%', '8.1%', '10.3%', '6.5%', '10.9%', '7.2%', '7.1%']);
   });
 
   it('呼び名は「AI 一致率」。週の「一致率」（自分の〇△✕ と AI 基準の一致）は別の数で、そのまま残る', async () => {

@@ -61,10 +61,7 @@ const baseSettings = {
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
   daily_count: 5,
-  disagreement_percent: 5,
   highlight_dora: false,
-  // 拮抗の場面（F17）の既定は入だが、問題の数を数える試験が多いので、試験の見本は切にしておく（入の試験は、設定を重ねる）
-  contest_enabled: false,
 };
 
 /** FX-4（読み取りの写しつき。迷い 1〜5 は推定）と、f9da。 */
@@ -94,7 +91,7 @@ function resolvedScenario(): Partial<Scenario> {
 }
 
 /**
- * FX-4 の大きな不一致の先頭 3 問（`keys` を渡したときは、その判断）を、期限が今日以前の答えとして保存済みにする（解き直しの問題）。
+ * FX-4 の悪手の先頭 3 問（`keys` を渡したときは、その判断）を、期限が今日以前の答えとして保存済みにする（解き直しの問題）。
  * `sessionId` を渡すと、その半荘の判断として保存する（FX-1 の半荘の場面を解き直したいとき）。
  */
 function dueAnswers(keys?: readonly string[], sessionId: string = FX4_ID): unknown[] {
@@ -102,9 +99,7 @@ function dueAnswers(keys?: readonly string[], sessionId: string = FX4_ID): unkno
   if (!imported.ok) throw new Error('FX-4 を読めません');
   const problems =
     keys ??
-    listProblems([{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game: imported.value, markKeys: [] }], {
-      threshold: 0.05,
-    })
+    listProblems([{ sessionId: FX4_ID, startedMs: local(2026, 10, 9, 19, 9), game: imported.value, markKeys: [] }])
       .slice(0, 3)
       .map((problem) => problem.key);
   return problems.map((key, index) => ({

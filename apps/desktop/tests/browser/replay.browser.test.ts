@@ -6,10 +6,10 @@
  * - U-5・U-6: axe の重大な違反が 0 件（色のコントラストを含む）。ライトとダーク。Tab ですべての操作に届く
  * - U-21: 既定のキーが働き、文字を打つ欄・メニューの中では働かない。キーの一覧は、押しても、マウスを乗せても開く。
  *   同じキーの割り当ては、割り当てずに断る。変えたキーは、設定に保存され、開き直しても働く
- * - U-1: 答える前の DOM に、AI の情報は無い（全場面。不一致を増やす設定のときの、増えた場面も）。外へ通信しない
+ * - U-1: 答える前の DOM に、AI の情報は無い（全場面。悪手の段の飛び先を広げる設定のときの、増えた場面も）。外へ通信しない
  * - U-19: ドラを目立たせる設定が、通して見る画面でも効く
- * - U-41・U-42: 解決した場面（薄い印・一覧の「解決」）と、3 つの段（不一致・迷い・拮抗。「細かいミスだけ」つき）の操作の段が、各幅で収まる。
- *   1280×800 で、操作の段の高さが、段を足す前と変わらない
+ * - U-41・U-42・U-49: 解決した場面（薄い印・一覧の「解決」）と、2 つの段（悪手・迷い。「細かいミスだけ」つき）の操作の段が、各幅で 1 行に収まる。
+ *   拮抗の段は無い（F19）
  * jsdom の試験（src/main/replay/Replay.test.tsx）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
 import type { Browser, BrowserContext, Page } from 'playwright-core';
@@ -59,16 +59,8 @@ const baseSettings = {
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
   daily_count: 5,
-  disagreement_percent: 5,
   highlight_dora: false,
   show_all_mismatches: false,
-  // 拮抗の場面（F17）の既定は入だが、問題・場面の数を数える試験が多いので、試験の見本は切にしておく（入の試験は、設定を重ねる）
-  contest_enabled: false,
-  contest_gap_percent: 20,
-  contest_by_junme: true,
-  contest_min_junme: 12,
-  contest_after_riichi: true,
-  contest_two_calls: true,
   replay_keys: defaultReplayKeys(),
 };
 
@@ -78,7 +70,7 @@ const USER_LINKS: Links = {
   marks: { '1': 'k0h0e4', '2': 'k1h0e12', '3': 'k1h1e7', '4': 'k1h1e10', '5': 'k2h1e6', '6': 'k2h1e14' },
 };
 
-/** FX-4 の場面（迷い 6 と大きな不一致 5。迷い 2 は大きな不一致でもある）の鍵。半荘の順。 */
+/** FX-4 の場面（迷い 6 と悪手 5。迷い 2 は悪手でもある）の鍵。半荘の順。 */
 const SCENE_KEYS = ['k0h0e4', 'k1h0e12', 'k1h1e6', 'k1h1e7', 'k1h1e9', 'k1h1e10', 'k2h1e2', 'k2h1e6', 'k2h1e14', 'k2h1e16'];
 
 /** FX-4（読み取りの写しつき）と、f9da（河の段が多い長い局がある）。`resolved` は、最初から解決している FX-4 の判断の鍵。 */
@@ -100,8 +92,6 @@ interface ScenarioOptions {
   keys?: Record<string, string | null>;
   /** 設定の「迷いだけを記録する」を入にする（迷いの場面の、答える前のメモの欄が出なくなる。U-46）。 */
   doubtOnly?: boolean;
-  /** 拮抗の場面を出す（差 100 ポイント・1 巡目以降: 2 つ以上の候補がある判断はすべて拮抗の場面。数を増やして検査するため。F17）。 */
-  contest?: boolean;
   /** 最初から解決している FX-4 の判断の鍵（F16）。 */
   resolved?: readonly string[];
 }
@@ -116,7 +106,6 @@ function scenario(options: ScenarioOptions = {}): Scenario {
       show_all_mismatches: options.showAll === true,
       replay_keys: options.keys ?? defaultReplayKeys(),
       doubt_only: options.doubtOnly === true,
-      ...(options.contest === true ? { contest_enabled: true, contest_gap_percent: 100, contest_min_junme: 1 } : {}),
     },
     inputStatus: null,
     sessions: sessions(options.resolved),
@@ -295,7 +284,7 @@ const STATES: StateDef[] = [
     },
   },
   {
-    name: '不一致も出す（設定が入）',
+    name: '広げる設定が入（AI の1位と違う判断も飛び先）',
     scenario: { showAll: true },
     run: (page) => openReplay(page),
   },
@@ -370,20 +359,10 @@ const STATES: StateDef[] = [
     },
   },
   {
-    name: '拮抗の段が入（操作の段が 3 つ。細かいミスだけ・横棒の印）',
-    scenario: { contest: true },
+    name: '細かいミスだけが入（操作の段の 2 つの段）',
     run: async (page) => {
       await openReplay(page);
       await page.getByRole('button', { name: '細かいミスだけ' }).click();
-    },
-  },
-  {
-    name: '拮抗の場面（答える前。上段に解決）',
-    scenario: { contest: true },
-    run: async (page) => {
-      await openReplay(page);
-      await page.getByRole('button', { name: /^次の拮抗へ/ }).click();
-      await page.locator('.qz[data-state="answering"]').waitFor();
     },
   },
   {
@@ -464,14 +443,13 @@ describe('U-4: 1280×800 で、操作の段・卓・手牌が、ページをス�
       '局の終わり（結果と点の増減）',
       '迷いの場面（答える前）',
       '鳴きの場面（答える前）',
-      '不一致も出す（設定が入）',
+      '広げる設定が入（AI の1位と違う判断も飛び先）',
       '長い局の終わり（f9da）',
-      '拮抗の段が入（操作の段が 3 つ。細かいミスだけ・横棒の印）',
-      '拮抗の場面（答える前。上段に解決）',
+      '細かいミスだけが入（操作の段の 2 つの段）',
     ].includes(state.name),
   );
-  it('検査する状態が、8 つそろっている', () => {
-    expect(FIT_STATES.map((state) => state.name)).toHaveLength(8);
+  it('検査する状態が、7 つそろっている', () => {
+    expect(FIT_STATES.map((state) => state.name)).toHaveLength(7);
   });
 
   for (const state of FIT_STATES) {
@@ -675,7 +653,7 @@ describe('U-5: Tab ですべての操作に届く', () => {
     '守備のタブ（副露の気配の 1 行。答えた場面）',
     '鳴きの場面（答える前）',
     'キーの一覧を開いたところ',
-    '不一致も出す（設定が入）',
+    '広げる設定が入（AI の1位と違う判断も飛び先）',
   ];
   for (const state of STATES.filter((s) => REACH.includes(s.name))) {
     it(`${state.name}: 手牌・答えのボタンは止まり場所が 1 つ。残りはすべて、Tab で届く`, { timeout: 60_000 }, async () => {
@@ -876,10 +854,10 @@ describe('U-21: 既定のキー（実ブラウザ）', () => {
       expect(await posText(page)).not.toBe(decisionPos);
       await page.keyboard.press('ArrowLeft');
       expect(await posText(page)).toBe(decisionPos);
-      // ↓ は次の不一致（東2局 11巡目。迷い 2 でもある）。↑ は前の不一致（無い）
+      // ↓ は次の悪手（東2局 11巡目。迷い 2 でもある）。↑ は前の悪手（無い）
       await page.keyboard.press('ArrowDown');
       expect(await titleText(page)).toBe('東2局 11巡目');
-      expect(await page.locator('.q-chips .q-chip').allTextContents()).toEqual(['1向聴', '実戦：打8p', '迷い2', '細かいミス', '大きな不一致']);
+      expect(await page.locator('.q-chips .q-chip').allTextContents()).toEqual(['1向聴', '実戦：打8p', '迷い2', '細かいミス', '悪手']);
       await page.keyboard.press('ArrowUp');
       expect(await titleText(page)).toBe('東2局 11巡目');
       // Shift+↑ は前の迷い（東1局 4巡目）。Shift+→ は次の局の頭。Shift+← は前の局の頭
@@ -956,7 +934,7 @@ describe('U-21: キーの一覧と割り当ての変更（実ブラウザ）', (
         // マウスを乗せると出る
         await button.hover();
         await dialog.waitFor();
-        expect(await dialog.locator('.kp-row').count()).toBe(16);
+        expect(await dialog.locator('.kp-row').count()).toBe(14);
         // 離すと閉じる
         await page.mouse.move(2, 2);
         await expect.poll(() => dialog.count(), { timeout: 3000 }).toBe(0);
@@ -1123,7 +1101,7 @@ describe('U-1・N-8: 答える前の DOM と、牌の画像', () => {
     }
   });
 
-  it('「AI の1位と違う判断も、不一致として出す」が入のとき、増えた場面（FX-4 は 3 か所）も、答える前の DOM に AI の情報が無い', { timeout: 120_000 }, async () => {
+  it('「AI の1位と違う判断も、飛び先に入れる」が入のとき、増えた場面（FX-4 は 3 か所）も、答える前の DOM に AI の情報が無い', { timeout: 120_000 }, async () => {
     const { context, page } = await openState(STATES[9] as StateDef);
     try {
       const small = page.locator('.pin.mis.small');
@@ -1134,7 +1112,7 @@ describe('U-1・N-8: 答える前の DOM と、牌の画像', () => {
         await small.nth(index).click();
         await page.locator('.qz[data-state="answering"]').waitFor();
         expect(await aiTraces(page)).toEqual({ state: 'answering', ai: 0, html: false, text: false, actual: true });
-        expect(await page.locator('.q-chips .q-chip').last().textContent()).toBe('不一致');
+        expect(await page.locator('.q-chips .q-chip').last().textContent()).toBe('悪手');
       }
       // ↑ ↓ は、増えた場面にも止まる（8 か所）
       await page.getByRole('button', { name: '局の頭へ' }).click();
@@ -1661,7 +1639,7 @@ describe('U-44・盤面の見方: 通して見る画面（実ブラウザ）', (
 });
 
 describe('U-45: 迷いのスクショ（通して見る画面。実ブラウザ）', () => {
-  it('迷いの場面: 答えの欄のいちばん上。写真は幅 112px、値・ボタンは欄の中。ほかの場面（不一致だけ）・見ているだけの手には無い。幅 390・768・1280 で横スクロールが無い', { timeout: 120_000 }, async () => {
+  it('迷いの場面: 答えの欄のいちばん上。写真は幅 112px、値・ボタンは欄の中。ほかの場面（悪手だけ）・見ているだけの手には無い。幅 390・768・1280 で横スクロールが無い', { timeout: 120_000 }, async () => {
     for (const width of [1280, 768, 390]) {
       const { context, page } = await open({ width, height: 900 });
       try {
@@ -1691,7 +1669,7 @@ describe('U-45: 迷いのスクショ（通して見る画面。実ブラウザ�
           expect(button.left, `@${width}`).toBeGreaterThanOrEqual(m.panel.left - 0.5);
         }
         expect(m.scroll[0], `@${width}`).toBeLessThanOrEqual(m.scroll[1] as number);
-        // 不一致だけの場面と、見ているだけの手には無い
+        // 悪手だけの場面と、見ているだけの手には無い
         await page.locator('.pin[data-key="k1h1e6"]').first().click();
         await page.locator('.qz[data-state="answering"]').waitFor();
         expect(await page.locator('[data-shots="block"]').count()).toBe(0);
@@ -1841,7 +1819,7 @@ describe('U-44: ドラ表示牌の行は折り返さず、中央の箱の点数�
   }
 });
 
-describe('U-41・U-42: 操作の段の 3 つの段（不一致・迷い・拮抗）と、解決した場面の薄い印', () => {
+describe('U-41・U-42・U-49: 操作の段の 2 つの段（悪手・迷い）と、解決した場面の薄い印', () => {
   /** 操作の段の「飛ぶ」段（.jump）の箱と、操作の段・文書の高さ。 */
   async function barLayout(page: Page) {
     return page.evaluate(() => {
@@ -1866,85 +1844,47 @@ describe('U-41・U-42: 操作の段の 3 つの段（不一致・迷い・拮抗
   for (const [width, height] of [
     [1920, 1080],
     [1440, 900],
+    [1280, 800],
   ] as const) {
-    it(`${width}×${height}: 3 つの段が 1 行に並び、操作の段の高さは、拮抗の段を足す前（拮抗を出さない設定）と変わらない`, { timeout: 90_000 }, async () => {
-      const plain = await open({ width, height });
-      const wide = await open({ width, height, scenario: scenario({ contest: true }) });
+    it(`${width}×${height}: 段は悪手・迷いの 2 つで、1 行に並ぶ。拮抗の段は無く、卓は小さくしない。文書は、窓の高さに収まる`, { timeout: 90_000 }, async () => {
+      const { context, page } = await open({ width, height });
       try {
-        await openReplay(plain.page);
-        await openReplay(wide.page);
-        const before = await barLayout(plain.page);
-        const after = await barLayout(wide.page);
-        expect(before.groups.map((g) => g.kind)).toEqual(['mismatch', 'doubt']);
-        expect(after.groups.map((g) => g.kind)).toEqual(['mismatch', 'doubt', 'contest']);
-        // 3 つとも同じ行（上端が同じ）で、右の端からはみ出さない。段の左から右へ、順に並ぶ
-        expect(new Set(after.groups.map((g) => g.top)).size).toBe(1);
-        expect(after.groups[2]!.right).toBeLessThanOrEqual(after.jumpsRight);
-        expect(after.groups[0]!.right).toBeLessThanOrEqual(after.groups[1]!.left);
-        expect(after.groups[1]!.right).toBeLessThanOrEqual(after.groups[2]!.left);
-        expect(after.barHeight).toBe(before.barHeight);
-        expect(after.barExtra).toBe('');
-        expect(after.documentHeight).toBeLessThanOrEqual(after.windowHeight);
+        await openReplay(page);
+        const layout = await barLayout(page);
+        expect(layout.groups.map((g) => g.kind)).toEqual(['mismatch', 'doubt']);
+        expect(new Set(layout.groups.map((g) => g.top)).size).toBe(1);
+        expect(layout.groups[1]!.right).toBeLessThanOrEqual(layout.jumpsRight);
+        expect(layout.groups[0]!.right).toBeLessThanOrEqual(layout.groups[1]!.left);
+        expect(layout.barExtra).toBe('');
+        expect(layout.documentHeight).toBeLessThanOrEqual(layout.windowHeight);
+        expect(await page.locator('.jump[data-kind="contest"], .pin.cst').count()).toBe(0);
+        expect(await page.getByRole('button', { name: /拮抗/ }).count()).toBe(0);
       } finally {
-        await plain.context.close();
-        await wide.context.close();
+        await context.close();
       }
     });
   }
 
-  it('1280×800: 窓が狭くて 3 つの段が収まらないときは、拮抗の段が次の行に折り返し、その高さの分だけ卓を小さくする。文書は、窓の高さに収まる', { timeout: 90_000 }, async () => {
-    const plain = await open({ width: 1280, height: 800 });
-    const wide = await open({ width: 1280, height: 800, scenario: scenario({ contest: true }) });
+  it('悪手の段: 名前は「悪手の場面へ飛ぶ」、文字は「悪手 N か所」、前・次のボタンは「前の悪手へ」「次の悪手へ」', { timeout: 60_000 }, async () => {
+    const { context, page } = await open({ width: 1280, height: 800 });
     try {
-      await openReplay(plain.page);
-      await openReplay(wide.page);
-      const before = await barLayout(plain.page);
-      const after = await barLayout(wide.page);
-      expect(before.groups).toHaveLength(2);
-      expect(new Set(before.groups.map((g) => g.top)).size).toBe(1);
-      expect(after.groups.map((g) => g.kind)).toEqual(['mismatch', 'doubt', 'contest']);
-      expect(after.groups[2]!.top).toBeGreaterThan(after.groups[0]!.top);
-      const grown = after.barHeight - before.barHeight;
-      expect(grown).toBeGreaterThan(0);
-      expect(after.barExtra).toBe(`--bar-extra: ${grown}px;`);
-      expect(after.documentHeight).toBeLessThanOrEqual(after.windowHeight);
-      expect(before.documentHeight).toBeLessThanOrEqual(before.windowHeight);
-      // 卓と手牌は、窓に収まる
-      const fit = await wide.page.evaluate(() => {
-        const bottom = (selector: string) => document.querySelector(selector)?.getBoundingClientRect().bottom ?? Infinity;
-        return { table: bottom('.board-col .table'), hand: bottom('.board-col .hand'), height: window.innerHeight };
-      });
-      expect(fit.table).toBeLessThanOrEqual(fit.height);
-      expect(fit.hand).toBeLessThanOrEqual(fit.height);
-    } finally {
-      await plain.context.close();
-      await wide.context.close();
-    }
-  });
-
-  it('拮抗を出さない設定では、拮抗の段は無い。出す設定のときは、段の名前（「拮抗 N か所」）と前・次のボタンがある', { timeout: 60_000 }, async () => {
-    const plain = await open({ width: 1280, height: 800 });
-    const wide = await open({ width: 1280, height: 800, scenario: scenario({ contest: true }) });
-    try {
-      await openReplay(plain.page);
-      await openReplay(wide.page);
-      expect(await plain.page.locator('.jump[data-kind="contest"]').count()).toBe(0);
-      const group = wide.page.locator('.jump[data-kind="contest"]');
-      expect(await group.getAttribute('aria-label')).toBe('拮抗の場面へ飛ぶ');
-      expect(((await group.textContent()) ?? '').replace(/\s+/g, ' ')).toMatch(/^拮抗 \d+か所/);
-      await group.getByRole('button', { name: /^次の拮抗へ/ }).click();
-      await wide.page.locator('.qz[data-state="answering"]').waitFor();
-      expect(await wide.page.locator('.q-chips .q-chip', { hasText: '拮抗' }).count()).toBe(1);
+      await openReplay(page);
+      const group = page.locator('.jump[data-kind="mismatch"]');
+      expect(await group.getAttribute('aria-label')).toBe('悪手の場面へ飛ぶ');
+      expect(((await group.textContent()) ?? '').replace(/\s+/g, ' ')).toMatch(/^悪手 5か所/);
+      expect(await group.getByRole('button', { name: '前の悪手へ' }).count()).toBe(1);
+      await group.getByRole('button', { name: /^次の悪手へ/ }).click();
+      await page.locator('.qz[data-state="answering"]').waitFor();
+      expect(await page.locator('.q-chips .q-chip', { hasText: '悪手' }).count()).toBe(1);
       // 答える前に AI の情報は無い
-      expect(await wide.page.locator('[data-ai]').count()).toBe(0);
+      expect(await page.locator('[data-ai]').count()).toBe(0);
     } finally {
-      await plain.context.close();
-      await wide.context.close();
+      await context.close();
     }
   });
 
-  it('印の形: 迷いは丸、細かいミスだけ四角、不一致はひし形、拮抗は短い横棒（描かれた形で確かめる）。解決した場面の印は薄い', { timeout: 60_000 }, async () => {
-    const { context, page } = await open({ width: 1440, height: 900, scenario: scenario({ contest: true, resolved: ['k1h1e7'] }) });
+  it('印の形: 迷いは丸、細かいミスだけ四角、悪手はひし形（描かれた形で確かめる。拮抗の横棒は無い）。解決した場面の印は薄い', { timeout: 60_000 }, async () => {
+    const { context, page } = await open({ width: 1440, height: 900, scenario: scenario({ resolved: ['k1h1e7'] }) });
     try {
       await openReplay(page);
       const shape = (selector: string) =>
@@ -1970,9 +1910,7 @@ describe('U-41・U-42: 操作の段の 3 つの段（不一致・迷い・拮抗
       const diamond = await shape('.pin.mis[data-key="k1h1e9"]');
       expect(diamond).toMatchObject({ width: 10, height: 10, up: false });
       expect(diamond!.transform).not.toBe('none');
-      const bar = await shape('.tl-pins.down .pin.cst');
-      expect(bar).toMatchObject({ width: 16, height: 6, up: false });
-      expect(bar!.transform).toBe('none');
+      expect(await page.locator('.pin.cst').count()).toBe(0);
       // 解決した場面（迷い 3）の印は薄い。押せる
       const resolved = await shape('.pin.dbt[data-key="k1h1e7"]');
       expect(resolved).toMatchObject({ opacity: '0.35' });

@@ -46,7 +46,6 @@ const settings = {
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
   daily_count: 5,
-  disagreement_percent: 5,
   highlight_dora: false,
 };
 

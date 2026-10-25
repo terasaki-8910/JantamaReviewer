@@ -33,23 +33,27 @@ use crate::study::{
 };
 
 /// 同期する設定の項目の名前（データの保存先と窓の位置は入れない）。
-pub const SETTING_NAMES: [&str; 16] = [
+pub const SETTING_NAMES: [&str; 9] = [
     "trigger",
     "orientation",
     "sound",
     "doubt_only",
     "capture_keywords",
     "daily_count",
-    "disagreement_percent",
     "highlight_dora",
     "show_all_mismatches",
+    "replay_keys",
+];
+
+/// 前の版が同期した、現在は使わない設定。受け取っても失敗にせず、手元へは入れない。
+const LEGACY_SETTING_NAMES: [&str; 7] = [
+    "disagreement_percent",
     "contest_enabled",
     "contest_gap_percent",
     "contest_by_junme",
     "contest_min_junme",
     "contest_after_riichi",
     "contest_two_calls",
-    "replay_keys",
 ];
 
 /// 半荘の置き場所。
@@ -501,15 +505,8 @@ fn setting_value(settings: &Settings, name: &str) -> Option<serde_json::Value> {
         "doubt_only" => serde_json::to_value(settings.doubt_only),
         "capture_keywords" => serde_json::to_value(&settings.capture_keywords),
         "daily_count" => serde_json::to_value(settings.daily_count),
-        "disagreement_percent" => serde_json::to_value(settings.disagreement_percent),
         "highlight_dora" => serde_json::to_value(settings.highlight_dora),
         "show_all_mismatches" => serde_json::to_value(settings.show_all_mismatches),
-        "contest_enabled" => serde_json::to_value(settings.contest_enabled),
-        "contest_gap_percent" => serde_json::to_value(settings.contest_gap_percent),
-        "contest_by_junme" => serde_json::to_value(settings.contest_by_junme),
-        "contest_min_junme" => serde_json::to_value(settings.contest_min_junme),
-        "contest_after_riichi" => serde_json::to_value(settings.contest_after_riichi),
-        "contest_two_calls" => serde_json::to_value(settings.contest_two_calls),
         "replay_keys" => serde_json::to_value(&settings.replay_keys),
         _ => return None,
     };
@@ -527,28 +524,9 @@ fn set_setting(settings: &mut Settings, name: &str, text: &str) -> Result<(), St
             settings.capture_keywords = serde_json::from_str(text).map_err(bad)?
         }
         "daily_count" => settings.daily_count = serde_json::from_str(text).map_err(bad)?,
-        "disagreement_percent" => {
-            settings.disagreement_percent = serde_json::from_str(text).map_err(bad)?
-        }
         "highlight_dora" => settings.highlight_dora = serde_json::from_str(text).map_err(bad)?,
         "show_all_mismatches" => {
             settings.show_all_mismatches = serde_json::from_str(text).map_err(bad)?
-        }
-        "contest_enabled" => settings.contest_enabled = serde_json::from_str(text).map_err(bad)?,
-        "contest_gap_percent" => {
-            settings.contest_gap_percent = serde_json::from_str(text).map_err(bad)?
-        }
-        "contest_by_junme" => {
-            settings.contest_by_junme = serde_json::from_str(text).map_err(bad)?
-        }
-        "contest_min_junme" => {
-            settings.contest_min_junme = serde_json::from_str(text).map_err(bad)?
-        }
-        "contest_after_riichi" => {
-            settings.contest_after_riichi = serde_json::from_str(text).map_err(bad)?
-        }
-        "contest_two_calls" => {
-            settings.contest_two_calls = serde_json::from_str(text).map_err(bad)?
         }
         "replay_keys" => settings.replay_keys = serde_json::from_str(text).map_err(bad)?,
         _ => return Err(format!("知らない設定です: {name}")),
@@ -1072,6 +1050,10 @@ impl<P: Ports> FsLocal<P> {
                 continue;
             };
             let name = parsed.rest;
+            if LEGACY_SETTING_NAMES.contains(&name) {
+                results.push(ApplyResult::Applied);
+                continue;
+            }
             let now = setting_value(&current, name).map(|v| v.to_string());
             if &now != expect {
                 results.push(ApplyResult::Skipped("設定が変わっていました".to_string()));

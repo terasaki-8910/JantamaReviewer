@@ -528,7 +528,6 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
               rereads={rereads}
               onOpenReplay={openReplay}
               fit={fit}
-              threshold={study.threshold}
               doubtOnly={study.doubtOnly}
             />
           )}

@@ -175,7 +175,7 @@ export function TargetImportPanel({ flow }: PanelProps) {
           </h2>
           {where}
           <p className="counts">
-            判断 <b>{summary.decisionCount}</b> · 大きな不一致 <b>{summary.disagreementCount}</b> · 迷い{' '}
+            判断 <b>{summary.decisionCount}</b> · 悪手 <b>{summary.disagreementCount}</b> · 迷い{' '}
             <b>{summary.markCount}</b>
             {marks && <span className="quiet">{marks}</span>}
           </p>
@@ -254,3 +254,5 @@ export function TargetConfirm({ check, label, heading, headingId, onConfirm, onC
     </section>
   );
 }
+
+

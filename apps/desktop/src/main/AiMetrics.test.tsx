@@ -1,7 +1,7 @@
 /**
  * AI 一致率・類似度・悪手率（ACCEPTANCE の U-48。SPEC の F18）の、半荘のページの見出しの画面の試験。
  * 半荘の保存先の偽物（FakeSessionStore）の上で、取り込んだ半荘（FX-4 と f9da）と取り込む前の半荘を出して、使う人と同じ操作で確かめる。
- * 値の数え方は、エンジンの ai-metrics.test.ts（E-48）。ここでは、見出しの 1 行の形・説明の文・出る条件と、設定の基準が悪手率に届くこと。
+ * 値の数え方は、エンジンの ai-metrics.test.ts（E-48）。ここでは、見出しの 1 行の形・説明の文・出る条件を確かめる。
  * 週の集計は week/WeekAiMetrics.test.tsx、実ブラウザの見え方（横スクロール・見出しの右との重なり・色・axe）は tests/browser/hanchan.browser.test.ts。
  */
 import { aiMetricsOf, formatRatePercent, formatSimilarity, parseReportText } from '@jantama/engine';
@@ -9,9 +9,8 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FakeSessionStore, REPORT_TEXTS, local, seedSession, type ReportKey } from '../../tests/fake-sessions';
-import { baseSettings, installTauriMock } from '../../tests/tauri-mock';
+import { installTauriMock } from '../../tests/tauri-mock';
 import type { SessionRecord } from '../api/types';
-import { App } from './App';
 import { SessionPage } from './SessionPage';
 import { summarizeReportText, type SummaryState } from './sessionSummaries';
 import { UndoProvider } from './undo/UndoProvider';
@@ -51,8 +50,6 @@ interface SetupOptions {
   report?: ReportKey | null;
   /** 画面に渡すまとめ。既定は、結果から作ったもの（取り込む前の半荘は無し）。 */
   summary?: SummaryState | undefined;
-  /** 大きな不一致の基準（確率）。渡さなければ、画面の既定（5%）。 */
-  threshold?: number;
   doubtOnly?: boolean;
   handlers?: Record<string, (args: unknown) => unknown>;
 }
@@ -64,7 +61,6 @@ function setup(options: SetupOptions = {}) {
   const mock = installTauriMock({ handlers: { ...store.handlers, ...options.handlers } });
   const summary = 'summary' in options ? options.summary : session.report_path === null ? undefined : summaryOf(key ?? 'fx4');
   const extra = {
-    ...(options.threshold === undefined ? {} : { threshold: options.threshold }),
     ...(options.doubtOnly === undefined ? {} : { doubtOnly: options.doubtOnly }),
   };
   const view = render(
@@ -88,9 +84,9 @@ async function settled(mock: ReturnType<typeof installTauriMock>) {
   });
 }
 
-/** 説明の文（基準 N% と、半荘の数を入れる）。 */
-const hint = (counts: { matches: number; decisions: number; badMoves: number }, percent: number) =>
-  `AI（Mortal）と比べた数です。AI 一致率は、自分の判断のうち、AI の1位と同じだった割合（${counts.matches}/${counts.decisions}）。類似度は、Mortal の Rating と同じ値で、AI の1位なら満点、違えば AI の評価に応じた部分点です（NAGA の類似度に当たります）。悪手率は、実戦の行動の AI の確率が ${percent}% より低かった判断の割合（${counts.badMoves}/${counts.decisions}）で、大きな不一致と同じ基準です（NAGA の悪手と同じ線）。`;
+/** 説明の文（半荘の数を入れる）。 */
+const hint = (counts: { matches: number; decisions: number; badMoves: number }) =>
+  `AI（Mortal）と比べた数です。AI 一致率は、自分の判断のうち、AI の1位と同じだった割合（${counts.matches}/${counts.decisions}）。類似度は、Mortal の Rating と同じ値で、AI の1位なら満点、違えば AI の評価に応じた部分点です（NAGA の類似度に当たります）。悪手率は、実戦の行動の AI の確率が 5% より低かった判断（悪手）の割合（${counts.badMoves}/${counts.decisions}）で、NAGA の悪手と同じ線です。`;
 
 describe('U-48 半荘のページの見出し: AI 一致率・類似度・悪手率', () => {
   it('取り込み済み（FX-4）は、題の下の副題のさらに下に 1 行。「AI 一致率 88.6% · 類似度 93.0 · 悪手率 7.1%」の順で、説明のアイコンが続く', async () => {
@@ -149,9 +145,9 @@ describe('U-48 半荘のページの見出し: AI 一致率・類似度・悪手
   it('説明のアイコン「AI 一致率・類似度・悪手率の説明」: 3 つの意味と、この半荘の数（62/70・5/70）と設定の基準（5%）が書いてある', async () => {
     setup();
     await lineReady();
-    expect(tip()).toHaveAccessibleDescription(hint({ matches: 62, decisions: 70, badMoves: 5 }, 5));
+    expect(tip()).toHaveAccessibleDescription(hint({ matches: 62, decisions: 70, badMoves: 5 }));
     expect(tip()).toHaveAccessibleDescription(
-      'AI（Mortal）と比べた数です。AI 一致率は、自分の判断のうち、AI の1位と同じだった割合（62/70）。類似度は、Mortal の Rating と同じ値で、AI の1位なら満点、違えば AI の評価に応じた部分点です（NAGA の類似度に当たります）。悪手率は、実戦の行動の AI の確率が 5% より低かった判断の割合（5/70）で、大きな不一致と同じ基準です（NAGA の悪手と同じ線）。',
+      'AI（Mortal）と比べた数です。AI 一致率は、自分の判断のうち、AI の1位と同じだった割合（62/70）。類似度は、Mortal の Rating と同じ値で、AI の1位なら満点、違えば AI の評価に応じた部分点です（NAGA の類似度に当たります）。悪手率は、実戦の行動の AI の確率が 5% より低かった判断（悪手）の割合（5/70）で、NAGA の悪手と同じ線です。',
     );
   });
 
@@ -159,19 +155,8 @@ describe('U-48 半荘のページの見出し: AI 一致率・類似度・悪手
     const view = setup({ report: 'fx1a' });
     const before = await lineReady();
     expect(textOf(before)).toBe('AI 一致率 75.8% · 類似度 86.7 · 悪手率 10.7%');
-    expect(tip()).toHaveAccessibleDescription(hint({ matches: 135, decisions: 178, badMoves: 19 }, 5));
+    expect(tip()).toHaveAccessibleDescription(hint({ matches: 135, decisions: 178, badMoves: 19 }));
     view.unmount();
-
-    setup({ report: 'fx1a', threshold: 0.1 });
-    const line = await lineReady();
-    expect(textOf(line)).toBe('AI 一致率 75.8% · 類似度 86.7 · 悪手率 14.0%');
-    expect(tip()).toHaveAccessibleDescription(hint({ matches: 135, decisions: 178, badMoves: 25 }, 10));
-  });
-
-  it('基準の % は、浮動小数点のずれを出さない（7% は「7%」）', async () => {
-    setup({ report: 'fx1a', threshold: 7 / 100 });
-    await lineReady();
-    expect(tip()).toHaveAccessibleDescription(/実戦の行動の AI の確率が 7% より低かった判断の割合（\d+\/178）で/);
   });
 
   it('迷いだけの設定が入でも切でも出る（〇△✕ を使わないため）', async () => {
@@ -231,22 +216,5 @@ describe('U-48 半荘のページの見出し: AI 一致率・類似度・悪手
     expect(tip()).toBeNull();
     // 結果を読めない半荘の画面は、記録した評価の一覧（見出しの 1 行が無いだけで、ほかは変わらない）
     expect(screen.getByRole('heading', { level: 2, name: /^評価（/ })).toBeInTheDocument();
-  });
-});
-
-describe('U-48 設定の基準が、アプリ全体で見出しに届く', () => {
-  it('設定の「大きな不一致の基準」が 10% なら悪手率は 14.0%。基準を 5% に替えると（settings-changed）、10.7% に替わる', async () => {
-    const store = new FakeSessionStore([{ session: imported('fx1a'), report: 'fx1a' }]);
-    const mock = installTauriMock({ settings: { ...baseSettings, disagreement_percent: 10 }, handlers: store.handlers });
-    render(<App />);
-    // 設定を読み込むまでは既定の 5% なので、読み込みのあとの値になるまで待つ
-    await waitFor(() => expect(textOf(list())).toBe('AI 一致率 75.8% · 類似度 86.7 · 悪手率 14.0%'), { timeout: 20_000 });
-    expect(tip()).toHaveAccessibleDescription(hint({ matches: 135, decisions: 178, badMoves: 25 }, 10));
-
-    act(() => {
-      mock.emit('settings-changed', { ...baseSettings, disagreement_percent: 5 });
-    });
-    await waitFor(() => expect(textOf(list())).toBe('AI 一致率 75.8% · 類似度 86.7 · 悪手率 10.7%'));
-    expect(tip()).toHaveAccessibleDescription(hint({ matches: 135, decisions: 178, badMoves: 19 }, 5));
   });
 });

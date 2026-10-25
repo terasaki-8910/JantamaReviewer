@@ -299,7 +299,7 @@ function DonePanel({
         </dd>
       </dl>
       <p className="counts">
-        判断 <b>{summary.decisionCount}</b> · 大きな不一致 <b>{summary.disagreementCount}</b>
+        判断 <b>{summary.decisionCount}</b> · 悪手 <b>{summary.disagreementCount}</b>
         {summary.linkedToRecording && (
           <>
             {' '}
@@ -383,3 +383,5 @@ function Fallback({
     </section>
   );
 }
+
+

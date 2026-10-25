@@ -42,13 +42,6 @@ const settings = {
   doubt_only: false,
   capture_keywords: ['雀魂', 'Mahjong Soul'],
   data_dir: 'C:\\Users\\someone\\JantamaReviewerData',
-  // 拮抗の場面（F17）の設定。設定ページの欄（押せるチェック・数の欄）が出る
-  contest_enabled: true,
-  contest_gap_percent: 20,
-  contest_by_junme: true,
-  contest_min_junme: 12,
-  contest_after_riichi: true,
-  contest_two_calls: true,
 };
 
 const at = (h: number, mi: number) => new Date(2026, 9, 9, h, mi, 0).getTime();

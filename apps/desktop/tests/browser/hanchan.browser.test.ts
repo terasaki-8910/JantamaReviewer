@@ -263,7 +263,7 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     await page.keyboard.press('End');
     await page.waitForFunction(() => document.querySelector('.wk-tip:not([hidden])') !== null);
   },
-  // 「表で見る」を開いたところ（東3局1本場。最後の点が大きな不一致）
+  // 「表で見る」を開いたところ（東3局1本場。最後の点が悪手）
   rowOpenTrackTable: async (page) => {
     await (await reveal(page, page.getByRole('button', { name: '東3局1本場', exact: true }))).click();
     const toggle = page.locator('.hx-trk').getByRole('button', { name: '表で見る' });
@@ -716,7 +716,7 @@ describe('U-36 向聴数の推移（実ブラウザ。局の評価の行を開�
   });
 
   for (const width of [390, 768, 1280] as const) {
-    it(`幅 ${width}px: 折れ線を矢印キーで選ぶと、吹き出しが窓の中に収まる。印のある点の吹き出しに、迷いと大きな不一致の文字が出る`, async () => {
+    it(`幅 ${width}px: 折れ線を矢印キーで選ぶと、吹き出しが窓の中に収まる。印のある点の吹き出しに、迷いと悪手の文字が出る`, async () => {
       const { context, page } = await open({ width });
       try {
         await page.getByRole('button', { name: '東2局', exact: true }).click();
@@ -737,8 +737,8 @@ describe('U-36 向聴数の推移（実ブラウザ。局の評価の行を開�
         await page.keyboard.press('Home');
         expect(await read()).toMatchObject({ value: '2向聴', label: '配牌', inside: true });
         for (let i = 0; i < 11; i += 1) await page.keyboard.press('ArrowRight');
-        expect(await read()).toMatchObject({ value: '1向聴・迷い2・大きな不一致', label: '11巡目 打8p', inside: true });
-        // 印の付いた値は、途中で折り返さず 1 行に収まる（吹き出しの幅が狭いと「大きな / 不一致」と割れた）
+        expect(await read()).toMatchObject({ value: '1向聴・迷い2・悪手', label: '11巡目 打8p', inside: true });
+        // 印の付いた値は、途中で折り返さず 1 行に収まる（吹き出しの幅が狭いと、印の名前が途中で割れた）
         const valueLines = await page.evaluate(() => {
           const v = document.querySelector<HTMLElement>('.wk-tip:not([hidden]) .wk-tip-v');
           if (v === null) return 0;
@@ -1581,7 +1581,7 @@ describe('U-31 MAKA の当てはめの見込み（実ブラウザ。局の評価
 describe('U-48: AI 一致率・類似度・悪手率の1行（実ブラウザ。半荘のページの見出し）', () => {
   const LINE = 'AI 一致率 88.6% · 類似度 93.0 · 悪手率 7.1%';
   const HINT =
-    'AI（Mortal）と比べた数です。AI 一致率は、自分の判断のうち、AI の1位と同じだった割合（62/70）。類似度は、Mortal の Rating と同じ値で、AI の1位なら満点、違えば AI の評価に応じた部分点です（NAGA の類似度に当たります）。悪手率は、実戦の行動の AI の確率が 5% より低かった判断の割合（5/70）で、大きな不一致と同じ基準です（NAGA の悪手と同じ線）。';
+    'AI（Mortal）と比べた数です。AI 一致率は、自分の判断のうち、AI の1位と同じだった割合（62/70）。類似度は、Mortal の Rating と同じ値で、AI の1位なら満点、違えば AI の評価に応じた部分点です（NAGA の類似度に当たります）。悪手率は、実戦の行動の AI の確率が 5% より低かった判断（悪手）の割合（5/70）で、NAGA の悪手と同じ線です。';
 
   /** 見出しの箱（題・副題・1 行・右の操作）の位置と、1 行の文字・色・数字の形。 */
   const measureHead = (page: Page) =>

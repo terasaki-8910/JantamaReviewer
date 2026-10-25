@@ -11,7 +11,6 @@ import { answerRow } from '../../../tests/fake-study';
 import { SEARCH_NOW, SEARCH_SEEDS, searchFixture, type SearchFixture, type SearchSeed } from '../../../tests/search-fixtures';
 import type { AnswerRow } from '../../api/types';
 import { MAC_STAGE_2_PLATFORM, setPlatform, WINDOWS_PLATFORM } from '../../shared/platform';
-import { contestOptionsOf } from '../study/contestOptions';
 import { StudyProvider, type StudyValue } from '../study/StudyProvider';
 import { useShortcutsBlocked } from '../undo/shortcutGuard';
 import { UndoProvider } from '../undo/UndoProvider';
@@ -41,7 +40,6 @@ function studyValue(fixture: SearchFixture, options: Options): StudyValue {
     threshold: 0.05,
     dailyCount: 5,
     highlightDora: false,
-    contest: contestOptionsOf(null),
     resolvedIds: new Set(),
     doubtOnly: false,
     answers: options.answers ?? [],
@@ -214,7 +212,7 @@ describe('U-22: 開いた状態', () => {
       /^問題 東\d局(\d本場)? \d+巡目 (迷い\d )?(打牌|鳴き|リーチ|和了|カン) · (\d+向聴|聴牌) · 10月9日 19:09 の半荘 未解答$/,
     );
     expect(problemRows.every((row) => /(未解答|解答済み)$/.test(optionText(row)))).toBe(true);
-    // 迷いの問題には「迷い N」（今日の出題の行と同じ言い方）。大きな不一致の問題には付かない
+    // 迷いの問題には「迷い N」（今日の出題の行と同じ言い方）。悪手の問題には付かない
     const lines = problemRows.map((row) => optionText(row));
     expect(lines.some((line) => /迷い\d/.test(line))).toBe(true);
     expect(lines.some((line) => !/迷い\d/.test(line))).toBe(true);

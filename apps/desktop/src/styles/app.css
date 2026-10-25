@@ -475,34 +475,6 @@ fieldset.setting:not(:first-child) {
   accent-color: var(--accent);
 }
 
-/* ---------- 設定: 拮抗の場面（F17）。切のときは、差と条件の欄を押せなくして、薄くする ---------- */
-.contest-set {
-  gap: var(--s3);
-}
-
-.contest-conds {
-  display: grid;
-  gap: var(--s1);
-}
-
-.contest-cond {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s3);
-}
-
-.contest-set .check:has(input:disabled) {
-  color: var(--muted);
-  cursor: not-allowed;
-}
-
-.contest-set .input:disabled {
-  color: var(--muted);
-  background: var(--hover);
-  cursor: not-allowed;
-}
-
 .path {
   margin: 0;
   flex: 1;

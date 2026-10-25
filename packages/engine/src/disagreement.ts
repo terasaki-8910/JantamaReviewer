@@ -1,5 +1,5 @@
 /**
- * 大きな不一致の一覧（E-4、F2）。
+ * 悪手の一覧（E-4、F2）。
  * Mortal が実戦の行動に付けた確率が基準（既定 5%）未満の判断を、確率の低い順（差の大きい順）に並べる。
  */
 import type { Decision } from './decision';
@@ -63,3 +63,5 @@ export function listDisagreements(decisions: readonly Decision[], options: Disag
   all.sort((a, b) => a.prob - b.prob || a.decision.index - b.decision.index);
   return { threshold, limit, total: all.length, items: all.slice(0, limit), rest: all.slice(limit) };
 }
+
+

@@ -1,7 +1,7 @@
 /**
  * 出題（今日の出題・解き直し・答え合わせ）が使うデータを、検討画面のシェルが 1 つだけ持つ。
  *
- * - 半荘ごとの再生した結果（`GameStore`）・答えの記録（`study.sqlite`）・設定（1日に出す数・基準・ドラ・拮抗の場面）を読む
+ * - 半荘ごとの再生した結果（`GameStore`）・答えの記録（`study.sqlite`）・設定（1日に出す数・ドラ）を読む
  * - 今日（午前 4 時までは前の日）の組を、まだ無ければ作って保存する（作ったら、その日のうちは入れ替えない。E-24）。
  *   組は、すべての半荘の結果を読み終えてから作る（読み込み中に作ると、一部の半荘だけの組になる）
  * - サイドバーの数（今日のまだ答えていない数・解き直しの期限の数）と、各ページが使う `StudyModel` を作る
@@ -11,10 +11,10 @@
  */
 import {
   STUDY_DAY_START_HOUR,
+  DEFAULT_DISAGREEMENT_THRESHOLD,
   findDecisionByKey,
   problemId,
   studyDate,
-  type ContestOptions,
   type Decision,
   type ImportedGame,
 } from '@jantama/engine';
@@ -33,7 +33,6 @@ import {
 import { api, errorMessage, onSettingsChanged } from '../../api/tauri';
 import type { AnswerNotes, AnswerRow, NewAnswer, SessionRecord, Settings, StoredProblemRef } from '../../api/types';
 import { useUndo } from '../undo/UndoProvider';
-import { contestOptionsOf } from './contestOptions';
 import { GameStore, type GameState } from './gameStore';
 import { resolveCommand } from './resolveEdits';
 import { buildStudyModel, collectProblems, plannedSet, type StudyModel } from './studyModel';
@@ -92,13 +91,11 @@ export interface StudyValue {
   error: string | null;
   /** 今日（午前 4 時までは前の日）。 */
   studyDay: string;
-  /** 大きな不一致の基準（確率）と、正解の基準。設定の「大きな不一致の基準」（%）から。 */
+  /** 悪手の基準と正解の下限（5% 固定）。 */
   threshold: number;
   dailyCount: number;
   /** 設定の「ドラを目立たせる」。 */
   highlightDora: boolean;
-  /** 設定の「拮抗の場面」（F17）をエンジンの形にしたもの。読み込み前は既定値。 */
-  contest: ContestOptions;
   /** 解決した問題の識別（`problemId`。消した半荘は入れない。F16）。 */
   resolvedIds: ReadonlySet<string>;
   /**
@@ -170,11 +167,6 @@ export function useDoubtOnly(): boolean {
   return useContext(StudyContext)?.doubtOnly ?? false;
 }
 
-/** 設定の「大きな不一致の基準」（%）を、確率にする。 */
-export function thresholdOf(percent: number): number {
-  return percent / 100;
-}
-
 /**
  * 出題のデータを作る（検討画面のシェルが 1 回だけ呼び、結果を `StudyProvider` で配る）。
  * `sessions` は、消していない半荘（一覧に出ているもの）。読み込み前は null。
@@ -214,26 +206,8 @@ export function useStudyData(sessions: readonly SessionRecord[] | null, reloadSe
     };
   }, []);
 
-  const threshold = thresholdOf(settings?.disagreement_percent ?? 5);
+  const threshold = DEFAULT_DISAGREEMENT_THRESHOLD;
   const dailyCount = settings?.daily_count ?? 5;
-  const contestEnabled = settings?.contest_enabled;
-  const contestGap = settings?.contest_gap_percent;
-  const contestByJunme = settings?.contest_by_junme;
-  const contestMinJunme = settings?.contest_min_junme;
-  const contestAfterRiichi = settings?.contest_after_riichi;
-  const contestTwoCalls = settings?.contest_two_calls;
-  const contest = useMemo(
-    () =>
-      contestOptionsOf({
-        contest_enabled: contestEnabled,
-        contest_gap_percent: contestGap,
-        contest_by_junme: contestByJunme,
-        contest_min_junme: contestMinJunme,
-        contest_after_riichi: contestAfterRiichi,
-        contest_two_calls: contestTwoCalls,
-      }),
-    [contestEnabled, contestGap, contestByJunme, contestMinJunme, contestAfterRiichi, contestTwoCalls],
-  );
 
   const settled =
     sessions !== null &&
@@ -243,8 +217,8 @@ export function useStudyData(sessions: readonly SessionRecord[] | null, reloadSe
   const sessionList = useMemo(() => sessions ?? NO_SESSIONS, [sessions]);
   const resolvedIds = useMemo(() => resolvedIdsOf(sessionList), [sessionList]);
   const collected = useMemo(
-    () => (ready ? collectProblems(sessionList, games, threshold, contest) : null),
-    [ready, sessionList, games, threshold, contest],
+    () => (ready ? collectProblems(sessionList, games) : null),
+    [ready, sessionList, games],
   );
 
   // 今日の組を、まだ無ければ作って保存する（作ったら入れ替えない。保存先の側でも、その日の組があれば入れ替えない）
@@ -355,7 +329,6 @@ export function useStudyData(sessions: readonly SessionRecord[] | null, reloadSe
       threshold,
       dailyCount,
       highlightDora,
-      contest,
       resolvedIds,
       doubtOnly,
       answers: answerList,
@@ -377,7 +350,6 @@ export function useStudyData(sessions: readonly SessionRecord[] | null, reloadSe
       threshold,
       dailyCount,
       highlightDora,
-      contest,
       resolvedIds,
       doubtOnly,
       answerList,

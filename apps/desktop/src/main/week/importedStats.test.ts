@@ -39,7 +39,7 @@ const sessionOf = (seed: Seed): SessionRecord => seedSession(seed.at, { id: seed
 const gamesOf = (seeds: readonly Seed[]) => new Map(seeds.map((seed) => [seed.id, gameFromReportText(REPORT_TEXTS[seed.key])] as const));
 const noSummaries: SummaryMap = new Map();
 
-/** 悪手の基準（設定の「大きな不一致の基準」の既定 5%）。 */
+/** 悪手の基準（固定 5%）。 */
 const THRESHOLD = 0.05;
 
 function stats(
@@ -47,9 +47,8 @@ function stats(
   seeds: readonly Seed[],
   games: ReadonlyMap<string, GameState> = gamesOf(seeds),
   sessions = seeds.map(sessionOf),
-  threshold = THRESHOLD,
 ) {
-  return buildImportedStats({ sessions, summaries: noSummaries, gameState: (id) => games.get(id), week, threshold });
+  return buildImportedStats({ sessions, summaries: noSummaries, gameState: (id) => games.get(id), week });
 }
 
 describe('E-42・U-37 週ごとの、取り込んだ半荘から数えた成績', () => {
@@ -97,7 +96,7 @@ describe('E-42・U-37 週ごとの、取り込んだ半荘から数えた成績'
 
   it('結果を取り込んでいない半荘（迷いマークだけ）は数えない。取り込んだ半荘が無い週は、半荘 0・値はすべて null', () => {
     const notImported = seedSession(local(2026, 10, 6, 20, 0), { id: 'g-none', marks: 3 }).session;
-    const result = buildImportedStats({ sessions: [notImported], summaries: noSummaries, gameState: () => undefined, week: THIS_WEEK, threshold: THRESHOLD });
+    const result = buildImportedStats({ sessions: [notImported], summaries: noSummaries, gameState: () => undefined, week: THIS_WEEK });
     expect(result.imported).toBe(0);
     expect(result.rows).toEqual([]);
     expect(result.totals.hanchanCount).toBe(0);
@@ -124,7 +123,7 @@ describe('E-42・U-37 週ごとの、取り込んだ半荘から数えた成績'
   it('卓の呼び名は、まとめが読めている半荘だけに付く', () => {
     const seed = WEEK_SEEDS[0] as Seed;
     const withRoom: SummaryMap = new Map([[seed.id, { status: 'ready', summary: { room: '玉の間・南' } as never }]]);
-    const result = buildImportedStats({ sessions: [sessionOf(seed)], summaries: withRoom, gameState: (id) => gamesOf([seed]).get(id), week: THIS_WEEK, threshold: THRESHOLD });
+    const result = buildImportedStats({ sessions: [sessionOf(seed)], summaries: withRoom, gameState: (id) => gamesOf([seed]).get(id), week: THIS_WEEK });
     expect(result.rows[0]?.room).toBe('玉の間・南');
     expect(stats(THIS_WEEK, [seed]).rows[0]?.room).toBeNull();
   });
@@ -174,16 +173,6 @@ describe('E-48・U-48 週ごとの、AI 一致率・類似度・悪手率', () =
     expect(Math.abs((ai.matchRate ?? 0) - average)).toBeGreaterThan(1e-3);
   });
 
-  it('基準を 10% にすると、悪手の数が基準 10% の値（25・20・17・22・25・9・5。合計 123）になり、判断・一致・類似度は変わらない', () => {
-    const result = stats(THIS_WEEK, WEEK_SEEDS, undefined, undefined, 0.1);
-    expect(result.threshold).toBe(0.1);
-    expect(result.rows.map((row) => row.ai.badMoves)).toEqual([25, 20, 17, 22, 25, 9, 5]);
-    expect(result.ai.badMoves).toBe(123);
-    const base = stats(THIS_WEEK, WEEK_SEEDS).ai;
-    expect([result.ai.decisions, result.ai.matches, result.ai.similarity]).toEqual([base.decisions, base.matches, base.similarity]);
-    expect(result.ai.badMoveRate).toBe(123 / 1159);
-  });
-
   it('数える半荘は、既存の値と同じ絞り込み: 週の外・消した半荘・結果の無い半荘・読み込み中・牌譜が読めない半荘は数えない', () => {
     const games = gamesOf(WEEK_SEEDS);
     // FX-4 を消した一覧
@@ -207,7 +196,7 @@ describe('E-48・U-48 週ごとの、AI 一致率・類似度・悪手率', () =
     expect([partial.ai.decisions, partial.ai.matches, partial.ai.badMoves]).toEqual([178, 135, 19]);
     // 結果を取り込んでいない半荘だけの週
     const notImported = seedSession(local(2026, 10, 6, 20, 0), { id: 'g-none', marks: 3 }).session;
-    const none = buildImportedStats({ sessions: [notImported], summaries: noSummaries, gameState: () => undefined, week: THIS_WEEK, threshold: THRESHOLD });
+    const none = buildImportedStats({ sessions: [notImported], summaries: noSummaries, gameState: () => undefined, week: THIS_WEEK });
     expect(none.ai).toEqual({ decisions: 0, matches: 0, badMoves: 0, scoreSum: 0, matchRate: null, similarity: null, badMoveRate: null });
   });
 });

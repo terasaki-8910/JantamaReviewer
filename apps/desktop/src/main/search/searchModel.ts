@@ -4,7 +4,7 @@
  *
  * - 半荘: 日付（10/9・10月9日・昨日）・開始時刻・卓・段階・Rating・迷い・メモに、半荘の一覧の検索と同じ当て方で当たる
  *   （`sessionFilter.ts` の検索の口をそのまま使う）。それに加えて、その半荘の局の名前に当たる（東4局 → 東4局を持つ半荘）
- * - 問題: 今日の出題と同じ一覧（大きな不一致 + 迷いを結びつけた判断。消した半荘の問題は、元から入らない）。
+ * - 問題: 今日の出題と同じ一覧（悪手 + 迷いを結びつけた判断。消した半荘の問題は、元から入らない）。
  *   局の名前・巡目・種類・向聴数・迷い・学んだ原則・解答の状態と、その半荘の日付・開始時刻・卓・メモに当たる
  * - 検索語は空白で区切り、すべてに当たるものだけ（AND）。全角・半角と大文字・小文字は区別しない
  * - 絞り込み: 種類（半荘・問題）・段階（半荘の一覧と同じ）・期間・迷いあり・未解答。問題の段階と期間は、その半荘のもの
@@ -123,7 +123,7 @@ export interface GameEntry {
   /** 問題の数と、まだ答えていない数。問題を読み終えるまでは null。 */
   readonly problemCount: number | null;
   readonly unanswered: number | null;
-  /** 大きな不一致（確率が基準未満）の問題の数。並べ替えにだけ使う（画面には出さない）。 */
+  /** 悪手（確率が基準未満）の問題の数。並べ替えにだけ使う（画面には出さない）。 */
   readonly mismatchCount: number;
   /** 検索で当てる文字（正規化済み）。 */
   readonly text: string;
@@ -169,7 +169,7 @@ export interface SearchInput {
   problems: readonly Problem[];
   problemsReady: boolean;
   answers: readonly AnswerRow[];
-  /** 大きな不一致の基準（確率）。 */
+  /** 悪手の基準（確率）。 */
   threshold: number;
   now: number;
 }
@@ -442,3 +442,5 @@ export function dateHits(
   const matches = (list: readonly string[]) => terms.some((term) => list.some((text) => containsTerm(text, term)));
   return { monthDay: matches(numeric), relative: matches(relative) };
 }
+
+

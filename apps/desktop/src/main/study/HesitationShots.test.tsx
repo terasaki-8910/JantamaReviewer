@@ -78,7 +78,7 @@ describe('U-45 迷いのスクショの欄: 出す場面', () => {
     expect(document.querySelector('.answer')?.firstElementChild).toHaveClass('answer-bar');
   });
 
-  it('迷いマークの結びつかない問題（大きな不一致だけ）には、出ない', () => {
+  it('迷いマークの結びつかない問題（悪手だけ）には、出ない', () => {
     renderQuiz({ report: 'fx4', key: 'k1h1e9', session: session() });
     expect(block()).toBeNull();
     expect(screen.queryByText('迷いのスクショ')).toBeNull();
@@ -247,3 +247,5 @@ describe('U-45 迷いのスクショの欄: 前の手・次の手に付け替え
     expect(document.getElementById('reveal-h')).not.toBeNull();
   });
 });
+
+

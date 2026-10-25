@@ -254,10 +254,9 @@ describe('設定ページ: 迷いだけを記録する（F0、W-15）', () => {
 });
 
 describe('設定ページ: 出題の設定（D-3・U-19）', () => {
-  it('既定: 1日に出す数 5・大きな不一致の基準 5%・ドラを目立たせる は切', async () => {
+  it('既定: 1日に出す数 5・ドラを目立たせる は切', async () => {
     await renderPage();
     expect(screen.getByRole('spinbutton', { name: '1日に出す数' })).toHaveValue(5);
-    expect(screen.getByRole('spinbutton', { name: '大きな不一致の基準' })).toHaveValue(5);
     expect(screen.getByRole('checkbox', { name: 'ドラを目立たせる' })).not.toBeChecked();
     expect(screen.getByText('今日の出題に入れる問題の数です（既定は5）。')).toBeInTheDocument();
   });
@@ -274,7 +273,7 @@ describe('設定ページ: 出題の設定（D-3・U-19）', () => {
     expect(savedSettings(mock)).toHaveLength(0);
     await user.type(box, '{Enter}');
     await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
-    expect(savedSettings(mock)[0]).toMatchObject({ daily_count: 8, disagreement_percent: 5, highlight_dora: false });
+    expect(savedSettings(mock)[0]).toMatchObject({ daily_count: 8, highlight_dora: false });
     expect(await screen.findByText('保存しました')).toBeInTheDocument();
     expect(box).toHaveValue(8);
   });
@@ -297,23 +296,6 @@ describe('設定ページ: 出題の設定（D-3・U-19）', () => {
     await user.tab();
     await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
     expect(savedSettings(mock)[0]?.daily_count).toBe(50);
-  });
-
-  it('大きな不一致の基準（%）も同じ。1〜50 の整数で保存し、外れた値は理由を出して戻す', async () => {
-    const user = userEvent.setup();
-    const mock = await renderPage();
-    const box = screen.getByRole('spinbutton', { name: '大きな不一致の基準' });
-    await user.clear(box);
-    await user.type(box, '10');
-    await user.tab();
-    await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
-    expect(savedSettings(mock)[0]).toMatchObject({ disagreement_percent: 10, daily_count: 5 });
-    await user.clear(box);
-    await user.type(box, '0');
-    await user.tab();
-    expect(await screen.findByRole('alert')).toHaveTextContent('大きな不一致の基準は 1% から 50% の間の整数で指定してください');
-    expect(box).toHaveValue(10);
-    expect(savedSettings(mock)).toHaveLength(1);
   });
 
   it('ドラを目立たせる: チェックで、その場で保存する（入れたあと、切ることもできる）', async () => {
@@ -339,29 +321,27 @@ describe('設定ページ: 出題の設定（D-3・U-19）', () => {
 });
 
 describe('設定ページ: 通して見る画面の設定（R10-4・E-26・U-21）', () => {
-  it('「AI の1位と違う判断も、不一致として出す」は、「大きな不一致の基準」のすぐ下にあり、既定は切', async () => {
+  it('「AI の1位と違う判断も、飛び先に入れる」は既定は切で、固定 5% と出題への影響を説明する', async () => {
     await renderPage();
-    const box = screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' });
+    const box = screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、飛び先に入れる' });
     expect(box).not.toBeChecked();
-    const threshold = screen.getByRole('spinbutton', { name: '大きな不一致の基準' }).closest('.setting');
-    expect(threshold?.nextElementSibling).toContainElement(box);
-    expect(screen.getByText(/出題の基準は変わりません/)).toBeInTheDocument();
-    expect(box).toHaveAccessibleDescription(/半荘を通して見る画面で/);
+    expect(box).toHaveAccessibleDescription(
+      '半荘を通して見る画面で、確率が 5% 以上でも、AI の1位と違う判断を悪手の段の飛び先に入れます。出題は変わりません（既定は切）。',
+    );
   });
 
   it('チェックで、その場で保存する（入れたあと、切ることもできる）。ほかの設定と、キーの割り当てはそのまま', async () => {
     const user = userEvent.setup();
     const mock = await renderPage();
-    await user.click(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' }));
+    await user.click(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、飛び先に入れる' }));
     await waitFor(() => expect(savedSettings(mock)).toHaveLength(1));
     expect(savedSettings(mock)[0]).toMatchObject({
       show_all_mismatches: true,
-      disagreement_percent: 5,
       highlight_dora: false,
       replay_keys: baseSettings.replay_keys,
     });
-    expect(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' })).toBeChecked();
-    await user.click(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' }));
+    expect(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、飛び先に入れる' })).toBeChecked();
+    await user.click(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、飛び先に入れる' }));
     await waitFor(() => expect(savedSettings(mock)).toHaveLength(2));
     expect(savedSettings(mock)[1]?.show_all_mismatches).toBe(false);
   });
@@ -371,7 +351,7 @@ describe('設定ページ: 通して見る画面の設定（R10-4・E-26・U-21�
     act(() => {
       mock.emit('settings-changed', { ...baseSettings, show_all_mismatches: true } satisfies Settings);
     });
-    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、不一致として出す' })).toBeChecked());
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'AI の1位と違う判断も、飛び先に入れる' })).toBeChecked());
   });
 });
 

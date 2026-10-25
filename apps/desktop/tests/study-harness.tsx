@@ -9,7 +9,6 @@ import { useRef, useState } from 'react';
 import { vi, type Mock } from 'vitest';
 
 import type { AnswerMode, AnswerNotes, AnswerRow, NewAnswer, SessionRecord } from '../src/api/types';
-import { contestOptionsOf } from '../src/main/study/contestOptions';
 import { QuizScreen } from '../src/main/study/QuizScreen';
 import { resolveCommand } from '../src/main/study/resolveEdits';
 import { StudyProvider, type StudyValue } from '../src/main/study/StudyProvider';
@@ -50,8 +49,6 @@ export interface QuizOptions {
   resolved?: readonly string[];
   /** 細かいミスの問題として開く（見出しに札が出る。F17）。 */
   fineMiss?: boolean;
-  /** 拮抗の問題として開く（見出しに札が出る。F17）。 */
-  contest?: boolean;
 }
 
 export interface QuizProbe {
@@ -113,7 +110,6 @@ function HarnessInner({ decision, imported, probe, ...options }: HarnessProps) {
     threshold: 0.05,
     dailyCount: 5,
     highlightDora: options.highlightDora ?? false,
-    contest: contestOptionsOf(null),
     resolvedIds: new Set(resolvedKeys.map((key) => problemId({ sessionId, key }))),
     doubtOnly: options.doubtOnly ?? false,
     answers,
@@ -169,7 +165,7 @@ function HarnessInner({ decision, imported, probe, ...options }: HarnessProps) {
         progress={options.progress ?? null}
         markNumber={options.markNumber ?? null}
         fineMiss={options.fineMiss ?? false}
-        contest={options.contest ?? false}
+        badMove={options.fineMiss !== true && options.markNumber == null}
         existing={options.existing ?? null}
         previousIntervalDays={options.previousIntervalDays ?? null}
         nextLabel={options.nextLabel ?? '次の問題へ'}

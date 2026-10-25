@@ -3,7 +3,7 @@
  *
  * - 点 1 つが 1 行: 巡目（配牌・N巡目）・打牌・向聴数・印。図の吹き出しと表は、同じ行から作る（数字が食い違わない）
  * - 「N巡目」は、自分の巡目（記録のまま。迷いのカードの「6巡目」と同じ数え方。自分のツモとチー・ポンで 1 つずつ増える）
- * - 印の文は、迷い（迷い3）・大きな不一致・聴牌になった打牌。迷い・大きな不一致の判断が、打牌以外（リーチ・鳴き・カン・和了）のときは、
+ * - 印の文は、迷い（迷い3）・悪手・聴牌になった打牌。迷い・悪手の判断が、打牌以外（リーチ・鳴き・カン・和了）のときは、
  *   その行動を添える（例: 迷い4（東をポン））。打牌のときは、行の打牌と同じなので添えない
  * - AI の候補・確率・順位は出さない（SPEC F3）。出すのは、自分が実際にした行動だけ
  */
@@ -33,14 +33,14 @@ export interface TrackRow {
   tenpai: boolean;
   /** 迷いの場面か（輪）。 */
   doubt: boolean;
-  /** 大きな不一致の場面か（菱形）。 */
+  /** 悪手の場面か（菱形）。 */
   big: boolean;
 }
 
-/** 場面 1 つの印の文。例: 迷い3、迷い2・大きな不一致、迷い4（東をポン）。 */
+/** 場面 1 つの印の文。例: 迷い3、迷い2・悪手、迷い4（東をポン）。 */
 export function sceneMarkText(scene: ReplayScene): string {
   const parts = scene.doubts.map((number) => `迷い${number}`);
-  if (scene.mismatch === 'big') parts.push('大きな不一致');
+  if (scene.mismatch === 'big') parts.push('悪手');
   const { actual } = scene.decision.entry;
   const what = actual.type === 'dahai' ? '' : `（${actionLabel(actual, scene.decision.kind)}）`;
   return `${parts.join('・')}${what}`;
@@ -76,3 +76,5 @@ export function trackRowsOf(track: MyKyokuTrack<ReplayScene>): TrackRow[] {
     };
   });
 }
+
+

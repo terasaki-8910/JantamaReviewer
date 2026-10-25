@@ -25,7 +25,6 @@ use super::{
 };
 use crate::replay_keys::ReplayKeys;
 use crate::settings::{Orientation, Settings, Trigger};
-use crate::settings::{DEFAULT_CONTEST_GAP_PERCENT, DEFAULT_CONTEST_MIN_JUNME};
 use crate::store::{
     valid_session_id, write_atomic, PendingRecords, SessionRecords, Store, StoreError,
     PENDING_VERSION,
@@ -57,37 +56,10 @@ pub struct PortableSettings {
     pub doubt_only: bool,
     pub capture_keywords: Vec<String>,
     pub daily_count: u32,
-    pub disagreement_percent: u32,
     pub highlight_dora: bool,
     pub show_all_mismatches: bool,
-    /// 拮抗の場面の設定（F17）。この項目が無い昔の書き出しは、既定値として読む。
-    #[serde(default = "default_true")]
-    pub contest_enabled: bool,
-    #[serde(default = "default_contest_gap_percent")]
-    pub contest_gap_percent: u32,
-    #[serde(default = "default_true")]
-    pub contest_by_junme: bool,
-    #[serde(default = "default_contest_min_junme")]
-    pub contest_min_junme: u32,
-    #[serde(default = "default_true")]
-    pub contest_after_riichi: bool,
-    #[serde(default = "default_true")]
-    pub contest_two_calls: bool,
     pub replay_keys: ReplayKeys,
     pub replay_keys_revision: u32,
-}
-
-/// 拮抗の入り切りの既定（入）。この項目が無い昔の書き出しを読むときに使う。
-fn default_true() -> bool {
-    true
-}
-
-fn default_contest_gap_percent() -> u32 {
-    DEFAULT_CONTEST_GAP_PERCENT
-}
-
-fn default_contest_min_junme() -> u32 {
-    DEFAULT_CONTEST_MIN_JUNME
 }
 
 /// 迷いだけの既定（入）。この項目が無い昔の書き出しを読むときに使う。
@@ -105,15 +77,8 @@ impl PortableSettings {
             doubt_only: settings.doubt_only,
             capture_keywords: settings.capture_keywords.clone(),
             daily_count: settings.daily_count,
-            disagreement_percent: settings.disagreement_percent,
             highlight_dora: settings.highlight_dora,
             show_all_mismatches: settings.show_all_mismatches,
-            contest_enabled: settings.contest_enabled,
-            contest_gap_percent: settings.contest_gap_percent,
-            contest_by_junme: settings.contest_by_junme,
-            contest_min_junme: settings.contest_min_junme,
-            contest_after_riichi: settings.contest_after_riichi,
-            contest_two_calls: settings.contest_two_calls,
             replay_keys: settings.replay_keys.clone(),
             replay_keys_revision: settings.replay_keys_revision,
         }
@@ -131,15 +96,8 @@ impl PortableSettings {
             capture_keywords: self.capture_keywords.clone(),
             data_dir: current.data_dir.clone(),
             daily_count: self.daily_count,
-            disagreement_percent: self.disagreement_percent,
             highlight_dora: self.highlight_dora,
             show_all_mismatches: self.show_all_mismatches,
-            contest_enabled: self.contest_enabled,
-            contest_gap_percent: self.contest_gap_percent,
-            contest_by_junme: self.contest_by_junme,
-            contest_min_junme: self.contest_min_junme,
-            contest_after_riichi: self.contest_after_riichi,
-            contest_two_calls: self.contest_two_calls,
             replay_keys: self.replay_keys.clone(),
             replay_keys_revision: self.replay_keys_revision,
         }
@@ -765,16 +723,8 @@ mod tests {
             ],
             data_dir: data.to_path_buf(),
             daily_count: 9,
-            disagreement_percent: 8,
             highlight_dora: true,
             show_all_mismatches: true,
-            // 既定とは違う値にして、書き出し・読み込みで落ちないことを確かめる（F17）
-            contest_enabled: false,
-            contest_gap_percent: 35,
-            contest_by_junme: false,
-            contest_min_junme: 9,
-            contest_after_riichi: false,
-            contest_two_calls: false,
             replay_keys: replay,
             replay_keys_revision: replay_keys::KEYS_REVISION,
         }
@@ -1138,14 +1088,7 @@ mod tests {
             keys_of(&value["settings"]),
             [
                 "capture_keywords",
-                "contest_after_riichi",
-                "contest_by_junme",
-                "contest_enabled",
-                "contest_gap_percent",
-                "contest_min_junme",
-                "contest_two_calls",
                 "daily_count",
-                "disagreement_percent",
                 "doubt_only",
                 "highlight_dora",
                 "orientation",
@@ -1543,45 +1486,38 @@ mod tests {
     }
 
     #[test]
-    fn f16_an_export_from_before_resolved_and_contest_settings_still_reads() {
-        // 解決も拮抗の設定も無かった版の書き出し: 解決は空、拮抗の設定は既定値として読む
+    fn e49_an_old_export_with_removed_settings_and_key_actions_still_reads() {
         let fx = fixture();
         let base = fx.export();
         let old = edited(&base, |v| {
-            for session in v["sessions"].as_object_mut().unwrap().values_mut() {
-                session.as_object_mut().unwrap().remove("resolved");
-            }
             let settings = v["settings"].as_object_mut().unwrap();
-            for name in [
-                "contest_enabled",
-                "contest_gap_percent",
-                "contest_by_junme",
-                "contest_min_junme",
-                "contest_after_riichi",
-                "contest_two_calls",
-            ] {
-                settings.remove(name);
-            }
+            settings.insert("disagreement_percent".into(), json!(10));
+            settings.insert("contest_enabled".into(), json!(false));
+            settings.insert("contest_gap_percent".into(), json!(35));
+            settings.insert("contest_by_junme".into(), json!(false));
+            settings.insert("contest_min_junme".into(), json!(9));
+            settings.insert("contest_after_riichi".into(), json!(false));
+            settings.insert("contest_two_calls".into(), json!(false));
+            settings["replay_keys"]["prev_contest"] = json!("KeyH");
+            settings["replay_keys"]["next_contest"] = json!("KeyL");
         });
         let file = parse_records(old.as_bytes()).unwrap();
-        assert!(file
-            .sessions
-            .values()
-            .all(|s| s.resolved.decisions.is_empty()));
-        let defaults = Settings::default();
-        assert_eq!(file.settings.contest_enabled, defaults.contest_enabled);
-        assert_eq!(file.settings.contest_gap_percent, 20);
-        assert_eq!(file.settings.contest_by_junme, defaults.contest_by_junme);
-        assert_eq!(file.settings.contest_min_junme, 12);
-        assert!(file.settings.contest_after_riichi && file.settings.contest_two_calls);
-        // 読み込んだ設定には、ファイルにある値が重なる（拮抗の設定も、書き出した値が戻る）
-        let restored = base.settings.applied_to(&Settings::default());
-        assert!(!restored.contest_enabled);
-        assert_eq!(restored.contest_gap_percent, 35);
-        assert!(!restored.contest_by_junme);
-        assert_eq!(restored.contest_min_junme, 9);
-        assert!(!restored.contest_after_riichi && !restored.contest_two_calls);
+        let restored = file.settings.applied_to(&Settings::default());
+        assert!(!restored.replay_keys.contains_key("prev_contest"));
+        assert!(!restored.replay_keys.contains_key("next_contest"));
         assert_eq!(restored.validate(), Ok(()));
+        let next = serde_json::to_value(PortableSettings::from_settings(&restored)).unwrap();
+        for removed in [
+            "disagreement_percent",
+            "contest_enabled",
+            "contest_gap_percent",
+            "contest_by_junme",
+            "contest_min_junme",
+            "contest_after_riichi",
+            "contest_two_calls",
+        ] {
+            assert!(next.get(removed).is_none(), "{removed}");
+        }
     }
 
     #[test]

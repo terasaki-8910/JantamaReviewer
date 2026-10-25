@@ -2,11 +2,11 @@
  * 半荘を通して見る画面（F12）。取り込んだ半荘を、卓の配置の盤面で、1 手ずつ・1 巡ずつ・局ごとに進めて見る。
  *
  * - 1 手は、全員の打牌と鳴きの 1 つずつ（配牌・自分のツモ・リーチの宣言・カンと、局の終わりも 1 手）。盤面は、牌譜の再生（E-2）と同じ
- * - 迷いの場面（迷いマークを結びつけた判断）と不一致の場面（既定は大きな不一致。設定で、AI の1位と違う判断すべて）は、位置の帯・
+ * - 迷いの場面（迷いマークを結びつけた判断）と悪手の場面（設定で、AI の1位と違う判断も飛び先に追加）は、位置の帯・
  *   場面の一覧から飛べる。場面に着くと、出題と同じ形で答えられる。答える前は、AI の候補・確率・順位を画面にも DOM にも出さない（U-1）
  * - 答えは、出題と同じに記録する（mode は quiz。1 日後の解き直しの予定が入り、今日の出題でも「答えた」になる）。
- *   答えた場面は、答え合わせのあとの形で開く。「次の迷いへ」「次の不一致へ」は、答えた場面も通る
- * - キー（既定は、, . で 1 手、← → で自分の判断、↑ ↓ で不一致、Shift+↑ ↓ で迷い、Shift+← → で局。割り当ては変えられる）
+ *   答えた場面は、答え合わせのあとの形で開く。「次の迷いへ」「次の悪手へ」は、答えた場面も通る
+ * - キー（既定は、, . で 1 手、← → で自分の判断、↑ ↓ で悪手、Shift+↑ ↓ で迷い、Shift+← → で局。割り当ては変えられる）
  * - 半荘を通して見る間、答えの下書き（選んだ答え・理由）は、場面を離れても残す（戻ると、続きから。答えるまでの時間は、最初に見たときから）
  */
 import {
@@ -48,7 +48,7 @@ function useWindowHeight(): number {
 }
 
 /**
- * 操作の段の「飛ぶ」段（不一致・迷い・拮抗）が、窓の幅で折り返して増えた高さ（px。1 行のときは 0）。
+ * 操作の段の「飛ぶ」段（悪手・迷い）が、窓の幅で折り返して増えた高さ（px。1 行のときは 0）。
  * 3 つの段が 1 行に収まる広さなら 0、収まらなければ 1 行ぶん（36px）ずつ。卓の外の高さ（`--chrome-h`）はそのまま、この分だけ卓を小さくする
  * （`.rp` の `--bar-extra`。文書全体をスクロールさせない。U-39）。レイアウトのない環境（試験の jsdom）では、いつも 0。
  */
@@ -95,12 +95,10 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
     () =>
       listReplayScenes(timeline, game.decisions, {
         markKeys,
-        threshold: study.threshold,
         includeAll: settings.showAllMismatches,
-        contest: study.contest,
         resolvedKeys,
       }),
-    [timeline, game.decisions, markKeys, study.threshold, settings.showAllMismatches, study.contest, resolvedKeys],
+    [timeline, game.decisions, markKeys, settings.showAllMismatches, resolvedKeys],
   );
   // 「細かいミスだけ」（F17）。入れると、前・次の迷いと迷いの数が、細かいミスだけになる
   const [fineMissOnly, setFineMissOnly] = useFineMissOnly();
@@ -197,7 +195,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   if (step === undefined || info === null) return null;
   const compact = windowHeight < compactBelowHeight(info.rows, info.riichiAny, barExtra);
 
-  // 「次の場面へ」: いまより後ろの、次の場面（迷いでも不一致でも拮抗でも。解決した場面は飛ばす）。無ければ、1 手先
+  // 「次の場面へ」: いまより後ろの、次の場面（迷いか悪手。解決した場面は飛ばす）。無ければ、1 手先
   const nextScene = scenes.find((item) => item.step > g && !item.resolved);
   const afterReveal = () => go(nextScene === undefined ? g + 1 : nextScene.step);
 
@@ -234,13 +232,11 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
         scenes={scenes}
         nav={nav}
         keys={settings.keys}
-        showAll={settings.showAllMismatches}
         answered={answered}
         currentKey={scene === null ? null : scene.key}
         go={go}
         onChangeKeys={(next) => settings.update({ replay_keys: next })}
         ticks={ticks}
-        contestEnabled={study.contest.enabled}
         fineMissOnly={fineMissOnly}
         onFineMissOnly={setFineMissOnly}
       />
