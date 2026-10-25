@@ -144,7 +144,7 @@ describe('U-52 「NAGA の結果」の欄が出る半荘', () => {
     const tip = within(section()).getByRole('button', { name: 'NAGA の結果の説明' });
     const text = document.getElementById(tip.getAttribute('aria-describedby') ?? '')?.textContent;
     expect(text).toBe(
-      'NAGA（ニコニコの麻雀 AI）で、この半荘の牌譜を解析した結果のページの URL を貼っておくと、ここと半荘を通して見る画面から開けます。申し込みと支払いは、NAGA のページで行います。',
+      'NAGA でこの半荘の牌譜を解析した結果のページの URL を貼っておくと、ここと半荘を通して見る画面から開けます。申し込みと支払いは、NAGA のページで行います。',
     );
   });
 

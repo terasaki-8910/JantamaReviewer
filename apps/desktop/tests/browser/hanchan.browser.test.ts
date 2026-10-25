@@ -1762,7 +1762,7 @@ describe('F22・U-52: 半荘のページの「NAGA の結果」の欄（実ブ�
   /** 窓の幅より長い URL（折り返さず、末尾を省いて 1 行に収める）。 */
   const LONG_URL = `https://naga.dmv.nico/htmls/report_viewer.html?report_id=${'0123456789abcdef'.repeat(8)}`;
   const HELP =
-    'NAGA（ニコニコの麻雀 AI）で、この半荘の牌譜を解析した結果のページの URL を貼っておくと、ここと半荘を通して見る画面から開けます。申し込みと支払いは、NAGA のページで行います。';
+    'NAGA でこの半荘の牌譜を解析した結果のページの URL を貼っておくと、ここと半荘を通して見る画面から開けます。申し込みと支払いは、NAGA のページで行います。';
 
   const savedScenario = (url: string) => scenario({ sessions: [importedSession({ naga: url }), recordedSession()] });
   const section = (page: Page) => page.getByRole('region', { name: 'NAGA の結果' });

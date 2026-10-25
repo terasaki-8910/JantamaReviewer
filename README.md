@@ -257,7 +257,7 @@ pnpm --filter @jantama/desktop tauri build --no-bundle
 5. 見直したいとき: 「この半荘を通して見る」で半荘を通して見て、迷いと悪手の場面へ飛びます。「ログ」で答えた問題を絞り込み、Ctrl+K の検索で、半荘や問題を探します。週に 1 回、「週の集計」で、差の原因・局面の種類・自己評価のずれを見て、成績と来週の重点を書きます。
 6. 記録を残すとき・写すとき: 設定ページの「記録の書き出し」で、記録だけの JSON を書き出します。
 
-データは、半荘ごとのフォルダに保存します（既定は `%USERPROFILE%\JantamaReviewerData\games\<開始時刻>\`）。ウィジェットの記録（`events.jsonl`。追記式）、迷いと評価のスクリーンショット（`marks\`・`ratings\`）、取り込んだ結果（`report.json`）、文字認識の写し（`ocr.json`）、結びつけ（`links.json`）、自分の評価の付け直し（`self-ratings.json`）、MAKA の評価（`maka.json`）、終局直後のメモ（`memos.json`）が入ります。答え・解き直しの予定・今日の出題・週の成績は、保存先の直下の `study.sqlite` に入ります。保存先は、Git のリポジトリの外に限ります。
+データは、半荘ごとのフォルダに保存します（既定は `%USERPROFILE%\JantamaReviewerData\games\<開始時刻>\`）。ウィジェットの記録（`events.jsonl`。追記式）、迷いと評価のスクリーンショット（`marks\`・`ratings\`）、取り込んだ結果（`report.json`）、文字認識の写し（`ocr.json`）、結びつけ（`links.json`）、自分の評価の付け直し（`self-ratings.json`）、MAKA の評価（`maka.json`）、終局直後のメモ（`memos.json`）、解決した局面（`resolved.json`）、NAGA の結果の URL（`naga.json`）が入ります。答え・解き直しの予定・今日の出題・週の成績は、保存先の直下の `study.sqlite` に入ります。保存先は、Git のリポジトリの外に限ります。
 
 ## 開発
 
