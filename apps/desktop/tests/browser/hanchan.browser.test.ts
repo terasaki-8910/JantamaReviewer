@@ -7,7 +7,8 @@
  * - 形: カードの画像の箱は 16:9 で、画像は切り取らず収める。「選び直す」は、カードの右端に固定。表は、狭いとき 2 行のかたまりになっても、表の意味を保つ
  * - 画像の大きな表示: 裏の画面は操作できない・Esc と背景で閉じる・カードへキーボードの位置が戻る・前後で画像が変わる
  * - 編集: 迷いを選ぶ・自分の評価・MAKA が、実際のキーとマウスで保存され、Ctrl+Z で戻る
- * jsdom の試験（src/main/SessionPage.test.tsx・Hanchan.test.tsx）と同じふるまいを、実際の描画・キー・時計で確かめる。
+ * - U-52: 見出しの下の欄「NAGA の結果」（URL なし・長い URL・理由の表示）が、各幅・ライト・ダークで収まり、axe の重大な違反が無い
+ * jsdom の試験（src/main/SessionPage.test.tsx・Hanchan.test.tsx・NagaSection.test.tsx）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';

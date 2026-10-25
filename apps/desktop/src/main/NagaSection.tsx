@@ -110,7 +110,8 @@ export function NagaSection({ session, reload }: NagaSectionProps) {
         </form>
       ) : (
         <div className="naga-saved">
-          <a className="naga-url" ref={linkRef} href={saved} target="_blank" rel="noopener noreferrer">
+          {/* 狭い幅では末尾を省くので、全文は、マウスを乗せたときの説明（title）にも出す */}
+          <a className="naga-url" ref={linkRef} href={saved} title={saved} target="_blank" rel="noopener noreferrer">
             {saved}
           </a>
           <div className="naga-acts">

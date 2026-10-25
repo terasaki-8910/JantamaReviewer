@@ -10,6 +10,7 @@
  * - U-19: ドラを目立たせる設定が、通して見る画面でも効く
  * - U-41・U-42・U-49: 解決した場面（薄い印・一覧の「解決」）と、2 つの段（悪手・迷い。「細かいミスだけ」つき）の操作の段が、各幅で 1 行に収まる。
  *   拮抗の段は無い（F19）
+ * - U-52: 操作の段の 1 段目の「NAGA の結果を開く」リンク（URL を保存してあるときだけ）が、各幅で収まり、操作の段を高くしない
  * jsdom の試験（src/main/replay/Replay.test.tsx）と同じふるまいを、実際の描画・キー・時計で確かめる。
  */
 import type { Browser, BrowserContext, Page } from 'playwright-core';
@@ -2151,11 +2152,21 @@ describe('F22・U-52: 通して見る画面の操作の段の「NAGA の結果�
       const sweep: Array<[number, number]> = [];
       for (let width = 400; width <= 1500; width += 20) sweep.push([width, 800]);
       const isStandard = (width: number, height: number) => standard.some(([w, h]) => w === width && h === height);
+      // 窓の大きさを替えたあと、測った値が 2 回続けて同じになるまで待つ（卓の大きさの指定は、大きさの変化を見る仕組みで、少し遅れて決まる）
+      const settled = async (page: Page) => {
+        let last = JSON.stringify(await measureBar(page));
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          await page.waitForTimeout(80);
+          const next = JSON.stringify(await measureBar(page));
+          if (next === last) break;
+          last = next;
+        }
+        return JSON.parse(last) as Awaited<ReturnType<typeof measureBar>>;
+      };
       for (const [width, height] of [...standard, ...sweep]) {
         for (const { page } of [without, withUrl]) await page.setViewportSize({ width, height });
-        for (const { page } of [without, withUrl]) await page.waitForTimeout(120);
-        const a = await measureBar(without.page);
-        const b = await measureBar(withUrl.page);
+        const a = await settled(without.page);
+        const b = await settled(withUrl.page);
         const at = `${width}×${height}`;
         expect(a.link, `${at}: 無いとき`).toBeNull();
         expect(b.link, `${at}: 有るとき`).not.toBeNull();
