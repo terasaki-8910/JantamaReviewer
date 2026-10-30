@@ -244,7 +244,7 @@
 
 ### F21 アプリ内の更新（2026-10-24 の依頼、2026-10-25 の答え「GitHub Actions で公開」）
 - 決まり（ユーザーの全体の決まり「Every installable binary ships in-app updates」）: 起動したときに確かめる。新しい版があれば「今すぐ入れ直す」「あとで」「この版は飛ばす」を出す。飛ばした版は覚えて、それより新しい版が出たら、また出す。設定に「更新を確かめる」。更新は署名つき。作業の途中で勝手に開き直さない。
-- 配る所: GitHub の Releases。版のタグ（`v0.2.0` の形）を push すると、GitHub Actions（Windows）が、署名つきのインストーラー（NSIS の setup.exe）と版の情報（latest.json）を作って Releases に置く（tauri-action）。アプリは `https://github.com/<リポジトリ>/releases/latest/download/latest.json` を見る。リポジトリが非公開なら、配る物だけの公開リポジトリを別に作り、そこに置く（どちらにするかは、最初の push の前にユーザーに確かめる）。push とタグの push はユーザーが打つ。
+- 配る所: GitHub の Releases。版のタグ（`v0.2.0` の形）を push すると、GitHub Actions（Windows。0.2.1 からは Mac も）が、署名つきのインストーラー（NSIS の setup.exe）と版の情報（latest.json）を作って Releases に置く（tauri-action）。アプリは `https://github.com/<リポジトリ>/releases/latest/download/latest.json` を見る。リポジトリが非公開なら、配る物だけの公開リポジトリを別に作り、そこに置く（どちらにするかは、最初の push の前にユーザーに確かめる）。push とタグの push はユーザーが打つ。
 - 署名の鍵: 更新の署名の鍵の組を、ユーザーが作る（`pnpm tauri signer generate`）。秘密鍵とその合言葉は GitHub Actions の Secrets（TAURI_SIGNING_PRIVATE_KEY・TAURI_SIGNING_PRIVATE_KEY_PASSWORD）だけに置き、リポジトリには入れない。公開鍵は tauri.conf.json に入れる。手元の組み立て（release・debug）は鍵なしで通る（更新のファイルを作る設定は、Actions の組み立てだけで入れる）。
 - 配り方: インストーラーで入れる形にする（今は 2 つの実行ファイルを Documents に写している）。今のユーザーにだけ入れる形（管理者の確認なし）。本体と補助プログラム（jantama-helper.exe）を同じフォルダに入れる。設定とデータの場所は変わらない（%APPDATA% と保存先）。補助プログラムが前の版から変わった版では、設定ページの補助プログラムの行に「新しい補助プログラムがあります。設定し直してください」を出し、「設定し直す」（管理者の確認）で Program Files の写しを替える。
 - 確かめる時: 起動したとき（1 回）と、設定の「更新を確かめる」を押したとき。通信に失敗しても、知らせずに続ける（設定から確かめたときだけ、失敗を出す）。
@@ -253,7 +253,7 @@
 - 設定: 「更新」の欄に、今の版、最後に確かめた結果（「最新です」「新しい版 0.2.1 があります」「確かめられませんでした」）、「更新を確かめる」。飛ばした版は settings.json（`skipped_update_version`）に覚える（同期しない。PC ごと）。
 - 外への通信（S-2）: 更新のために github.com（と、Releases のファイルの置き場の objects.githubusercontent.com・release-assets.githubusercontent.com）を足す。ほかは今のまま。インストーラーの置き場所は latest.json が告げ、github.com から置き場へ移される（どこから取っても、入れるのは署名を確かめられたものだけ）。
 - 版の番号: 配るたびに上げる（tauri.conf.json・Cargo.toml・package.json をそろえる）。最初の版は 0.2.0。
-- Mac: 同じ仕組みで届ける（段階 5。署名の証明書を変えると Mac の許可が外れる。analysis/mac 2.3）。
+- Mac（2026-10-30 の答え「Mac 版を配る」「まず ad-hoc」）: 同じタグで、Actions（macos-latest、Apple Silicon）が、最初に入れる .dmg と、更新用の .app.tar.gz と署名のファイルを作り、latest.json に Mac の行（darwin-aarch64）を足す。最初に Mac を載せる版は 0.2.1。中身は段階 2（検討の画面だけ。ウィジェット・横ボタン・撮影・文字認識は無い）。コードの署名は、しばらく ad-hoc（Releases から入れた最初の 1 回だけ `xattr -cr` が要る。アプリ内の更新で入れたものには要らない）。段階 2 は Mac の許可（アクセシビリティ・画面収録）を使わないので、版ごとに署名が変わっても困らない。段階 3 を作る前に、自分の証明書の署名に替える（R14-7。署名を替えると Mac の許可が外れる。analysis/mac 2.3）。Mac の試験は、Actions の mac-test（手で動かす）で macOS の上で動かす。
 
 ### F22 NAGA との連携の段 1・2（2026-10-22 の依頼、2026-10-25 の答え「段 1・2 を作る」）
 - 段 1 送る: 半荘のページの見出しの操作に「NAGA で解析する」を置く（結果を取り込んで読めている半荘だけ）。押すと、その半荘の局ごとの牌譜を、天鳳の牌譜エディタの形（Mortal の結果の `split_logs` の 1 局ずつ）でクリップボードに写し、NAGA の申し込みのページをいつものブラウザで開き、「NAGA に貼る牌譜を N 局ぶん写しました」と知らせる。申し込み・支払い・送信はユーザーが行う（アプリから自動で送らない。2 章）。写す形と開くページの URL は、作る前にユーザーに確かめる（2026-10-25 に調べたが、NAGA の今の受け付けのページを確かめられなかった）。
