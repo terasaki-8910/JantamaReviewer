@@ -11,6 +11,10 @@ Mac は Apple Silicon・最新の macOS（R14-6）。署名は自分で作る証
 段階 2 の Mac では、ウィジェット・迷いマークのボタン・撮影・文字認識は動かない（設定ページに「Mac ではまだ使えません」と出る）。
 この段階で見るのは、検討画面（半荘の一覧・半荘の画面・出題・解き直し・通して見る画面・ログ・週の集計・取り込み・設定）。
 
+2026-10-30 から、Mac 版は Actions で作って配る（SPEC F21 の Mac）。A-1〜A-4（Mac で作る）は要らなくなり、README の「Mac で使う」の手順（Releases の .dmg を入れ、最初の 1 回だけ `xattr -cr`）で入れる。
+確かめの項目 1（`pnpm test`）は、Actions の mac-test（macOS の上で動かす）で代える。項目 2 は「Releases の .dmg から入れて、ダブルクリックで起動する」（署名は ad-hoc なので、`codesign -dv` は `Signature=adhoc` と出る）に読み替える。
+A-5（試しの保存先で動かす）からあとは、そのまま使う。`APP` は `/Applications/JantamaReviewer.app` にする。自分の証明書で作る A-3・A-4 は、段階 3 の前に署名を替えるときに使う。
+
 ## A. 段階 2: 検討画面を Mac で動かす
 
 ### A-1. 準備（1 回だけ）

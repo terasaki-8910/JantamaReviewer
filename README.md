@@ -228,10 +228,33 @@ Ctrl+K（サイドバーの虫眼鏡）で開く重ね表示で、半荘と問�
 - Windows 10 / 11（開発と確認は Windows 11 で行っています）
 - Microsoft Edge WebView2 ランタイム（画面の表示に使います）
 - Windows の日本語の文字認識（OCR）。取り込みのとき、スクリーンショットから局と点数を読むのに使います。入っていなくても取り込みはできますが、迷いの結びつけを、すべて手で選ぶことになります。
+- Mac（0.2.1 から）: Apple Silicon の Mac、macOS 14 以降。Mac で使えるのは、検討の画面（半荘の一覧・半荘の画面・出題・解き直し・半荘を通して見る・検索・ログ・週の集計・書き出しと読み込み・同期・設定）です。ウィジェット・迷いマークのボタン・スクリーンショット・取り込みのときの文字認識は、まだ Mac では動きません。対局と取り込みは Windows で行い、記録は同期で Mac に届けます（スクリーンショットは同期しません）。
 
-## 入れ方と作り方
+## 入れ方
 
-配布しているインストーラーはありません。ソースから作ります。必要なものは次のとおりです。
+GitHub の [Releases](https://github.com/terasaki-8910/JantamaReviewer/releases/latest) から入れます。入れたあとは、起動したときに新しい版を知らせます（「今すぐ入れ直す」で入れ直します。設定の「更新を確かめる」でも確かめられます）。
+
+### Windows
+
+`JantamaReviewer_<版>_x64-setup.exe` を落として動かします。今のユーザーにだけ入れるので、管理者の確認はありません。本体と補助プログラムが同じフォルダに入ります。インストーラーにはコードの署名が無いので、「Windows によって PC が保護されました」と出たら、「詳細情報」→「実行」を押します。
+
+### Mac で使う
+
+1. `JantamaReviewer_<版>_aarch64.dmg` を落として開き、`JantamaReviewer` を「アプリケーション」のフォルダに引きずって入れます。
+2. このアプリは Apple の公証を受けていない（ad-hoc の署名だけの）ので、そのまま開くと「壊れているため開けません」と出ます。最初の 1 回だけ、ターミナルで次を実行してから開きます。
+
+   ```sh
+   xattr -cr /Applications/JantamaReviewer.app
+   ```
+
+3. 開くと検討画面が出ます。Windows の記録を見るには、設定の同期の欄に、Windows で使っている同期先の DB の URL とトークンを入れます（トークンは Mac のキーチェーンに入ります）。
+4. アプリ内の更新で入れた版には、`xattr` は要りません。署名が版ごとに変わるので、更新のあと、キーチェーンの確認（同期のトークンを使ってよいか）が出ることがあります。そのときは「常に許可」を押します。
+
+保存先の既定は `~/JantamaReviewerData`、設定のファイルは `~/Library/Application Support/io.github.terasaki-8910.jantama-reviewer/` です。
+
+## 作り方
+
+ソースから作るときに必要なものは、次のとおりです（Mac で作る手順は [analysis/mac/appendix/mac-steps.md](analysis/mac/appendix/mac-steps.md) の A にあります）。
 
 - Node.js（動作確認は v25.2.1）と pnpm 11（`packageManager` は `pnpm@11.9.0`）
 - Rust 1.90 以上（Windows では MSVC のツールチェーン。Visual Studio の C++ ビルドツールが要ります）
