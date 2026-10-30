@@ -14,7 +14,8 @@ impl PlayerState {
     }
 
     fn test_update_json(&mut self, mjai_json: &str) -> ActionCandidate {
-        let cans = self.update_json(mjai_json).unwrap();
+        let event = serde_json::from_str(mjai_json).unwrap();
+        let cans = self.update(&event).unwrap();
         self.validate();
         cans
     }

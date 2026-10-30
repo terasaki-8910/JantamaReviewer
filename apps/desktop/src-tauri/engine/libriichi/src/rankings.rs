@@ -1,5 +1,7 @@
 #[derive(Debug, Clone, Copy)]
 pub struct Rankings {
+    // 上流では、取り除いたモジュール（arena・dataset）が読んでいた。上流との差を小さく保つため、欄は残す。
+    #[allow(dead_code)]
     pub player_by_rank: [u8; 4],
     pub rank_by_player: [u8; 4],
 }

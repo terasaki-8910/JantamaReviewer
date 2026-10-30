@@ -6,19 +6,15 @@ use crate::must_tile;
 use crate::tile::Tile;
 use std::iter;
 
-use anyhow::Result;
 use derivative::Derivative;
-use pyo3::prelude::*;
-use serde_json as json;
 use tinyvec::{ArrayVec, TinyVec};
 
 /// `PlayerState` is the core of the lib, which holds all the observable game
 /// state information from a specific seat's perspective with the ability to
 /// identify the legal actions the specified player can make upon an incoming
 /// mjai event, along with some helper functions to build an actual agent.
-/// Notably, `PlayerState` encodes observation features into numpy arrays which
+/// Notably, `PlayerState` encodes observation features into arrays which
 /// serve as inputs for deep learning model.
-#[pyclass]
 #[derive(Clone, Derivative)]
 #[derivative(Default)]
 pub struct PlayerState {
@@ -139,10 +135,8 @@ pub struct PlayerState {
     pub(super) has_next_shanten_discard: bool,
 }
 
-#[pymethods]
 impl PlayerState {
     /// Panics if `player_id` is outside of range [0, 3].
-    #[new]
     #[must_use]
     pub fn new(player_id: u8) -> Self {
         assert!(player_id < 4, "{player_id} is not in range [0, 3]");
@@ -150,20 +144,6 @@ impl PlayerState {
             player_id,
             ..Default::default()
         }
-    }
-
-    /// Returns an `ActionCandidate`.
-    #[pyo3(name = "update")]
-    pub(super) fn update_json(&mut self, mjai_json: &str) -> Result<ActionCandidate> {
-        let event = json::from_str(mjai_json)?;
-        self.update(&event)
-    }
-
-    /// Raises an exception if the action is not valid.
-    #[pyo3(name = "validate_reaction")]
-    pub(super) fn validate_reaction_json(&self, mjai_json: &str) -> Result<()> {
-        let action = json::from_str(mjai_json)?;
-        self.validate_reaction(&action)
     }
 
     /// For debug only.

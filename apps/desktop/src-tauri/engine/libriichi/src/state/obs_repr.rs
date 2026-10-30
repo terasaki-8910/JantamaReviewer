@@ -8,8 +8,6 @@ use crate::{tu8, tuz};
 use std::num::NonZeroUsize;
 
 use ndarray::prelude::*;
-use numpy::{PyArray1, PyArray2};
-use pyo3::prelude::*;
 
 const SELF_KAWA_ITEM_CHANNELS: usize = 4;
 const KAWA_ITEM_CHANNELS: usize = 8;
@@ -770,23 +768,6 @@ impl<'a> ObsEncoderContext<'a> {
             }
         }
         self.idx += KAWA_ITEM_CHANNELS;
-    }
-}
-
-#[pymethods]
-impl PlayerState {
-    /// Returns `(obs, mask)`
-    #[pyo3(name = "encode_obs")]
-    fn encode_obs_py<'py>(
-        &self,
-        version: u32,
-        at_kan_select: bool,
-        py: Python<'py>,
-    ) -> (Bound<'py, PyArray2<f32>>, Bound<'py, PyArray1<bool>>) {
-        let (obs, mask) = self.encode_obs(version, at_kan_select);
-        let obs = PyArray2::from_owned_array(py, obs);
-        let mask = PyArray1::from_owned_array(py, mask);
-        (obs, mask)
     }
 }
 
