@@ -12,11 +12,21 @@ publish = false
 name = "jantama_reviewer_lib"
 crate-type = ["rlib"]
 
+# 解析エンジンを呼ぶ層（src/reads/engine_runner.rs）の試験。試験の実行ファイル自身を「偽のエンジン」にして動かすので、
+# 通常の試験の枠（libtest）は使わない（`read --report ...` の引数を、枠が自分の引数として読んで断ってしまうため）。
+[[test]]
+name = "engine_runner"
+harness = false
+
 # 本体（このパッケージ）と、管理者で動くボタンの補助プログラム（helper）、2 つが共有する部品（input）、
 # 取り込みのときだけ使う文字認識（ocr）。
 # `cargo build` で本体と補助プログラムの両方を作る（default-members）。
+# 解析エンジン（engine。AGPL-3.0-or-later の別のプログラム。SPEC の F24）は、別の workspace（engine/Cargo.toml と
+# engine/Cargo.lock）にする。本体はエンジンに依存せず、別のプロセスとして呼ぶ。エンジンの推論の部品（tract など）が、
+# 本体の Cargo.lock に入らない（tests/safety.rs の S-3）。
 [workspace]
 members = ["input", "helper", "ocr"]
+exclude = ["engine"]
 default-members = [".", "helper"]
 resolver = "2"
 

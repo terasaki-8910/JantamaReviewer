@@ -1,0 +1,33 @@
+# Mortal（https://github.com/Equim-chan/Mortal、コミット 0cff2b5）の libriichi を、Python なしで使う形にしたもの。
+# 元の Cargo.toml から、Python の部品（pyo3・numpy・pyo3-log・pyo3-build-config）と、エンジンで使わない部品
+# （indicatif・mimalloc・criterion と bench）、取り除いたモジュール（自己対局・学習用のデータ・統計・エージェント）が
+# 使っていた部品（rand・rand_chacha・rayon・sha3・glob・log・crossbeam・parking_lot・derive_more）を外した。
+# 変えた所は ../README.md に書く。
+[package]
+name = "libriichi"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[lib]
+name = "riichi"
+
+[dependencies]
+anyhow = "1"
+boomphf = "0.6"
+byteorder = "1"
+ndarray = "0.16"
+serde_with = "3"
+flate2 = "1"
+derivative = "2"
+ahash = "0.8"
+tinyvec = { version = "1", features = ["alloc", "serde", "rustc_1_57"] }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# 単体テスト（state/test.rs）が mjai の JSON を読むのに使う
+serde_json = "1"
+
+[features]
+sp_reproduce_cpp_ver = []

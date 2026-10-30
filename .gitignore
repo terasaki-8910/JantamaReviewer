@@ -22,6 +22,8 @@ docs/sheet/_*
 target/
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
+# Actions の組み立てで、解析エンジンを本体と一緒に入れるために写す場所（release.yml）
+apps/desktop/src-tauri/binaries/
 # フロントエンドのビルド出力
 apps/desktop/dist/
 packages/*/dist/
@@ -30,6 +32,8 @@ packages/*/dist/
 # テスト・解析の出力
 playwright-report/
 test-results/
+# 読みの画面（F23）の実ブラウザの検査が撮る画面写真（見て確かめるためのもの。リポジトリには入れない）
+apps/desktop/tests/browser/zz-reads-ui-shots/
 coverage/
 # パッケージマネージャのキャッシュ
 .pnpm-store/
@@ -37,3 +41,5 @@ coverage/
 *.msi
 *.exe
 *.nsis
+# 設定の「解析のモデル」の画面写真（見て確かめるための写真。tests/browser/reads-settings.browser.test.ts が作る。git に入れない）
+apps/desktop/tests/browser/zz-reads-settings-shots/

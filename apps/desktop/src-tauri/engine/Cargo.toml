@@ -1,0 +1,43 @@
+# 解析エンジン（SPEC の F24）。本体（MIT）とは別のプログラムで、AGPL-3.0-or-later。
+# 本体は、このプログラムを別のプロセスとして呼び、渡したファイルと出力先だけでやり取りする（本体はこの crate に依存しない）。
+# 通信・ほかのプロセスの操作・画面の撮影の部品は持たない（tests/safety.rs の S-5）。
+[package]
+name = "jantama-engine"
+version = "0.1.0"
+description = "JantamaReviewer の解析エンジン（他家の読み・手元のモデルでの解析）"
+license = "AGPL-3.0-or-later"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+# 部品は lib にして、試験（tests/）からも呼べるようにする。main.rs は引数を読んで lib を呼ぶだけ。
+[lib]
+name = "jantama_engine"
+path = "src/lib.rs"
+
+[[bin]]
+name = "jantama-engine"
+path = "src/main.rs"
+
+# 本体の workspace とは別の workspace（Cargo.lock も別）。推論の部品（tract など）を、本体の Cargo.lock に入れないため（S-3）。
+[workspace]
+members = ["libriichi"]
+resolver = "2"
+
+# 試験（debug）でも推論が遅くなりすぎないよう、依存は最適化して組む。libriichi は workspace の一員なので、
+# "*" には入らない（観測の組み立てが遅くなる）。別に書く。
+[profile.dev.package."*"]
+opt-level = 2
+[profile.dev.package.libriichi]
+opt-level = 2
+
+[dependencies]
+libriichi = { path = "libriichi" }
+# ONNX の推論（tenpai.onnx）。Rust だけで動く（ほかのライブラリを要らない）
+tract-onnx = "0.23"
+ndarray = "0.16"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+# モデルのファイルと、試験の観測の sha256
+sha2 = "0.10"

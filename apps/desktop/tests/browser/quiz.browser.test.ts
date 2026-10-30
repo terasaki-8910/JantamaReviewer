@@ -2170,7 +2170,7 @@ describe('盤面の見方（卓の上の右端の説明のアイコン。実ブ�
             const r = el.getBoundingClientRect();
             return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
           };
-          const icon = document.querySelector('.board-tools .infotip-btn') as Element;
+          const icon = document.querySelector('.board-tools .infotip-btn[aria-label="盤面の見方"]') as Element;
           return { icon: box(icon), column: box(document.querySelector('.board-col') as Element), table: box(document.querySelector('.table') as Element), legendInColumn: document.querySelector('.board-col > .legend') !== null };
         });
         // 列の右端（押せる範囲の余白を含めて 28px）にあり、卓より上
@@ -2197,7 +2197,7 @@ describe('盤面の見方（卓の上の右端の説明のアイコン。実ブ�
         await flag.waitFor();
         const flagBox = await flag.evaluate((el) => {
           const r = el.getBoundingClientRect();
-          const icon = (document.querySelector('.board-tools .infotip-btn') as Element).getBoundingClientRect();
+          const icon = (document.querySelector('.board-tools .infotip-btn[aria-label="盤面の見方"]') as Element).getBoundingClientRect();
           return { right: r.right, iconLeft: icon.left, width: r.width, text: el.textContent, visible: (el as HTMLElement).checkVisibility() };
         });
         expect(flagBox.visible).toBe(true);

@@ -83,6 +83,19 @@ jobs:
         if: runner.os == 'Windows'
         run: cargo build --release --manifest-path apps/desktop/src-tauri/Cargo.toml -p jantama-helper
 
+      # 解析エンジン（jantama-engine。AGPL の別のプログラム。SPEC の F24）を、両方の OS で先に作る（本体とは別の workspace）。
+      # 組み立ての設定（tauri.release.conf.json の externalBin）が探す名前（binaries/jantama-engine-<ターゲット>）に写すと、
+      # Windows はインストールするフォルダの直下、Mac は .app の Contents/MacOS に、本体と並んで入る（本体は、本体の隣からエンジンを探す）
+      - name: 解析エンジンを作る
+        shell: bash
+        run: |
+          cargo build --release --manifest-path apps/desktop/src-tauri/engine/Cargo.toml
+          triple="$(rustc -vV | sed -n 's/^host: //p')"
+          ext=''
+          if [ "$RUNNER_OS" = 'Windows' ]; then ext='.exe'; fi
+          mkdir -p apps/desktop/src-tauri/binaries
+          cp "apps/desktop/src-tauri/engine/target/release/jantama-engine$ext" "apps/desktop/src-tauri/binaries/jantama-engine-$triple$ext"
+
       # 署名つきのインストーラーと latest.json を作って、Releases に置く（Windows と Mac のジョブが、同じ版の Releases に置き、
       # latest.json は、あとから置くほうが、先に置かれたものに自分の OS の行を足す）。手で動かしたときは、タグが無いので、作るだけ。
       # tauri-action は v0 を使う: v1 は、latest.json のダウンロード先が GitHub の API の URL（api.github.com）になり、

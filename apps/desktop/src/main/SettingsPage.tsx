@@ -11,6 +11,7 @@ import {
 import type { HelperStatus, InputStatus, Orientation, Settings } from '../api/types';
 import { platform } from '../shared/platform';
 import { describeTrigger, formatClock } from './format';
+import { ReadsModelBlock } from './ReadsModelBlock';
 import { RecordsBlock } from './RecordsBlock';
 import { SyncBlock } from './SyncBlock';
 import { UpdateBlock } from './update/UpdateBlock';
@@ -477,6 +478,8 @@ export function SettingsPage({ onRecordsModal, onRecordsReplaced, recordsNotice 
               出題と半荘を通して見る画面で、ドラ表示牌が指す牌の面を黄色にします。赤五は、指される牌でもあるときだけ黄色になります（既定は切）。
             </p>
           </div>
+
+          <ReadsModelBlock />
 
           <UpdateBlock />
         </div>

@@ -21,6 +21,7 @@ pub mod menu;
 pub mod naga;
 pub mod navigation;
 pub mod platform;
+pub mod reads;
 pub mod ready;
 pub mod recorder;
 pub mod replay_keys;
@@ -96,6 +97,14 @@ pub fn run() {
             update::commands::check_update,
             update::commands::install_update,
             update::commands::skip_update_version,
+            reads::commands::get_reads_model,
+            reads::commands::download_reads_model,
+            reads::commands::cancel_reads_model_download,
+            reads::commands::choose_reads_model_file,
+            reads::commands::delete_reads_model,
+            reads::commands::read_reads,
+            reads::commands::compute_reads,
+            reads::commands::set_reads_visible,
             import::commands::read_clipboard_text,
             import::commands::open_mjai_window,
             import::commands::close_mjai_window,
@@ -255,6 +264,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     app.manage(study::commands::SharedStudy::new());
     // 見つけた更新（「今すぐ入れ直す」が、確かめたときに見つけた更新をそのまま入れるため。F21）。
     app.manage(update::PendingUpdate::default());
+    // 読み（F23）の動いている処理（モデルを取っている最中か・半荘ごとの計算）。
+    app.manage(reads::ReadsState::default());
     commands::allow_asset_dir(&handle, &settings.data_dir);
     // 記録の同期（F15）。使わない設定なら、裏のスレッドは何もしない。
     sync::commands::start(&handle, config_dir(app)?);

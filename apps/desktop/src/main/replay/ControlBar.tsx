@@ -17,7 +17,7 @@ import { Icon } from '../Icon';
 import { MenuSelect } from '../MenuSelect';
 import { NAGA_OPEN_LABEL } from '../naga';
 import { KeyHelp } from './KeyHelp';
-import { formatChord, type ReplayAction } from './keys';
+import { formatChord, type NavAction, type ReplayAction } from './keys';
 import { kyokuCounts, turnLabel, type ReplayNav } from './replayModel';
 import { ReplayIcon } from './ReplayIcons';
 import { Strip, type StripTick } from './Strip';
@@ -46,10 +46,10 @@ interface ControlBarProps {
 const JUMP_ACTIONS = {
   mismatch: { prev: 'prev_mismatch', next: 'next_mismatch', noun: '悪手' },
   doubt: { prev: 'prev_doubt', next: 'next_doubt', noun: '迷い' },
-} as const satisfies Record<string, { prev: ReplayAction; next: ReplayAction; noun: string }>;
+} as const satisfies Record<string, { prev: NavAction; next: NavAction; noun: string }>;
 
 /** 押したボタンが押せなくなったとき、キーボードの位置を移す先（対のボタン）。 */
-const PAIR: Partial<Record<ReplayAction, ReplayAction>> = {
+const PAIR: Partial<Record<NavAction, NavAction>> = {
   step_back: 'step_forward',
   step_forward: 'step_back',
   prev_turn: 'next_turn',
@@ -65,8 +65,8 @@ const PAIR: Partial<Record<ReplayAction, ReplayAction>> = {
 export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKey, go, onChangeKeys, ticks, fineMissOnly, onFineMissOnly, nagaUrl = null }: ControlBarProps) {
   const step = timeline.steps[g];
   const kyoku = step === undefined ? undefined : timeline.kyokus[step.kyokuPosition];
-  const buttons = useRef(new Map<ReplayAction, HTMLButtonElement>());
-  const pressed = useRef<ReplayAction | null>(null);
+  const buttons = useRef(new Map<NavAction, HTMLButtonElement>());
+  const pressed = useRef<NavAction | null>(null);
   const trackFallback = useRef<HTMLDivElement>(null);
 
   // 押したボタンが端で押せなくなったとき、対のボタン（それも押せなければ位置の帯）へ、キーボードの位置を移す
@@ -82,11 +82,11 @@ export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKe
     else trackFallback.current?.querySelector<HTMLElement>('.tl-track')?.focus();
   }, [g]);
 
-  const bind = (action: ReplayAction) => (element: HTMLButtonElement | null) => {
+  const bind = (action: NavAction) => (element: HTMLButtonElement | null) => {
     if (element === null) buttons.current.delete(action);
     else buttons.current.set(action, element);
   };
-  const press = (action: ReplayAction) => {
+  const press = (action: NavAction) => {
     const to = nav[action];
     pressed.current = action;
     if (to !== null) go(to);
@@ -96,7 +96,7 @@ export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKe
     return chord === null ? label : `${label}（${formatChord(chord)}）`;
   };
 
-  const stepButton = (action: ReplayAction, label: string, content: ReactNode, id: string) => (
+  const stepButton = (action: NavAction, label: string, content: ReactNode, id: string) => (
     <button
       type="button"
       className="btn sm"

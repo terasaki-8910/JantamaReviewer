@@ -61,6 +61,11 @@ export interface Settings {
    * そのまま返すだけ（飛ばすときは `updateApi.skipUpdateVersion`）。試験の設定の見本には無くてよい。
    */
   skipped_update_version?: string | null;
+  /**
+   * 盤面の「読み」（F23）を入にしているか。この PC だけの値で、同期にも書き出しにも入れない。画面は、受け取ったものを
+   * そのまま返すだけ（入切は `readsApi.setReadsVisible`）。試験の設定の見本には無くてよい（無ければ切）。
+   */
+  reads_visible?: boolean;
 }
 
 /** idle =半荘がまだ始まっていない、recording = 記録中、error = 保存先を開けない。 */

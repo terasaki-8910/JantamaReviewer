@@ -28,7 +28,7 @@ pub const KEYS_REVISION: u32 = 3;
 const CHANGED_IN_REVISION_2: [&str; 2] = ["kyoku_start", "kyoku_end"];
 
 /// 操作と、既定のキー（割り当て無しは `None`）。画面の表と同じ並び・同じ名前（試験が、画面のソースと突き合わせる）。
-pub const ACTIONS: [(&str, Option<&str>); 14] = [
+pub const ACTIONS: [(&str, Option<&str>); 15] = [
     ("step_back", Some("Comma")),
     ("step_forward", Some("Period")),
     ("prev_decision", Some("ArrowLeft")),
@@ -43,6 +43,8 @@ pub const ACTIONS: [(&str, Option<&str>); 14] = [
     ("next_turn", None),
     ("kyoku_start", Some("Home")),
     ("kyoku_end", Some("End")),
+    // 読み（F23）の入切。保存してある設定に値が無ければ既定を入れる（ほかの操作が使っていれば割り当て無し）ので、版は上げない
+    ("toggle_reads", Some("KeyR")),
 ];
 
 /// 割り当てられないキー（画面の操作に使う）。修飾キーを足しても、同じキーとして断る。
@@ -315,6 +317,8 @@ mod tests {
         // 局の頭・局の終わりは、Home・End（R11-4）
         assert_eq!(key("kyoku_start").as_deref(), Some("Home"));
         assert_eq!(key("kyoku_end").as_deref(), Some("End"));
+        // 読み（F23）の入切は R
+        assert_eq!(key("toggle_reads").as_deref(), Some("KeyR"));
         assert_eq!(validate(&keys), Ok(()));
     }
 
@@ -617,5 +621,39 @@ mod tests {
         let mut cleared = default_keys();
         cleared.insert("kyoku_start".into(), None);
         assert_eq!(normalized(cleared)["kyoku_start"], None);
+    }
+
+    #[test]
+    fn f23_the_reads_toggle_gets_its_default_in_saved_settings_that_do_not_have_it() {
+        // 読み（F23）の前に保存した設定（この操作が書いていない）: 書いてあるキーは守り、R が入る。版は上げなくてよい
+        let keys = from_value(Some(&json!({ "step_back": "KeyJ" })), KEYS_REVISION);
+        assert_eq!(keys["step_back"].as_deref(), Some("KeyJ"));
+        assert_eq!(keys["toggle_reads"].as_deref(), Some("KeyR"));
+        assert_eq!(validate(&keys), Ok(()));
+        // 版 2 のファイルでも同じ
+        assert_eq!(
+            from_value(Some(&json!({ "step_back": "KeyJ" })), 2)["toggle_reads"].as_deref(),
+            Some("KeyR")
+        );
+        // R を別の操作に割り当てていれば、割り当て無し（重なりを作らない）。ほかのキーは守る
+        let keys = from_value(
+            Some(&json!({ "prev_turn": "KeyR", "step_back": "KeyJ" })),
+            KEYS_REVISION,
+        );
+        assert_eq!(keys["prev_turn"].as_deref(), Some("KeyR"));
+        assert_eq!(keys["toggle_reads"], None);
+        assert_eq!(keys["step_back"].as_deref(), Some("KeyJ"));
+        assert_eq!(validate(&keys), Ok(()));
+        // 外した（null）と書いてあれば、戻さない。別のキーに替えたものも、そのまま
+        let keys = from_value(Some(&json!({ "toggle_reads": null })), KEYS_REVISION);
+        assert_eq!(keys["toggle_reads"], None);
+        let keys = from_value(Some(&json!({ "toggle_reads": "KeyY" })), KEYS_REVISION);
+        assert_eq!(keys["toggle_reads"].as_deref(), Some("KeyY"));
+        // 保存するときの整え方も同じ
+        let mut given = ReplayKeys::new();
+        given.insert("prev_turn".into(), Some("KeyR".into()));
+        let keys = normalized(given);
+        assert_eq!(keys["toggle_reads"], None);
+        assert_eq!(validate(&keys), Ok(()));
     }
 }

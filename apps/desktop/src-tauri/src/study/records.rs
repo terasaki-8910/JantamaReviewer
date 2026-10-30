@@ -4,7 +4,8 @@
 //! 半荘ごと（半荘の名前で。消した半荘 `trash/` は入れない）の結びつけ・自己評価の付け直し・MAKA の評価・メモ・解決した局面
 //! （半荘のフォルダの `links.json`・`self-ratings.json`・`maka.json`・`memos.json`・`resolved.json` の中身）、設定。
 //! 入れないもの: スクリーンショット（`marks/`・`ratings/`）、Mortal の結果（`report.json`）、ウィジェットの記録（`events.jsonl`）、
-//! 文字認識の写し（`ocr.json`）、設定のうち、この PC だけで意味を持つ値（データの保存先・ウィジェットの窓の位置）。
+//! 文字認識の写し（`ocr.json`）、読みの写し（`reads.json`。どの端末でも作り直せる。F23）、設定のうち、この PC だけで意味を持つ値
+//! （データの保存先・ウィジェットの窓の位置・飛ばした更新の版・読みの入切）。
 //!
 //! 読み込む: ファイルを全部確かめてから（版・形・ストアが書くときと同じ決まりの値）、いまの記録を、ファイルの内容に置き換える。
 //! 途中で失敗したら、元の記録のまま残す（先に新しいファイルを別の名前で書いておき、取引の中で答えを入れ替え、確定する前に
@@ -102,6 +103,8 @@ impl PortableSettings {
             replay_keys_revision: self.replay_keys_revision,
             // 飛ばした更新の版も、この PC だけの値（書き出しに入れず、いまのまま）
             skipped_update_version: current.skipped_update_version.clone(),
+            // 盤面の「読み」の入切（F23）も、この PC だけの値（書き出しに入れず、いまのまま）
+            reads_visible: current.reads_visible,
         }
         .normalized()
     }
@@ -642,7 +645,7 @@ mod tests {
     use crate::replay_keys;
     use crate::settings::WidgetPosition;
     use crate::store::{
-        Links, Maka, MemoPosition, NagaResult, OcrCache, OcrEntry, Rating, SelfRating,
+        Links, Maka, MemoPosition, NagaResult, OcrCache, OcrEntry, Rating, SelfRating, READS_FILE,
         SESSION_GAP_MS,
     };
     use crate::study::{AnswerMode, NewAnswer, ProblemRef, WeekStats};
@@ -650,6 +653,7 @@ mod tests {
     const T0: i64 = 1_760_000_000_123;
     const REPORT_SENTINEL: &str = "REPORT-SENTINEL-4f2a";
     const OCR_SENTINEL: &str = "OCR-SENTINEL-9b1c";
+    const READS_SENTINEL: &str = "READS-SENTINEL-7d3e";
     const RECORD_FILES: [&str; 6] = [
         "links.json",
         "self-ratings.json",
@@ -733,6 +737,7 @@ mod tests {
             replay_keys: replay,
             replay_keys_revision: replay_keys::KEYS_REVISION,
             skipped_update_version: None,
+            reads_visible: false,
         }
         .normalized()
     }
@@ -770,6 +775,12 @@ mod tests {
             },
         );
         store.save_ocr(&a, &ocr).unwrap();
+        // 読み（F23）の写し。どの端末でも作り直せるので、書き出しにも同期にも入らず、読み込みでも消えない
+        fs::write(
+            store.session_folder(&a).unwrap().join(READS_FILE),
+            format!("{{\"format\":\"jantama-reads/1\",\"note\":\"{READS_SENTINEL}\"}}"),
+        )
+        .unwrap();
 
         // 半荘 a: 全種類の記録
         let mut links = Links::default();
@@ -1076,6 +1087,30 @@ mod tests {
     }
 
     #[test]
+    fn f23_the_reads_switch_is_not_exported_and_an_import_keeps_the_current_one() {
+        let fx = fixture();
+        // 書き出す設定の形に無い（この PC だけの値）
+        assert!(!fx.export_text().contains("reads_visible"));
+        let on = Settings {
+            reads_visible: true,
+            ..fx.settings.clone()
+        };
+        let exported = build_export(&fx.data, &fx.db, &on, "2026-10-12T14:03:22+09:00").unwrap();
+        assert!(!to_text(&exported).unwrap().contains("reads_visible"));
+        // 読み込むと、いまの入切のまま（ファイルの側に値が無いので、入でも切でも、そのまま）
+        assert!(exported.settings.applied_to(&on).reads_visible);
+        assert!(
+            !exported
+                .settings
+                .applied_to(&Settings::default())
+                .reads_visible
+        );
+        // 書き出す設定の項目に、読みの入切が入っていない
+        let portable = serde_json::to_value(PortableSettings::from_settings(&on)).unwrap();
+        assert!(portable.get("reads_visible").is_none(), "{portable}");
+    }
+
+    #[test]
     fn d2_the_file_lists_the_kinds_of_records_and_nothing_else() {
         let fx = fixture();
         let value: Value = serde_json::from_str(&fx.export_text()).unwrap();
@@ -1151,6 +1186,10 @@ mod tests {
         // 結果・文字認識の写しの中身
         assert!(!text.contains(REPORT_SENTINEL));
         assert!(!text.contains(OCR_SENTINEL));
+        // 読みの写し（reads.json。F23）の中身と名前
+        assert!(!text.contains(READS_SENTINEL));
+        assert!(!text.contains("jantama-reads"));
+        assert!(!text.contains(READS_FILE));
         // 画像のパス・ウィジェットの記録（events.jsonl）の項目
         for needle in [
             "screenshot",

@@ -8,6 +8,7 @@
  *   Shift+↑ ↓  前・次の迷い
  *   Shift+← →  前・次の局
  *   Home End   局の頭・局の終わり（R11-4）。手牌の牌・位置の帯・答えの選択肢にキーボードの位置があるときは、それぞれの Home・End が先
+ *   R          読み（F23）の入切。出題・解き直しの答え合わせのあとにも、同じキーで切り替える（答える前は、読みを出さないので効かない）
  * 巡目の移動は、ボタンだけ（キーは割り当てで足せる）。
  *
  * キーは、`KeyboardEvent.code` に、押していた修飾キーを `Ctrl+` `Alt+` `Shift+` の順に付けた文字（例: `Shift+ArrowUp`・`Comma`）。
@@ -31,7 +32,11 @@ export type ReplayAction =
   | 'prev_turn'
   | 'next_turn'
   | 'kyoku_start'
-  | 'kyoku_end';
+  | 'kyoku_end'
+  | 'toggle_reads';
+
+/** 手の行き先に動く操作（`toggle_reads` のほかのすべて。`ReplayNav` の名前と同じ）。 */
+export type NavAction = Exclude<ReplayAction, 'toggle_reads'>;
 
 export interface ReplayActionDef {
   id: ReplayAction;
@@ -59,6 +64,7 @@ export const REPLAY_ACTIONS: readonly ReplayActionDef[] = [
   { id: 'next_turn', label: '次の巡目', key: null },
   { id: 'kyoku_start', label: '局の頭', key: 'Home' },
   { id: 'kyoku_end', label: '局の終わり', key: 'End' },
+  { id: 'toggle_reads', label: '読みの入切', note: '手牌の下と他家の席に出す', key: 'KeyR' },
 ];
 
 const ACTION_BY_ID = new Map<string, ReplayActionDef>(REPLAY_ACTIONS.map((action) => [action.id, action]));

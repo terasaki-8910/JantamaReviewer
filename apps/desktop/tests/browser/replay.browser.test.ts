@@ -940,7 +940,7 @@ describe('U-21: キーの一覧と割り当ての変更（実ブラウザ）', (
         // マウスを乗せると出る
         await button.hover();
         await dialog.waitFor();
-        expect(await dialog.locator('.kp-row').count()).toBe(14);
+        expect(await dialog.locator('.kp-row').count()).toBe(15);
         // 離すと閉じる
         await page.mouse.move(2, 2);
         await expect.poll(() => dialog.count(), { timeout: 3000 }).toBe(0);
@@ -1592,7 +1592,7 @@ describe('U-44・盤面の見方: 通して見る画面（実ブラウザ）', (
             return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width };
           };
           const strip = document.querySelector('.info-strip') as HTMLElement;
-          const icon = document.querySelector('.board-tools .infotip-btn') as Element;
+          const icon = document.querySelector('.board-tools .infotip-btn[aria-label="盤面の見方"]') as Element;
           return {
             stripHasDora: strip.querySelector('.dora, .tile') !== null || (strip.textContent ?? '').includes('ドラ'),
             icon: box(icon),

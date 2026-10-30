@@ -4,9 +4,16 @@
 //! Rust のソースは、本体（src）・共有の部品（input/src）・管理者で動く補助プログラム（helper/src）のすべて。
 //! 補助プログラムには、さらに W-9 の決まり（ファイル・ほかのプログラム・画面・文字認識の部品を持たない。例外は設定と解除の 1 ファイル）を課す。
 //! - S-1: ほかのプロセス（ゲーム）のメモリを読み書きする・スレッドを差し込むなどの API。
-//! - S-2: 雀魂のドメインへの通信、通信の部品（HTTP クライアントなど）。
+//! - S-2: 雀魂のドメインへの通信、通信の部品（HTTP クライアントなど）。HTTP クライアントを使ってよいのは、結果を取る
+//!   `import/report_fetch.rs` と、読みのモデルを取る `reads/download.rs`（F24。配布元と、その配布の置き場のホストだけ）の 2 か所で、
+//!   どちらにも同じ決まり（GET の 1 回だけ・https・移動の指示に自分では従わない・待ち時間と大きさの上限）と、場所ごとの決まりを課す。
 //! - S-3: 画像の解析・文字認識のライブラリ（PNG の書き出しは良い）。
 //! - S-4: ウィジェットのコードが、ファイル保存と記録の追記以外の窓口（プラグインなど）を読み込むこと。
+//! - S-5（F24）: 解析エンジン（`engine`。別の workspace、AGPL-3.0-or-later の別のプログラム）のソースと Cargo.toml・Cargo.lock に、
+//!   S-1〜S-3 と同じ語の一覧を当てる。さらに、エンジンだけの決まり（ほかのプロセスを起こさない・ソケットの道具を持たない・
+//!   本体はエンジンに依存しない）。エンジンは推論の部品（tract）を持つので、S-3 の crate の一覧は、本体にだけ当てる。
+//!   本体の側の決まり: エンジンを呼ぶのは `reads/engine_runner.rs` の 1 か所で、渡すのは `read --report --model --out` の 3 つのパスだけ
+//!   （プロセスを起こす所は、補助プログラムの設定のほかは、ここだけ）。
 //! - macOS（段階 1 から。`analysis/mac/README.md` 4 章）: 画面を続けて取り続ける・ほかのアプリの要素を読む・入力を送る・
 //!   ほかのプロセスに触れる・外部プロセスで撮影する・デバッグ用の権限を付ける API と部品。静止画 1 枚の撮影・入力のタップ・
 //!   文字認識は、決めた 1 か所だけ。段階 2 からは、AppKit・Foundation も、クリップボードの文字・ごみ箱の 2 か所の決めた機能だけ。
@@ -222,13 +229,22 @@ const OPENER_RUST: &str = "tauri_plugin_opener";
 /// 開く部品のクレート名（Cargo.toml での書き方）。
 const OPENER_CRATE: &str = "tauri-plugin-opener";
 
-/// HTTP のクライアント（ureq）を使ってよい場所（ファイル名とその理由）。アプリが外へ出す通信は、ここの 1 種類だけ。
-/// 使えるのはここだけで、本体のクレート（`src-tauri`）の依存にだけ置く。ウィジェット・ボタンを拾う部分・補助プログラムには入れない。
-/// 通信先は mjai のサイトの結果の置き場所（`/report/<16 桁の小文字の 16 進数>.json`）に固定し、雀魂のサーバー・牌譜屋には触れない。
-const ALLOWED_HTTP_CLIENT_FILES: &[(&str, &str)] = &[(
-    "src/import/report_fetch.rs",
-    "F1・E-19: ユーザー自身が mjai のサイトで Submit した結果を、GET の 1 種類で 1 回だけ取る。ID の形・通信先・パス・待ち時間・大きさの上限・移動の指示に従わないことを、このファイルの 1 か所に集める",
-)];
+/// HTTP のクライアント（ureq）を使ってよい場所（ファイル名とその理由）。アプリが外へ出す通信のうち、GET の 1 種類で取るものは、
+/// ここの 2 つだけ。使えるのはここだけで、本体のクレート（`src-tauri`）の依存にだけ置く。ウィジェット・ボタンを拾う部分・補助プログラムには入れない。
+/// 通信先は、1 つ目は mjai のサイトの結果の置き場所（`/report/<16 桁の小文字の 16 進数>.json`）、2 つ目は読みのモデルの配布元
+/// （huggingface.co と、その配布の置き場の `.hf.co` で終わるホスト）に固定し、雀魂のサーバー・牌譜屋には触れない。
+/// 2 つのファイルには、同じ決まり（GET の 1 回だけ・https の指定・移動の指示に自分では従わない・待ち時間・大きさの上限）を課し、
+/// そのうえで、ファイルごとの決まり（通信先の組み立て方）を課す。
+const ALLOWED_HTTP_CLIENT_FILES: &[(&str, &str)] = &[
+    (
+        "src/import/report_fetch.rs",
+        "F1・E-19: ユーザー自身が mjai のサイトで Submit した結果を、GET の 1 種類で 1 回だけ取る。ID の形・通信先・パス・待ち時間・大きさの上限・移動の指示に従わないことを、このファイルの 1 か所に集める",
+    ),
+    (
+        "src/reads/download.rs",
+        "F24・U-54: ユーザーが設定の「Hugging Face から取る」を押したときだけ、読みのモデル（決まったコミットの tenpai.onnx）を、GET の 1 種類で取る。通信先は配布元（huggingface.co）と、その配布の置き場（.hf.co で終わるホスト）だけ。移動の指示は 3 回まで、移し先を同じ決まりで確かめてから自分で従う。大きさの上限は 64 MiB、取ったものは SHA-256 が決まった版と合ってから置く。通信の層は差し替えられ、試験では本物の通信をしない",
+    ),
+];
 
 /// HTTP クライアントの名前（Rust のソースでの書き方）。
 const HTTP_CLIENT_RUST: &str = "ureq::";
@@ -925,9 +941,11 @@ fn s2_cargo_toml_declares_no_network_dependency() {
     );
 }
 
-/// HTTP のクライアントは、許した 1 か所だけが使い、結果の取得（GET の 1 種類）しかできない形のままであること（S-2）。
+/// HTTP のクライアントは、許した場所だけが使い、どの場所も、GET の 1 種類で、決まった通信先にしかつながない形のままであること（S-2）。
+/// 同じ決まり（GET の 1 回だけ・本文を送らない・https の指定・移動の指示に自分では従わない・待ち時間・大きさの上限・OS の証明書）を、
+/// 許した場所のすべてに課し、そのうえで、場所ごとの決まり（結果の取得は、結果の ID の形と固定の通信先。モデルの取得は、決まったホスト）を課す。
 #[test]
-fn s2_the_http_client_is_only_used_from_its_one_file_and_it_can_only_get_the_report() {
+fn s2_the_http_client_is_only_used_from_its_listed_files_and_each_can_only_do_its_one_get() {
     // どのソースがクライアントの名前を持つか。
     let mut users: Vec<String> = Vec::new();
     for file in rust_sources() {
@@ -945,6 +963,7 @@ fn s2_the_http_client_is_only_used_from_its_one_file_and_it_can_only_get_the_rep
         );
     }
 
+    // 許した場所のすべてに課す、同じ決まり。
     for (file, _) in ALLOWED_HTTP_CLIENT_FILES {
         let text = read(&crate_dir().join(file));
         let product = product_part(&text);
@@ -979,38 +998,22 @@ fn s2_the_http_client_is_only_used_from_its_one_file_and_it_can_only_get_the_rep
                 "{file}: {forbidden} を使っている"
             );
         }
-        // 守り: 通信先は固定の形で組み立てる（ID の形の確認は ReportId が先）。移動の指示に従わず、待ち時間と大きさに上限を付け、
-        // https の通信は OS の証明書で確かめる。
+        // 守り: 移動の指示に自分では従わず、待ち時間と大きさに上限を付け、https の通信は OS の証明書で確かめる。
         for needle in [
-            "endpoint.report_url(id)",
             "max_redirects(0)",
             "timeout_global(",
             "timeout_connect(",
             ".limit(",
-            "https_only(endpoint.is_secure())",
+            "https_only(",
             "TlsProvider::NativeTls",
             "RootCerts::PlatformVerifier",
-            "ReportId::parse(",
         ] {
             assert!(product.contains(needle), "{file}: {needle} が無い");
         }
-        let url_at = product.find("endpoint.report_url(id)").unwrap();
-        let call_at = product.find(".call()").unwrap();
-        assert!(
-            url_at < call_at,
-            "{file}: 通信先を固定の形で組み立ててから、通信する"
-        );
-        // 文字の ID から取る入口は、形を確かめてから、取る。
-        let by_text = product
-            .split("pub fn fetch_report_by_text(")
-            .nth(1)
-            .and_then(|rest| rest.split("\n}\n").next())
-            .unwrap_or_else(|| panic!("{file}: fetch_report_by_text が無い"));
-        assert!(
-            by_text.contains("ReportId::parse(id)") && by_text.contains("FetchError::InvalidId"),
-            "{file}: ID の形を確かめてから使う"
-        );
     }
+
+    check_report_fetch_rules();
+    check_model_download_rules();
 
     // 通信先を差し替える関数は、製品のコードでは呼ばない（試験だけ）。製品の取得の入口は、製品の通信先だけを使う。
     let report_fetch = read(
@@ -1045,6 +1048,185 @@ fn s2_the_http_client_is_only_used_from_its_one_file_and_it_can_only_get_the_rep
         commands.matches("ReportEndpoint::").count(),
         commands.matches("ReportEndpoint::production()").count(),
         "取得の入口は、製品の通信先（production）だけを使う"
+    );
+}
+
+/// 結果の取得（`report_fetch.rs`）だけの決まり: 通信先は固定の形で組み立てる（ID の形の確認は ReportId が先）。
+fn check_report_fetch_rules() {
+    let file = "src/import/report_fetch.rs";
+    let text = read(&crate_dir().join(file));
+    let product = product_part(&text);
+    for needle in [
+        "endpoint.report_url(id)",
+        "https_only(endpoint.is_secure())",
+        "ReportId::parse(",
+    ] {
+        assert!(product.contains(needle), "{file}: {needle} が無い");
+    }
+    let url_at = product.find("endpoint.report_url(id)").unwrap();
+    let call_at = product.find(".call()").unwrap();
+    assert!(
+        url_at < call_at,
+        "{file}: 通信先を固定の形で組み立ててから、通信する"
+    );
+    // 文字の ID から取る入口は、形を確かめてから、取る。
+    let by_text = product
+        .split("pub fn fetch_report_by_text(")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .unwrap_or_else(|| panic!("{file}: fetch_report_by_text が無い"));
+    assert!(
+        by_text.contains("ReportId::parse(id)") && by_text.contains("FetchError::InvalidId"),
+        "{file}: ID の形を確かめてから使う"
+    );
+}
+
+/// 関数の本文（`signature` で始まる所から、次の行頭の `}` まで）。
+fn function_text<'a>(text: &'a str, signature: &str) -> &'a str {
+    let at = text
+        .find(signature)
+        .unwrap_or_else(|| panic!("{signature} が無い"));
+    let rest = &text[at..];
+    rest.split("\n}\n").next().unwrap_or(rest)
+}
+
+/// 読みのモデルの取得（`reads/download.rs`）だけの決まり（F24・U-54）: 通信先は、配布元（huggingface.co）と、その配布の置き場
+/// （`.hf.co` で終わるホスト）だけ。https だけ・URL の文字列は書かない・決まりを通った通信先しか通信の層に渡せない・移動の指示は
+/// 3 回まで・大きさは 64 MiB まで・SHA-256 が合ってから置く。
+fn check_model_download_rules() {
+    let file = "src/reads/download.rs";
+    let text = read(&crate_dir().join(file));
+    let product = product_part(&text);
+
+    // URL の文字列は、試験を含めて、ソースのどこにも書かない（部品から組み立てる）。
+    for scheme in URL_SCHEMES {
+        assert!(
+            !text.contains(scheme),
+            "{file}: URL の文字列 {scheme} を書いている"
+        );
+    }
+    // スキームは https だけ。クライアントの https の指定は、いつも true。
+    assert_eq!(string_const(product, "SCHEME"), "https");
+    assert_eq!(product.matches("https_only(").count(), 1, "{file}");
+    assert!(
+        product.contains(".https_only(true)"),
+        "{file}: https_only(true) が無い"
+    );
+    // ホストは、配布元と、その配布の置き場の終わりの 2 つの定数だけ。
+    assert_eq!(string_const(product, "MODEL_HOST"), "huggingface.co");
+    assert_eq!(string_const(product, "MODEL_HOST_SUFFIX"), ".hf.co");
+    let allowed = function_text(product, "pub fn is_allowed_host(");
+    assert!(
+        allowed.contains("host == MODEL_HOST") && allowed.contains("ends_with(MODEL_HOST_SUFFIX)"),
+        "{file}: ホストの決まりが、2 つの定数のとおりでない: {allowed}"
+    );
+    for loosening in [".contains(", ".starts_with(", ".ends_with(\""] {
+        assert!(
+            !allowed.contains(loosening),
+            "{file}: ホストの決まりを緩める書き方がある: {loosening}"
+        );
+    }
+    // 通信先は、スキームの確認・認証の情報とポートが無いこと・ホストの確認を、全部通ったものだけ（`CheckedUrl`）。
+    let check = function_text(product, "fn check_url(");
+    for needle in [
+        "url.scheme() != SCHEME",
+        "url.username().is_empty()",
+        "url.password().is_some()",
+        "url.port().is_some()",
+        "is_allowed_host(host)",
+    ] {
+        assert!(
+            check.contains(needle),
+            "{file}: check_url に {needle} が無い"
+        );
+    }
+    assert!(
+        product.contains("pub struct CheckedUrl(Url);"),
+        "{file}: CheckedUrl の中身を公開している"
+    );
+    assert_eq!(
+        product.matches("CheckedUrl(").count(),
+        2,
+        "{file}: CheckedUrl を、決まりを通さずに作っている（型の宣言と、check_url の 1 か所だけのはず）"
+    );
+    assert!(product.contains("Ok(CheckedUrl(url))"), "{file}");
+    assert!(
+        product.contains("fn get(&self, url: &CheckedUrl) -> Result<Reply, DownloadError>;"),
+        "{file}: 通信の層は、決まりを通った通信先だけを受け取る"
+    );
+    // 通信の層を呼ぶのは 1 か所で、そこへ渡すのは、最初の取り先（`model_url`）と、移動の指示（`follow`）の結果だけ。どちらも `check_url` を通る。
+    assert_eq!(product.matches("transport.get(").count(), 1, "{file}");
+    assert!(
+        product.contains("let mut url = model_url(spec)?;"),
+        "{file}"
+    );
+    assert!(
+        product.contains("url = follow(&url, &location)?;"),
+        "{file}"
+    );
+    assert!(
+        function_text(product, "pub fn model_url(").contains("check_url(url)"),
+        "{file}: 最初の取り先も、決まりを通す"
+    );
+    assert!(
+        function_text(product, "fn follow(").contains("check_url(next)"),
+        "{file}: 移動の指示の移し先も、決まりを通す"
+    );
+    // 取り先は、決まった版（リポジトリ・コミット・ファイル名）から組み立てる。
+    assert!(
+        product.contains(r#"format!("/{}/resolve/{}/{}", spec.repo, spec.revision, spec.file)"#),
+        "{file}: 取り先を、決まった版から組み立てていない"
+    );
+    // 移動の指示は 3 回まで・大きさは 64 MiB まで。
+    assert!(
+        product.contains("pub const MAX_REDIRECTS: u32 = 3;"),
+        "{file}"
+    );
+    assert!(
+        product.contains("pub const MAX_MODEL_BYTES: u64 = 64 * 1024 * 1024;"),
+        "{file}"
+    );
+    assert!(
+        product.contains("followed >= limits.max_redirects"),
+        "{file}"
+    );
+    // 要求の見出しは、受け取る形（Accept）の 1 つだけ。
+    assert_eq!(product.matches(".header(").count(), 1, "{file}");
+    // 取ったものは、SHA-256 が決まった版と合ってから、本来の名前にする。取り消し・失敗のときは、途中のファイルを消す。
+    let compare_at = product
+        .find("digest != spec.sha256")
+        .unwrap_or_else(|| panic!("{file}: SHA-256 を確かめていない"));
+    let rename_at = product
+        .find("fs::rename(&part.path, &target)")
+        .unwrap_or_else(|| panic!("{file}: 本来の名前にしていない"));
+    assert!(
+        compare_at < rename_at,
+        "{file}: SHA-256 を確かめてから、本来の名前にする"
+    );
+    assert_eq!(product.matches("fs::rename(").count(), 1, "{file}");
+    assert!(
+        product.contains("impl Drop for PartFile"),
+        "{file}: 途中のファイルを必ず消す仕組みが無い"
+    );
+
+    // モデルの通信の層を作るのは、画面から呼ぶ命令（`download_reads_model`）の 1 か所だけ。
+    let makers = product_files_containing("UreqTransport::new(");
+    let names: Vec<&str> = makers
+        .iter()
+        .map(|p| p.rsplit("src/").next().unwrap_or(p))
+        .collect();
+    assert_eq!(
+        names,
+        vec!["reads/commands.rs", "reads/download.rs"],
+        "{makers:?}"
+    );
+    let commands = read(&crate_dir().join("src").join("reads").join("commands.rs"));
+    let commands = product_part(&commands);
+    assert_eq!(commands.matches("UreqTransport::new(").count(), 1);
+    assert!(
+        function_text(commands, "pub async fn download_reads_model(")
+            .contains("UreqTransport::new()"),
+        "download_reads_model だけが、モデルの通信の層を作る"
     );
 }
 
@@ -1757,16 +1939,18 @@ fn s2_the_sync_token_is_exposed_only_where_it_is_needed_and_never_written_or_pri
     );
 }
 
-/// 同期は、同期しないもの（スクショ・ウィジェットの記録・文字認識の写し）に触れない。
+/// 同期は、同期しないもの（スクショ・ウィジェットの記録・文字認識の写し・読みの写し）に触れない。
 #[test]
 fn s2_the_sync_never_names_the_files_it_must_not_sync() {
     let forbidden = [
         "EVENTS_FILE",
         "OCR_FILE",
+        "READS_FILE",
         "MARKS_DIR",
         "RATINGS_DIR",
         "events.jsonl",
         "ocr.json",
+        "reads.json",
         "\"marks\"",
         "\"ratings\"",
         ".png",
@@ -3671,4 +3855,715 @@ fn mac_platform_config_files_are_scanned_and_the_windows_helper_is_not_built_for
     );
     let conf = read(&crate_dir().join("tauri.macos.conf.json"));
     assert!(!conf.to_lowercase().contains("helper"));
+}
+
+// ---- S-5: 解析エンジン（F24）の線引き ----
+//
+// エンジン（`apps/desktop/src-tauri/engine`）は、本体（MIT）とは別の workspace・別の Cargo.lock の別のプログラム。
+// 推論の部品（tract）を持つので、S-3 の crate の一覧（tract を禁じる）は本体だけに当て、エンジンには「通信・ほかのプロセスの操作・
+// 画面の撮影・文字認識の部品が無い」ことを、同じ語の一覧で確かめる。本体がエンジンに依存しないことも確かめる。
+
+/// エンジンだけの禁止: ほかのプロセスを起こす・ソケットを使う道具（`std::process::ExitCode` は、プロセスを起こさないので良い）。
+const ENGINE_PROCESS_RUST: &[&str] = &[
+    "std::process::Command",
+    "process::Command",
+    "Command::new",
+    "std::process::Child",
+    "std::process::Stdio",
+    "std::process::{",
+    "std::process::*",
+    "std::os::windows::process",
+    "std::os::unix::process",
+    "CommandExt",
+    "tokio::process",
+    "std::net",
+];
+
+/// エンジンのソースで、画像・文字認識のクレートを使う書き方（S-3 の `VISION_RUST` に足す）。
+/// エンジンは画像を読まない・書かないので、PNG の書き出しも要らない。
+const ENGINE_VISION_RUST: &[&str] = &[
+    "tesseract::",
+    "leptess::",
+    "leptonica",
+    "ocrs::",
+    "opencv::",
+    "imageproc::",
+    "image::",
+    "png::",
+    "kornia",
+    "rxing::",
+    "load_from_memory",
+];
+
+/// エンジンの Cargo.toml・Cargo.lock に置かない、通信の部品（クレート名。前方一致は「名前-」まで）。
+/// `s2_cargo_toml_declares_no_network_dependency` の一覧に、モデルを取る道具（hf-hub）と、非同期の通信の土台を足したもの。
+const ENGINE_NETWORK_CRATES: &[&str] = &[
+    "reqwest",
+    "hyper",
+    "ureq",
+    "isahc",
+    "surf",
+    "attohttpc",
+    "minreq",
+    "curl",
+    "tungstenite",
+    "tokio-tungstenite",
+    "websocket",
+    "hf-hub",
+    "tokio",
+    "mio",
+    "socket2",
+    "async-std",
+    "smol",
+    "h2",
+    "native-tls",
+    "rustls",
+    "openssl",
+    "tauri-plugin-http",
+    "tauri-plugin-websocket",
+    "tauri-plugin-updater",
+    "tauri-plugin-shell",
+];
+
+/// エンジンの Cargo.toml・Cargo.lock に置かない、画像解析・文字認識の部品。
+/// S-3 の `VISION_CRATES` から、エンジンの仕事である推論の部品（tract・onnxruntime・candle など）を除き、画像の読み書き（image・png）を足したもの。
+const ENGINE_VISION_CRATES: &[&str] = &[
+    "tesseract",
+    "leptess",
+    "leptonica",
+    "ocrs",
+    "opencv",
+    "imageproc",
+    "kornia",
+    "template-matching",
+    "image-compare",
+    "rxing",
+    "paddle",
+    "image",
+    "png",
+];
+
+/// 本体の側（本体・共有の部品・補助プログラム・文字認識）の Cargo.toml・Cargo.lock に出てはいけない、エンジンの crate 名。
+const ENGINE_CRATE_NAMES: &[&str] = &["jantama-engine", "jantama_engine", "libriichi", "riichi"];
+
+/// 本体の側の Cargo.toml で、エンジンのフォルダを指す依存の書き方（名前を替えた依存も見つけるため）。
+const ENGINE_PATH_WORDS: &[&str] = &[
+    "path = \"engine",
+    "path = \"./engine",
+    "path = \"../engine",
+    "engine/libriichi",
+];
+
+/// 解析エンジン（別の workspace）のフォルダ。
+fn engine_dir() -> PathBuf {
+    crate_dir().join("engine")
+}
+
+/// エンジンの Rust のソース: エンジン本体（`engine/src`）と、含めた libriichi（`engine/libriichi/src`）。
+/// 本体・共有の部品・補助プログラムの走査（`rust_sources`）には入れない。ここには、エンジン用の決まりをかける。
+fn engine_sources() -> Vec<PathBuf> {
+    let mut files = files_under(&engine_dir().join("src"), &|p| has_ext(p, &["rs"]));
+    files.extend(files_under(
+        &engine_dir().join("libriichi").join("src"),
+        &|p| has_ext(p, &["rs"]),
+    ));
+    files.sort();
+    files
+}
+
+/// エンジンの依存の一覧: 2 つの Cargo.toml と、エンジンの Cargo.lock（推移的な依存まで）。
+fn engine_manifests() -> Vec<PathBuf> {
+    vec![
+        engine_dir().join("Cargo.toml"),
+        engine_dir().join("libriichi").join("Cargo.toml"),
+        engine_dir().join("Cargo.lock"),
+    ]
+}
+
+/// コメントの行を空の行に替えた文（行番号は変わらない）。上流（Mortal）のソースは、出どころの URL をコメントに書いている。
+/// コメントの URL は通信にならないので許し、コードの中の URL だけを、S-2 の「URL を書かない」で見る。
+fn without_comment_lines(text: &str) -> String {
+    text.lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("//") || trimmed.starts_with('#') {
+                ""
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn the_engine_scanner_detects_every_engine_pattern() {
+    for (name, patterns) in [
+        ("S-5 プロセス", ENGINE_PROCESS_RUST),
+        ("S-5 画像", ENGINE_VISION_RUST),
+    ] {
+        for pattern in patterns {
+            let sample = format!("let x = {pattern}example;");
+            assert_eq!(
+                scan_lines(&sample, &[pattern], false).len(),
+                1,
+                "{name}: {pattern} を検出できない"
+            );
+        }
+    }
+    // 終了コードの型は、ほかのプロセスを起こさないので、禁止の語に当たらない。
+    assert!(scan_lines("use std::process::ExitCode;", ENGINE_PROCESS_RUST, false).is_empty());
+    assert!(scan_lines("std::process::exit(2)", ENGINE_PROCESS_RUST, false).is_empty());
+    // コードの中の URL は見つけ、コメントの中の URL は通信にならないので許す。
+    let code = "let url = \"https://example.com/\";";
+    assert_eq!(
+        scan_lines(&without_comment_lines(code), URL_SCHEMES, false).len(),
+        1
+    );
+    let comments = "//! Source: <https://example.com/>\n    /// <http://example.com/>\n// see https://example.com/";
+    assert!(scan_lines(&without_comment_lines(comments), URL_SCHEMES, false).is_empty());
+
+    // 依存の一覧: 通信・画像の部品の名前を、名前そのものと「名前-…」で見つける。
+    for name in ENGINE_NETWORK_CRATES.iter().chain(ENGINE_VISION_CRATES) {
+        let toml = format!("[dependencies]\n{name} = \"1\"\n");
+        let lock = format!("[[package]]\nname = \"{name}-sys\"\n");
+        for text in [toml, lock] {
+            let found = forbidden_crates_in_manifest(&text, ENGINE_NETWORK_CRATES).len()
+                + forbidden_crates_in_manifest(&text, ENGINE_VISION_CRATES).len();
+            assert!(found >= 1, "{name}: 依存の一覧で検出できない: {text}");
+        }
+    }
+    // 本体の Cargo.toml が、エンジンを依存に書いたら（名前を替えても）見つける。
+    let by_name = "[dependencies]
+libriichi = { path = \"engine/libriichi\" }
+";
+    assert_eq!(
+        forbidden_crates_in_manifest(by_name, ENGINE_CRATE_NAMES).len(),
+        1
+    );
+    let by_path = "[dependencies]
+solver = { path = \"engine\" }
+";
+    assert_eq!(scan_lines(by_path, ENGINE_PATH_WORDS, false).len(), 1);
+    let commented = "# 解析エンジン（engine/libriichi）は別の workspace
+";
+    assert!(scan_lines(&without_comment_lines(commented), ENGINE_PATH_WORDS, false).is_empty());
+    // エンジンの仕事である推論の部品は許し、本体の S-3 の一覧は同じものを禁じる。
+    let engine_toml =
+        "[dependencies]\ntract-onnx = \"0.23\"\nndarray = \"0.16\"\nsha2 = \"0.10\"\n";
+    assert!(forbidden_crates_in_manifest(engine_toml, ENGINE_NETWORK_CRATES).is_empty());
+    assert!(forbidden_crates_in_manifest(engine_toml, ENGINE_VISION_CRATES).is_empty());
+    assert_eq!(
+        forbidden_crates_in_manifest(engine_toml, VISION_CRATES).len(),
+        1,
+        "本体の S-3 の一覧は tract を禁じる"
+    );
+}
+
+#[test]
+fn s5_the_engine_scans_cover_its_sources_and_not_the_app_scans() {
+    let files: Vec<String> = engine_sources()
+        .iter()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .collect();
+    for needed in [
+        "engine/src/main.rs",
+        "engine/src/lib.rs",
+        "engine/src/reads.rs",
+        "engine/libriichi/src/lib.rs",
+        "engine/libriichi/src/state/obs_repr.rs",
+        "engine/libriichi/src/state/update.rs",
+        "engine/libriichi/src/mjai/event.rs",
+    ] {
+        assert!(
+            files.iter().any(|f| f.ends_with(needed)),
+            "走査の対象に {needed} が入っていない"
+        );
+    }
+    let engine = engine_dir();
+    assert!(
+        rust_sources().iter().all(|p| !p.starts_with(&engine)),
+        "本体の走査にエンジンが入っている"
+    );
+    for manifest in engine_manifests() {
+        assert!(manifest.exists(), "{} が無い", manifest.display());
+    }
+}
+
+#[test]
+fn s5_engine_sources_do_not_touch_another_process_or_start_one() {
+    let mut violations = Vec::new();
+    for file in engine_sources() {
+        let text = read(&file);
+        violations.push(report(
+            "S-5/S-1",
+            &file,
+            &scan_lines(&text, GAME_PROCESS_APIS, false),
+        ));
+        violations.push(report("S-5/S-1 フック", &file, &disallowed_hook_ids(&text)));
+        violations.push(report(
+            "S-5 プロセス",
+            &file,
+            &scan_lines(&text, ENGINE_PROCESS_RUST, false),
+        ));
+    }
+    assert_no_violations(violations.into_iter().filter(|v| !v.is_empty()).collect());
+}
+
+#[test]
+fn s5_engine_sources_have_no_network_code() {
+    let mut violations = Vec::new();
+    for file in engine_sources() {
+        let text = read(&file);
+        let mut hits = scan_lines(&text, GAME_DOMAINS, true);
+        hits.extend(scan_lines(&text, NETWORK_RUST, false));
+        // URL はコードに書かない（コメントの出どころの URL は、通信にならないので許す）。
+        hits.extend(scan_lines(
+            &without_comment_lines(&text),
+            URL_SCHEMES,
+            false,
+        ));
+        violations.push(report("S-5/S-2", &file, &hits));
+    }
+    assert_no_violations(violations.into_iter().filter(|v| !v.is_empty()).collect());
+}
+
+#[test]
+fn s5_engine_sources_have_no_screen_capture_or_image_analysis() {
+    let mut violations = Vec::new();
+    for file in engine_sources() {
+        let text = read(&file);
+        let mut hits = scan_lines(&text, VISION_RUST, false);
+        hits.extend(scan_lines(&text, ENGINE_VISION_RUST, false));
+        violations.push(report("S-5/S-3", &file, &hits));
+    }
+    assert_no_violations(violations.into_iter().filter(|v| !v.is_empty()).collect());
+}
+
+#[test]
+fn s5_engine_manifests_list_no_network_or_image_crates() {
+    let mut violations = Vec::new();
+    for path in engine_manifests() {
+        let text = read(&path);
+        for (line, name) in forbidden_crates_in_manifest(&text, ENGINE_NETWORK_CRATES) {
+            violations.push(format!(
+                "[S-5/S-2] {}:{line}: 通信の部品 {name}",
+                path.display()
+            ));
+        }
+        for (line, name) in forbidden_crates_in_manifest(&text, ENGINE_VISION_CRATES) {
+            violations.push(format!(
+                "[S-5/S-3] {}:{line}: 画像解析・文字認識の部品 {name}",
+                path.display()
+            ));
+        }
+    }
+    assert_no_violations(violations);
+
+    // 走査が正しいファイルを読んでいる: エンジンは推論の部品（tract）を持ち、libriichi を含む。
+    let toml = read(&engine_dir().join("Cargo.toml"));
+    assert!(
+        toml.contains("tract-onnx"),
+        "エンジンの Cargo.toml に tract-onnx が無い"
+    );
+    let lock = read(&engine_dir().join("Cargo.lock"));
+    assert!(
+        lock.contains("name = \"tract-onnx\"") && lock.contains("name = \"libriichi\""),
+        "エンジンの Cargo.lock を読めていない"
+    );
+}
+
+#[test]
+fn s5_the_main_crates_do_not_depend_on_the_engine() {
+    let mut manifests: Vec<PathBuf> = crate_dirs().iter().map(|d| d.join("Cargo.toml")).collect();
+    manifests.push(ocr_dir().join("Cargo.toml"));
+    manifests.push(crate_dir().join("Cargo.lock"));
+    let mut violations = Vec::new();
+    for path in manifests {
+        let text = read(&path);
+        for (line, name) in forbidden_crates_in_manifest(&text, ENGINE_CRATE_NAMES) {
+            violations.push(format!(
+                "[S-5] {}:{line}: 本体がエンジンに依存している {name}",
+                path.display()
+            ));
+        }
+        // 名前を替えた依存（`x = { path = "engine" }`）も許さない。
+        let code = without_comment_lines(&text);
+        for (line, what) in scan_lines(&code, ENGINE_PATH_WORDS, false) {
+            violations.push(format!(
+                "[S-5] {}:{line}: エンジンの経路を指す依存 {what}",
+                path.display()
+            ));
+        }
+    }
+    assert_no_violations(violations);
+
+    // 本体の workspace は、エンジンを含めない（別の workspace・別の Cargo.lock）。
+    let main_toml = read(&crate_dir().join("Cargo.toml"));
+    assert!(
+        main_toml.contains("exclude = [\"engine\"]"),
+        "本体の workspace が、engine を除外していない"
+    );
+}
+
+// ---- S-2（F24）: モデルの配布元の名前は、取る層の 1 つのファイルだけ ----
+
+/// モデルの配布元のホストを指す語（小文字で比べる）。取る層（`ALLOWED_HTTP_CLIENT_FILES` の `src/reads/download.rs`）だけが書く。
+const MODEL_HOST_WORDS: &[&str] = &["huggingface", "hf.co"];
+
+#[test]
+fn s2_no_source_but_the_model_download_file_names_the_model_host() {
+    let mut named_by: Vec<String> = Vec::new();
+    for file in rust_sources() {
+        let name = file.to_string_lossy().replace('\\', "/");
+        let lower = read(&file).to_lowercase();
+        if MODEL_HOST_WORDS.iter().any(|word| lower.contains(word)) {
+            named_by.push(name.rsplit("src/").next().unwrap_or(&name).to_string());
+        }
+    }
+    assert_eq!(named_by, vec!["reads/download.rs"], "{named_by:?}");
+    // 設定（権限・Tauri の設定）にも、配布元のホストを書かない。画面（webview）から、配布元へつなげる道を作らない。
+    let mut configs = files_under(&crate_dir().join("capabilities"), &|p| {
+        has_ext(p, &["json"])
+    });
+    for name in [
+        "tauri.conf.json",
+        "tauri.macos.conf.json",
+        "tauri.release.conf.json",
+        "tauri.release.macos.conf.json",
+        "tauri.release.windows.conf.json",
+    ] {
+        configs.push(crate_dir().join(name));
+    }
+    for file in configs {
+        let lower = read(&file).to_lowercase();
+        for word in MODEL_HOST_WORDS {
+            assert!(
+                !lower.contains(word),
+                "{}: 配布元のホスト {word} を書いている",
+                file.display()
+            );
+        }
+    }
+    // 画面のソースで、配布元の名前を書くのは、設定の説明の文（`readsModelText.ts`）だけ。画面は通信しない（S-2。URL の文字列も
+    // 通信の窓口も、画面のソースには書けない）ので、これは、ユーザーに見せる説明でしかない。
+    let screen_src = repo_root().join("apps").join("desktop").join("src");
+    let mut named_by_screen: Vec<String> = ts_sources()
+        .iter()
+        .filter(|file| read(file).to_lowercase().contains("huggingface"))
+        .map(|file| {
+            file.strip_prefix(&screen_src)
+                .unwrap_or(file)
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .collect();
+    named_by_screen.sort();
+    assert_eq!(
+        named_by_screen,
+        vec!["main/readsModelText.ts"],
+        "{named_by_screen:?}"
+    );
+}
+
+// ---- S-5（F24）: 本体がエンジンを呼ぶのは 1 か所で、渡すのは入力・モデル・出力先の 3 つのパスだけ ----
+
+/// 本体の `src` の製品のソース（試験の部分を除く）のうち、`needle` を含むファイルの名前（`src` から）。
+/// 補助プログラム・共有の部品（`helper`・`input`）の `src` は含めない。
+fn main_src_files_containing(needle: &str) -> Vec<String> {
+    let src = crate_dir().join("src");
+    let mut found: Vec<String> = files_under(&src, &|p| has_ext(p, &["rs"]))
+        .iter()
+        .filter(|file| product_part(&read(file)).contains(needle))
+        .map(|file| {
+            file.strip_prefix(&src)
+                .unwrap_or(file)
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .collect();
+    found.sort();
+    found
+}
+
+#[test]
+fn s5_the_main_crate_starts_a_process_in_two_places_only_the_helper_setup_and_the_engine_runner() {
+    assert_eq!(
+        main_src_files_containing("Command::new("),
+        vec!["platform/win/helper_setup.rs", "reads/engine_runner.rs"]
+    );
+}
+
+#[test]
+fn s5_the_engine_runner_passes_only_read_report_model_out_and_adds_no_shell_or_environment() {
+    let file = "src/reads/engine_runner.rs";
+    let text = read(&crate_dir().join(file));
+    let product = product_part(&text);
+    // プロセスを起こすのは 1 か所で、起こすのはエンジン（呼ぶ側が渡した、決まった場所の実行ファイル）だけ。
+    assert_eq!(product.matches("Command::new(").count(), 1, "{file}");
+    assert!(product.contains("Command::new(run.engine)"), "{file}");
+    // 引数は、`engine_args` の 1 か所で渡す。1 つずつ足す書き方（`.arg(`）や、環境・作業のフォルダの指定、shell は使わない。
+    assert_eq!(product.matches(".args(").count(), 1, "{file}");
+    assert!(
+        product.contains(".args(engine_args(report, run.model, out))"),
+        "{file}"
+    );
+    for forbidden in [
+        ".arg(",
+        ".env(",
+        ".envs(",
+        ".env_clear(",
+        ".env_remove(",
+        ".current_dir(",
+        ".arg0(",
+        ".raw_arg(",
+        ".creation_flags(",
+        ".uid(",
+        ".gid(",
+    ] {
+        assert!(
+            !product.contains(forbidden),
+            "{file}: {forbidden} を使っている"
+        );
+    }
+    let lower = product.to_lowercase();
+    for shell in [
+        "cmd.exe",
+        "powershell",
+        "bash",
+        "/bin/sh",
+        "\"sh\"",
+        "\"cmd\"",
+        "-c\"",
+    ] {
+        assert!(!lower.contains(shell), "{file}: shell の語 {shell} がある");
+    }
+    // 引数の名前の文字は、4 つだけ（命令の `read` と、`--report`・`--model`・`--out`）。
+    assert_eq!(string_const(product, "ENGINE_COMMAND"), "read");
+    assert_eq!(string_const(product, "ARG_REPORT"), "--report");
+    assert_eq!(string_const(product, "ARG_MODEL"), "--model");
+    assert_eq!(string_const(product, "ARG_OUT"), "--out");
+    assert_eq!(
+        product.matches("\"--").count(),
+        3,
+        "{file}: ほかの引数の名前がある"
+    );
+    // `engine_args` が返すのは、この 7 つだけ（この順）。
+    let body = function_text(product, "pub fn engine_args(");
+    let list = body
+        .split_once("vec![")
+        .and_then(|(_, rest)| rest.split_once(']'))
+        .map(|(list, _)| list)
+        .unwrap_or_else(|| panic!("{file}: engine_args の中身を読めない"));
+    let items: Vec<String> = list
+        .split(',')
+        .map(|item| item.split_whitespace().collect::<String>())
+        .filter(|item| !item.is_empty())
+        .collect();
+    assert_eq!(
+        items,
+        [
+            "ENGINE_COMMAND.into()",
+            "ARG_REPORT.into()",
+            "report.into()",
+            "ARG_MODEL.into()",
+            "model.into()",
+            "ARG_OUT.into()",
+            "out.into()",
+        ],
+        "{file}"
+    );
+    // 渡す 3 つのパスの出どころ: 結果は半荘のフォルダの `report.json`、出力先は同じフォルダの `reads.json.part`、モデルは呼ぶ側が決めたもの。
+    assert!(
+        product.contains("run.session_dir.join(REPORT_FILE)"),
+        "{file}"
+    );
+    assert!(
+        product.contains("reads_part_path(run.session_dir)"),
+        "{file}"
+    );
+    assert!(
+        product.contains("run_engine(run, &report, &part, progress)"),
+        "{file}"
+    );
+    // 標準入力は空・標準出力は捨てる・標準エラーだけ読む。時間は 10 分。
+    for needle in [
+        ".stdin(Stdio::null())",
+        ".stdout(Stdio::null())",
+        ".stderr(Stdio::piped())",
+        "pub const ENGINE_TIMEOUT: Duration = Duration::from_secs(10 * 60);",
+    ] {
+        assert!(product.contains(needle), "{file}: {needle} が無い");
+    }
+    // エンジンの場所は、環境変数 JANTAMA_ENGINE（開発と試験）か、本体の実行ファイルのフォルダの中だけ。
+    assert_eq!(string_const(product, "ENGINE_ENV"), "JANTAMA_ENGINE");
+    assert!(product.contains("std::env::current_exe()"), "{file}");
+    // コンソールの窓を出さない設定は、OS ごとの部分（platform）に任せる。
+    assert!(
+        product.contains("platform::hide_console_window(&mut command)"),
+        "{file}"
+    );
+    let windows = read(
+        &crate_dir()
+            .join("src")
+            .join("platform")
+            .join("win")
+            .join("process.rs"),
+    );
+    assert!(product_part(&windows).contains("creation_flags(CREATE_NO_WINDOW)"));
+}
+
+#[test]
+fn s5_only_the_reads_commands_locate_and_run_the_engine_and_no_main_source_names_its_crates() {
+    for needle in ["compute_reads_file(", "locate_engine("] {
+        assert_eq!(
+            main_src_files_containing(needle),
+            vec!["reads/commands.rs", "reads/engine_runner.rs"],
+            "{needle}"
+        );
+    }
+    // エンジンの呼び出しの組み立て（`EngineRun`）を作るのも、計算の命令の側だけ
+    assert_eq!(
+        main_src_files_containing("EngineRun {"),
+        vec!["reads/commands.rs"]
+    );
+    let commands = read(&crate_dir().join("src").join("reads").join("commands.rs"));
+    let commands = product_part(&commands);
+    assert_eq!(commands.matches("compute_reads_file(").count(), 1);
+    assert_eq!(commands.matches("locate_engine(").count(), 1);
+    // 計算は、画面が計算の命令（`compute_reads`）を呼んだときだけ動く。ほかの命令・起動の処理からは、エンジンに触れない
+    assert!(
+        function_text(commands, "fn compute(").contains("compute_reads_file("),
+        "エンジンを動かすのは、計算の 1 つの関数だけ"
+    );
+    assert!(
+        function_text(commands, "pub async fn compute_reads(").contains("compute(&app"),
+        "計算の関数を呼ぶのは、計算の命令だけ"
+    );
+    // 本体のソースは、エンジンのクレートの名前を書かない（クレートで依存せず、別のプロセスとして呼ぶ）
+    for file in rust_sources() {
+        let text = read(&file);
+        for name in ["jantama_engine", "libriichi"] {
+            assert!(
+                !product_part(&text).contains(name),
+                "{}: エンジンのクレート {name} を名指している",
+                file.display()
+            );
+        }
+    }
+}
+
+// ---- F23・F24: 読みの命令は、検討画面だけが呼べる ----
+
+/// 読みとモデルの Tauri コマンド（Rust の名前）。ウィジェットのコードは、どれにも触れない。
+const READS_COMMANDS: &[&str] = &[
+    "get_reads_model",
+    "download_reads_model",
+    "cancel_reads_model_download",
+    "choose_reads_model_file",
+    "delete_reads_model",
+    "read_reads",
+    "compute_reads",
+    "set_reads_visible",
+];
+/// 画面側の窓口の名前（`api/reads.ts`）。
+const READS_API_NAMES: &[&str] = &[
+    "readsApi",
+    "onReadsModelProgress",
+    "onReadsProgress",
+    "EVENT_READS_MODEL_PROGRESS",
+    "EVENT_READS_PROGRESS",
+];
+
+#[test]
+fn f23_every_reads_command_refuses_calls_from_other_windows_and_the_widget_never_names_them() {
+    let commands = read(&crate_dir().join("src").join("reads").join("commands.rs"));
+    let product = product_part(&commands);
+    let declared = product.matches("#[tauri::command]").count();
+    assert_eq!(declared, READS_COMMANDS.len(), "命令の数が、一覧と合わない");
+    // どの命令も、検討画面（main）の窓から呼ばれたかを、最初に確かめる。
+    assert_eq!(product.matches("ensure_main(&window)?;").count(), declared);
+    assert!(product.contains("window.label() == MAIN_LABEL"));
+    for name in READS_COMMANDS {
+        assert!(
+            product.contains(&format!("pub async fn {name}(")),
+            "{name} がある"
+        );
+    }
+    for chunk in product.split("#[tauri::command]").skip(1) {
+        let guard_at = chunk
+            .find("ensure_main(&window)?;")
+            .expect("命令に、窓の確認がある");
+        for early in ["app.state", "config_dir(", "session_dir(", "blocking("] {
+            if let Some(at) = chunk.find(early) {
+                assert!(guard_at < at, "窓の確認より前に {early} を使っている");
+            }
+        }
+    }
+    // 起動のときに、命令が登録されている。
+    let lib = read(&crate_dir().join("src").join("lib.rs"));
+    for name in READS_COMMANDS {
+        assert!(
+            lib.contains(&format!("reads::commands::{name},")),
+            "{name} が lib.rs に登録されていない"
+        );
+    }
+    // 読みの入切は、設定を変える共通の道（全部の窓に知らせる）を通る。
+    assert!(
+        function_text(product, "pub async fn set_reads_visible(").contains("set_settings_now("),
+        "読みの入切は、設定を変える共通の道を通る"
+    );
+    // ウィジェットの画面のソースは、読みの窓口の名前に触れない。
+    let widget_dir = repo_root()
+        .join("apps")
+        .join("desktop")
+        .join("src")
+        .join("widget");
+    for file in files_under(&widget_dir, &|p| {
+        has_ext(p, &["ts", "tsx"]) && !is_test_file(p)
+    }) {
+        let text = read(&file);
+        for name in READS_COMMANDS.iter().chain(READS_API_NAMES) {
+            assert!(
+                !text.contains(name),
+                "{}: ウィジェットが読みの窓口 {name} に触れている",
+                file.display()
+            );
+        }
+    }
+    // 権限の一覧（capabilities）に、読みの窓口を足していない（画面は、命令を、権限の一覧に頼らずに呼ぶ）。
+    for file in files_under(&crate_dir().join("capabilities"), &|p| {
+        has_ext(p, &["json"])
+    }) {
+        let text = read(&file);
+        for name in READS_COMMANDS {
+            assert!(!text.contains(name), "{}: {name}", file.display());
+        }
+    }
+}
+
+// ---- D-8: 読みの写しとモデルは、同期にも書き出しにも触れない ----
+
+#[test]
+fn d8_neither_the_sync_nor_the_export_names_the_reads_file_or_the_models() {
+    for dir in ["sync", "study"] {
+        for file in files_under(&crate_dir().join("src").join(dir), &|p| has_ext(p, &["rs"])) {
+            let text = read(&file);
+            let code = without_comment_lines(product_part(&text));
+            for word in [
+                "READS_FILE",
+                "reads.json",
+                "MODELS_DIR",
+                "tenpai.onnx",
+                "crate::reads",
+                "ReadsState",
+            ] {
+                assert!(
+                    !code.contains(word),
+                    "{}: 同期・書き出しが、読みの写しやモデルの名前 {word} に触れている",
+                    file.display()
+                );
+            }
+        }
+    }
 }

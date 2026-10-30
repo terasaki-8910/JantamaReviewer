@@ -34,6 +34,8 @@ export function useReplayKeys(keys: ReplayKeys, handlers: ReplayHandlers): void 
     if (action === null) return;
     // 割り当てたキーは、行き先が無くても、窓のスクロールなどの既定の動きを起こさない
     event.preventDefault();
+    // 読みの入切は、押しっぱなしの繰り返しでは働かない（入と切が交互に出てしまう）。移動のキーは、繰り返しで動き続ける
+    if (action === 'toggle_reads' && event.repeat) return;
     handlers[action]();
   });
   useEffect(() => {

@@ -20,14 +20,15 @@ use crate::naga::sample_url;
 use crate::settings::{Orientation, Trigger};
 use crate::store::{
     ExtraMemo, Links, MemoPosition, MemoText, Memos, NagaResult, OcrCache, OcrEntry, Rating,
-    SelfRating, EVENTS_FILE, LINKS_FILE, MAKA_FILE, MEMOS_FILE, NAGA_FILE, OCR_FILE, REPORT_FILE,
-    RESOLVED_FILE, SELF_RATINGS_FILE, SESSION_GAP_MS,
+    SelfRating, EVENTS_FILE, LINKS_FILE, MAKA_FILE, MEMOS_FILE, NAGA_FILE, OCR_FILE, READS_FILE,
+    REPORT_FILE, RESOLVED_FILE, SELF_RATINGS_FILE, SESSION_GAP_MS,
 };
 use crate::study::{AnswerMode, NewAnswer, ProblemRef, StudyDb, WeekRecord, WeekStats};
 
 const T0: i64 = 1_760_000_000_123;
 const REPORT_SENTINEL: &str = "REPORT-SENTINEL-4f2a";
 const OCR_SENTINEL: &str = "OCR-SENTINEL-9b1c";
+const READS_SENTINEL: &str = "READS-SENTINEL-7d3e";
 const PNG: [u8; 7] = [0x89, b'P', b'N', b'G', 9, 9, 9];
 
 fn shot() -> Result<Screenshot, CaptureError> {
@@ -91,6 +92,12 @@ fn populate(dev: &Dev) -> (String, String) {
         },
     );
     store.save_ocr(&a, &ocr).unwrap();
+    // 読み（F23）の写し。どの端末でも作り直せるので、同期しない
+    fs::write(
+        store.session_folder(&a).unwrap().join(READS_FILE),
+        format!("{{\"format\":\"jantama-reads/1\",\"note\":\"{READS_SENTINEL}\"}}"),
+    )
+    .unwrap();
 
     let mut links = Links::default();
     links.marks.insert("1".into(), "k0h0e3".into());
@@ -344,10 +351,11 @@ fn d4_records_round_trip_through_the_sync_rows_into_another_local_db_identically
     assert_eq!(b.store().load_naga(&sb).unwrap(), None);
     assert!(session_dir(&b, &sa).join(NAGA_FILE).is_file());
     assert!(!session_dir(&b, &sb).join(NAGA_FILE).exists());
-    // 同期しない: スクショ・ウィジェットの記録・文字認識の写し
+    // 同期しない: スクショ・ウィジェットの記録・文字認識の写し・読みの写し
     let folder = session_dir(&b, &sa);
     assert!(!folder.join(EVENTS_FILE).exists());
     assert!(!folder.join(OCR_FILE).exists());
+    assert!(!folder.join(READS_FILE).exists());
     assert!(!folder.join("marks").exists());
     assert!(!folder.join("ratings").exists());
     // 取り込んだ半荘は、一覧に出て、開ける（結果がある半荘として）
@@ -455,7 +463,16 @@ fn d4_screenshots_widget_records_and_ocr_copies_never_reach_the_sync_db() {
     // 同期用の DB のどの行・本体にも、同期しないものの中身が無い
     let store = server.store();
     for (key, row) in &store.rows {
-        for forbidden in [OCR_SENTINEL, "events", "marks/", "ratings/", "ocr", "png"] {
+        for forbidden in [
+            OCR_SENTINEL,
+            READS_SENTINEL,
+            "jantama-reads",
+            "events",
+            "marks/",
+            "ratings/",
+            "ocr",
+            "png",
+        ] {
             assert!(
                 !row.value.contains(forbidden) && !key.contains(forbidden),
                 "{key}: {forbidden}"
@@ -466,6 +483,7 @@ fn d4_screenshots_widget_records_and_ocr_copies_never_reach_the_sync_db() {
         let bytes = super::engine::gunzip(gz).unwrap();
         let text = String::from_utf8_lossy(&bytes);
         assert!(!text.contains(OCR_SENTINEL), "{key}");
+        assert!(!text.contains(READS_SENTINEL), "{key}");
         assert!(
             text.contains(REPORT_SENTINEL),
             "結果のファイルは入る: {key}"
@@ -1268,11 +1286,11 @@ fn d4_a_sync_db_made_by_a_newer_version_is_left_alone() {
 #[test]
 fn d4_syncing_never_touches_local_files_it_does_not_own() {
     let (_server, mut a, mut b, sa, _sb) = pair();
-    // 手元だけにある、events.jsonl・ocr.json・スクショは、同期でも書き換わらない
+    // 手元だけにある、events.jsonl・ocr.json・reads.json・スクショは、同期でも書き換わらない
     let dir = session_dir(&a, &sa);
     let snapshot = |d: &PathBuf| -> BTreeMap<String, Vec<u8>> {
         let mut out = BTreeMap::new();
-        for name in [EVENTS_FILE, OCR_FILE] {
+        for name in [EVENTS_FILE, OCR_FILE, READS_FILE] {
             out.insert(name.to_string(), fs::read(d.join(name)).unwrap());
         }
         for entry in fs::read_dir(d.join("marks")).unwrap().flatten() {
