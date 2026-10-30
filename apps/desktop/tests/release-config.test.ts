@@ -230,6 +230,10 @@ describe('手元の組み立ての設定と、Actions だけの設定', () => {
     // 写す前の実行ファイルの名前は、エンジンの Cargo.toml の bin の名前。写す場所は git に入れない
     expect(read('apps', 'desktop', 'src-tauri', 'engine', 'Cargo.toml')).toMatch(/\[\[bin\]\]\nname = "jantama-engine"/);
     expect(read('.gitignore')).toMatch(/^apps\/desktop\/src-tauri\/binaries\/$/m);
+    // 本体は、本体の隣の、同じ名前のエンジンを探す（externalBin は、入れるときにターゲットの名前を外す）
+    expect(read('apps', 'desktop', 'src-tauri', 'src', 'reads', 'engine_runner.rs')).toContain(
+      'const ENGINE_NAME: &str = "jantama-engine";',
+    );
   });
 
   it('補助プログラムは、同じソースから同じ中身になるよう作る（/Brepro）。そうでないと、配るたびに「新しい補助プログラムがあります」が出る', () => {
