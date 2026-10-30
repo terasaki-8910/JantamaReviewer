@@ -1,0 +1,3 @@
+# リポジトリのルートの .gitignore の `state/`（パイプラインの実行時の状態）が、libriichi の `state` モジュール
+# （局面の更新と観測の組み立て）にも当たってしまうので、ここだけ外す。
+!/libriichi/src/state/
