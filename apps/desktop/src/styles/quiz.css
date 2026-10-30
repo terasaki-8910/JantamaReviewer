@@ -276,7 +276,7 @@
   --kwx: calc(var(--kw) + 2 * var(--g));
   --kwy: calc(var(--kw) + var(--g));
   --rw-w: calc((100cqw - var(--kwx)) / var(--cwx));
-  --rw-h: calc((100vh - var(--chrome-h, 346px) - var(--bar-extra, 0px) - var(--kwy)) / var(--cwy));
+  --rw-h: calc((100vh - var(--chrome-h, 324px) - var(--bar-extra, 0px) - var(--kwy)) / var(--cwy));
   --rw: max(14px, min(46px, var(--rw-w), var(--rw-h)));
   --rh: calc(var(--rw) * 4 / 3);
   --hw: calc(var(--rw) * var(--hf));
@@ -1240,6 +1240,9 @@
 @container main (width >= 840px) {
   /* 高さは、窓から .main の上下の余白（18px + 28px）を引いたもの。文書全体がスクロールしないように（U-39） */
   .qz:has(> .head) {
+    /* 牌の下の読みの数の帯（22px。reads.css の --rd-h）の分を、卓の外の高さに足す（既定は 324px。縦に並べる配置は、文書がスクロールするので足さない） */
+    --chrome-h: 346px;
+
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);

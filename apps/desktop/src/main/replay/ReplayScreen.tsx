@@ -156,7 +156,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   // 読み（F23）。盤面を見ているだけの手と、答えたあとの場面でだけ使う（答える前の場面では、設定も読みも呼ばない）
   const readsActive = scene === null || answered.has(scene.key);
   const reads = useReadsFeature(session.id, readsActive);
-  const { visible: readsVisible, reads: readsData, toggle: toggleReads } = reads;
+  const { visible: readsVisible, reads: readsData, toggle: toggleReads, loaded: readsLoaded } = reads;
   const readsView = useMemo<ReadsMomentView | null>(() => {
     if (!readsVisible || readsData === null || step === undefined) return null;
     const moment = momentFor(readsData, momentAtStep(step, game.playerId));
@@ -204,7 +204,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
       if (action.id === 'toggle_reads') {
         // 読みの入切は、切り替えがある手（盤面を見ているだけの手・答えたあとの場面）でだけ働く
         table[action.id] = () => {
-          if (readsActive) toggleReads();
+          if (readsActive && readsLoaded) toggleReads();
         };
         continue;
       }
@@ -215,7 +215,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
       };
     }
     return table;
-  }, [nav, go, readsActive, toggleReads]);
+  }, [nav, go, readsActive, readsLoaded, toggleReads]);
   useReplayKeys(settings.keys, handlers);
 
   if (step === undefined || info === null) return null;
@@ -267,7 +267,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
         onFineMissOnly={setFineMissOnly}
         nagaUrl={session.naga?.url ?? null}
         readsToggle={
-          readsActive ? <ReadsToggle on={readsVisible} onToggle={toggleReads} keyChord={settings.keys.toggle_reads ?? null} /> : null
+          readsActive && readsLoaded ? <ReadsToggle on={readsVisible} onToggle={toggleReads} keyChord={settings.keys.toggle_reads ?? null} /> : null
         }
       />
       {scene === null ? (

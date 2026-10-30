@@ -39,7 +39,7 @@ interface QuizReadsParams {
 
 export function useQuizReads({ sessionId, game, decision, past, revealed }: QuizReadsParams): ReadsWork | null {
   const feature = useReadsFeature(sessionId, revealed);
-  useReadsKey(feature.keyChord, revealed, feature.toggle);
+  useReadsKey(feature.keyChord, revealed && feature.loaded, feature.toggle);
   const { visible, reads } = feature;
   const view = useMemo<ReadsMomentView | null>(() => {
     if (!visible || reads === null || past) return null;
@@ -48,7 +48,8 @@ export function useQuizReads({ sessionId, game, decision, past, revealed }: Quiz
   }, [visible, reads, past, game, decision]);
   if (!revealed) return null;
   return {
-    toggle: <ReadsToggle on={feature.visible} onToggle={feature.toggle} keyChord={feature.keyChord} />,
+    // 設定を読めるまでは、切り替えを出さない（入なのに、一瞬切に見えないように）
+    toggle: feature.loaded ? <ReadsToggle on={feature.visible} onToggle={feature.toggle} keyChord={feature.keyChord} /> : null,
     status: <ReadsFeatureStatus feature={feature} />,
     view,
   };

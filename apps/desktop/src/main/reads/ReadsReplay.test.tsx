@@ -69,6 +69,8 @@ async function loaded() {
 async function openReplay(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'この半荘を通して見る' }));
   await screen.findByRole('region', { name: '半荘を進める' });
+  // 設定を読めると、切り替えが出る（読めるまでは出さない）
+  await screen.findByRole('button', { name: '読み' });
 }
 
 function press(init: { code: string; key?: string; repeat?: boolean }) {

@@ -16,6 +16,8 @@ import { useSessionReads, type ReadsLoad } from './useSessionReads';
 export interface ReadsFeature {
   /** 読みを出してよい場面か。 */
   active: boolean;
+  /** 設定（入切の保存した値とキーの割り当て）を読めたか。読めるまでは、切り替えを出さない（入なのに、一瞬切に見えないように）。 */
+  loaded: boolean;
   /** 「読み」が入か（`active` でなければ、いつも false）。 */
   visible: boolean;
   /** 入切を替えて保存する。 */
@@ -37,6 +39,7 @@ export function useReadsFeature(sessionId: string, active: boolean): ReadsFeatur
   const toggle = useCallback(() => setVisible(!visible), [setVisible, visible]);
   return {
     active,
+    loaded: settings.loaded,
     visible,
     toggle,
     keyChord: settings.keyChord,

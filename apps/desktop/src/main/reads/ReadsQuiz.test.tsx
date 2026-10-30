@@ -57,6 +57,8 @@ async function answer(view: ReturnType<typeof open>) {
   await view.user.type(screen.getByLabelText('理由（1行）'), '待ちを避けて');
   await view.user.click(screen.getByRole('button', { name: '答え合わせ' }));
   await revealed();
+  // 設定を読めると、切り替えが出る（読めるまでは出さない）
+  await screen.findByRole('button', { name: '読み' });
 }
 
 const toggle = () => screen.getByRole('button', { name: '読み' });
