@@ -5,6 +5,7 @@ mod clipboard;
 mod helper_link;
 mod helper_setup;
 mod hook;
+mod process;
 mod sound;
 mod style;
 mod trash;
@@ -23,6 +24,7 @@ use crate::input_flow::Input;
 
 pub use clipboard::read_string as read_clipboard_string;
 pub use hook::start_input_hook;
+pub use process::hide_console_window;
 pub use style::style_window;
 pub use trash::recycler;
 pub use webview::harden as harden_webview;

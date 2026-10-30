@@ -4,7 +4,8 @@
 //! 半荘ごと（半荘の名前で。消した半荘 `trash/` は入れない）の結びつけ・自己評価の付け直し・MAKA の評価・メモ・解決した局面
 //! （半荘のフォルダの `links.json`・`self-ratings.json`・`maka.json`・`memos.json`・`resolved.json` の中身）、設定。
 //! 入れないもの: スクリーンショット（`marks/`・`ratings/`）、Mortal の結果（`report.json`）、ウィジェットの記録（`events.jsonl`）、
-//! 文字認識の写し（`ocr.json`）、設定のうち、この PC だけで意味を持つ値（データの保存先・ウィジェットの窓の位置）。
+//! 文字認識の写し（`ocr.json`）、読みの写し（`reads.json`。どの端末でも作り直せる。F23）、設定のうち、この PC だけで意味を持つ値
+//! （データの保存先・ウィジェットの窓の位置・飛ばした更新の版・読みの入切）。
 //!
 //! 読み込む: ファイルを全部確かめてから（版・形・ストアが書くときと同じ決まりの値）、いまの記録を、ファイルの内容に置き換える。
 //! 途中で失敗したら、元の記録のまま残す（先に新しいファイルを別の名前で書いておき、取引の中で答えを入れ替え、確定する前に
@@ -1098,7 +1099,12 @@ mod tests {
         assert!(!to_text(&exported).unwrap().contains("reads_visible"));
         // 読み込むと、いまの入切のまま（ファイルの側に値が無いので、入でも切でも、そのまま）
         assert!(exported.settings.applied_to(&on).reads_visible);
-        assert!(!exported.settings.applied_to(&Settings::default()).reads_visible);
+        assert!(
+            !exported
+                .settings
+                .applied_to(&Settings::default())
+                .reads_visible
+        );
         // 書き出す設定の項目に、読みの入切が入っていない
         let portable = serde_json::to_value(PortableSettings::from_settings(&on)).unwrap();
         assert!(portable.get("reads_visible").is_none(), "{portable}");

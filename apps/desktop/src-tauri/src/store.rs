@@ -4545,14 +4545,7 @@ mod tests {
         // 消した半荘のフォルダごと、置き場へ動く（元の場所には残らない）。消さなかった半荘のは、そのまま
         assert!(!store.root().join(GAMES_DIR).join(&older).exists());
         assert_eq!(
-            fs::read_to_string(
-                store
-                    .root()
-                    .join(TRASH_DIR)
-                    .join(&older)
-                    .join(READS_FILE)
-            )
-            .unwrap(),
+            fs::read_to_string(store.root().join(TRASH_DIR).join(&older).join(READS_FILE)).unwrap(),
             reads
         );
         assert!(session_dir_of(&store, &newer).join(READS_FILE).is_file());
@@ -4599,9 +4592,15 @@ mod tests {
         let records = store.session_records().unwrap();
         assert!(records[&id].is_empty());
         let text = serde_json::to_string(&records).unwrap();
-        assert!(!text.contains(marker) && !text.contains("jantama-reads"), "{text}");
+        assert!(
+            !text.contains(marker) && !text.contains("jantama-reads"),
+            "{text}"
+        );
         let listed = serde_json::to_string(&store.list_sessions().unwrap()).unwrap();
-        assert!(!listed.contains(marker) && !listed.contains("jantama-reads"), "{listed}");
+        assert!(
+            !listed.contains(marker) && !listed.contains("jantama-reads"),
+            "{listed}"
+        );
         // 空の記録を書き直しても（読み込みと同じ動き）、読みの写しは消えない
         write_session_records(&session_dir_of(&store, &id), &SessionRecords::default()).unwrap();
         assert!(session_dir_of(&store, &id).join(READS_FILE).is_file());

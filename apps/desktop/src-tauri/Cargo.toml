@@ -12,6 +12,12 @@ publish = false
 name = "jantama_reviewer_lib"
 crate-type = ["rlib"]
 
+# 解析エンジンを呼ぶ層（src/reads/engine_runner.rs）の試験。試験の実行ファイル自身を「偽のエンジン」にして動かすので、
+# 通常の試験の枠（libtest）は使わない（`read --report ...` の引数を、枠が自分の引数として読んで断ってしまうため）。
+[[test]]
+name = "engine_runner"
+harness = false
+
 # 本体（このパッケージ）と、管理者で動くボタンの補助プログラム（helper）、2 つが共有する部品（input）、
 # 取り込みのときだけ使う文字認識（ocr）。
 # `cargo build` で本体と補助プログラムの両方を作る（default-members）。
