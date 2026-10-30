@@ -44,6 +44,7 @@ describe('U-21 通して見る画面のキーの既定（R10-3、R11-4）', () =
       next_turn: null,
       kyoku_start: 'Home',
       kyoku_end: 'End',
+      toggle_reads: 'KeyR',
     });
   });
 
@@ -225,6 +226,22 @@ describe('U-21 設定の値を割り当てにする', () => {
       const assigned = Object.values(result).filter((key): key is string => key !== null);
       expect(new Set(assigned).size).toBe(assigned.length);
     }
+  });
+
+  it('F23 読みの入切: 既定は R。保存してある設定に値が無ければ R が入り、外した（null）ものは戻らない。ほかの操作が R を使っていれば割り当て無し', () => {
+    expect(defaultReplayKeys().toggle_reads).toBe('KeyR');
+    const old = normalizeReplayKeys({ step_back: 'KeyJ' });
+    expect(old.toggle_reads).toBe('KeyR');
+    expect(old.step_back).toBe('KeyJ');
+    expect(normalizeReplayKeys({ ...defaultReplayKeys(), toggle_reads: null }).toggle_reads).toBeNull();
+    expect(normalizeReplayKeys({ ...defaultReplayKeys(), toggle_reads: 'KeyY' }).toggle_reads).toBe('KeyY');
+    const taken = normalizeReplayKeys({ prev_turn: 'KeyR' });
+    expect(taken.prev_turn).toBe('KeyR');
+    expect(taken.toggle_reads).toBeNull();
+    // 割り当ての操作でも、ほかの操作が使っているキーは断る
+    expect(assignKey(defaultReplayKeys(), 'prev_turn', 'KeyR')).toMatchObject({ ok: false, reason: 'duplicate', other: 'toggle_reads' });
+    expect(assignKey(defaultReplayKeys(), 'toggle_reads', 'KeyY')).toMatchObject({ ok: true });
+    expect(formatChord('KeyR')).toBe('R');
   });
 
   it('U-21 Home・End は、割り当ての操作で、ほかの操作が使っていれば断る（局の頭に End は付けられない）', () => {
