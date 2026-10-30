@@ -109,6 +109,20 @@ describe('U-25 説明のアイコン: キーボードで選ぶと出る', () => 
     expect(tip()).not.toBeNull();
   });
 
+  it('マウスを離した直後に Tab で位置が来ても、離したときの「閉じる」で閉じない', async () => {
+    const { user, icon } = setup();
+    await user.hover(icon);
+    await user.keyboard('{Escape}');
+    expect(tip()).toBeNull();
+    // 離して、閉じるまでの猶予（220ms）の間に、キーボードで位置を移す
+    await user.unhover(icon);
+    await user.tab();
+    expect(icon).toHaveFocus();
+    expect(tip()).not.toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(tip()).not.toBeNull();
+  });
+
   it('Esc で閉じる。位置はアイコンに残る。Enter（Space）で開き直せて、もう一度押すと閉じる', async () => {
     const { user, icon } = setup();
     await user.tab();

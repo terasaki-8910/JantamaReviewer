@@ -1,5 +1,7 @@
 # Mac（Apple Silicon）の上で、試験（pnpm test の画面・計算と Rust）を動かす。Actions の画面から手で動かす（workflow_dispatch）。
 # Mac の許可（アクセシビリティ・画面収録）が要る確かめ（フック・撮影）と、Mac の文字認識は、ここでは動かせない（analysis/mac の段階 3・4）。
+# Mac のランナーは遅い（1 台で実ブラウザの検査を全部回すと 55 分かかり、時間切れの落ち方をした）ので、試験を 3 種に分け、
+# 実ブラウザの検査は 4 つに分けて並べて動かす。
 name: mac-test
 
 on:
@@ -9,9 +11,10 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  # 計算（packages/engine）と、画面の部品（jsdom）の試験
+  unit:
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
@@ -22,16 +25,47 @@ jobs:
         with:
           node-version: 24
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: 依存を入れる
+        run: pnpm install --frozen-lockfile
+
+      - name: 計算の試験
+        run: pnpm --filter @jantama/engine test
+
+      - name: 画面の部品の試験（jsdom）
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @jantama/desktop exec vitest run --exclude "tests/browser/**"
+
+  # 実ブラウザの検査（ランナーに入っている Chrome を使う）。4 つに分けて並べる。遅いランナーに合わせて、1 件の待ちを 60 秒にする
+  browser:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
 
       - name: 依存を入れる
         run: pnpm install --frozen-lockfile
 
-      # 実ブラウザの検査は、ランナーに入っている Chrome を使う
-      - name: 画面と計算の試験
-        run: pnpm test:ts
+      - name: 実ブラウザの検査
+        run: pnpm --filter @jantama/desktop exec vitest run tests/browser --maxWorkers=2 --shard=${{ matrix.shard }}/4 --testTimeout=60000
 
-      # 画面の試験が落ちても、Rust の試験の結果も見る
+  # Rust の試験。落ちた試験があっても、ほかの crate の試験を最後まで動かす（--no-fail-fast）
+  rust:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Rust の試験
-        if: ${{ !cancelled() }}
-        run: pnpm test:rust
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --workspace --no-fail-fast
