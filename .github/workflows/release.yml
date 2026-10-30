@@ -1,6 +1,7 @@
 # アプリ内の更新（F21）の配布。版のタグ（v0.2.0 の形）を push すると、Windows 用の署名つきインストーラー（NSIS の setup.exe）と、
-# 更新の情報（latest.json）と、署名のファイル（.sig）を作って、GitHub の Releases に置く。
+# Mac（Apple Silicon）用の .dmg と更新用の .app.tar.gz と、更新の情報（latest.json）と、署名のファイル（.sig）を作って、GitHub の Releases に置く。
 # アプリは、起動したときに、Releases の最新の版の latest.json を見て、新しい版を知らせる（src-tauri/src/update/config.rs）。
+# Actions の画面から手で動かす（workflow_dispatch）と、Releases には置かず、組み立てだけをして、できた物を Artifacts に置く（試しに入れる用）。
 #
 # 配るまでに、ユーザーがすること（push とタグの push も、ユーザーが打つ）:
 #   1. 署名の鍵の組を作る:  pnpm --filter @jantama/desktop tauri signer generate -w <秘密鍵のファイル>
@@ -18,6 +19,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 # Releases を作って、ファイルを置くのに要る
 permissions:
@@ -25,7 +27,18 @@ permissions:
 
 jobs:
   release:
-    runs-on: windows-latest
+    strategy:
+      # 片方の OS が失敗しても、もう片方は最後まで作って置く（失敗した OS のジョブだけを、あとで動かし直す）
+      fail-fast: false
+      matrix:
+        include:
+          # Windows: 署名つきのインストーラー（NSIS）。補助プログラムを本体と同じフォルダに入れる（tauri.release.windows.conf.json）
+          - platform: windows-latest
+            args: --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.windows.conf.json
+          # Mac（Apple Silicon）: 最初に入れる .dmg と、更新用の .app.tar.gz。コードの署名は ad-hoc（tauri.release.macos.conf.json。2026-10-30 の答え）
+          - platform: macos-latest
+            args: --config src-tauri/tauri.release.conf.json --config src-tauri/tauri.release.macos.conf.json --bundles app,dmg
+    runs-on: ${{ matrix.platform }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -43,11 +56,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # 公開鍵が入っていないと、アプリが更新の署名を確かめられない。タグと tauri.conf.json の版が違うと、
-      # 別の版の名前で配ることになる。どちらも、時間のかかる組み立ての前に止める
+      # 別の版の名前で配ることになる。どちらも、時間のかかる組み立ての前に止める（手で動かしたときは、タグが無いので版は比べない）
       - name: 公開鍵とタグの版を確かめる
         shell: pwsh
         env:
           TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           $release = Get-Content apps/desktop/src-tauri/tauri.release.conf.json -Raw | ConvertFrom-Json
           $pubkey = $release.plugins.updater.pubkey
@@ -59,16 +73,18 @@ jobs:
             throw 'src-tauri/src/update/config.rs の UPDATE_PUBLIC_KEY が、tauri.release.conf.json の公開鍵と違います。同じ値にしてください。'
           }
           $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          if ('v' + $version -ne $env:TAG) {
+          if ($env:REF_TYPE -eq 'tag' -and ('v' + $version -ne $env:TAG)) {
             throw "タグ $env:TAG と、tauri.conf.json の版 $version が違います。"
           }
 
-      # 補助プログラム（jantama-helper.exe）を先に作る。組み立ての設定（tauri.release.conf.json の resources）が、これをインストーラーに入れて、
-      # 本体と同じフォルダに置く（設定ページの「管理者の補助プログラムを設定する」が、そこから探す）
+      # 補助プログラム（jantama-helper.exe。Windows だけ）を先に作る。組み立ての設定（tauri.release.windows.conf.json の resources）が、
+      # これをインストーラーに入れて、本体と同じフォルダに置く（設定ページの「管理者の補助プログラムを設定する」が、そこから探す）
       - name: 補助プログラムを作る
+        if: runner.os == 'Windows'
         run: cargo build --release --manifest-path apps/desktop/src-tauri/Cargo.toml -p jantama-helper
 
-      # 署名つきのインストーラーと latest.json を作って、Releases に置く。
+      # 署名つきのインストーラーと latest.json を作って、Releases に置く（Windows と Mac のジョブが、同じ版の Releases に置き、
+      # latest.json は、あとから置くほうが、先に置かれたものに自分の OS の行を足す）。手で動かしたときは、タグが無いので、作るだけ。
       # tauri-action は v0 を使う: v1 は、latest.json のダウンロード先が GitHub の API の URL（api.github.com）になり、
       # アプリが通信する相手が増えるため（SPEC の S-2）。v0 は、Releases の普通の URL（github.com）を書く。
       - uses: tauri-apps/tauri-action@v0
@@ -80,13 +96,26 @@ jobs:
           projectPath: apps/desktop
           # pnpm の lock ファイルはリポジトリの直下にあり、apps/desktop には無いので、tauri-action が自分で選ぶと npm で動かしてしまう。pnpm を指定する
           tauriScript: pnpm tauri
-          # 更新の署名のファイルを作る設定と、補助プログラムを入れる設定は、組み立ての Actions だけで足す（手元の組み立ては、鍵なしで通る）
-          args: --config src-tauri/tauri.release.conf.json
-          tagName: ${{ github.ref_name }}
+          # 更新の署名のファイルを作る設定と、OS ごとの設定（補助プログラム・Mac の署名）は、組み立ての Actions だけで足す（手元の組み立ては、鍵なしで通る）
+          args: ${{ matrix.args }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: 'JantamaReviewer v__VERSION__'
-          releaseBody: 'JantamaReviewer の新しい版です。インストーラー（setup.exe）で入れられます。入れてあるアプリは、起動したときに、この版を知らせます。'
+          releaseBody: 'JantamaReviewer の新しい版です。Windows はインストーラー（setup.exe）、Mac（Apple Silicon）は .dmg で入れられます（Mac の入れ方は README の「Mac で使う」）。入れてあるアプリは、起動したときに、この版を知らせます。'
           releaseDraft: false
           # 「v0.3.0-beta.1」のように「-」の入ったタグは、先行版として置く（アプリが見る「最新の版」にならない）
           prerelease: ${{ contains(github.ref_name, '-') }}
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
+
+      # 手で動かしたとき（Releases に置かない）は、できた物を Actions の Artifacts に置く（試しに入れて確かめる用）
+      - name: できた物を Artifacts に置く
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v7
+        with:
+          name: bundle-${{ runner.os }}
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+            apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            apps/desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz
+          if-no-files-found: error
+          retention-days: 14
