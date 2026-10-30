@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { gameOf } from '../../../tests/fake-study';
 import {
   TABLE_CHROME_PX,
+  READS_BAND_PX,
   compactBelowHeight,
   deltaItems,
   formatSigned,
@@ -179,6 +180,13 @@ describe('卓の大きさの切り替えの高さ', () => {
     expect(compactBelowHeight(3, true)).toBe(1126);
     expect(compactBelowHeight(4, false)).toBe(1212);
     expect(compactBelowHeight(4, true)).toBe(1224);
+  });
+
+  it('読みの数の帯を取っておく画面は、その帯の分（22px）だけ、高い窓が要る。取っておかなければ、変わらない（F23）', () => {
+    expect(READS_BAND_PX).toBe(22);
+    expect(compactBelowHeight(3, false, 0, READS_BAND_PX)).toBe(compactBelowHeight(3, false) + 22);
+    expect(compactBelowHeight(2, true, 36, READS_BAND_PX)).toBe(compactBelowHeight(2, true) + 36 + 22);
+    expect(compactBelowHeight(3, false, 0, 0)).toBe(compactBelowHeight(3, false));
   });
 
   it('操作の段が折り返して増えた高さ（barExtra）の分だけ、高い窓が要る。足さなければ、変わらない（F17）', () => {

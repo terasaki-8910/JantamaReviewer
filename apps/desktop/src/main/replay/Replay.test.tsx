@@ -680,7 +680,7 @@ describe('U-21 キーの説明と割り当ての変更（アイコンを押す�
     await user.click(icon);
     expect(icon).toHaveAttribute('aria-expanded', 'true');
     const rows = [...dialog().querySelectorAll('.kp-row')];
-    expect(rows).toHaveLength(14);
+    expect(rows).toHaveLength(15);
     const text = (label: string) => rowOf(label).querySelector('.kp-key')?.textContent;
     expect(text('1手戻る')).toBe(',');
     expect(text('1手進む')).toBe('.');
@@ -696,6 +696,8 @@ describe('U-21 キーの説明と割り当ての変更（アイコンを押す�
     expect(text('次の巡目')).toBe('なし');
     expect(text('局の頭')).toBe('Home');
     expect(text('局の終わり')).toBe('End');
+    // 読み（F23）の入切は R。ほかの操作と同じ表に並ぶ
+    expect(text('読みの入切')).toBe('R');
     // もう一度押すと閉じる
     await user.click(icon);
     expect(screen.queryByRole('dialog')).toBeNull();

@@ -6,6 +6,7 @@
  * - 見出しの実戦の行動（「実戦：打3m」）は、出題だけ。解き直しは、答え合わせまで実戦の行動も AI の答えも出さない（U-1・U-17）
  * - 問題ごとに作り直す（呼ぶ側が `key` に問題の識別を入れる）。答えるまでの時間は、この画面を出した時刻から数える
  * - 答え合わせのあと、自分の答えの下に「終局直後のメモ」（その問題に結びつく迷いのメモ・追加のメモ。F4、U-28）。答える前は、DOM にも無い
+ * - 答え合わせのあと、卓の上に「読み」の切り替え（F23）。入にすると、手牌の下に牌ごとの待たれる確率、他家の席に聴牌の確率が出る。答える前は、DOM にも無い
  * - 迷いマークを結びつけた問題は、答えの欄のいちばん上に「迷いのスクショ」（F12、U-45）。出題は答える前から、解き直しは答え合わせのあとだけ
  *   （打牌の直後に押したスクショには、実戦の打牌が写るため）。前・次の手に付け替えたら、その問題のまま、読み上げの文を出す（迷いはこの問題から外れる）
  */
@@ -15,6 +16,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AnswerMode, AnswerRow } from '../../api/types';
 import { resolveMarks, type ResolvedMark } from '../markCards';
 import { memosForDecision } from '../memos';
+import { useQuizReads } from '../reads/ReadsWork';
 import { anyCalled, boardInfoOf } from './Board';
 import { HesitationShots } from './HesitationShots';
 import { relinkedText } from './shotMarks';
@@ -86,6 +88,8 @@ export function QuizScreen({
   const board = steps[step] ?? decision.board;
   const past = step < last;
   const work = useQuizWork({ decision, sessionId: session.id, mode, board, past, existing, previousIntervalDays });
+  // 読み（F23）: 答え合わせのあとにだけ作る（答える前は null）
+  const { work: reads, reserved: readsReserved } = useQuizReads({ sessionId: session.id, game, decision, past, revealed: work.revealed });
   const info = useMemo(() => boardInfoOf(decision.board, steps), [decision.board, steps]);
   // 迷いマークの結びつけ（迷いのスクショの欄と、答え合わせのあとのメモが使う）。迷いマークの無い半荘では、探さない
   const resolved = useMemo(() => (session.marks.length === 0 ? [] : resolveMarks(game.report, session)), [game.report, session]);
@@ -147,6 +151,7 @@ export function QuizScreen({
       ref={rootRef}
       data-state={work.revealed ? 'revealed' : 'answering'}
       data-dora={study.highlightDora ? 'on' : 'off'}
+      data-reads={readsReserved ? 'on' : undefined}
     >
       <header className="head qhead">
         <div className="q-main">
@@ -216,6 +221,7 @@ export function QuizScreen({
         game={game}
         eventIndex={frames[step]?.eventIndex ?? decision.eventIndex}
         openHands={openHands}
+        reads={reads}
       />
       <p className="sr-only" aria-live="polite" data-live="relinked">
         {relinked}

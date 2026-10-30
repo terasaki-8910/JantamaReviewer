@@ -1,6 +1,7 @@
-import type { DecisionKind, Tile as TileCode } from '@jantama/engine';
+import { tileKind, type DecisionKind, type Tile as TileCode } from '@jantama/engine';
 import { useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 
+import { ReadsCell, type HandReads } from '../reads/ReadsCell';
 import type { HandBar, HandBars } from './aiBars';
 import { isDoraTile } from './dora';
 import { Tile } from './Tile';
@@ -51,6 +52,12 @@ interface HandProps {
    * 渡さないときも、棒の帯（`--band`）は空のまま取っておく（答える前と答えたあとで、盤面が動かないように。U-1・U-39）。
    */
   bars?: HandBars | null;
+  /**
+   * 読み（F23）の、牌の下の数（3 段目）。読みを出してよい場面（答え合わせのあと・通して見る画面の自分のツモの手）で、読みの場面があるときだけ渡す。
+   * 渡さないときも、入切の好みが入の画面（根の `data-reads="on"`）は、数の帯（`--rd-h`）を空のまま取っておく（読みの入切・答える前と答えたあとで、盤面が動かないように。reads.css）。
+   * 好みが切の画面は、帯を取らない（これまでと同じ高さ）。
+   */
+  reads?: HandReads | null;
 }
 
 /** 牌の上の棒 1 本（読み上げない。読み上げは、手牌のそばの一覧が受け持つ）。AI の情報なので `data-ai`。 */
@@ -69,18 +76,20 @@ function tileLabel(item: HandItem, dora: boolean): string {
 }
 
 /** 手牌。切る牌を選ぶときは、1 つの Tab の止まり場所（矢印キーで牌の間を動く）で、Space か Enter で選ぶ。 */
-export function Hand({ items, interactive, kind, selected, revealed, marks, used, calledCaption, dora, onPick, bars = null }: HandProps) {
+export function Hand({ items, interactive, kind, selected, revealed, marks, used, calledCaption, dora, onPick, bars = null, reads = null }: HandProps) {
   const refs = useRef(new Map<number, HTMLButtonElement>());
+  const cellRefs = useRef(new Map<number, HTMLButtonElement>());
   // 矢印キーで動いた位置（選んでいる牌が替わったら、そこへ戻す）
   const [moved, setMoved] = useState<{ for: number | null; at: number } | null>(null);
   const rove = moved !== null && moved.for === selected ? moved.at : (selected ?? 0);
 
-  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+  // 矢印キー・Home・End で、同じ組（手牌の牌、牌の下の数）の中を動く
+  const moveWithin = (event: KeyboardEvent<HTMLButtonElement>, group: ReadonlyMap<number, HTMLButtonElement>) => {
     const { key } = event;
     if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'Home' && key !== 'End') return;
     // Alt+← → は画面の戻る・進む、Shift+← → は通して見る画面の前・次の局。ここでは使わない
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    const buttons = [...refs.current.entries()].filter(([, el]) => !el.disabled).sort((a, b) => a[0] - b[0]);
+    const buttons = [...group.entries()].filter(([, el]) => !el.disabled).sort((a, b) => a[0] - b[0]);
     const current = buttons.findIndex(([, el]) => el === document.activeElement);
     if (current < 0) return;
     const to =
@@ -92,10 +101,36 @@ export function Hand({ items, interactive, kind, selected, revealed, marks, used
     setMoved({ for: selected, at: target[0] });
     target[1].focus();
   };
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => moveWithin(event, refs.current);
+  const onCellKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => moveWithin(event, cellRefs.current);
+
+  // 牌の下の数の Tab の止まり場所は、手牌の牌と同じ位置（Tab の順は、牌 → その牌の下の数）
+  const firstCell = items.find((item) => !item.called)?.index ?? null;
+  const cellStop = items.some((item) => !item.called && item.index === rove) ? rove : firstCell;
+
+  /** 牌の下の数（読みを出さないときは、何も描かない。帯は CSS が取ってある）。 */
+  const readsCell = (item: HandItem) => {
+    if (reads === null || item.called) return null;
+    return (
+      <ReadsCell
+        tileName={tileName(item.tile)}
+        probability={reads.anyWait[tileKind(item.tile)] ?? 0}
+        expanded={reads.openIndex === item.index}
+        tabStop={item.index === cellStop}
+        bind={(el) => {
+          if (el === null) cellRefs.current.delete(item.index);
+          else cellRefs.current.set(item.index, el);
+        }}
+        onOpen={(trigger) => reads.onOpen(item.index, trigger)}
+        onKeyDown={onCellKeyDown}
+      />
+    );
+  };
 
   return (
     <>
-      <div className="hand-wrap" data-kind={kind} inert={!interactive}>
+      {/* 読みの数（F23）は押せる物なので、読みを出している間は、手牌ごと inert にしない（牌は、押せない牌の絵のまま） */}
+      <div className="hand-wrap" data-kind={kind} inert={!interactive && reads === null}>
         <div className="hand" role="group" aria-label="手牌（右端がツモ牌）">
           {items.map((item) => {
             const isDora = !item.called && isDoraTile(item.tile, dora);
@@ -113,6 +148,7 @@ export function Hand({ items, interactive, kind, selected, revealed, marks, used
                 <span className={`slot${item.draw ? ' draw' : ''}`} key={item.index} data-use={used.has(item.index) ? '1' : undefined}>
                   <BarColumn bar={bar} />
                   <Tile tile={item.tile} dora={isDora} alt={`${tileName(item.tile)}${item.draw ? '（ツモ牌）' : ''}`} />
+                  {readsCell(item)}
                 </span>
               );
             }
@@ -156,6 +192,7 @@ export function Hand({ items, interactive, kind, selected, revealed, marks, used
                       </span>
                     ))}
                 </span>
+                {readsCell(item)}
               </span>
             );
           })}

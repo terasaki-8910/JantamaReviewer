@@ -32,6 +32,8 @@ packages/*/dist/
 # テスト・解析の出力
 playwright-report/
 test-results/
+# 読みの画面（F23）の実ブラウザの検査が撮る画面写真（見て確かめるためのもの。リポジトリには入れない）
+apps/desktop/tests/browser/zz-reads-ui-shots/
 coverage/
 # パッケージマネージャのキャッシュ
 .pnpm-store/

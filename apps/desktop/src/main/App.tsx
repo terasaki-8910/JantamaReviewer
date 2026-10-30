@@ -13,6 +13,7 @@ import { Lightbox, type ViewerRequest } from './Lightbox';
 import { LogPage } from './log/LogPage';
 import { useLogState } from './log/useLogState';
 import { ReplayPage } from './replay/ReplayPage';
+import { focusSettingsSection, MODEL_SECTION_HEADING, SettingsLinkProvider, type OpenModelSettings } from './reads/settingsLink';
 import { relinkRatings } from './ratingRelink';
 import { RereadStore } from './rereadStore';
 import { SearchOverlay } from './search/SearchOverlay';
@@ -301,6 +302,19 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
   const openProblem = useCallback((sessionId: string, key: string) => push(quizView(sessionId, key)), [push]);
   // 半荘を通して見る画面。`key` は、開く判断の鍵（迷いのカードの「この局面を解く」）。無ければ半荘の頭から
   const openReplay = useCallback((sessionId: string, key?: string) => push(replayView(sessionId, key)), [push]);
+  // 読みのモデルが入っていないときの案内（F23）: 設定を開いて、「解析のモデル」の欄へ移る（設定が描かれてから移るので、見出しを探して待つ）
+  const sectionToFocus = useRef<string | null>(null);
+  const openModelSettings = useCallback<OpenModelSettings>(() => {
+    sectionToFocus.current = MODEL_SECTION_HEADING;
+    push({ kind: 'settings' });
+  }, [push]);
+  useEffect(() => {
+    if (view.kind !== 'settings') return undefined;
+    const heading = sectionToFocus.current;
+    if (heading === null) return undefined;
+    sectionToFocus.current = null;
+    return focusSettingsSection(heading);
+  }, [view]);
 
   // 取り込みが終わったら、一覧を読み直す（保存した結果の段階・Rating を出すため。Rust 側の知らせの取りこぼしにも備える）。
   useEffect(() => {
@@ -450,7 +464,7 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
   const solvedLine = solvedProblemsLine(solved);
 
   return (
-    <Providers study={study} openViewer={setViewer}>
+    <Providers study={study} openViewer={setViewer} openModelSettings={openModelSettings}>
       <div
         className="app"
         data-sb={sidebar.shown ? 'shown' : 'hidden'}
@@ -585,11 +599,23 @@ function Shell({ solvedProblems, recordsNotice, startOnSettings, onRecordsReplac
   );
 }
 
-/** 出題のデータと、迷いの画像を大きく表示する関数（半荘のページの迷いのカードと、出題・通して見る画面の「迷いのスクショ」が使う）を、画面に配る。 */
-function Providers({ study, openViewer, children }: { study: StudyValue; openViewer: OpenViewer; children: ReactNode }) {
+/** 出題のデータと、迷いの画像を大きく表示する関数（半荘のページの迷いのカードと、出題・通して見る画面の「迷いのスクショ」が使う）と、設定の「解析のモデル」を開く関数（読みの案内が使う。F23）を、画面に配る。 */
+function Providers({
+  study,
+  openViewer,
+  openModelSettings,
+  children,
+}: {
+  study: StudyValue;
+  openViewer: OpenViewer;
+  openModelSettings: OpenModelSettings;
+  children: ReactNode;
+}) {
   return (
     <StudyProvider value={study}>
-      <ViewerProvider value={openViewer}>{children}</ViewerProvider>
+      <ViewerProvider value={openViewer}>
+        <SettingsLinkProvider value={openModelSettings}>{children}</SettingsLinkProvider>
+      </ViewerProvider>
     </StudyProvider>
   );
 }
