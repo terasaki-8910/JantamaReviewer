@@ -4,7 +4,8 @@
 //! 迷いだけを記録する（既定は入。ウィジェットが 48px 角の「迷い」ボタン 1 つになり、〇△✕ と終局直後メモの画面の部品を出さない）、
 //! 雀魂の窓を探す語、データの保存先、出題の設定（1 日に出す数・ドラを目立たせる）、
 //! 半荘を通して見る画面の設定（AI の1位と違う判断も飛び先に入れる・キーの割り当て）、
-//! 更新の知らせで「この版は飛ばす」を押した版（この PC だけの値。データの保存先・窓の位置と同じく、同期にも書き出しにも入れない）。
+//! 更新の知らせで「この版は飛ばす」を押した版と、盤面の「読み」の入切（どちらもこの PC だけの値。データの保存先・窓の位置と同じく、
+//! 同期にも書き出しにも入れない）。
 
 use std::ffi::OsString;
 use std::fs;
@@ -165,6 +166,9 @@ pub struct Settings {
     /// 更新の知らせで「この版は飛ばす」を押した版（F21、E-50）。この版では知らせを出さず、もっと新しい版が出たら、また出す。
     /// この PC だけの値なので、同期（`sync::local::SETTING_NAMES`）にも書き出し（`PortableSettings`）にも入れない。無ければ `None`。
     pub skipped_update_version: Option<String>,
+    /// 盤面の「読み」（他家の聴牌と待ち。F23）を入にしているか（既定は切）。この PC だけの値なので、`skipped_update_version` と同じく、
+    /// 同期（`sync::local::SETTING_NAMES`）にも書き出し（`PortableSettings`）にも入れず、記録を読み込んでも、いまのまま残る。
+    pub reads_visible: bool,
 }
 
 impl Default for Settings {
@@ -186,6 +190,7 @@ impl Default for Settings {
             replay_keys: replay_keys::default_keys(),
             replay_keys_revision: replay_keys::KEYS_REVISION,
             skipped_update_version: None,
+            reads_visible: false,
         }
     }
 }
@@ -273,6 +278,8 @@ impl Settings {
             // 無い・文字でない値は、「飛ばした版は無い」として読む（前の版の設定ファイルには、この項目が無い）。
             skipped_update_version: field::<Option<String>>(value, "skipped_update_version")
                 .flatten(),
+            // 無い・真偽でない値は、切として読む（前の版の設定ファイルには、この項目が無い）。
+            reads_visible: field(value, "reads_visible").unwrap_or(defaults.reads_visible),
         }
     }
 
@@ -629,6 +636,56 @@ mod tests {
             .normalized();
         assert_eq!(from_file.skipped_update_version, None);
         assert_eq!(spaced.validate(), Ok(()));
+    }
+
+    #[test]
+    fn f23_reads_visible_is_off_by_default_and_a_file_without_it_reads_as_off() {
+        assert!(!Settings::default().reads_visible);
+        // 前の版の設定ファイル（この項目が無い）は、切として読む。ほかの項目は守る。
+        let old = Settings::from_json_str(r#"{ "sound": false, "daily_count": 8 }"#).unwrap();
+        assert!(!old.reads_visible);
+        assert!(!old.sound);
+        assert_eq!(old.daily_count, 8);
+        // 画面から届く設定にこの項目が無くても（`#[serde(default)]`）、切になる。
+        let from_page: Settings = serde_json::from_str(r#"{ "sound": false }"#).unwrap();
+        assert!(!from_page.reads_visible);
+        // 真偽でない値も、切として読む。ほかの項目は守る
+        for bad in ["null", "7", r#""yes""#, r#"{ "on": true }"#] {
+            let s = Settings::from_json_str(&format!(
+                r#"{{ "reads_visible": {bad}, "sound": false, "daily_count": 8 }}"#
+            ))
+            .unwrap();
+            assert!(!s.reads_visible, "{bad}");
+            assert!(!s.sound, "{bad}");
+            assert_eq!(s.daily_count, 8, "{bad}");
+        }
+        // 入は、入として読む
+        let on = Settings::from_json_str(r#"{ "reads_visible": true, "sound": false }"#).unwrap();
+        assert!(on.reads_visible);
+        assert!(!on.sound);
+        assert_eq!(on.validate(), Ok(()));
+    }
+
+    #[test]
+    fn f23_reads_visible_is_saved_and_read_back_and_always_written_to_the_file() {
+        let dir = temp_dir();
+        let path = settings_path(dir.path());
+        // 切のときも、項目は false で書く（settings.json の形が、いつも同じ）
+        Settings::default().save(&path).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"reads_visible\": false"), "{text}");
+        let saved = Settings {
+            reads_visible: true,
+            ..Settings::default()
+        };
+        saved.save(&path).unwrap();
+        let loaded = Settings::load(&path).unwrap();
+        assert_eq!(loaded, saved);
+        assert!(loaded.reads_visible);
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"reads_visible\": true"), "{text}");
+        // 正規化しても、入のまま
+        assert!(saved.normalized().reads_visible);
     }
 
     #[test]

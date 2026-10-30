@@ -58,6 +58,10 @@ pub const MEMOS_FILE: &str = "memos.json";
 pub const RESOLVED_FILE: &str = "resolved.json";
 /// NAGA の結果のページの URL（半荘ごとに 1 つ）のファイル名（半荘のフォルダの中。F22 段 2）。
 pub const NAGA_FILE: &str = "naga.json";
+/// 読み（他家の聴牌と待ち。F23）の計算結果のファイル名（半荘のフォルダの中。解析エンジンが書く。`reads::reads_file`）。
+/// 手元のモデルで作り直せるので、同期にも書き出しにも入れない（`SessionRecords` に入れず、同期の走査も名前を書かない。D-8）。
+/// 半荘のフォルダごと、ごみ箱へ動き、戻ってくる。
+pub const READS_FILE: &str = "reads.json";
 /// 読み込んだ記録のうち、この保存先にまだフォルダの無い半荘の分を、フォルダが現れるまで取っておくファイル名（保存先の直下。D-2）。
 pub const PENDING_FILE: &str = "pending-records.json";
 /// メモの「候補」の長さの上限（文字数）。「3m・6p」のような短い文。
@@ -4526,6 +4530,81 @@ mod tests {
             store.load_naga(&older).unwrap().map(|naga| naga.url),
             Some(sample_url("a1"))
         );
+    }
+
+    // ---- F23・D-8: 読みの写し（reads.json）は、記録に入らず、半荘のフォルダと一緒に動く ----
+
+    #[test]
+    fn d8_the_reads_file_moves_with_the_session_folder_when_it_is_deleted_and_restored() {
+        let (_tmp, mut store) = open_store();
+        let (older, newer) = two_sessions(&mut store);
+        let reads = "{\"format\":\"jantama-reads/1\",\"moments\":[]}";
+        fs::write(session_dir_of(&store, &older).join(READS_FILE), reads).unwrap();
+        fs::write(session_dir_of(&store, &newer).join(READS_FILE), reads).unwrap();
+        store.delete_sessions(std::slice::from_ref(&older)).unwrap();
+        // 消した半荘のフォルダごと、置き場へ動く（元の場所には残らない）。消さなかった半荘のは、そのまま
+        assert!(!store.root().join(GAMES_DIR).join(&older).exists());
+        assert_eq!(
+            fs::read_to_string(
+                store
+                    .root()
+                    .join(TRASH_DIR)
+                    .join(&older)
+                    .join(READS_FILE)
+            )
+            .unwrap(),
+            reads
+        );
+        assert!(session_dir_of(&store, &newer).join(READS_FILE).is_file());
+        // 戻すと、同じ中身で戻ってくる
+        store
+            .restore_sessions(std::slice::from_ref(&older))
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(session_dir_of(&store, &older).join(READS_FILE)).unwrap(),
+            reads
+        );
+    }
+
+    #[test]
+    fn d8_the_reads_file_is_not_a_record_and_never_reaches_the_records_of_a_session() {
+        // 書き出し・読み込みの対象の記録の 6 つのファイルに、読みの写しは入っていない
+        let names: Vec<&str> = SessionRecords::default()
+            .files()
+            .unwrap()
+            .iter()
+            .map(|(name, _)| *name)
+            .collect();
+        assert_eq!(
+            names,
+            [
+                LINKS_FILE,
+                SELF_RATINGS_FILE,
+                MAKA_FILE,
+                MEMOS_FILE,
+                RESOLVED_FILE,
+                NAGA_FILE
+            ]
+        );
+        assert!(!names.contains(&READS_FILE));
+        // 半荘のフォルダに読みの写しがあっても、書き出す記録（`session_records`）にも、一覧（`list_sessions`）にも、中身は出ない
+        let (_tmp, mut store) = open_store();
+        let id = session_with_records(&mut store);
+        let marker = "READS-SENTINEL-0a1b";
+        fs::write(
+            session_dir_of(&store, &id).join(READS_FILE),
+            format!("{{\"format\":\"jantama-reads/1\",\"note\":\"{marker}\"}}"),
+        )
+        .unwrap();
+        let records = store.session_records().unwrap();
+        assert!(records[&id].is_empty());
+        let text = serde_json::to_string(&records).unwrap();
+        assert!(!text.contains(marker) && !text.contains("jantama-reads"), "{text}");
+        let listed = serde_json::to_string(&store.list_sessions().unwrap()).unwrap();
+        assert!(!listed.contains(marker) && !listed.contains("jantama-reads"), "{listed}");
+        // 空の記録を書き直しても（読み込みと同じ動き）、読みの写しは消えない
+        write_session_records(&session_dir_of(&store, &id), &SessionRecords::default()).unwrap();
+        assert!(session_dir_of(&store, &id).join(READS_FILE).is_file());
     }
 
     // ---- U-28: 終局直後のメモの保存（memos.json） ----
