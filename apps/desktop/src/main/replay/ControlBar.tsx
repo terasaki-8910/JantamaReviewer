@@ -5,7 +5,6 @@
  * 2 段目: 前・次の悪手（あと何か所）・前・次の迷い（あと何か所。「細かいミスだけ」の切り替えつき）
  * 解決した場面（F16）は、飛ぶ先にも、数にも入れない。
  * 3 段目: 位置の帯
- * 2 段目の右には、「読み」の切り替え（F23）。盤面を見ているだけの手と、答えたあとの場面にだけある（答える前の場面にはない。U-1）。
  * 3 段目の位置の帯には、他家の手牌を開いているときだけ、他家が聴牌になった手の目盛りが付く（F14、R16-7 の A）。
  * 他家の手牌の開け閉めは、盤面の手牌のボタン（Board.tsx）。ここには無い（R16-7）。
  * 押したボタンが端で押せなくなったとき、キーボードの位置が消えないよう、対のボタン（それも押せなければ位置の帯）へ移す。
@@ -41,11 +40,6 @@ interface ControlBarProps {
   onFineMissOnly: (on: boolean) => void;
   /** 半荘に保存した NAGA の結果の URL（F22 段 2）。あれば、1 段目のキーの一覧のアイコンの左に、いつものブラウザで開くリンクを出す。 */
   nagaUrl?: string | null;
-  /**
-   * 「読み」の切り替え（F23）。盤面を見ているだけの手と、答えたあとの場面でだけ渡す（答える前の場面では渡さず、DOM に無い。U-1）。
-   * 2 段目（悪手・迷いの段）の右に置く。「細かいミスだけ」と同じ見た目。
-   */
-  readsToggle?: ReactNode;
 }
 
 /** 「飛ぶ」段ごとの、前・次の操作と、場面の呼び名。 */
@@ -68,7 +62,7 @@ const PAIR: Partial<Record<NavAction, NavAction>> = {
   next_doubt: 'prev_doubt',
 };
 
-export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKey, go, onChangeKeys, ticks, fineMissOnly, onFineMissOnly, nagaUrl = null, readsToggle = null }: ControlBarProps) {
+export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKey, go, onChangeKeys, ticks, fineMissOnly, onFineMissOnly, nagaUrl = null }: ControlBarProps) {
   const step = timeline.steps[g];
   const kyoku = step === undefined ? undefined : timeline.kyokus[step.kyokuPosition];
   const buttons = useRef(new Map<NavAction, HTMLButtonElement>());
@@ -265,7 +259,6 @@ export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKe
       <div className="pb-jumps">
         {jump('mismatch')}
         {jump('doubt')}
-        {readsToggle !== null && <div className="pb-reads">{readsToggle}</div>}
       </div>
       <div ref={trackFallback}>
         <Strip timeline={timeline} g={g} scenes={scenes} answered={answered} currentKey={currentKey} go={go} ticks={ticks} />

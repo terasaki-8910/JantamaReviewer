@@ -1,8 +1,9 @@
 /**
  * 作業の面（卓・手牌・右の欄）に渡す「読み」（F23）をまとめる。
- * - `ReadsWork`: 作業の面が受け取るもの。切り替え（出題・解き直しは卓の上、通して見る画面は操作の段にあるので渡さない）・右の欄の上の状態の行・
+ * - `ReadsWork`: 作業の面が受け取るもの。卓の上の切り替え・右の欄の上の状態の行・
  *   手牌の下と他家の席と吹き出しに出す場面（無ければ null）
- * - `useQuizReads`: 出題・解き直しの画面の分。答え合わせのあとにだけ作る（答える前は null。DOM にも、読みのコマンドの呼び出しにも出ない。U-1）
+ * - `useQuizReads`: 出題・解き直しの画面の分。`work` は答え合わせのあとにだけ作る（答える前は null。DOM にも、読みのコマンドの呼び出しにも出ない。U-1）。
+ *   `reserved` は、手牌の下の帯を取っておくか（画面の根の `data-reads`）
  */
 import type { Decision, ImportedGame } from '@jantama/engine';
 import { useMemo, type ReactNode } from 'react';
@@ -15,6 +16,7 @@ import { useOpenModelSettings } from './settingsLink';
 import { useReadsFeature, useReadsKey, type ReadsFeature } from './useReadsFeature';
 
 export interface ReadsWork {
+  /** 卓の上の 1 行（盤面の見方の左）に置く切り替え。設定を読めるまでは null。 */
   toggle?: ReactNode;
   status: ReactNode;
   view: ReadsMomentView | null;
@@ -37,7 +39,7 @@ interface QuizReadsParams {
   revealed: boolean;
 }
 
-export function useQuizReads({ sessionId, game, decision, past, revealed }: QuizReadsParams): ReadsWork | null {
+export function useQuizReads({ sessionId, game, decision, past, revealed }: QuizReadsParams): { work: ReadsWork | null; reserved: boolean } {
   const feature = useReadsFeature(sessionId, revealed);
   useReadsKey(feature.keyChord, revealed && feature.loaded, feature.toggle);
   const { visible, reads } = feature;
@@ -46,11 +48,14 @@ export function useQuizReads({ sessionId, game, decision, past, revealed }: Quiz
     const moment = momentFor(reads, momentAtDecision(game, decision));
     return moment === null ? null : { moment, board: decision.board };
   }, [visible, reads, past, game, decision]);
-  if (!revealed) return null;
+  if (!revealed) return { work: null, reserved: feature.reserved };
   return {
-    // 設定を読めるまでは、切り替えを出さない（入なのに、一瞬切に見えないように）
-    toggle: feature.loaded ? <ReadsToggle on={feature.visible} onToggle={feature.toggle} keyChord={feature.keyChord} /> : null,
-    status: <ReadsFeatureStatus feature={feature} />,
-    view,
+    work: {
+      // 設定を読めるまでは、切り替えを出さない（入なのに、一瞬切に見えないように）
+      toggle: feature.loaded ? <ReadsToggle on={feature.visible} onToggle={feature.toggle} keyChord={feature.keyChord} /> : null,
+      status: <ReadsFeatureStatus feature={feature} />,
+      view,
+    },
+    reserved: feature.reserved,
   };
 }

@@ -154,10 +154,13 @@ export function kyokuCounts(timeline: ReplayTimeline, scenes: readonly ReplaySce
 // ---- 卓の大きさ（窓の高さが足りないとき、小さい配置にする） ----
 
 /**
- * 卓が大きい配置のとき、見出し・操作の段・卓の上の 1 行（盤面の見方）・手牌（と、その上の棒の帯・牌の下の読みの数の帯・下の印の行）をのぞいて、卓に使える高さを決める「卓の外の高さ」（px）。
+ * 卓が大きい配置のとき、見出し・操作の段・卓の上の 1 行（盤面の見方）・手牌（と、その上の棒の帯・下の印の行）をのぞいて、卓に使える高さを決める「卓の外の高さ」（px）。
  * replay.css の `.rp` の `--chrome-h` と同じ値（変えるときは両方）。
  */
-export const TABLE_CHROME_PX = 498;
+export const TABLE_CHROME_PX = 476;
+
+/** 牌の下の読みの数の帯の高さ（px。reads.css の `--rd-h`）。読みの帯を取っておく画面（`data-reads="on"`）では、卓の外の高さに足す。 */
+export const READS_BAND_PX = 22;
 
 /** 手牌の下に残す余白（px）。主の欄の下の余白（28px）のぶん、手牌が窓の下の端にくっつかないように。 */
 export const TABLE_BOTTOM_SLACK_PX = 24;
@@ -176,12 +179,13 @@ export const TABLE_TILE_MIN_PX = 36;
  * 大きい配置は、窓の高さから牌の幅を決めるが、下限（36px）より小さくはできないので、河の段が多い局ほど高い窓が要る。
  * `rows` は河の段の数（6 枚で折り返す。最低 2）、`riichiAny` はリーチ宣言牌（横向き）の分の余白があるか（quiz.css の `--kwy`・`--cwy` と同じ式）。
  * `barExtra` は、操作の段の「飛ぶ」段が折り返して増えた高さ（px。`.rp` の `--bar-extra` と同じ値。F17。既定は 0）。
+ * `readsBand` は、読みの数の帯を取っておく画面で足す高さ（`READS_BAND_PX`。既定は 0）。
  */
-export function compactBelowHeight(rows: number, riichiAny: boolean, barExtra = 0): number {
+export function compactBelowHeight(rows: number, riichiAny: boolean, barExtra = 0, readsBand = 0): number {
   // 高さ: --kwy = --kw + --g（手牌の帯の隙間）、--cwy = --cw + --hk（手牌の帯）
   const kw = 2 * 12 + 4 * 8 + 2 * rows + 3 + 8;
   const cw = 6 + (rows * 8) / 3 + (riichiAny ? 1 / 3 : 0) + TABLE_HAND_BAND;
-  return Math.ceil(TABLE_CHROME_PX + barExtra + kw + TABLE_TILE_MIN_PX * cw + TABLE_BOTTOM_SLACK_PX);
+  return Math.ceil(TABLE_CHROME_PX + barExtra + readsBand + kw + TABLE_TILE_MIN_PX * cw + TABLE_BOTTOM_SLACK_PX);
 }
 
 // ---- 行き先（どの操作も、いまの手 `g` からの行き先の手の通し番号。無ければ null） ----

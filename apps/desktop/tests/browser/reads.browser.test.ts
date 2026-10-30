@@ -5,7 +5,8 @@
  * - 幅 390・768・1280×800（と 1440×900・1920×1080）、ライト・ダークで、通して見る画面（上家がリーチ中に自分が打つ場面）と、
  *   解き直しの答え合わせのあとに、読みを出す。横スクロールが無く、手牌の下の数が隣と重ならず、自分の牌の列の中に収まる。
  *   他家の席の札は中央の箱に収まり、折り返さない。axe の重大が 0
- * - 読みの入切で、卓も手牌の帯も文書の高さも動かない。1280×800・1440×900・1920×1080 で、文書は窓の高さに収まる（U-39）
+ * - 手牌の下の帯: 好みが切の画面は、これまでと同じ（帯を取らない）。入の画面は、切っても入れ直しても、卓も手牌も文書も動かない。
+ *   1280×800・1440×900・1920×1080 で、文書は窓の高さに収まる（U-39）
  * - 答える前は、読みの切り替えも数も札も DOM に無く、読みのコマンドも呼ばない（U-1）
  * - 吹き出しは、牌の列の上に出て（幅 390px では画面の下から）、Esc・外を押すと閉じる。数は Tab で届く
  * - 見て確かめるための画面写真を、tests/browser/zz-reads-ui-shots/ に撮る（リポジトリには入れない）
@@ -441,60 +442,78 @@ describe('U-53・U-4〜U-6: 通して見る画面（上家がリーチ中に自�
   }
 });
 
-describe('U-39: 読みの入切で動かない。文書は窓の高さに収まる', () => {
+describe('U-39: 手牌の下の帯の取り方。好みが切の画面は変わらず、入の画面は入切で動かない。文書は窓の高さに収まる', () => {
+  /** 卓・手牌・文書の大きさが、2 つの測りで同じ（0.5px まで）。 */
+  function expectSameLayout(a: ReadsLayout, b: ReadsLayout, where: string): void {
+    for (const key of ['top', 'left', 'width', 'height'] as const) {
+      expect(Math.abs((a.table as Box)[key] - (b.table as Box)[key]), `${where} 卓の ${key}`).toBeLessThanOrEqual(0.5);
+    }
+    expect(Math.abs((a.handWrap as Box).top - (b.handWrap as Box).top), `${where} 手牌の上`).toBeLessThanOrEqual(0.5);
+    expect(Math.abs((a.handWrap as Box).bottom - (b.handWrap as Box).bottom), `${where} 手牌の下`).toBeLessThanOrEqual(0.5);
+    expect(a.document.scrollHeight, `${where} 文書の高さ`).toBe(b.document.scrollHeight);
+    expect(Math.abs(a.center.width - b.center.width), `${where} 中央の箱`).toBeLessThanOrEqual(0.5);
+  }
+
+  const rootReads = (page: Page) => page.evaluate(() => document.querySelector('.rp, .qz')?.getAttribute('data-reads') ?? null);
+  const slotPadding = (page: Page) => page.evaluate(() => getComputedStyle(document.querySelector('.hand .slot') as Element).paddingBottom);
+
   for (const [width, height] of [
     [1280, 800],
     [1440, 900],
     [1920, 1080],
   ] as const) {
-    it(`${width}×${height}: 通して見る画面と解き直しで、入切の前後の卓・手牌の帯・文書の高さが同じ。入のときも文書は窓の高さに収まる`, { timeout: 300_000 }, async () => {
-      const replay = await open({ width, height, reads: { visible: false } });
-      try {
-        await replay.page.getByRole('button', { name: 'この半荘を通して見る' }).click();
-        await replay.page.locator('.pbar').waitFor();
-        for (let count = 0; count < RIICHI_STEP; count += 1) await replay.page.keyboard.press('Period');
-        await toggle(replay.page).waitFor();
-        const off = await measureReads(replay.page);
-        expect(off.cells).toHaveLength(0);
-        await toggle(replay.page).click();
-        await replay.page.locator('.rd-cell').first().waitFor();
-        const on = await measureReads(replay.page);
-        const where = `${width}×${height} 通して見る`;
-        expect(Math.abs((off.table as Box).top - (on.table as Box).top), `${where} 卓の上`).toBeLessThanOrEqual(0.5);
-        expect(Math.abs((off.table as Box).height - (on.table as Box).height), `${where} 卓の高さ`).toBeLessThanOrEqual(0.5);
-        expect(Math.abs((off.table as Box).width - (on.table as Box).width), `${where} 卓の幅`).toBeLessThanOrEqual(0.5);
-        expect(Math.abs((off.handWrap as Box).top - (on.handWrap as Box).top), `${where} 手牌の上`).toBeLessThanOrEqual(0.5);
-        expect(Math.abs((off.handWrap as Box).bottom - (on.handWrap as Box).bottom), `${where} 手牌の下`).toBeLessThanOrEqual(0.5);
-        expect(off.document.scrollHeight, `${where} 文書の高さ`).toBe(on.document.scrollHeight);
-        expect(on.document.scrollHeight, `${where} 文書は窓に収まる`).toBeLessThanOrEqual(on.document.innerHeight);
-        // 手牌の下の端も、窓の中
-        expect((on.handWrap as Box).bottom, `${where} 手牌の下は窓の中`).toBeLessThanOrEqual(on.document.innerHeight);
-        // 入切の前後で、中央の箱の大きさも同じ
-        expect(Math.abs(off.center.width - on.center.width), `${where} 中央の箱`).toBeLessThanOrEqual(0.5);
-        expect(Math.abs(off.center.height - on.center.height), `${where} 中央の箱`).toBeLessThanOrEqual(0.5);
-        expect(replay.problems).toEqual([]);
-      } finally {
-        await replay.context.close();
-      }
-      const review = await open({ width, height, reads: { visible: false } });
-      try {
-        await openReviewAndReveal(review.page);
-        await toggle(review.page).waitFor();
-        const off = await measureReads(review.page);
-        await toggle(review.page).click();
-        await review.page.locator('.rd-cell').first().waitFor();
-        const on = await measureReads(review.page);
-        const where = `${width}×${height} 解き直し`;
-        for (const key of ['top', 'height', 'width'] as const) {
-          expect(Math.abs((off.table as Box)[key] - (on.table as Box)[key]), `${where} 卓の ${key}`).toBeLessThanOrEqual(0.5);
+    it(`${width}×${height}: 通して見る画面・解き直しで、好みが切なら帯を取らず（これまでと同じ）、入なら取る。入の画面は、切っても入れ直しても、卓も手牌も文書も動かず、文書は窓の高さに収まる`, { timeout: 300_000 }, async () => {
+      for (const kind of ['replay', 'review'] as const) {
+        const where = `${width}×${height} ${kind === 'replay' ? '通して見る' : '解き直し'}`;
+        // 好みが入: 開いたときから帯を取っている
+        const on = await open({ width, height, reads: { visible: true } });
+        try {
+          if (kind === 'replay') await openReplayAtRiichi(on.page);
+          else {
+            await openReviewAndReveal(on.page);
+            await on.page.locator('.rd-cell').first().waitFor();
+          }
+          expect(await rootReads(on.page), `${where} 入`).toBe('on');
+          expect(await slotPadding(on.page), `${where} 帯`).toBe('22px');
+          const shown = await measureReads(on.page);
+          expect(shown.document.scrollHeight, `${where} 文書は窓に収まる`).toBeLessThanOrEqual(shown.document.innerHeight);
+          expect((shown.handWrap as Box).bottom, `${where} 手牌の下は窓の中`).toBeLessThanOrEqual(shown.document.innerHeight);
+          // 切っても、画面を離れるまで取ったまま（卓も手牌も動かない）
+          await toggle(on.page).click();
+          await expect.poll(() => on.page.locator('.rd-cell').count()).toBe(0);
+          expectSameLayout(shown, await measureReads(on.page), `${where} 切る`);
+          await toggle(on.page).click();
+          await on.page.locator('.rd-cell').first().waitFor();
+          expectSameLayout(shown, await measureReads(on.page), `${where} 入れ直す`);
+          expect(on.problems).toEqual([]);
+        } finally {
+          await on.context.close();
         }
-        expect(Math.abs((off.handWrap as Box).bottom - (on.handWrap as Box).bottom), `${where} 手牌の下`).toBeLessThanOrEqual(0.5);
-        expect(off.document.scrollHeight, `${where} 文書の高さ`).toBe(on.document.scrollHeight);
-        expect(on.document.scrollHeight, `${where} 文書は窓に収まる`).toBeLessThanOrEqual(on.document.innerHeight);
-        // 答える前の卓と、読みを入れた答えたあとの卓が、同じ大きさ
-        expect(review.problems).toEqual([]);
-      } finally {
-        await review.context.close();
+        // 好みが切: 帯を取らない（これまでと同じ）。入にすると取る（卓が小さくなりうるが、文書は窓の高さに収まる）
+        const off = await open({ width, height, reads: { visible: false } });
+        try {
+          if (kind === 'replay') {
+            await off.page.getByRole('button', { name: 'この半荘を通して見る' }).click();
+            await off.page.locator('.pbar').waitFor();
+            for (let count = 0; count < RIICHI_STEP; count += 1) await off.page.keyboard.press('Period');
+            await toggle(off.page).waitFor();
+          } else {
+            await openReviewAndReveal(off.page);
+            await toggle(off.page).waitFor();
+          }
+          expect(await rootReads(off.page), `${where} 切`).toBeNull();
+          expect(await slotPadding(off.page), `${where} 帯なし`).toBe('0px');
+          const before = await measureReads(off.page);
+          expect(before.document.scrollHeight, `${where} 切 文書は窓に収まる`).toBeLessThanOrEqual(before.document.innerHeight);
+          await toggle(off.page).click();
+          await off.page.locator('.rd-cell').first().waitFor();
+          expect(await rootReads(off.page), `${where} 入にした`).toBe('on');
+          const after = await measureReads(off.page);
+          expect(after.document.scrollHeight, `${where} 入にしたあとも文書は窓に収まる`).toBeLessThanOrEqual(after.document.innerHeight);
+          expect(off.problems).toEqual([]);
+        } finally {
+          await off.context.close();
+        }
       }
     });
   }

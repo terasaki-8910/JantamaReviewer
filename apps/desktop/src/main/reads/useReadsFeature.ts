@@ -4,7 +4,7 @@
  * `active` は、読みを出してよい場面か（答え合わせのあと、または、盤面を見ているだけの手）。`active` でない間は、設定も読みも呼ばない
  * （答える前は、読みの切り替えも数も DOM に無く、読みのコマンドも呼ばない。U-1）。
  */
-import { useCallback, useEffect, useEffectEvent } from 'react';
+import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 
 import type { Reads } from '../../api/reads';
 import { useShortcutsBlocked } from '../undo/shortcutGuard';
@@ -20,6 +20,11 @@ export interface ReadsFeature {
   loaded: boolean;
   /** 「読み」が入か（`active` でなければ、いつも false）。 */
   visible: boolean;
+  /**
+   * 手牌の下の数の帯（22px）を取っておくか。入切の好みが入のとき、または、この画面で一度でも入にしたあと（切っても、画面を離れるまで取ったまま）。
+   * 好みが切の人の画面は、これまでと同じ高さのまま（読みを使わない人の卓を、小さくしない）。画面の根の `data-reads="on"` になる（reads.css）。
+   */
+  reserved: boolean;
   /** 入切を替えて保存する。 */
   toggle: () => void;
   /** 「読みの入切」に割り当てたキー（無ければ null）。 */
@@ -33,14 +38,19 @@ export interface ReadsFeature {
 }
 
 export function useReadsFeature(sessionId: string, active: boolean): ReadsFeature {
-  const settings = useReadsSettings(active);
-  const session = useSessionReads(sessionId, active && settings.visible);
-  const { visible, setVisible } = settings;
-  const toggle = useCallback(() => setVisible(!visible), [setVisible, visible]);
+  const settings = useReadsSettings();
+  const { preferred, setVisible } = settings;
+  const visible = active && preferred;
+  const session = useSessionReads(sessionId, visible);
+  const toggle = useCallback(() => setVisible(!preferred), [setVisible, preferred]);
+  // 一度入にしたら、画面を離れるまで、帯は取ったまま（切っても卓が動かない）
+  const [used, setUsed] = useState(false);
+  if (preferred && !used) setUsed(true);
   return {
     active,
     loaded: settings.loaded,
     visible,
+    reserved: preferred || used,
     toggle,
     keyChord: settings.keyChord,
     load: session.load,

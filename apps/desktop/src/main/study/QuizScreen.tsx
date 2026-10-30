@@ -89,7 +89,7 @@ export function QuizScreen({
   const past = step < last;
   const work = useQuizWork({ decision, sessionId: session.id, mode, board, past, existing, previousIntervalDays });
   // 読み（F23）: 答え合わせのあとにだけ作る（答える前は null）
-  const reads = useQuizReads({ sessionId: session.id, game, decision, past, revealed: work.revealed });
+  const { work: reads, reserved: readsReserved } = useQuizReads({ sessionId: session.id, game, decision, past, revealed: work.revealed });
   const info = useMemo(() => boardInfoOf(decision.board, steps), [decision.board, steps]);
   // 迷いマークの結びつけ（迷いのスクショの欄と、答え合わせのあとのメモが使う）。迷いマークの無い半荘では、探さない
   const resolved = useMemo(() => (session.marks.length === 0 ? [] : resolveMarks(game.report, session)), [game.report, session]);
@@ -151,6 +151,7 @@ export function QuizScreen({
       ref={rootRef}
       data-state={work.revealed ? 'revealed' : 'answering'}
       data-dora={study.highlightDora ? 'on' : 'off'}
+      data-reads={readsReserved ? 'on' : undefined}
     >
       <header className="head qhead">
         <div className="q-main">

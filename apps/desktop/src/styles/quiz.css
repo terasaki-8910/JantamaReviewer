@@ -1240,13 +1240,15 @@
 @container main (width >= 840px) {
   /* 高さは、窓から .main の上下の余白（18px + 28px）を引いたもの。文書全体がスクロールしないように（U-39） */
   .qz:has(> .head) {
-    /* 牌の下の読みの数の帯（22px。reads.css の --rd-h）の分を、卓の外の高さに足す（既定は 324px。縦に並べる配置は、文書がスクロールするので足さない） */
-    --chrome-h: 346px;
-
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
     height: calc(100vh - 46px);
+  }
+
+  /* 牌の下の読みの数の帯（22px。reads.css の --rd-h）を取っておく画面は、その分を、卓の外の高さに足す（既定は 324px。縦に並べる配置は、文書がスクロールするので足さない） */
+  .qz[data-reads="on"]:has(> .head) {
+    --chrome-h: 346px;
   }
 
   /* 格子の中では、左右の余白が auto の要素は中身の幅まで縮む（盤面の列がつぶれる）ので、枠いっぱいにしてから最大幅で止める */

@@ -32,7 +32,8 @@ const moment = real.moments.find((item) => item.event_index === EVENT)!;
 const decision = game.decisions.find(isRiichiDecision)!;
 const pct = (probability: number) => Math.round(probability * 100);
 
-const COMMANDS = ['get_settings', 'read_reads', 'get_reads_model', 'compute_reads', 'set_reads_visible'] as const;
+/** 読みのコマンド（設定の読み出し `get_settings` は、入切の好みを知るために、答える前から呼ぶ。読みそのものは、答えたあとにだけ）。 */
+const COMMANDS = ['read_reads', 'get_reads_model', 'compute_reads', 'set_reads_visible'] as const;
 
 beforeEach(() => {
   vi.useRealTimers();
@@ -211,6 +212,33 @@ describe('U-53 切り替え: 設定から始まり、押すと保存し、キー
     expect(tip.textContent).toBe(
       '読み: 他家がその牌を待っている確率（3 人のどれか）。ロンできるか（役・フリテン）は含みません。天鳳の鳳凰卓で学習したモデル（hhim8826/mortal3-b40c192）の推定で、外れることもあります。',
     );
+  });
+});
+
+describe('F23 手牌の下の帯の取り方（画面の根の data-reads）', () => {
+  const root = () => document.querySelector('.qz') as HTMLElement;
+
+  it('入切の好みが切の画面は、帯を取らない（これまでと同じ高さ）。入にすると取り、切っても、画面を離れるまで取ったまま', async () => {
+    const view = open({ visible: false });
+    await waitFor(() => expect(view.mock.count('get_settings')).toBeGreaterThan(0));
+    expect(root().getAttribute('data-reads')).toBeNull();
+    await answer(view);
+    expect(root().getAttribute('data-reads')).toBeNull();
+    await view.user.click(toggle());
+    await waitForCells();
+    expect(root().getAttribute('data-reads')).toBe('on');
+    await view.user.click(toggle());
+    expect(cells()).toHaveLength(0);
+    expect(root().getAttribute('data-reads')).toBe('on');
+  });
+
+  it('好みが入の画面は、答える前から帯を取る（答え合わせで卓が動かない）。読みのコマンドは、答えるまで呼ばない', async () => {
+    const view = open({ visible: true });
+    await waitFor(() => expect(root().getAttribute('data-reads')).toBe('on'));
+    expect(view.mock.count('read_reads')).toBe(0);
+    expect(document.querySelector('.rd-cell, [data-ai]')).toBeNull();
+    await answer(view);
+    expect(root().getAttribute('data-reads')).toBe('on');
   });
 });
 

@@ -54,7 +54,7 @@ interface BrowseWorkProps {
   scenes: readonly ReplayScene[];
   answered: ReadonlySet<string>;
   go: (g: number) => void;
-  /** 読み（F23）の、右の欄の上の状態の行と、手牌の下・他家の席・吹き出しに出す場面。切り替えは操作の段にある。 */
+  /** 読み（F23）の、卓の上の切り替え・右の欄の上の状態の行・手牌の下と他家の席と吹き出しに出す場面。 */
   reads?: ReadsWork | null;
 }
 
@@ -90,6 +90,7 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
             tenpai={view.showing}
             dora={dora !== null}
             handsHint
+            reads={reads?.toggle}
           />
           <Board info={info} step={step.board} dora={dora} latest={latest} hands={view.hands} tenpai={view.tenpai} reads={chips} />
           <Hand

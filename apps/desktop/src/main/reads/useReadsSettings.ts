@@ -1,7 +1,8 @@
 /**
  * 「読み」の入切の設定（F23）。この PC だけの値（同期にも書き出しにも入れない）で、設定の `reads_visible`（無ければ切）に覚える。
  * 切り替えるたびに `readsApi.setReadsVisible` で保存し、保存できなかったときは元に戻して、理由を返す（`saveError`）。
- * 読み始めるのは、`active` になってから（出題・解き直し・通して見る画面の場面は、答えたあとにだけ。U-1）。
+ * 設定は、画面を開いたときに読む（入切の好みとキーの割り当てだけ。AI の情報ではない）。読みそのものは、答えたあとにだけ読む（U-1。`useSessionReads`）。
+ * 好みが入のとき、手牌の下の数の帯を、答える前から取っておく（答え合わせで卓が動かない。reads.css）。
  * キーの割り当て（`replay_keys` の `toggle_reads`）も、同じ設定から読む。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -14,8 +15,8 @@ import { normalizeReplayKeys } from '../replay/keys';
 export interface ReadsSettings {
   /** 設定を読めたか。 */
   loaded: boolean;
-  /** 「読み」が入か（読み込み前は切）。 */
-  visible: boolean;
+  /** 「読み」の入切の好み（保存した値。読み込み前は切）。出してよい場面かどうかは見ない。 */
+  preferred: boolean;
   /** 入切を変えて保存する。 */
   setVisible: (next: boolean) => void;
   /** 「読みの入切」に割り当てたキー（割り当て無しは null）。 */
@@ -26,7 +27,7 @@ export interface ReadsSettings {
   saveError: string | null;
 }
 
-export function useReadsSettings(active: boolean): ReadsSettings {
+export function useReadsSettings(): ReadsSettings {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   // 保存の途中の値（保存が済むまでは、これを見せる）
@@ -41,7 +42,6 @@ export function useReadsSettings(active: boolean): ReadsSettings {
   }, []);
 
   useEffect(() => {
-    if (!active) return undefined;
     let cancelled = false;
     let dispose: (() => void) | null = null;
     // コマンドが返事を返さない環境（部品だけの試験）でも、落ちない
@@ -66,7 +66,7 @@ export function useReadsSettings(active: boolean): ReadsSettings {
       cancelled = true;
       dispose?.();
     };
-  }, [active]);
+  }, []);
 
   const setVisible = useCallback((next: boolean) => {
     setSaveError(null);
@@ -90,7 +90,7 @@ export function useReadsSettings(active: boolean): ReadsSettings {
   const stored = settings?.reads_visible === true;
   return {
     loaded: settings !== null,
-    visible: active && (pending ?? stored),
+    preferred: pending ?? stored,
     setVisible,
     keyChord: keys.toggle_reads ?? null,
     keys,

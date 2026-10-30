@@ -96,14 +96,16 @@ const cells = () => [...document.querySelectorAll<HTMLButtonElement>('.rd-cell')
 const chips = () => [...document.querySelectorAll<HTMLElement>('.rd-tp')];
 const waitForCells = () => waitFor(() => expect(cells().length).toBeGreaterThan(0));
 
-describe('U-53 通して見る画面: 「読み」の切り替えは操作の段にあり、盤面を見ているだけの手にある', () => {
-  it('悪手・迷いの段の右に、「細かいミスだけ」と同じ見た目で置く。入切は aria-pressed。説明のアイコンが隣にある。設定に項目が無ければ切', async () => {
+describe('U-53 通して見る画面: 「読み」の切り替えは卓の上の 1 行にあり、盤面を見ているだけの手にある', () => {
+  it('卓の上の 1 行（盤面の見方の左）に、「細かいミスだけ」と同じ見た目で置く。入切は aria-pressed。説明のアイコンが隣にある。設定に項目が無ければ切。操作の段は 2 つのまま', async () => {
     const { user, mock } = setup();
     await loaded();
     await openReplay(user);
-    const group = document.querySelector('.pb-jumps .pb-reads') as HTMLElement;
+    const group = document.querySelector('.board-tools .reads-group') as HTMLElement;
     expect(group).not.toBeNull();
-    expect(group.closest('.pb-jumps')?.lastElementChild).toBe(group);
+    // 盤面の見方のアイコンの左（卓の上の 1 行）。操作の段には置かない（狭い窓で操作の段が 1 行増えて、答えるときに卓が動くため）
+    expect(group.nextElementSibling?.classList.contains('infotip')).toBe(true);
+    expect(document.querySelector('.pbar .reads-group')).toBeNull();
     // 悪手・迷いの段は 2 つのまま（読みは「飛ぶ」段ではない）
     expect([...document.querySelectorAll('.pb-jumps .jump')].map((el) => el.getAttribute('data-kind'))).toEqual(['mismatch', 'doubt']);
     const button = within(group).getByRole('button', { name: '読み' });
@@ -202,6 +204,26 @@ describe('U-53 通して見る画面: 「読み」の切り替えは操作の段
   });
 });
 
+describe('F23 手牌の下の帯の取り方（画面の根の data-reads）', () => {
+  const root = () => document.querySelector('.rp') as HTMLElement;
+
+  it('好みが切の画面は取らない。入にすると取り、切っても取ったまま。好みが入の画面は、開いたときから取る', async () => {
+    const off = setup();
+    await loaded();
+    await openReplay(off.user);
+    expect(root().getAttribute('data-reads')).toBeNull();
+    await off.user.click(toggle());
+    await waitFor(() => expect(root().getAttribute('data-reads')).toBe('on'));
+    await off.user.click(toggle());
+    expect(root().getAttribute('data-reads')).toBe('on');
+    off.view.unmount();
+    const on = setup({ visible: true });
+    await loaded();
+    await openReplay(on.user);
+    expect(root().getAttribute('data-reads')).toBe('on');
+  });
+});
+
 describe('U-1・U-53 答える場面は、答えるまで、読みの切り替えも数も札も DOM に無い', () => {
   /** 悪手の場面（FX-4 の最初の悪手。局 0 の 4 手目付近）へ、「次の悪手へ」で飛ぶ。 */
   async function gotoMismatch(user: ReturnType<typeof userEvent.setup>) {
@@ -217,7 +239,7 @@ describe('U-1・U-53 答える場面は、答えるまで、読みの切り替�
     await gotoMismatch(user);
     expect(screen.queryByRole('button', { name: '読み' })).toBeNull();
     expect(screen.queryByRole('button', { name: '読みの説明' })).toBeNull();
-    expect(document.querySelector('.pb-reads, .reads-group, .rd-cell, .rd-tp, .rd-status, #rdpop')).toBeNull();
+    expect(document.querySelector('.reads-group, .rd-cell, .rd-tp, .rd-status, #rdpop')).toBeNull();
     expect(document.querySelector('[data-ai]')).toBeNull();
     expect(document.body.textContent).not.toMatch(/\d\s*%|Mortal/);
     // 答える前の場面で R を押しても、何も起きない
