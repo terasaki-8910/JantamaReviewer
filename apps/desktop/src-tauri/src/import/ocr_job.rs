@@ -290,9 +290,12 @@ mod tests {
     use super::*;
 
     fn shot(name: &str) -> Shot {
+        // OS の区切りで組む（Windows の形の文字だと、Mac ではファイル名を取り出せない）
         Shot {
             relative: format!("marks/{name}.png"),
-            absolute: PathBuf::from(format!("C:\\data\\games\\s\\marks\\{name}.png")),
+            absolute: ["data", "games", "s", "marks", &format!("{name}.png")]
+                .iter()
+                .collect(),
         }
     }
 

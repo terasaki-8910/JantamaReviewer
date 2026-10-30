@@ -211,6 +211,13 @@ describe('更新の帯（U-51）', () => {
               );
               expect(checks).toBe(1);
               await install.click();
+              // 入れ直しは、書きかけのメモを保存してから呼ばれる（押した直後には、まだ呼ばれていないことがある）
+              await page.waitForFunction(
+                () =>
+                  (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.some(
+                    (call) => call.cmd === 'install_update',
+                  ),
+              );
               const installs = await page.evaluate(
                 () =>
                   (window as unknown as { __jrCalls: Array<{ cmd: string }> }).__jrCalls.filter(
