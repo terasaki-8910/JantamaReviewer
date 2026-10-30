@@ -354,9 +354,14 @@ describe('設定の「解析のモデル」の欄（U-54）', () => {
       it(`説明のアイコン 幅${width}px ${scheme}: キーボードで選ぶと出て、窓の中に収まり、欄の文字にかからない`, async () => {
         const { context, page, problems, external, group } = await open({ width, height: 900 }, scheme, { status: NOT_INSTALLED });
         try {
+          // 設定のページへ進むときに押したボタンの位置に、別の欄の説明のアイコンが重なって、マウスの乗せ方で開いていることがある。
+          // マウスを隅へ外し、開いている説明を Esc で閉じてから、キーボードだけで、この欄のアイコンへ届く
+          await page.mouse.move(0, 0);
+          await page.keyboard.press('Escape');
           await group.getByRole('button', { name: '読みのモデルの説明' }).focus();
           await page.keyboard.press('Shift+Tab');
           await page.keyboard.press('Tab');
+          await page.locator('.infotip-pop:not([hidden])').waitFor();
           const measure = await measureInfoTip(page, '#reads-model-name');
           expect(measure).not.toBeNull();
           if (measure === null) return;
