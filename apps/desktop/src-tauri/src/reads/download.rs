@@ -1269,4 +1269,25 @@ mod tests {
         // 作るだけでは、通信しない
         let _ = UreqTransport::new();
     }
+
+    /// 手動: 本物の配布元から決まった版を取り、sha256 まで通す（`cargo test --lib reads::download::tests::live -- --ignored --nocapture`）。
+    /// 移動の指示の先のホストが変わっていないかも、ここで分かる。
+    #[test]
+    #[ignore = "手動: 本物の配布元と通信する"]
+    fn live_the_pinned_model_downloads_and_matches() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut last = None;
+        download_model(
+            &READS_MODEL,
+            &UreqTransport::new(),
+            dir.path(),
+            &DownloadLimits::default(),
+            &AtomicBool::new(false),
+            &mut |progress| last = Some(progress),
+        )
+        .unwrap();
+        let bytes = fs::read(READS_MODEL.target_in(dir.path())).unwrap();
+        assert_eq!(sha256_hex(&bytes), READS_MODEL.sha256);
+        assert_eq!(last.unwrap().done, bytes.len() as u64);
+    }
 }

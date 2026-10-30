@@ -80,10 +80,9 @@
   gap: var(--s1);
 }
 
-/* 卓の上の 1 行（18px）の高さを変えない（ボタンは 30px。説明のアイコンと同じ、負の余白）。隣の「盤面の見方」のアイコンとは、少し離す（同じ形のアイコンが続かないように） */
+/* 卓の上の 1 行（18px）の高さを変えない（ボタンは 30px。説明のアイコンと同じ、負の余白） */
 .board-tools .reads-group {
   margin-block: -6px;
-  margin-right: var(--s2);
 }
 
 /* ---------- 状態の行（右の欄の上） ---------- */
@@ -119,54 +118,38 @@
   font-family: var(--font-body);
 }
 
-/* 中央の箱が狭いときは、折り返さず、「聴牌」の文字を隠して数だけ残す（名前は aria-label に全部ある） */
-@container cbox (width < 210px) {
-  .score .rd-tp-w {
-    display: none;
-  }
-}
-
 @container board (width <= 639px) {
   .score .rd-tp {
     font-size: 10px;
   }
 }
 
-/*
-  いちばん小さい中央の箱（通して見る画面の 1280×800・幅の狭い窓。箱が 130px より狭い）では、左右の点数の列に、縦に 1 行足す余地が無い
-  （点数とリーチの札だけで、すでに箱の高さを使い切っている）。左右の席は、札を風の字の行の右に並べて、高さを足さない。
-  上の席は、行の中に並べる（点数の行は、もともと横に並んでいる）。
-*/
-@container cbox (width < 130px) {
-  .score .rd-tp {
-    font-size: 9px;
-    line-height: 1.2;
-  }
+/* ---------- 中央の箱が狭いときの、卓の上の行（useTenpaiPlacement） ---------- */
+.rd-line {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--s1);
+  min-width: 0;
+  height: 18px;
+  margin: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+}
 
-  .score.left,
-  .score.right {
-    grid-template-columns: auto auto;
-    justify-content: center;
-    column-gap: 2px;
-  }
+.rd-line-n {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
 
-  .score.left .who,
-  .score.right .who {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .score.left .rd-tp,
-  .score.right .rd-tp {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .score.left .pts,
-  .score.right .pts,
-  .score.left .rch,
-  .score.right .rch {
-    grid-column: 1 / -1;
+/* 狭い窓では「（リーチ）」を省く（リーチは中央の箱の札で分かる。行は折り返さない） */
+@media (width < 480px) {
+  .rd-line-rch {
+    display: none;
   }
 }
 
@@ -218,4 +201,13 @@
 
 .rd-pop .rd-opp-d p {
   margin: 0;
+}
+
+.rd-pop .rd-note {
+  margin: var(--s2) 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
 }

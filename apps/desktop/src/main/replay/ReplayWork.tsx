@@ -19,9 +19,9 @@ import type { AnswerRow, SessionRecord } from '../../api/types';
 import type { ResolvedMark } from '../markCards';
 import { MarkMemoFields } from '../MarkMemoFields';
 import { memoOfMark, memosForDecision } from '../memos';
-import { tenpaiChips } from '../reads/explain';
 import type { ReadsWork } from '../reads/ReadsWork';
 import { useReadsPopover } from '../reads/useReadsPopover';
+import { useTenpaiPlacement } from '../reads/useTenpaiPlacement';
 import { handBars } from '../study/aiBars';
 import { Board, BoardTools, type BoardInfo } from '../study/Board';
 import { doraKinds } from '../study/dora';
@@ -76,11 +76,11 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
   // 読み（F23）。盤面を見ているだけの手は、いつでも出せる（見せる場面が無い手では、数も札も出さない）
   const readsView = reads === null ? null : reads.view;
   const popover = useReadsPopover(readsView, items);
-  const chips = useMemo(() => (readsView === null ? null : tenpaiChips(readsView.moment)), [readsView]);
+  const tenpai = useTenpaiPlacement(readsView === null ? null : readsView.moment);
   return (
     <div className="qz" data-state="browse" data-dora={study.highlightDora ? 'on' : 'off'}>
       <div className="work">
-        <section className="board-col" aria-label="盤面と手牌" data-view="now">
+        <section className="board-col" ref={tenpai.colRef} aria-label="盤面と手牌" data-view="now">
           <BoardTools
             riichi={info.riichiAny}
             called={anyCalled}
@@ -90,9 +90,14 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
             tenpai={view.showing}
             dora={dora !== null}
             handsHint
-            reads={reads?.toggle}
+            reads={
+              <>
+                {reads?.toggle}
+                {tenpai.line}
+              </>
+            }
           />
-          <Board info={info} step={step.board} dora={dora} latest={latest} hands={view.hands} tenpai={view.tenpai} reads={chips} />
+          <Board info={info} step={step.board} dora={dora} latest={latest} hands={view.hands} tenpai={view.tenpai} reads={tenpai.chips} />
           <Hand
             items={items}
             interactive={false}

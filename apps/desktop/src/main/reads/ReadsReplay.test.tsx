@@ -97,7 +97,7 @@ const chips = () => [...document.querySelectorAll<HTMLElement>('.rd-tp')];
 const waitForCells = () => waitFor(() => expect(cells().length).toBeGreaterThan(0));
 
 describe('U-53 通して見る画面: 「読み」の切り替えは卓の上の 1 行にあり、盤面を見ているだけの手にある', () => {
-  it('卓の上の 1 行（盤面の見方の左）に、「細かいミスだけ」と同じ見た目で置く。入切は aria-pressed。説明のアイコンが隣にある。設定に項目が無ければ切。操作の段は 2 つのまま', async () => {
+  it('卓の上の 1 行（盤面の見方の左）に、「細かいミスだけ」と同じ見た目で置く。入切は aria-pressed。読みの説明のアイコンは置かない。設定に項目が無ければ切。操作の段は 2 つのまま', async () => {
     const { user, mock } = setup();
     await loaded();
     await openReplay(user);
@@ -112,7 +112,7 @@ describe('U-53 通して見る画面: 「読み」の切り替えは卓の上の
     expect(button).toHaveAttribute('aria-pressed', 'false');
     expect(button.className).toBe('btn sm fm-toggle');
     expect(button.getAttribute('title')).toContain('（R）');
-    expect(within(group).getByRole('button', { name: '読みの説明' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '読みの説明' })).toBeNull();
     // 半荘の頭（配牌）には読みの場面が無いが、切り替えは残る
     expect(cells()).toHaveLength(0);
     // 切のあいだは、読みを読まない

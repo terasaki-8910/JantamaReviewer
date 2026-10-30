@@ -8,6 +8,7 @@
  * - 他家ごと（下家・対面・上家）に 1 行: 名前（リーチは「（リーチ）」）・聴牌の確率・この牌を待っている確率・守備の目安（リーチした他家だけ）
  * - 読み直した他家（リーチか、聴牌の確率が 50% 以上）には、さらに、効いた捨て牌（2 つまで。無ければ「大きく動かす捨て牌なし」）・
  *   読みの上位 5 牌・実際の待ち（聴牌していなければ「聴牌していなかった」）
+ * - いちばん下に、読みの説明（待たれる確率で、ロンできるかは含まない・モデルの出どころ）
  * 答える前は DOM に無い（U-1）ので、`data-ai` を付ける。
  */
 import type { DangerClass } from '@jantama/engine';
@@ -16,7 +17,7 @@ import { createPortal } from 'react-dom';
 
 import { Icon } from '../Icon';
 import { Tile } from '../study/Tile';
-import type { OpponentExplain, TileExplain } from './explain';
+import { READS_HINT, type OpponentExplain, type TileExplain } from './explain';
 
 /** 小窓を画面の下から出す幅（`UkeireSection` と同じ）。 */
 const SHEET_WIDTH = 640;
@@ -188,6 +189,7 @@ export function ReadsPopover({ explain, trigger, onClose }: ReadsPopoverProps) {
             <Opponent opponent={opponent} key={opponent.seat} />
           ))}
         </ul>
+        <p className="rd-note">{READS_HINT}</p>
       </div>
     </div>,
     document.body,

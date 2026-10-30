@@ -4,7 +4,7 @@
  *
  * - 幅 390・768・1280×800（と 1440×900・1920×1080）、ライト・ダークで、通して見る画面（上家がリーチ中に自分が打つ場面）と、
  *   解き直しの答え合わせのあとに、読みを出す。横スクロールが無く、手牌の下の数が隣と重ならず、自分の牌の列の中に収まる。
- *   他家の席の札は中央の箱に収まり、折り返さない。axe の重大が 0
+ *   他家の席の札は中央の箱に収まり（狭い箱では卓の上の 1 行）、折り返さない。axe の重大が 0
  * - 手牌の下の帯: 好みが切の画面は、これまでと同じ（帯を取らない）。入の画面は、切っても入れ直しても、卓も手牌も文書も動かない。
  *   1280×800・1440×900・1920×1080 で、文書は窓の高さに収まる（U-39）
  * - 答える前は、読みの切り替えも数も札も DOM に無く、読みのコマンドも呼ばない（U-1）
@@ -221,6 +221,8 @@ interface ChipMeasure {
 interface ReadsLayout {
   cells: CellMeasure[];
   chips: ChipMeasure[];
+  /** 中央の箱が狭いときの、卓の上の 1 行。無ければ null。 */
+  line: { box: Box; scrollWidth: number; clientWidth: number; text: string; tools: Box; neighbors: Box[] } | null;
   marks: Box[];
   center: Box;
   /** 中央の箱の中身の幅（container query の cbox が見る幅。余白を除く）。 */
@@ -288,9 +290,22 @@ async function measureReads(page: Page): Promise<ReadsLayout> {
         box: box(el),
         seat: el.closest('.score') === null ? null : (el.closest('.score') as HTMLElement).className.replace('score ', ''),
       }));
+    const lineEl = document.querySelector<HTMLElement>('.board-tools .rd-line');
+    const tools = document.querySelector('.board-tools');
     return {
       cells,
       chips,
+      line:
+        lineEl === null || tools === null
+          ? null
+          : {
+              box: box(lineEl),
+              scrollWidth: lineEl.scrollWidth,
+              clientWidth: lineEl.clientWidth,
+              text: lineEl.textContent ?? '',
+              tools: box(tools),
+              neighbors: [...tools.children].filter((child) => child !== lineEl).map(box),
+            },
       marks: [...document.querySelectorAll<HTMLElement>('.hand .mk')].map(box),
       center: box(center),
       centerInner: center.clientWidth - Number.parseFloat(getComputedStyle(center).paddingLeft) - Number.parseFloat(getComputedStyle(center).paddingRight),
@@ -351,10 +366,26 @@ function expectReadsFit(layout: ReadsLayout, where: string, options: { expectChi
   // 印（自分・実戦・AI）と重ならない
   for (const mark of layout.marks) for (const item of layout.cells) expect(overlaps(mark, item.cell), `${where} 印と数`).toBe(false);
   if (options.expectChips === false) return;
+  // 箱の中身が 150px 未満なら卓の上の 1 行、それ以上なら席の札（どちらか片方だけ）
+  if (layout.centerInner < 150) {
+    expect(layout.chips, `${where} 箱 ${layout.centerInner}px は札なし`).toEqual([]);
+    const line = layout.line;
+    if (line === null) throw new Error(`${where} 箱 ${layout.centerInner}px に卓の上の行が無い`);
+    expect(line.text, `${where} 行の文`).toMatch(/^聴牌下家\d+%·対面\d+%·上家(（リーチ）)?\d+%$/);
+    // 切れず、折り返さず、窓の中で、隣（切り替え・盤面の見方）と重ならない
+    expect(line.scrollWidth, `${where} 行のあふれ ${line.text}`).toBeLessThanOrEqual(line.clientWidth + 0.5);
+    expect(line.box.height, `${where} 行の高さ`).toBeLessThanOrEqual(18.5);
+    expect(line.box.left, `${where} 行の左`).toBeGreaterThanOrEqual(-0.5);
+    expect(line.box.right, `${where} 行の右`).toBeLessThanOrEqual(layout.document.innerWidth + 0.5);
+    for (const neighbor of line.neighbors) expect(overlaps(line.box, neighbor), `${where} 行と隣`).toBe(false);
+    return;
+  }
+  expect(layout.line, `${where} 箱 ${layout.centerInner}px は行なし`).toBeNull();
   expect(layout.chips.map((chip) => chip.position).sort(), `${where} 札の席`).toEqual(['left', 'right', 'top']);
   for (const chip of layout.chips) {
     const at = `${where} 札 ${chip.position}`;
-    expect(chip.text.startsWith('聴牌 ') || /^\d+%$/.test(chip.text), `${at} 文字 ${chip.text}`).toBe(true);
+    expect(chip.text, `${at} 文字`).toMatch(/^聴牌 \d+%$/);
+    expect(chip.wordShown, `${at} 聴牌の字`).toBe(true);
     expect(chip.label, `${at} 名前`).toMatch(/^聴牌 \d+%$/);
     // 中央の箱に収まり、折り返さず、ほかの文字と重ならない
     expect(chip.box.left, `${at} 箱の左`).toBeGreaterThanOrEqual(layout.center.left - 0.5);
@@ -527,7 +558,7 @@ describe('U-1・U-53: 答える前は、読みの切り替えも数も札も DOM
       ai: document.querySelectorAll('[data-ai]').length,
       html: /data-ai|data-mark|data-ring/.test(document.body.innerHTML),
       text: /\d\s*%|Mortal/.test(document.body.textContent ?? ''),
-      reads: document.querySelectorAll('.rd-cell, .rd-tp, .rd-status, .reads-group, .pb-reads, #rdpop').length,
+      reads: document.querySelectorAll('.rd-cell, .rd-tp, .rd-line, .rd-status, .reads-group, .pb-reads, #rdpop').length,
     }));
 
   it('解き直し（答える前）: 設定が入でも、何も無い。答えると出る', { timeout: 120_000 }, async () => {
@@ -702,13 +733,14 @@ describe('U-53: 用意の様子（画面写真つき）', () => {
   });
 });
 
-describe('U-53: 中央の箱が狭いとき、札は「聴牌」の文字を隠して数だけ残す（折り返さない）', () => {
-  it('文字を出すのは箱の中身が 210px 以上のとき（通して見る画面の 390・1280・1920 と、解き直しの 1920）。隠れても名前（aria-label）は全部', { timeout: 300_000 }, async () => {
-    const seen = new Set<boolean>();
+describe('U-53: 中央の箱の大きさで、聴牌の確率の置き場所が替わる', () => {
+  it('箱の中身が 150px 以上なら席の札、未満なら卓の上の 1 行（両方を見る）。窓を変えると替わる', { timeout: 300_000 }, async () => {
+    const seen = new Set<string>();
     const cases: Array<{ where: string; width: number; height: number; reveal: boolean }> = [
       { where: '通して見る 390', width: 390, height: 844, reveal: false },
       { where: '通して見る 1280', width: 1280, height: 800, reveal: false },
       { where: '通して見る 1920', width: 1920, height: 1080, reveal: false },
+      { where: '解き直し 1280', width: 1280, height: 800, reveal: true },
       { where: '解き直し 1920', width: 1920, height: 1080, reveal: true },
     ];
     for (const { where, width, height, reveal } of cases) {
@@ -721,18 +753,28 @@ describe('U-53: 中央の箱が狭いとき、札は「聴牌」の文字を隠�
           await openReplayAtRiichi(page);
         }
         const layout = await measureReads(page);
-        expect(layout.chips).toHaveLength(3);
-        for (const chip of layout.chips) {
-          seen.add(chip.wordShown);
-          expect(chip.wordShown, `${where} ${chip.position} 箱 ${layout.centerInner}px`).toBe(layout.centerInner >= 210);
-          expect(chip.label).toMatch(/^聴牌 \d+%$/);
-          expect(chip.lineCount, `${where} 1 行`).toBe(1);
-        }
+        expectReadsFit(layout, where);
+        seen.add(layout.centerInner < 150 ? 'line' : 'chips');
       } finally {
         await context.close();
       }
     }
-    // 文字を出す幅と隠す幅の両方を見た
-    expect(seen.size).toBe(2);
+    expect([...seen].sort()).toEqual(['chips', 'line']);
+  });
+
+  it('窓を小さくすると、札が卓の上の行に替わり、大きくすると戻る', { timeout: 120_000 }, async () => {
+    const { context, page } = await open({ width: 1920, height: 1080 });
+    try {
+      await openReplayAtRiichi(page);
+      await page.locator('.rd-tp').first().waitFor();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.locator('.board-tools .rd-line').waitFor();
+      expect(await page.locator('.rd-tp').count()).toBe(0);
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await page.locator('.rd-tp').first().waitFor();
+      expect(await page.locator('.rd-line').count()).toBe(0);
+    } finally {
+      await context.close();
+    }
   });
 });

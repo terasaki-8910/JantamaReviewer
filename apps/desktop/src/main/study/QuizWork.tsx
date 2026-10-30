@@ -6,13 +6,13 @@
  * 開いているあいだ、答えの欄の上に「他家の手牌」の欄（聴牌の 1 行・向聴数の折れ線・待ちと点）を出す。開け閉めの状態は、呼ぶ側が持つ（`openHands`）。
  */
 import type { BoardState, Decision, ImportedGame } from '@jantama/engine';
-import { useMemo, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import type { AnswerMode } from '../../api/types';
 import type { ShownMemo } from '../memos';
 import type { ReadsWork } from '../reads/ReadsWork';
-import { tenpaiChips } from '../reads/explain';
 import { useReadsPopover } from '../reads/useReadsPopover';
+import { useTenpaiPlacement } from '../reads/useTenpaiPlacement';
 import { AnswerPanel } from './AnswerPanel';
 import { Board, BoardTools, type BoardInfo } from './Board';
 import { Hand } from './Hand';
@@ -54,10 +54,10 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
   // 読み（F23）: 手牌の下の数・他家の席の札・数の吹き出し
   const readsView = reads === null ? null : reads.view;
   const popover = useReadsPopover(readsView, work.items);
-  const chips = useMemo(() => (readsView === null ? null : tenpaiChips(readsView.moment)), [readsView]);
+  const tenpai = useTenpaiPlacement(readsView === null ? null : readsView.moment);
   return (
     <div className="work">
-      <section className="board-col" aria-label="盤面と手牌" data-view={past ? 'past' : 'now'}>
+      <section className="board-col" ref={tenpai.colRef} aria-label="盤面と手牌" data-view={past ? 'past' : 'now'}>
         <BoardTools
           riichi={info.riichiAny}
           called={anyCalled}
@@ -66,9 +66,14 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
           tenpai={view.showing}
           dora={work.dora !== null}
           handsHint={work.revealed}
-          reads={reads?.toggle}
+          reads={
+            <>
+              {reads?.toggle}
+              {tenpai.line}
+            </>
+          }
         />
-        <Board info={info} step={board} dora={work.dora} target={past ? null : work.calledSeat} hands={view.hands} tenpai={view.tenpai} reads={chips} />
+        <Board info={info} step={board} dora={work.dora} target={past ? null : work.calledSeat} hands={view.hands} tenpai={view.tenpai} reads={tenpai.chips} />
         <Hand
           items={work.items}
           interactive={!past}

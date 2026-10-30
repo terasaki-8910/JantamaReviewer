@@ -11,7 +11,7 @@ use serde::de::IgnoredAny;
 use serde::Deserialize;
 
 use super::catalog::PART_SUFFIX;
-use crate::store::READS_FILE;
+use crate::store::{READS_FILE, REPORT_FILE};
 
 /// 読みの写しの形の名前（`format`）。解析エンジンの `reads.json` と同じ（`engine/README.md`）。
 pub const READS_FORMAT: &str = "jantama-reads/1";
@@ -61,6 +61,7 @@ pub fn check(text: &str, model_sha256: &str) -> Result<(), String> {
 /// 半荘のフォルダの写しを、使えるときだけ返す。写しが無い・読めない・形が違う・いまのモデルのものでない・モデルが入っていない、の
 /// どれでも `None`（画面が計算し直す）。`model_installed` は、モデルがいま入っているか（中身まで確かめる）を答える関数で、
 /// 写しが使える形のときだけ呼ぶ（モデルを読むのを、無駄に繰り返さない）。
+/// 写しより新しい `report.json` があるときも `None`（結果を取り込み直した半荘は、計算し直す）。
 pub fn read_valid(
     session_dir: &Path,
     model_sha256: &str,
@@ -68,7 +69,22 @@ pub fn read_valid(
 ) -> Option<String> {
     let text = fs::read_to_string(reads_path(session_dir)).ok()?;
     check(&text, model_sha256).ok()?;
+    if report_is_newer(session_dir) {
+        return None;
+    }
     model_installed().then_some(text)
+}
+
+/// `report.json` が、読みの写しより新しいか。どちらかの時刻を読めないときは、新しくないとする。
+fn report_is_newer(session_dir: &Path) -> bool {
+    let modified = |path: PathBuf| fs::metadata(path).and_then(|meta| meta.modified()).ok();
+    match (
+        modified(session_dir.join(REPORT_FILE)),
+        modified(reads_path(session_dir)),
+    ) {
+        (Some(report), Some(reads)) => report > reads,
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -104,6 +120,30 @@ mod tests {
         let extra = reads_text(READS_FORMAT, SHA).replace("\"moments\"", "\"later\":1,\"moments\"");
         let dir = session_with(&extra);
         assert!(read_valid(dir.path(), SHA, || true).is_some());
+    }
+
+    #[test]
+    fn d8_a_report_newer_than_the_file_gives_nothing_and_an_older_one_does_not() {
+        let text = reads_text(READS_FORMAT, SHA);
+        let dir = session_with(&text);
+        let report = dir.path().join(REPORT_FILE);
+        fs::write(&report, "{}").unwrap();
+        let reads_time = fs::metadata(reads_path(dir.path()))
+            .unwrap()
+            .modified()
+            .unwrap();
+        let set_report_time = |time: std::time::SystemTime| {
+            fs::File::options()
+                .write(true)
+                .open(&report)
+                .unwrap()
+                .set_modified(time)
+                .unwrap();
+        };
+        set_report_time(reads_time - std::time::Duration::from_secs(60));
+        assert_eq!(read_valid(dir.path(), SHA, || true), Some(text));
+        set_report_time(reads_time + std::time::Duration::from_secs(60));
+        assert_eq!(read_valid(dir.path(), SHA, || true), None);
     }
 
     #[test]

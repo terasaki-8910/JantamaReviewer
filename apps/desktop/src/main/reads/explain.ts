@@ -42,6 +42,10 @@ export function chipText(probability: number): string {
   return `聴牌 ${percentOf(probability)}%`;
 }
 
+/** 読みの説明（吹き出しの下に出す。SPEC F23）。 */
+export const READS_HINT =
+  '読み: 他家がその牌を待っている確率（3 人のどれか）。ロンできるか（役・フリテン）は含みません。天鳳の鳳凰卓で学習したモデル（hhim8826/mortal3-b40c192）の推定で、外れることもあります。';
+
 /** 他家の席の札（席 → 聴牌の確率）。 */
 export function tenpaiChips(moment: ReadsMoment): ReadonlyMap<number, number> {
   return new Map(moment.opponents.map((opponent) => [opponent.seat, opponent.tenpai]));
@@ -58,6 +62,21 @@ export function anyWaitOf(moment: ReadsMoment, tile: Tile): number {
 }
 
 const STEP_NAME: Readonly<Record<1 | 2 | 3, string>> = { 1: '下家', 2: '対面', 3: '上家' };
+
+/** 卓の上の行の、他家 1 人ぶん。 */
+export interface TenpaiLineItem {
+  seat: number;
+  name: string;
+  riichi: boolean;
+  percent: number;
+}
+
+/** 中央の箱が狭いときに卓の上の行に出す、他家の聴牌の確率（下家・対面・上家の順）。 */
+export function tenpaiLineItems(moment: ReadsMoment): TenpaiLineItem[] {
+  return [...moment.opponents]
+    .sort((a, b) => a.step - b.step)
+    .map((opponent) => ({ seat: opponent.seat, name: STEP_NAME[opponent.step], riichi: opponent.riichi, percent: percentOf(opponent.tenpai) }));
+}
 
 /** 牌の呼び名（数牌は 5p、字牌は漢字。赤五は普通の五）。守備の目安の欄と同じ。 */
 export function readsTileText(tile: string): string {

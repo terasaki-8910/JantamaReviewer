@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { gameOf } from '../../../tests/fake-study';
 import { EMPTY_WAITS, fx4Reads, moment, opponent } from '../../../tests/reads-fixtures';
 import { defenseAgainst, riichiOpponentSeats } from './defense';
-import { barRatio, cellLabel, chipText, explainTile, percentOf, STRONG_FROM, tenpaiChips, wasReread } from './explain';
+import { barRatio, cellLabel, chipText, explainTile, percentOf, STRONG_FROM, tenpaiChips, tenpaiLineItems, wasReread } from './explain';
 
 describe('F23 数の丸め方', () => {
   it('整数の %。0.5% 未満は 0、ちょうど 0.5% は 1（四捨五入）。100% を超えない', () => {
@@ -45,6 +45,17 @@ describe('F23 数の丸め方', () => {
       [1, 0.62],
       [2, 0.05],
       [3, 1],
+    ]);
+  });
+});
+
+describe('F23 卓の上の行（中央の箱が狭いとき）', () => {
+  it('下家・対面・上家の順に、名前・リーチ・整数の % を返す（reads.json の順に頼らない）', () => {
+    const items = tenpaiLineItems(moment(0, 2, { opponents: [opponent(3, 3, { tenpai: 1, riichi: true }), opponent(1, 1, { tenpai: 0.05 }), opponent(2, 2, { tenpai: 0.174 })] }));
+    expect(items).toEqual([
+      { seat: 1, name: '下家', riichi: false, percent: 5 },
+      { seat: 2, name: '対面', riichi: false, percent: 17 },
+      { seat: 3, name: '上家', riichi: true, percent: 100 },
     ]);
   });
 });

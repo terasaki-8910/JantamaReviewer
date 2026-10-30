@@ -75,7 +75,7 @@ describe('U-1・U-53 答える前は、読みの切り替えも数も札も DOM 
       const absent = () => {
         expect(screen.queryByRole('button', { name: '読み' })).toBeNull();
         expect(screen.queryByRole('button', { name: '読みの説明' })).toBeNull();
-        expect(document.querySelector('.rd-cell, .rd-tp, .reads-group, .rd-status, #rdpop')).toBeNull();
+        expect(document.querySelector('.rd-cell, .rd-tp, .rd-line, .reads-group, .rd-status, #rdpop')).toBeNull();
         expect(document.querySelector('[data-ai]')).toBeNull();
         expect(document.body.textContent).not.toMatch(/\d\s*%|Mortal/);
         expect(document.body.textContent).not.toContain('だれかが待っている確率');
@@ -203,13 +203,13 @@ describe('U-53 切り替え: 設定から始まり、押すと保存し、キー
     expect(view.mock.calls().filter((call) => call.cmd === 'set_reads_visible').map((call) => call.args)).toEqual([{ visible: true }, { visible: false }]);
   });
 
-  it('説明のアイコン「読みの説明」に、待たれる確率であること・ロンできるかは含まないこと・モデルの出どころが書いてある', async () => {
+  it('読みの説明のアイコンは置かない（隣の「盤面の見方」と同じ形が並ぶため）。吹き出しの下に、待たれる確率であること・ロンできるかは含まないこと・モデルの出どころが書いてある', async () => {
     const view = open({ visible: true });
     await answer(view);
-    const icon = screen.getByRole('button', { name: '読みの説明' });
-    await view.user.click(icon);
-    const tip = document.getElementById(icon.getAttribute('aria-describedby') as string) as HTMLElement;
-    expect(tip.textContent).toBe(
+    await waitForCells();
+    expect(screen.queryByRole('button', { name: '読みの説明' })).toBeNull();
+    await view.user.click(cells()[0] as HTMLButtonElement);
+    expect(popover().querySelector('.rd-note')?.textContent).toBe(
       '読み: 他家がその牌を待っている確率（3 人のどれか）。ロンできるか（役・フリテン）は含みません。天鳳の鳳凰卓で学習したモデル（hhim8826/mortal3-b40c192）の推定で、外れることもあります。',
     );
   });
@@ -299,7 +299,7 @@ describe('U-53 手牌の牌の下の数と、他家の席の札', () => {
     expect(document.getElementById('rdpop')).toBeNull();
   });
 
-  it('他家の席に「聴牌 N%」の札が出る（下家・対面・上家の、それぞれの席に）。名前は全部、文字は中央の箱の幅で隠れる', async () => {
+  it('他家の席に「聴牌 N%」の札が出る（下家・対面・上家の、それぞれの席に）。札には、いつも「聴牌」の字が付く', async () => {
     const view = open({ visible: true });
     await answer(view);
     await waitForCells();
@@ -316,6 +316,34 @@ describe('U-53 手牌の牌の下の数と、他家の席の札', () => {
     // 自分の席には札が無い
     expect(document.querySelector('.score.bottom .rd-tp')).toBeNull();
     expect(document.querySelectorAll('.rd-tp')).toHaveLength(3);
+  });
+
+  it('中央の箱の中身が狭いと、席の札をやめて、切り替えの右の 1 行に下家・対面・上家の順で出す。広くなると、札に戻る', async () => {
+    const width = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+      return this.classList.contains('center') ? 149 : 0;
+    });
+    try {
+      const view = open({ visible: true });
+      await answer(view);
+      await waitForCells();
+      const line = await waitFor(() => {
+        const found = document.querySelector<HTMLElement>('.board-tools .rd-line');
+        expect(found).not.toBeNull();
+        return found as HTMLElement;
+      });
+      const byStep = new Map(moment.opponents.map((opponent) => [opponent.step, opponent]));
+      expect(line.textContent).toBe(
+        `聴牌下家${pct(byStep.get(1)!.tenpai)}%·対面${pct(byStep.get(2)!.tenpai)}%·上家（リーチ）${pct(byStep.get(3)!.tenpai)}%`,
+      );
+      expect(document.querySelector('.rd-tp')).toBeNull();
+      // 切り替えのすぐ右
+      expect(document.querySelector('.reads-group')?.nextElementSibling).toBe(line);
+      // 切ると消える
+      await view.user.click(toggle());
+      await waitFor(() => expect(document.querySelector('.rd-line')).toBeNull());
+    } finally {
+      width.mockRestore();
+    }
   });
 
   it('過去の盤面（前の巡目）を見ている間は、数も札も出ない（切り替えは残る）。判断の盤面に戻ると、また出る', async () => {
