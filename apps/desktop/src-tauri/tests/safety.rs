@@ -7,6 +7,9 @@
 //! - S-2: 雀魂のドメインへの通信、通信の部品（HTTP クライアントなど）。
 //! - S-3: 画像の解析・文字認識のライブラリ（PNG の書き出しは良い）。
 //! - S-4: ウィジェットのコードが、ファイル保存と記録の追記以外の窓口（プラグインなど）を読み込むこと。
+//! - S-5（F24）: 解析エンジン（`engine`。別の workspace、AGPL-3.0-or-later の別のプログラム）のソースと Cargo.toml・Cargo.lock に、
+//!   S-1〜S-3 と同じ語の一覧を当てる。さらに、エンジンだけの決まり（ほかのプロセスを起こさない・ソケットの道具を持たない・
+//!   本体はエンジンに依存しない）。エンジンは推論の部品（tract）を持つので、S-3 の crate の一覧は、本体にだけ当てる。
 //! - macOS（段階 1 から。`analysis/mac/README.md` 4 章）: 画面を続けて取り続ける・ほかのアプリの要素を読む・入力を送る・
 //!   ほかのプロセスに触れる・外部プロセスで撮影する・デバッグ用の権限を付ける API と部品。静止画 1 枚の撮影・入力のタップ・
 //!   文字認識は、決めた 1 か所だけ。段階 2 からは、AppKit・Foundation も、クリップボードの文字・ごみ箱の 2 か所の決めた機能だけ。
@@ -3671,4 +3674,353 @@ fn mac_platform_config_files_are_scanned_and_the_windows_helper_is_not_built_for
     );
     let conf = read(&crate_dir().join("tauri.macos.conf.json"));
     assert!(!conf.to_lowercase().contains("helper"));
+}
+
+// ---- S-5: 解析エンジン（F24）の線引き ----
+//
+// エンジン（`apps/desktop/src-tauri/engine`）は、本体（MIT）とは別の workspace・別の Cargo.lock の別のプログラム。
+// 推論の部品（tract）を持つので、S-3 の crate の一覧（tract を禁じる）は本体だけに当て、エンジンには「通信・ほかのプロセスの操作・
+// 画面の撮影・文字認識の部品が無い」ことを、同じ語の一覧で確かめる。本体がエンジンに依存しないことも確かめる。
+
+/// エンジンだけの禁止: ほかのプロセスを起こす・ソケットを使う道具（`std::process::ExitCode` は、プロセスを起こさないので良い）。
+const ENGINE_PROCESS_RUST: &[&str] = &[
+    "std::process::Command",
+    "process::Command",
+    "Command::new",
+    "std::process::Child",
+    "std::process::Stdio",
+    "std::process::{",
+    "std::process::*",
+    "std::os::windows::process",
+    "std::os::unix::process",
+    "CommandExt",
+    "tokio::process",
+    "std::net",
+];
+
+/// エンジンのソースで、画像・文字認識のクレートを使う書き方（S-3 の `VISION_RUST` に足す）。
+/// エンジンは画像を読まない・書かないので、PNG の書き出しも要らない。
+const ENGINE_VISION_RUST: &[&str] = &[
+    "tesseract::",
+    "leptess::",
+    "leptonica",
+    "ocrs::",
+    "opencv::",
+    "imageproc::",
+    "image::",
+    "png::",
+    "kornia",
+    "rxing::",
+    "load_from_memory",
+];
+
+/// エンジンの Cargo.toml・Cargo.lock に置かない、通信の部品（クレート名。前方一致は「名前-」まで）。
+/// `s2_cargo_toml_declares_no_network_dependency` の一覧に、モデルを取る道具（hf-hub）と、非同期の通信の土台を足したもの。
+const ENGINE_NETWORK_CRATES: &[&str] = &[
+    "reqwest",
+    "hyper",
+    "ureq",
+    "isahc",
+    "surf",
+    "attohttpc",
+    "minreq",
+    "curl",
+    "tungstenite",
+    "tokio-tungstenite",
+    "websocket",
+    "hf-hub",
+    "tokio",
+    "mio",
+    "socket2",
+    "async-std",
+    "smol",
+    "h2",
+    "native-tls",
+    "rustls",
+    "openssl",
+    "tauri-plugin-http",
+    "tauri-plugin-websocket",
+    "tauri-plugin-updater",
+    "tauri-plugin-shell",
+];
+
+/// エンジンの Cargo.toml・Cargo.lock に置かない、画像解析・文字認識の部品。
+/// S-3 の `VISION_CRATES` から、エンジンの仕事である推論の部品（tract・onnxruntime・candle など）を除き、画像の読み書き（image・png）を足したもの。
+const ENGINE_VISION_CRATES: &[&str] = &[
+    "tesseract",
+    "leptess",
+    "leptonica",
+    "ocrs",
+    "opencv",
+    "imageproc",
+    "kornia",
+    "template-matching",
+    "image-compare",
+    "rxing",
+    "paddle",
+    "image",
+    "png",
+];
+
+/// 本体の側（本体・共有の部品・補助プログラム・文字認識）の Cargo.toml・Cargo.lock に出てはいけない、エンジンの crate 名。
+const ENGINE_CRATE_NAMES: &[&str] = &["jantama-engine", "jantama_engine", "libriichi", "riichi"];
+
+/// 本体の側の Cargo.toml で、エンジンのフォルダを指す依存の書き方（名前を替えた依存も見つけるため）。
+const ENGINE_PATH_WORDS: &[&str] = &[
+    "path = \"engine",
+    "path = \"./engine",
+    "path = \"../engine",
+    "engine/libriichi",
+];
+
+/// 解析エンジン（別の workspace）のフォルダ。
+fn engine_dir() -> PathBuf {
+    crate_dir().join("engine")
+}
+
+/// エンジンの Rust のソース: エンジン本体（`engine/src`）と、含めた libriichi（`engine/libriichi/src`）。
+/// 本体・共有の部品・補助プログラムの走査（`rust_sources`）には入れない。ここには、エンジン用の決まりをかける。
+fn engine_sources() -> Vec<PathBuf> {
+    let mut files = files_under(&engine_dir().join("src"), &|p| has_ext(p, &["rs"]));
+    files.extend(files_under(
+        &engine_dir().join("libriichi").join("src"),
+        &|p| has_ext(p, &["rs"]),
+    ));
+    files.sort();
+    files
+}
+
+/// エンジンの依存の一覧: 2 つの Cargo.toml と、エンジンの Cargo.lock（推移的な依存まで）。
+fn engine_manifests() -> Vec<PathBuf> {
+    vec![
+        engine_dir().join("Cargo.toml"),
+        engine_dir().join("libriichi").join("Cargo.toml"),
+        engine_dir().join("Cargo.lock"),
+    ]
+}
+
+/// コメントの行を空の行に替えた文（行番号は変わらない）。上流（Mortal）のソースは、出どころの URL をコメントに書いている。
+/// コメントの URL は通信にならないので許し、コードの中の URL だけを、S-2 の「URL を書かない」で見る。
+fn without_comment_lines(text: &str) -> String {
+    text.lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("//") || trimmed.starts_with('#') {
+                ""
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn the_engine_scanner_detects_every_engine_pattern() {
+    for (name, patterns) in [
+        ("S-5 プロセス", ENGINE_PROCESS_RUST),
+        ("S-5 画像", ENGINE_VISION_RUST),
+    ] {
+        for pattern in patterns {
+            let sample = format!("let x = {pattern}example;");
+            assert_eq!(
+                scan_lines(&sample, &[pattern], false).len(),
+                1,
+                "{name}: {pattern} を検出できない"
+            );
+        }
+    }
+    // 終了コードの型は、ほかのプロセスを起こさないので、禁止の語に当たらない。
+    assert!(scan_lines("use std::process::ExitCode;", ENGINE_PROCESS_RUST, false).is_empty());
+    assert!(scan_lines("std::process::exit(2)", ENGINE_PROCESS_RUST, false).is_empty());
+    // コードの中の URL は見つけ、コメントの中の URL は通信にならないので許す。
+    let code = "let url = \"https://example.com/\";";
+    assert_eq!(
+        scan_lines(&without_comment_lines(code), URL_SCHEMES, false).len(),
+        1
+    );
+    let comments = "//! Source: <https://example.com/>\n    /// <http://example.com/>\n// see https://example.com/";
+    assert!(scan_lines(&without_comment_lines(comments), URL_SCHEMES, false).is_empty());
+
+    // 依存の一覧: 通信・画像の部品の名前を、名前そのものと「名前-…」で見つける。
+    for name in ENGINE_NETWORK_CRATES.iter().chain(ENGINE_VISION_CRATES) {
+        let toml = format!("[dependencies]\n{name} = \"1\"\n");
+        let lock = format!("[[package]]\nname = \"{name}-sys\"\n");
+        for text in [toml, lock] {
+            let found = forbidden_crates_in_manifest(&text, ENGINE_NETWORK_CRATES).len()
+                + forbidden_crates_in_manifest(&text, ENGINE_VISION_CRATES).len();
+            assert!(found >= 1, "{name}: 依存の一覧で検出できない: {text}");
+        }
+    }
+    // 本体の Cargo.toml が、エンジンを依存に書いたら（名前を替えても）見つける。
+    let by_name = "[dependencies]
+libriichi = { path = \"engine/libriichi\" }
+";
+    assert_eq!(
+        forbidden_crates_in_manifest(by_name, ENGINE_CRATE_NAMES).len(),
+        1
+    );
+    let by_path = "[dependencies]
+solver = { path = \"engine\" }
+";
+    assert_eq!(scan_lines(by_path, ENGINE_PATH_WORDS, false).len(), 1);
+    let commented = "# 解析エンジン（engine/libriichi）は別の workspace
+";
+    assert!(scan_lines(&without_comment_lines(commented), ENGINE_PATH_WORDS, false).is_empty());
+    // エンジンの仕事である推論の部品は許し、本体の S-3 の一覧は同じものを禁じる。
+    let engine_toml =
+        "[dependencies]\ntract-onnx = \"0.23\"\nndarray = \"0.16\"\nsha2 = \"0.10\"\n";
+    assert!(forbidden_crates_in_manifest(engine_toml, ENGINE_NETWORK_CRATES).is_empty());
+    assert!(forbidden_crates_in_manifest(engine_toml, ENGINE_VISION_CRATES).is_empty());
+    assert_eq!(
+        forbidden_crates_in_manifest(engine_toml, VISION_CRATES).len(),
+        1,
+        "本体の S-3 の一覧は tract を禁じる"
+    );
+}
+
+#[test]
+fn s5_the_engine_scans_cover_its_sources_and_not_the_app_scans() {
+    let files: Vec<String> = engine_sources()
+        .iter()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .collect();
+    for needed in [
+        "engine/src/main.rs",
+        "engine/src/lib.rs",
+        "engine/src/reads.rs",
+        "engine/libriichi/src/lib.rs",
+        "engine/libriichi/src/state/obs_repr.rs",
+        "engine/libriichi/src/state/update.rs",
+        "engine/libriichi/src/mjai/event.rs",
+    ] {
+        assert!(
+            files.iter().any(|f| f.ends_with(needed)),
+            "走査の対象に {needed} が入っていない"
+        );
+    }
+    let engine = engine_dir();
+    assert!(
+        rust_sources().iter().all(|p| !p.starts_with(&engine)),
+        "本体の走査にエンジンが入っている"
+    );
+    for manifest in engine_manifests() {
+        assert!(manifest.exists(), "{} が無い", manifest.display());
+    }
+}
+
+#[test]
+fn s5_engine_sources_do_not_touch_another_process_or_start_one() {
+    let mut violations = Vec::new();
+    for file in engine_sources() {
+        let text = read(&file);
+        violations.push(report(
+            "S-5/S-1",
+            &file,
+            &scan_lines(&text, GAME_PROCESS_APIS, false),
+        ));
+        violations.push(report("S-5/S-1 フック", &file, &disallowed_hook_ids(&text)));
+        violations.push(report(
+            "S-5 プロセス",
+            &file,
+            &scan_lines(&text, ENGINE_PROCESS_RUST, false),
+        ));
+    }
+    assert_no_violations(violations.into_iter().filter(|v| !v.is_empty()).collect());
+}
+
+#[test]
+fn s5_engine_sources_have_no_network_code() {
+    let mut violations = Vec::new();
+    for file in engine_sources() {
+        let text = read(&file);
+        let mut hits = scan_lines(&text, GAME_DOMAINS, true);
+        hits.extend(scan_lines(&text, NETWORK_RUST, false));
+        // URL はコードに書かない（コメントの出どころの URL は、通信にならないので許す）。
+        hits.extend(scan_lines(
+            &without_comment_lines(&text),
+            URL_SCHEMES,
+            false,
+        ));
+        violations.push(report("S-5/S-2", &file, &hits));
+    }
+    assert_no_violations(violations.into_iter().filter(|v| !v.is_empty()).collect());
+}
+
+#[test]
+fn s5_engine_sources_have_no_screen_capture_or_image_analysis() {
+    let mut violations = Vec::new();
+    for file in engine_sources() {
+        let text = read(&file);
+        let mut hits = scan_lines(&text, VISION_RUST, false);
+        hits.extend(scan_lines(&text, ENGINE_VISION_RUST, false));
+        violations.push(report("S-5/S-3", &file, &hits));
+    }
+    assert_no_violations(violations.into_iter().filter(|v| !v.is_empty()).collect());
+}
+
+#[test]
+fn s5_engine_manifests_list_no_network_or_image_crates() {
+    let mut violations = Vec::new();
+    for path in engine_manifests() {
+        let text = read(&path);
+        for (line, name) in forbidden_crates_in_manifest(&text, ENGINE_NETWORK_CRATES) {
+            violations.push(format!(
+                "[S-5/S-2] {}:{line}: 通信の部品 {name}",
+                path.display()
+            ));
+        }
+        for (line, name) in forbidden_crates_in_manifest(&text, ENGINE_VISION_CRATES) {
+            violations.push(format!(
+                "[S-5/S-3] {}:{line}: 画像解析・文字認識の部品 {name}",
+                path.display()
+            ));
+        }
+    }
+    assert_no_violations(violations);
+
+    // 走査が正しいファイルを読んでいる: エンジンは推論の部品（tract）を持ち、libriichi を含む。
+    let toml = read(&engine_dir().join("Cargo.toml"));
+    assert!(
+        toml.contains("tract-onnx"),
+        "エンジンの Cargo.toml に tract-onnx が無い"
+    );
+    let lock = read(&engine_dir().join("Cargo.lock"));
+    assert!(
+        lock.contains("name = \"tract-onnx\"") && lock.contains("name = \"libriichi\""),
+        "エンジンの Cargo.lock を読めていない"
+    );
+}
+
+#[test]
+fn s5_the_main_crates_do_not_depend_on_the_engine() {
+    let mut manifests: Vec<PathBuf> = crate_dirs().iter().map(|d| d.join("Cargo.toml")).collect();
+    manifests.push(ocr_dir().join("Cargo.toml"));
+    manifests.push(crate_dir().join("Cargo.lock"));
+    let mut violations = Vec::new();
+    for path in manifests {
+        let text = read(&path);
+        for (line, name) in forbidden_crates_in_manifest(&text, ENGINE_CRATE_NAMES) {
+            violations.push(format!(
+                "[S-5] {}:{line}: 本体がエンジンに依存している {name}",
+                path.display()
+            ));
+        }
+        // 名前を替えた依存（`x = { path = "engine" }`）も許さない。
+        let code = without_comment_lines(&text);
+        for (line, what) in scan_lines(&code, ENGINE_PATH_WORDS, false) {
+            violations.push(format!(
+                "[S-5] {}:{line}: エンジンの経路を指す依存 {what}",
+                path.display()
+            ));
+        }
+    }
+    assert_no_violations(violations);
+
+    // 本体の workspace は、エンジンを含めない（別の workspace・別の Cargo.lock）。
+    let main_toml = read(&crate_dir().join("Cargo.toml"));
+    assert!(
+        main_toml.contains("exclude = [\"engine\"]"),
+        "本体の workspace が、engine を除外していない"
+    );
 }
