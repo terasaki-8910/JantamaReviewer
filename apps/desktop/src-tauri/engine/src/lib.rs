@@ -11,6 +11,7 @@
 //! - [`report`](crate::report): 入力の report.json。
 //! - [`replay`](crate::replay): 牌譜を再生して、読みを出す場面を集める。
 //! - [`waits`](crate::waits): 牌譜の全員の手牌から数える、実際の待ち。
+//! - [`guard`](crate::guard): 内部の panic を日本語の 1 行のエラーにする。
 //! - [`counterfactual`](crate::counterfactual): 他家の捨て牌を字牌に替えて読み直す準備（効いた捨て牌）。
 //! - [`model`](crate::model): `tenpai.onnx` の推論（tract）。
 //! - [`reads`](crate::reads): `read` の本体と、reads.json の形。
@@ -18,6 +19,7 @@
 
 pub mod args;
 pub mod counterfactual;
+pub mod guard;
 pub mod model;
 pub mod reads;
 pub mod replay;

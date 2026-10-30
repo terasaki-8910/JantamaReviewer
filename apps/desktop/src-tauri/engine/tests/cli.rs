@@ -135,6 +135,28 @@ fn a_log_that_libriichi_rejects_fails_with_one_japanese_line() {
 }
 
 #[test]
+fn a_panic_inside_libriichi_becomes_one_japanese_line() {
+    // 自分の打牌の牌が `?`（見えない牌）だと、libriichi は Err でなく、配列の外を引いて panic で止まる。
+    // 標準エラーに英語の複数行を出さず、日本語の 1 行で失敗すること。
+    let game = common::fixture_json("game.json");
+    let mut log: Vec<Value> = game["mjai_log"].as_array().unwrap()[..3].to_vec();
+    log.push(serde_json::json!({"type": "dahai", "actor": 0, "pai": "?", "tsumogiri": true}));
+    let report = serde_json::json!({"player_id": 0, "mjai_log": log});
+    let report = write_scratch("panicking-report.json", report.to_string().as_bytes());
+    let output = engine(&[
+        os("read"),
+        os("--report"),
+        report.as_os_str(),
+        os("--model"),
+        os("no-such-model.onnx"),
+        os("--out"),
+        scratch_path("never-written-7.json").as_os_str(),
+    ]);
+    assert_one_line_failure(&output, "内部エラーで止まりました");
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("panicked"));
+}
+
+#[test]
 fn a_file_that_is_not_onnx_fails_with_one_japanese_line() {
     let model = write_scratch("garbage.onnx", b"this is not an onnx model at all");
     let output = engine(&[

@@ -76,9 +76,9 @@ pub fn model_path() -> Option<PathBuf> {
     Some(path)
 }
 
-/// 試験が書いてよい場所（`target/tmp`）に、試験ごとに別の名前のファイルを置く。
+/// 試験が書いてよい場所（`target/tmp`）の、試験ごとに別の名前のファイル。同じ名前は、次の実行で上書きする。
 pub fn scratch_path(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     std::fs::create_dir_all(&dir).expect("試験の一時フォルダを作れる");
-    dir.join(format!("{}-{name}", std::process::id()))
+    dir.join(name)
 }
