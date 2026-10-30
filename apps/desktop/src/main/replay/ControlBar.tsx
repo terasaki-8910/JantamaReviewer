@@ -5,6 +5,7 @@
  * 2 段目: 前・次の悪手（あと何か所）・前・次の迷い（あと何か所。「細かいミスだけ」の切り替えつき）
  * 解決した場面（F16）は、飛ぶ先にも、数にも入れない。
  * 3 段目: 位置の帯
+ * 2 段目の右には、「読み」の切り替え（F23）。盤面を見ているだけの手と、答えたあとの場面にだけある（答える前の場面にはない。U-1）。
  * 3 段目の位置の帯には、他家の手牌を開いているときだけ、他家が聴牌になった手の目盛りが付く（F14、R16-7 の A）。
  * 他家の手牌の開け閉めは、盤面の手牌のボタン（Board.tsx）。ここには無い（R16-7）。
  * 押したボタンが端で押せなくなったとき、キーボードの位置が消えないよう、対のボタン（それも押せなければ位置の帯）へ移す。
@@ -17,7 +18,7 @@ import { Icon } from '../Icon';
 import { MenuSelect } from '../MenuSelect';
 import { NAGA_OPEN_LABEL } from '../naga';
 import { KeyHelp } from './KeyHelp';
-import { formatChord, type ReplayAction } from './keys';
+import { formatChord, type NavAction, type ReplayAction } from './keys';
 import { kyokuCounts, turnLabel, type ReplayNav } from './replayModel';
 import { ReplayIcon } from './ReplayIcons';
 import { Strip, type StripTick } from './Strip';
@@ -40,16 +41,21 @@ interface ControlBarProps {
   onFineMissOnly: (on: boolean) => void;
   /** 半荘に保存した NAGA の結果の URL（F22 段 2）。あれば、1 段目のキーの一覧のアイコンの左に、いつものブラウザで開くリンクを出す。 */
   nagaUrl?: string | null;
+  /**
+   * 「読み」の切り替え（F23）。盤面を見ているだけの手と、答えたあとの場面でだけ渡す（答える前の場面では渡さず、DOM に無い。U-1）。
+   * 2 段目（悪手・迷いの段）の右に置く。「細かいミスだけ」と同じ見た目。
+   */
+  readsToggle?: ReactNode;
 }
 
 /** 「飛ぶ」段ごとの、前・次の操作と、場面の呼び名。 */
 const JUMP_ACTIONS = {
   mismatch: { prev: 'prev_mismatch', next: 'next_mismatch', noun: '悪手' },
   doubt: { prev: 'prev_doubt', next: 'next_doubt', noun: '迷い' },
-} as const satisfies Record<string, { prev: ReplayAction; next: ReplayAction; noun: string }>;
+} as const satisfies Record<string, { prev: NavAction; next: NavAction; noun: string }>;
 
 /** 押したボタンが押せなくなったとき、キーボードの位置を移す先（対のボタン）。 */
-const PAIR: Partial<Record<ReplayAction, ReplayAction>> = {
+const PAIR: Partial<Record<NavAction, NavAction>> = {
   step_back: 'step_forward',
   step_forward: 'step_back',
   prev_turn: 'next_turn',
@@ -62,11 +68,11 @@ const PAIR: Partial<Record<ReplayAction, ReplayAction>> = {
   next_doubt: 'prev_doubt',
 };
 
-export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKey, go, onChangeKeys, ticks, fineMissOnly, onFineMissOnly, nagaUrl = null }: ControlBarProps) {
+export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKey, go, onChangeKeys, ticks, fineMissOnly, onFineMissOnly, nagaUrl = null, readsToggle = null }: ControlBarProps) {
   const step = timeline.steps[g];
   const kyoku = step === undefined ? undefined : timeline.kyokus[step.kyokuPosition];
-  const buttons = useRef(new Map<ReplayAction, HTMLButtonElement>());
-  const pressed = useRef<ReplayAction | null>(null);
+  const buttons = useRef(new Map<NavAction, HTMLButtonElement>());
+  const pressed = useRef<NavAction | null>(null);
   const trackFallback = useRef<HTMLDivElement>(null);
 
   // 押したボタンが端で押せなくなったとき、対のボタン（それも押せなければ位置の帯）へ、キーボードの位置を移す
@@ -82,11 +88,11 @@ export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKe
     else trackFallback.current?.querySelector<HTMLElement>('.tl-track')?.focus();
   }, [g]);
 
-  const bind = (action: ReplayAction) => (element: HTMLButtonElement | null) => {
+  const bind = (action: NavAction) => (element: HTMLButtonElement | null) => {
     if (element === null) buttons.current.delete(action);
     else buttons.current.set(action, element);
   };
-  const press = (action: ReplayAction) => {
+  const press = (action: NavAction) => {
     const to = nav[action];
     pressed.current = action;
     if (to !== null) go(to);
@@ -96,7 +102,7 @@ export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKe
     return chord === null ? label : `${label}（${formatChord(chord)}）`;
   };
 
-  const stepButton = (action: ReplayAction, label: string, content: ReactNode, id: string) => (
+  const stepButton = (action: NavAction, label: string, content: ReactNode, id: string) => (
     <button
       type="button"
       className="btn sm"
@@ -259,6 +265,7 @@ export function ControlBar({ timeline, g, scenes, nav, keys, answered, currentKe
       <div className="pb-jumps">
         {jump('mismatch')}
         {jump('doubt')}
+        {readsToggle !== null && <div className="pb-reads">{readsToggle}</div>}
       </div>
       <div ref={trackFallback}>
         <Strip timeline={timeline} g={g} scenes={scenes} answered={answered} currentKey={currentKey} go={go} ticks={ticks} />

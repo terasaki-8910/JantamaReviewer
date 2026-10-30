@@ -276,7 +276,7 @@
   --kwx: calc(var(--kw) + 2 * var(--g));
   --kwy: calc(var(--kw) + var(--g));
   --rw-w: calc((100cqw - var(--kwx)) / var(--cwx));
-  --rw-h: calc((100vh - var(--chrome-h, 324px) - var(--bar-extra, 0px) - var(--kwy)) / var(--cwy));
+  --rw-h: calc((100vh - var(--chrome-h, 346px) - var(--bar-extra, 0px) - var(--kwy)) / var(--cwy));
   --rw: max(14px, min(46px, var(--rw-w), var(--rw-h)));
   --rh: calc(var(--rw) * 4 / 3);
   --hw: calc(var(--rw) * var(--hf));

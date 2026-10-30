@@ -9,6 +9,7 @@ import { useRef, useState } from 'react';
 import { vi, type Mock } from 'vitest';
 
 import type { AnswerMode, AnswerNotes, AnswerRow, NewAnswer, SessionRecord } from '../src/api/types';
+import { SettingsLinkProvider } from '../src/main/reads/settingsLink';
 import { QuizScreen } from '../src/main/study/QuizScreen';
 import { resolveCommand } from '../src/main/study/resolveEdits';
 import { StudyProvider, type StudyValue } from '../src/main/study/StudyProvider';
@@ -49,6 +50,8 @@ export interface QuizOptions {
   resolved?: readonly string[];
   /** 細かいミスの問題として開く（見出しに札が出る。F17）。 */
   fineMiss?: boolean;
+  /** 設定の「解析のモデル」を開く関数（読みの案内の「設定を開く」。F23）。シェルの外では無い（既定は無し）。 */
+  openModelSettings?: () => void;
 }
 
 export interface QuizProbe {
@@ -159,25 +162,27 @@ function HarnessInner({ decision, imported, probe, ...options }: HarnessProps) {
 
   return (
     <StudyProvider value={value}>
-      <QuizScreen
-        located={{ session: options.session ?? seedSession(0, { id: 'sess' }).session, game: imported, decision }}
-        mode={options.mode ?? 'quiz'}
-        progress={options.progress ?? null}
-        markNumber={options.markNumber ?? null}
-        fineMiss={options.fineMiss ?? false}
-        badMove={options.fineMiss !== true && options.markNumber == null}
-        existing={options.existing ?? null}
-        previousIntervalDays={options.previousIntervalDays ?? null}
-        nextLabel={options.nextLabel ?? '次の問題へ'}
-        onNext={probe.onNext}
-        kicker={
-          (options.mode ?? 'quiz') === 'review' ? (
-            <p className="kicker">
-              解き直し<span aria-hidden="true"> · </span>今日の期限 <b>6</b>問
-            </p>
-          ) : undefined
-        }
-      />
+      <SettingsLinkProvider value={options.openModelSettings ?? null}>
+        <QuizScreen
+          located={{ session: options.session ?? seedSession(0, { id: 'sess' }).session, game: imported, decision }}
+          mode={options.mode ?? 'quiz'}
+          progress={options.progress ?? null}
+          markNumber={options.markNumber ?? null}
+          fineMiss={options.fineMiss ?? false}
+          badMove={options.fineMiss !== true && options.markNumber == null}
+          existing={options.existing ?? null}
+          previousIntervalDays={options.previousIntervalDays ?? null}
+          nextLabel={options.nextLabel ?? '次の問題へ'}
+          onNext={probe.onNext}
+          kicker={
+            (options.mode ?? 'quiz') === 'review' ? (
+              <p className="kicker">
+                解き直し<span aria-hidden="true"> · </span>今日の期限 <b>6</b>問
+              </p>
+            ) : undefined
+          }
+        />
+      </SettingsLinkProvider>
     </StudyProvider>
   );
 }

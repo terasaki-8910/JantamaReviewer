@@ -19,6 +19,9 @@ import type { AnswerRow, SessionRecord } from '../../api/types';
 import type { ResolvedMark } from '../markCards';
 import { MarkMemoFields } from '../MarkMemoFields';
 import { memoOfMark, memosForDecision } from '../memos';
+import { tenpaiChips } from '../reads/explain';
+import type { ReadsWork } from '../reads/ReadsWork';
+import { useReadsPopover } from '../reads/useReadsPopover';
 import { handBars } from '../study/aiBars';
 import { Board, BoardTools, type BoardInfo } from '../study/Board';
 import { doraKinds } from '../study/dora';
@@ -51,9 +54,11 @@ interface BrowseWorkProps {
   scenes: readonly ReplayScene[];
   answered: ReadonlySet<string>;
   go: (g: number) => void;
+  /** 読み（F23）の、右の欄の上の状態の行と、手牌の下・他家の席・吹き出しに出す場面。切り替えは操作の段にある。 */
+  reads?: ReadsWork | null;
 }
 
-export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, scenes, answered, go }: BrowseWorkProps) {
+export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, scenes, answered, go, reads = null }: BrowseWorkProps) {
   const study = useStudy();
   const items = useMemo(() => buildHandItems(step.board, null), [step.board]);
   const dora = useMemo(() => (study.highlightDora ? doraKinds(step.board.doraMarkers) : null), [study.highlightDora, step.board]);
@@ -68,6 +73,10 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
   const latest = step.event.type === 'dahai' ? step.actor : null;
   // 場面にいない手は、他家の手牌をいつでも開ける
   const view = useOpenHandsView(game, step.kyokuPosition, step.eventIndex, openHands, true);
+  // 読み（F23）。盤面を見ているだけの手は、いつでも出せる（見せる場面が無い手では、数も札も出さない）
+  const readsView = reads === null ? null : reads.view;
+  const popover = useReadsPopover(readsView, items);
+  const chips = useMemo(() => (readsView === null ? null : tenpaiChips(readsView.moment)), [readsView]);
   return (
     <div className="qz" data-state="browse" data-dora={study.highlightDora ? 'on' : 'off'}>
       <div className="work">
@@ -82,7 +91,7 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
             dora={dora !== null}
             handsHint
           />
-          <Board info={info} step={step.board} dora={dora} latest={latest} hands={view.hands} tenpai={view.tenpai} />
+          <Board info={info} step={step.board} dora={dora} latest={latest} hands={view.hands} tenpai={view.tenpai} reads={chips} />
           <Hand
             items={items}
             interactive={false}
@@ -95,8 +104,10 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
             dora={dora}
             onPick={noop}
             bars={bars}
+            reads={popover.handReads}
           />
         </section>
+        {popover.popover}
         <NowPanel
           timeline={timeline}
           step={step}
@@ -107,8 +118,13 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
           dora={dora}
           above={
             view.showing && view.seats !== null ? (
-              <OpenHandsBlock me={game.playerId} seats={view.seats} eventIndex={step.eventIndex} dora={dora} tracks={view.tracks} />
-            ) : undefined
+              <>
+                {reads?.status}
+                <OpenHandsBlock me={game.playerId} seats={view.seats} eventIndex={step.eventIndex} dora={dora} tracks={view.tracks} />
+              </>
+            ) : (
+              reads?.status
+            )
           }
         />
       </div>
@@ -142,6 +158,8 @@ interface SceneWorkProps {
   /** 付け替えたあと、キーボードの位置を渡す迷いの記録の番号（付け替えた先の場面の、その迷いの写真へ）。 */
   focusMarkId: number | null;
   onFocusDone: () => void;
+  /** 読み（F23）。答えたあとの場面でだけ使う（答える前は渡されても使わない。U-1）。 */
+  reads?: ReadsWork | null;
 }
 
 export function SceneWork({
@@ -161,6 +179,7 @@ export function SceneWork({
   onRelinked,
   focusMarkId,
   onFocusDone,
+  reads = null,
 }: SceneWorkProps) {
   const study = useStudy();
   const reload = study.reloadSessions;
@@ -235,6 +254,7 @@ export function SceneWork({
         game={game}
         eventIndex={step.eventIndex}
         openHands={openHands}
+        reads={work.revealed ? reads : null}
       />
     </div>
   );

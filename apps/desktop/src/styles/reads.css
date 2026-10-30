@@ -1,0 +1,183 @@
+/*
+  reads.css: 読み（F23）の画面の部品。色はすべて tokens.css のトークンから（色のリテラルは書かない）。新しい色・トークンは足さない。
+  新しい見た目は足さず、既存の部品（切り替えは「細かいミスだけ」と同じ .btn.sm.fm-toggle、吹き出しは受け入れ枚数の小窓 .ukpop、分類の札は守備の欄の .dg-c、
+  状態の行は .link-btn）を言い換えて作る。ここにあるのは、手牌の下の数と帯、他家の席の札、吹き出しの中の行の並べ方だけ。
+
+  方針:
+  - 数と帯は灰色だけ（accent は AI の1位の印に残す）: 数と帯の線は --muted、確率が 10% 以上の数だけ --ink。帯の地は --line
+  - 手牌の下の帯（--rd-h）は、読みを出していなくても、いつも取る（入切・答える前と答えたあとで盤面が動かない。quiz.css の --band と同じやり方）。
+    そのぶん、卓の高さを決める --chrome-h を増やしてある（quiz.css・replay.css）
+*/
+
+/* ---------- 手牌の下の数（3 段目） ---------- */
+.hand-wrap {
+  --rd-h: 22px;
+}
+
+/* 牌の下に数の帯を取る。鳴きの判断（他家の打牌への鳴き）の手牌には読みが無いので、取らない */
+.hand-wrap:not([data-kind="call"]) .slot {
+  padding-bottom: var(--rd-h);
+}
+
+.rd-cell {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-rows: 13px 3px;
+  align-content: start;
+  gap: 2px;
+  height: var(--rd-h);
+  padding: 2px 0 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r1);
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.rd-cell.is-strong,
+.rd-cell[aria-expanded="true"] {
+  color: var(--ink);
+}
+
+.rd-cell:hover,
+.rd-cell[aria-expanded="true"] {
+  background: var(--hover);
+}
+
+.rd-n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.rd-bar {
+  display: block;
+  margin-inline: 3px;
+  background: var(--line);
+}
+
+.rd-fill {
+  display: block;
+  height: 3px;
+  background: var(--muted);
+}
+
+/* ---------- 切り替え（卓の上の 1 行・操作の段） ---------- */
+.reads-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.pb-reads {
+  display: flex;
+  align-items: center;
+}
+
+/* 卓の上の 1 行（18px）の高さを変えない（ボタンは 30px。説明のアイコンと同じ、負の余白） */
+.board-tools .reads-group {
+  margin-block: -6px;
+}
+
+/* ---------- 状態の行（右の欄の上） ---------- */
+.rd-status {
+  margin: 0 0 var(--s3);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.rd-status.is-problem {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.rd-status .link-btn {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* ---------- 他家の席の札（中央の箱の、点数の下） ---------- */
+.score .rd-tp {
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.score .rd-tp-w {
+  font-family: var(--font-body);
+}
+
+/* 中央の箱が狭いときは、折り返さず、「聴牌」の文字を隠して数だけ残す（名前は aria-label に全部ある） */
+@container cbox (width < 210px) {
+  .score .rd-tp-w {
+    display: none;
+  }
+}
+
+@container board (width <= 639px) {
+  .score .rd-tp {
+    font-size: 10px;
+  }
+}
+
+/* ---------- 吹き出しの中身（外枠・見出し・閉じるは .ukpop の部品） ---------- */
+.rd-pop .rd-opps {
+  display: grid;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rd-pop .rd-opp {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.rd-pop .rd-opp:first-child {
+  padding-top: 2px;
+  border-top: 0;
+}
+
+.rd-pop .rd-opp-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s3);
+  margin: 0;
+  font-size: 13px;
+}
+
+.rd-pop .rd-opp-name {
+  font-weight: 700;
+}
+
+.rd-pop .rd-opp-n,
+.rd-pop .rd-pop-n {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-pop .rd-opp-d {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.rd-pop .rd-opp-d p {
+  margin: 0;
+}

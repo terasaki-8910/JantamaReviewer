@@ -173,12 +173,12 @@ describe('局の選択の数', () => {
 
 describe('卓の大きさの切り替えの高さ', () => {
   it('河の段の数と、リーチ宣言牌の有無と、他家の手牌の帯（対面の上の 1 段。R16-7）で決まる（式は quiz.css の --kwy・--cwy と同じ）', () => {
-    expect(compactBelowHeight(2, false)).toBe(1016);
-    expect(compactBelowHeight(2, true)).toBe(1028);
-    expect(compactBelowHeight(3, false)).toBe(1114);
-    expect(compactBelowHeight(3, true)).toBe(1126);
-    expect(compactBelowHeight(4, false)).toBe(1212);
-    expect(compactBelowHeight(4, true)).toBe(1224);
+    expect(compactBelowHeight(2, false)).toBe(1038);
+    expect(compactBelowHeight(2, true)).toBe(1050);
+    expect(compactBelowHeight(3, false)).toBe(1136);
+    expect(compactBelowHeight(3, true)).toBe(1148);
+    expect(compactBelowHeight(4, false)).toBe(1234);
+    expect(compactBelowHeight(4, true)).toBe(1246);
   });
 
   it('操作の段が折り返して増えた高さ（barExtra）の分だけ、高い窓が要る。足さなければ、変わらない（F17）', () => {

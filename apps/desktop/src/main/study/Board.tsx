@@ -1,7 +1,8 @@
 import { tileLabel, type BoardState, type OpenSeat, type RiverTile, type Seat, type Tile as TileCode, type Wind } from '@jantama/engine';
-import { useId, type CSSProperties } from 'react';
+import { useId, type CSSProperties, type ReactNode } from 'react';
 
 import { InfoTip } from '../InfoTip';
+import { TenpaiChip } from '../reads/TenpaiChip';
 import { doraOfMarker, isDoraTile } from './dora';
 import { layoutMeld, MELD_NAME } from './meldLayout';
 import { BackTile, Tile } from './Tile';
@@ -74,6 +75,8 @@ interface BoardProps {
   hands: BoardHands;
   /** 聴牌になった打牌の枠（他家の手牌を開いているときだけ渡す）。席 → その席の河の位置（0 から）の集合。 */
   tenpai?: ReadonlyMap<number, ReadonlySet<number>>;
+  /** 読み（F23）の、他家の聴牌の確率の札（席 → 確率 0〜1）。読みを出してよい場面で、読みの場面があるときだけ渡す。中央の箱の、その席の点数の下に出す。 */
+  reads?: ReadonlyMap<number, number> | null;
 }
 
 function riverLabel(position: Position, info: BoardInfo, seat: Seat): string {
@@ -303,7 +306,7 @@ function DoraRow({ markers }: { markers: readonly TileCode[] }) {
 }
 
 /** 卓の配置（雀魂と同じ並び。河を四方に置く。副露は持ち主の右手側の角。他家の手牌は、他家の河の外側）。 */
-export function Board({ info, step, dora, target = null, latest = null, hands, tenpai }: BoardProps) {
+export function Board({ info, step, dora, target = null, latest = null, hands, tenpai, reads = null }: BoardProps) {
   const me = info.me;
   const seatAt: Record<Position, Seat> = {
     bottom: me,
@@ -352,6 +355,7 @@ export function Board({ info, step, dora, target = null, latest = null, hands, t
     const seat = seatAt[position];
     const isOya = info.oya === seat;
     const riichi = (step.riichi[seat] ?? 'none') !== 'none';
+    const chip = position === 'bottom' ? undefined : reads?.get(seat);
     return (
       <div className={`score ${position}${position === 'bottom' ? ' me' : ''}`}>
         <span className="who">
@@ -363,6 +367,7 @@ export function Board({ info, step, dora, target = null, latest = null, hands, t
         </span>
         <span className="pts">{groupedNumber(step.scores[seat] ?? 0)}</span>
         {riichi && <span className="rch">リーチ</span>}
+        {chip !== undefined && <TenpaiChip probability={chip} />}
       </div>
     );
   };
@@ -483,11 +488,13 @@ export function Legend({ riichi, called, call, latest = false, tenpai = false, d
 /**
  * 卓のすぐ上の右端の 1 行: 過去の盤面を見ているときの旗（文字のまま。説明の外）と、盤面の見方（凡例と、他家の手牌の一言）を出す説明のアイコン。
  * 凡例を卓の下に並べていたぶんの高さを、手牌の上の棒の帯（`--band`）に回すため、アイコンの中に入れた。
+ * 出題・解き直しの答え合わせのあとは、「読み」の切り替え（F23。`reads`）が、アイコンの左に並ぶ（行の高さは変えない）。
  */
-export function BoardTools({ pastView, ...legend }: LegendProps & { pastView: boolean }) {
+export function BoardTools({ pastView, reads, ...legend }: LegendProps & { pastView: boolean; reads?: ReactNode }) {
   return (
     <div className="board-tools">
       {pastView && <span className="past-flag">過去の盤面</span>}
+      {reads}
       <InfoTip label="盤面の見方" popClassName="legend-pop">
         <Legend {...legend} />
       </InfoTip>

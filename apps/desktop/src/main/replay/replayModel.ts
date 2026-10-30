@@ -154,10 +154,10 @@ export function kyokuCounts(timeline: ReplayTimeline, scenes: readonly ReplaySce
 // ---- 卓の大きさ（窓の高さが足りないとき、小さい配置にする） ----
 
 /**
- * 卓が大きい配置のとき、見出し・操作の段・卓の上の 1 行（盤面の見方）・手牌（と、その上の棒の帯・下の印の行）をのぞいて、卓に使える高さを決める「卓の外の高さ」（px）。
+ * 卓が大きい配置のとき、見出し・操作の段・卓の上の 1 行（盤面の見方）・手牌（と、その上の棒の帯・牌の下の読みの数の帯・下の印の行）をのぞいて、卓に使える高さを決める「卓の外の高さ」（px）。
  * replay.css の `.rp` の `--chrome-h` と同じ値（変えるときは両方）。
  */
-export const TABLE_CHROME_PX = 476;
+export const TABLE_CHROME_PX = 498;
 
 /** 手牌の下に残す余白（px）。主の欄の下の余白（28px）のぶん、手牌が窓の下の端にくっつかないように。 */
 export const TABLE_BOTTOM_SLACK_PX = 24;

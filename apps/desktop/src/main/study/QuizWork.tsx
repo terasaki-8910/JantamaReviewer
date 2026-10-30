@@ -6,10 +6,13 @@
  * 開いているあいだ、答えの欄の上に「他家の手牌」の欄（聴牌の 1 行・向聴数の折れ線・待ちと点）を出す。開け閉めの状態は、呼ぶ側が持つ（`openHands`）。
  */
 import type { BoardState, Decision, ImportedGame } from '@jantama/engine';
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 
 import type { AnswerMode } from '../../api/types';
 import type { ShownMemo } from '../memos';
+import type { ReadsWork } from '../reads/ReadsWork';
+import { tenpaiChips } from '../reads/explain';
+import { useReadsPopover } from '../reads/useReadsPopover';
 import { AnswerPanel } from './AnswerPanel';
 import { Board, BoardTools, type BoardInfo } from './Board';
 import { Hand } from './Hand';
@@ -41,11 +44,17 @@ export interface QuizWorkProps {
   eventIndex: number;
   /** 他家の手牌の開け閉め（呼ぶ側が持つ。画面を離れると閉じに戻る）。 */
   openHands: OpenHandsControl;
+  /** 読み（F23）。答え合わせのあとだけ渡す（答える前は渡さず、切り替えも数も札も DOM に無い。U-1）。 */
+  reads?: ReadsWork | null;
 }
 
-export function QuizWork({ work, decision, mode, info, board, past, anyCalled, nextLabel, onNext, memoEditor, memoShown, shots, game, eventIndex, openHands }: QuizWorkProps) {
+export function QuizWork({ work, decision, mode, info, board, past, anyCalled, nextLabel, onNext, memoEditor, memoShown, shots, game, eventIndex, openHands, reads = null }: QuizWorkProps) {
   // 答えるまでは押せない（表の牌は作らない）。答えたあとは、過去の盤面でも押せる（その時点の他家の手牌）
   const view = useOpenHandsView(game, decision.kyokuPosition, eventIndex, openHands, work.revealed);
+  // 読み（F23）: 手牌の下の数・他家の席の札・数の吹き出し
+  const readsView = reads === null ? null : reads.view;
+  const popover = useReadsPopover(readsView, work.items);
+  const chips = useMemo(() => (readsView === null ? null : tenpaiChips(readsView.moment)), [readsView]);
   return (
     <div className="work">
       <section className="board-col" aria-label="盤面と手牌" data-view={past ? 'past' : 'now'}>
@@ -57,8 +66,9 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
           tenpai={view.showing}
           dora={work.dora !== null}
           handsHint={work.revealed}
+          reads={reads?.toggle}
         />
-        <Board info={info} step={board} dora={work.dora} target={past ? null : work.calledSeat} hands={view.hands} tenpai={view.tenpai} />
+        <Board info={info} step={board} dora={work.dora} target={past ? null : work.calledSeat} hands={view.hands} tenpai={view.tenpai} reads={chips} />
         <Hand
           items={work.items}
           interactive={!past}
@@ -71,8 +81,10 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
           dora={work.dora}
           onPick={work.onPick}
           bars={work.bars}
+          reads={popover.handReads}
         />
       </section>
+      {popover.popover}
       <AnswerPanel
         decision={decision}
         mode={mode}
@@ -91,8 +103,13 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
         past={past}
         above={
           view.showing && view.seats !== null ? (
-            <OpenHandsBlock me={game.playerId} seats={view.seats} eventIndex={eventIndex} dora={work.dora} tracks={view.tracks} />
-          ) : undefined
+            <>
+              {reads?.status}
+              <OpenHandsBlock me={game.playerId} seats={view.seats} eventIndex={eventIndex} dora={work.dora} tracks={view.tracks} />
+            </>
+          ) : (
+            reads?.status
+          )
         }
       />
     </div>

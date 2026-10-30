@@ -8,6 +8,8 @@
  *   答えた場面は、答え合わせのあとの形で開く。「次の迷いへ」「次の悪手へ」は、答えた場面も通る
  * - キー（既定は、, . で 1 手、← → で自分の判断、↑ ↓ で悪手、Shift+↑ ↓ で迷い、Shift+← → で局。割り当ては変えられる）
  * - 半荘を通して見る間、答えの下書き（選んだ答え・理由）は、場面を離れても残す（戻ると、続きから。答えるまでの時間は、最初に見たときから）
+ * - 読み（F23）: 操作の段の「読み」を入にすると、自分のツモ・チー・ポンの手で、手牌の下に牌ごとの待たれる確率、他家の席に聴牌の確率が出る。
+ *   盤面を見ているだけの手と、答えたあとの場面にだけある（答える前の場面には、切り替えも数も無く、読みのコマンドも呼ばない。U-1）。キーでも切り替える
  */
 import {
   actualText,
@@ -23,6 +25,11 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExterna
 
 import type { SessionRecord } from '../../api/types';
 import { resolveMarks, type ResolvedMark } from '../markCards';
+import type { ReadsMomentView } from '../reads/explain';
+import { momentAtStep, momentFor } from '../reads/moments';
+import { ReadsFeatureStatus, type ReadsWork } from '../reads/ReadsWork';
+import { ReadsToggle } from '../reads/ReadsToggle';
+import { useReadsFeature } from '../reads/useReadsFeature';
 import { anyCalled, boardInfoOf } from '../study/Board';
 import { useGameTracks } from '../study/OpenHands';
 import { latestAnswerFor } from '../study/QuizPage';
@@ -146,6 +153,17 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
     [study.answers, session.id],
   );
 
+  // 読み（F23）。盤面を見ているだけの手と、答えたあとの場面でだけ使う（答える前の場面では、設定も読みも呼ばない）
+  const readsActive = scene === null || answered.has(scene.key);
+  const reads = useReadsFeature(session.id, readsActive);
+  const { visible: readsVisible, reads: readsData, toggle: toggleReads } = reads;
+  const readsView = useMemo<ReadsMomentView | null>(() => {
+    if (!readsVisible || readsData === null || step === undefined) return null;
+    const moment = momentFor(readsData, momentAtStep(step, game.playerId));
+    return moment === null ? null : { moment, board: step.board };
+  }, [readsVisible, readsData, step, game.playerId]);
+  const readsWork = useMemo<ReadsWork>(() => ({ status: <ReadsFeatureStatus feature={reads} />, view: readsView }), [reads, readsView]);
+
   // 他家が聴牌になった手の目盛り（位置の帯。他家の手牌を、いま開いて見せているときだけ。答える場面の答える前は、開いていても出さない）
   const showingHands = handsOpen && (scene === null || answered.has(scene.key));
   const gameTracks = useGameTracks(game, showingHands);
@@ -183,13 +201,21 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
   const handlers = useMemo(() => {
     const table = {} as ReplayHandlers;
     for (const action of REPLAY_ACTIONS) {
-      table[action.id] = () => {
-        const to = nav[action.id];
+      if (action.id === 'toggle_reads') {
+        // 読みの入切は、切り替えがある手（盤面を見ているだけの手・答えたあとの場面）でだけ働く
+        table[action.id] = () => {
+          if (readsActive) toggleReads();
+        };
+        continue;
+      }
+      const id = action.id;
+      table[id] = () => {
+        const to = nav[id];
         if (to !== null) go(to);
       };
     }
     return table;
-  }, [nav, go]);
+  }, [nav, go, readsActive, toggleReads]);
   useReplayKeys(settings.keys, handlers);
 
   if (step === undefined || info === null) return null;
@@ -240,6 +266,9 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
         fineMissOnly={fineMissOnly}
         onFineMissOnly={setFineMissOnly}
         nagaUrl={session.naga?.url ?? null}
+        readsToggle={
+          readsActive ? <ReadsToggle on={readsVisible} onToggle={toggleReads} keyChord={settings.keys.toggle_reads ?? null} /> : null
+        }
       />
       {scene === null ? (
         <BrowseWork
@@ -252,6 +281,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
           scenes={scenes}
           answered={answered}
           go={go}
+          reads={readsWork}
         />
       ) : (
         <SceneWork
@@ -272,6 +302,7 @@ export function ReplayScreen({ session, game, startKey }: ReplayScreenProps) {
           onRelinked={onRelinked}
           focusMarkId={focusMark}
           onFocusDone={onFocusDone}
+          reads={readsWork}
         />
       )}
     </div>
