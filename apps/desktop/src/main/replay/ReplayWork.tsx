@@ -76,11 +76,11 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
   // 読み（F23）。盤面を見ているだけの手は、いつでも出せる（見せる場面が無い手では、数も札も出さない）
   const readsView = reads === null ? null : reads.view;
   const popover = useReadsPopover(readsView, items);
-  const tenpai = useTenpaiPlacement(readsView === null ? null : readsView.moment);
+  const { bindCol, chips, line: tenpaiLine } = useTenpaiPlacement(readsView === null ? null : readsView.moment);
   return (
     <div className="qz" data-state="browse" data-dora={study.highlightDora ? 'on' : 'off'}>
       <div className="work">
-        <section className="board-col" ref={tenpai.colRef} aria-label="盤面と手牌" data-view="now">
+        <section className="board-col" ref={bindCol} aria-label="盤面と手牌" data-view="now">
           <BoardTools
             riichi={info.riichiAny}
             called={anyCalled}
@@ -93,11 +93,11 @@ export function BrowseWork({ game, openHands, timeline, step, info, anyCalled, s
             reads={
               <>
                 {reads?.toggle}
-                {tenpai.line}
+                {tenpaiLine}
               </>
             }
           />
-          <Board info={info} step={step.board} dora={dora} latest={latest} hands={view.hands} tenpai={view.tenpai} reads={tenpai.chips} />
+          <Board info={info} step={step.board} dora={dora} latest={latest} hands={view.hands} tenpai={view.tenpai} reads={chips} />
           <Hand
             items={items}
             interactive={false}

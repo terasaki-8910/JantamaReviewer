@@ -54,10 +54,10 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
   // 読み（F23）: 手牌の下の数・他家の席の札・数の吹き出し
   const readsView = reads === null ? null : reads.view;
   const popover = useReadsPopover(readsView, work.items);
-  const tenpai = useTenpaiPlacement(readsView === null ? null : readsView.moment);
+  const { bindCol, chips, line: tenpaiLine } = useTenpaiPlacement(readsView === null ? null : readsView.moment);
   return (
     <div className="work">
-      <section className="board-col" ref={tenpai.colRef} aria-label="盤面と手牌" data-view={past ? 'past' : 'now'}>
+      <section className="board-col" ref={bindCol} aria-label="盤面と手牌" data-view={past ? 'past' : 'now'}>
         <BoardTools
           riichi={info.riichiAny}
           called={anyCalled}
@@ -69,11 +69,11 @@ export function QuizWork({ work, decision, mode, info, board, past, anyCalled, n
           reads={
             <>
               {reads?.toggle}
-              {tenpai.line}
+              {tenpaiLine}
             </>
           }
         />
-        <Board info={info} step={board} dora={work.dora} target={past ? null : work.calledSeat} hands={view.hands} tenpai={view.tenpai} reads={tenpai.chips} />
+        <Board info={info} step={board} dora={work.dora} target={past ? null : work.calledSeat} hands={view.hands} tenpai={view.tenpai} reads={chips} />
         <Hand
           items={work.items}
           interactive={!past}
