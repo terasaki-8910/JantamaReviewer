@@ -27,14 +27,14 @@ pub struct ReadArgs {
 
 /// 読み取った命令。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Command {
+pub enum Invocation {
     Read(ReadArgs),
     /// `--help`（使い方を出して終わる）。
     Help,
 }
 
 /// プログラム名を除いた引数を読む。誤りは、使い方つきの日本語の 1 行。
-pub fn parse<I>(args: I) -> Result<Command, String>
+pub fn parse<I>(args: I) -> Result<Invocation, String>
 where
     I: IntoIterator<Item = OsString>,
 {
@@ -43,8 +43,8 @@ where
         return Err(format!("コマンドがありません。{USAGE}"));
     };
     match command.to_str() {
-        Some("read") => parse_read(args).map(Command::Read),
-        Some("-h" | "--help" | "help") => Ok(Command::Help),
+        Some("read") => parse_read(args).map(Invocation::Read),
+        Some("-h" | "--help" | "help") => Ok(Invocation::Help),
         _ => Err(format!(
             "知らないコマンドです: {}。{USAGE}",
             command.to_string_lossy()
@@ -131,13 +131,13 @@ where
 mod tests {
     use super::*;
 
-    fn run(args: &[&str]) -> Result<Command, String> {
+    fn run(args: &[&str]) -> Result<Invocation, String> {
         parse(args.iter().map(OsString::from))
     }
 
     #[test]
     fn reads_all_options_in_both_forms() {
-        let expected = Command::Read(ReadArgs {
+        let expected = Invocation::Read(ReadArgs {
             report: "a.json".into(),
             model: "m.onnx".into(),
             out: "o.json".into(),
@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn player_is_optional() {
         let parsed = run(&["read", "--report", "a", "--model", "b", "--out", "c"]).unwrap();
-        let Command::Read(args) = parsed else {
+        let Invocation::Read(args) = parsed else {
             panic!("read のはず");
         };
         assert_eq!(args.player, None);
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn help_is_not_an_error() {
-        assert_eq!(run(&["--help"]), Ok(Command::Help));
-        assert_eq!(run(&["-h"]), Ok(Command::Help));
+        assert_eq!(run(&["--help"]), Ok(Invocation::Help));
+        assert_eq!(run(&["-h"]), Ok(Invocation::Help));
     }
 }

@@ -5,7 +5,7 @@
 
 use std::process::ExitCode;
 
-use jantama_engine::args::{self, Command};
+use jantama_engine::args::{self, Invocation};
 use jantama_engine::reads::run_read;
 
 /// エラーの文を、改行のない 1 行にする。
@@ -22,11 +22,11 @@ fn main() -> ExitCode {
             eprintln!("jantama-engine: {message}");
             ExitCode::from(2)
         }
-        Ok(Command::Help) => {
+        Ok(Invocation::Help) => {
             println!("{}", args::USAGE);
             ExitCode::SUCCESS
         }
-        Ok(Command::Read(read)) => {
+        Ok(Invocation::Read(read)) => {
             let mut progress = |done: usize, total: usize| eprintln!("progress {done}/{total}");
             match run_read(&read, &mut progress) {
                 Ok(()) => ExitCode::SUCCESS,
