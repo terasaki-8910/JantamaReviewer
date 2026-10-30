@@ -37,7 +37,12 @@ if (Get-Command rustup -ErrorAction SilentlyContinue) {
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Resolve-Path (Join-Path $here '..')
-$manifest = Join-Path $root 'apps\desktop\src-tauri\Cargo.toml'
+# 本体の workspace と、解析エンジンの workspace（別の Cargo.lock。SPEC の F24）の 2 つ。
+# -Package を付けたときは、その crate を持つ workspace だけを見る（cargo が「無い」と言った workspace は飛ばす）
+$manifests = @(
+    (Join-Path $root 'apps\desktop\src-tauri\Cargo.toml'),
+    (Join-Path $root 'apps\desktop\src-tauri\engine\Cargo.toml')
+)
 $wrappers = Join-Path $here 'check-mac'
 
 $triple = $Target.Replace('-', '_')
@@ -46,10 +51,18 @@ Set-Item -Path "Env:AR_$triple" -Value (Join-Path $wrappers 'zigar.cmd')
 $env:CRATE_CC_NO_DEFAULTS = '1'
 if ($TargetDir -ne '') { $env:CARGO_TARGET_DIR = $TargetDir }
 
-$cargoArgs = @($Tool, '--manifest-path', $manifest, '--target', $Target, '--all-targets')
-if ($Package -ne '') { $cargoArgs += @('-p', $Package) } else { $cargoArgs += '--workspace' }
-if ($Tool -eq 'clippy') { $cargoArgs += @('--', '-D', 'warnings') }
+$failed = 0
+foreach ($manifest in $manifests) {
+    if ($Package -ne '') {
+        & cargo pkgid --manifest-path $manifest -p $Package *> $null
+        if ($LASTEXITCODE -ne 0) { continue }
+    }
+    $cargoArgs = @($Tool, '--manifest-path', $manifest, '--target', $Target, '--all-targets')
+    if ($Package -ne '') { $cargoArgs += @('-p', $Package) } else { $cargoArgs += '--workspace' }
+    if ($Tool -eq 'clippy') { $cargoArgs += @('--', '-D', 'warnings') }
 
-Write-Host "cargo $($cargoArgs -join ' ')"
-& cargo @cargoArgs
-exit $LASTEXITCODE
+    Write-Host "cargo $($cargoArgs -join ' ')"
+    & cargo @cargoArgs
+    if ($LASTEXITCODE -ne 0) { $failed = $LASTEXITCODE }
+}
+exit $failed

@@ -13,11 +13,14 @@ name = "jantama_reviewer_lib"
 crate-type = ["rlib"]
 
 # 本体（このパッケージ）と、管理者で動くボタンの補助プログラム（helper）、2 つが共有する部品（input）、
-# 取り込みのときだけ使う文字認識（ocr）。解析エンジン（engine。AGPL-3.0-or-later の別のプログラム）と、それが含む
-# Mortal の libriichi（engine/libriichi）。本体はエンジンに依存しない（別のプロセスとして呼ぶ。SPEC の F24）。
+# 取り込みのときだけ使う文字認識（ocr）。
 # `cargo build` で本体と補助プログラムの両方を作る（default-members）。
+# 解析エンジン（engine。AGPL-3.0-or-later の別のプログラム。SPEC の F24）は、別の workspace（engine/Cargo.toml と
+# engine/Cargo.lock）にする。本体はエンジンに依存せず、別のプロセスとして呼ぶ。エンジンの推論の部品（tract など）が、
+# 本体の Cargo.lock に入らない（tests/safety.rs の S-3）。
 [workspace]
-members = ["input", "helper", "ocr", "engine", "engine/libriichi"]
+members = ["input", "helper", "ocr"]
+exclude = ["engine"]
 default-members = [".", "helper"]
 resolver = "2"
 
