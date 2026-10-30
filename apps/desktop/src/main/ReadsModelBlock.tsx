@@ -95,6 +95,7 @@ export function ReadsModelBlock() {
   /** 本体に頼む操作 1 つ。待っている間は、ほかの操作を押せない。失敗したら、理由を出して、状態を読み直す。 */
   const act = useCallback(async (kind: Exclude<Busy, null>, action: () => Promise<ReadsModelStatus>) => {
     setBusy(kind);
+    setCancelling(false);
     setError(null);
     setProgress(null);
     try {
@@ -173,10 +174,10 @@ export function ReadsModelBlock() {
 
       {status !== null && (
         <>
-          <p className="selectable" role="status" aria-live="polite" aria-labelledby="reads-model-name">
+          <div className="selectable" role="status" aria-live="polite" aria-labelledby="reads-model-name">
             {stateText}
-          </p>
-          <p className="quiet selectable">{metaText(status)}</p>
+          </div>
+          <p className="quiet ex-not selectable">{metaText(status)}</p>
           <div className="setting-row" ref={buttons}>
             {downloading ? (
               <button type="button" className="btn" disabled={cancelling} aria-describedby="reads-model-help" onClick={cancel}>
@@ -219,12 +220,12 @@ export function ReadsModelBlock() {
       )}
 
       {error !== null && (
-        <p className="error selectable" role="alert">
+        <p className="error ex-not selectable" role="alert">
           {error}
         </p>
       )}
       {status === null && loadError !== null && (
-        <p className="error selectable" role="alert">
+        <p className="error ex-not selectable" role="alert">
           {loadFailedText(loadError)}
         </p>
       )}

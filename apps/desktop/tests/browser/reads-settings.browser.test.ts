@@ -230,19 +230,23 @@ async function expectClean(page: Page, problems: string[], external: string[]): 
   expect(external).toEqual([]);
 }
 
-/** 欄とその周り（上下 12px）の画面写真を残す。見て確かめるためで、合否には使わない。 */
+/** 欄とその周り（上下 12px。説明の重なりが開いているときは、それも入れる）の画面写真を残す。見て確かめるためで、合否には使わない。 */
 async function shoot(page: Page, name: string): Promise<void> {
   const group = page.getByRole('group', { name: GROUP });
   await group.scrollIntoViewIfNeeded();
   const box = await group.boundingBox();
   if (box === null) return;
+  // 開いている説明の重なりがあるときだけ、写真に入れる（無いものを待たない: locator の boundingBox は、現れるまで待ってしまう）
+  const openTip = page.locator('.infotip-pop:not([hidden])');
+  const tip = (await openTip.count()) > 0 ? await openTip.first().boundingBox() : null;
   const viewport = page.viewportSize();
   const width = viewport?.width ?? 1280;
-  const top = Math.max(0, box.y - 12);
-  const height = Math.min((viewport?.height ?? 800) - top, box.height + 24);
+  const height = viewport?.height ?? 800;
+  const top = Math.max(0, Math.min(box.y, tip?.y ?? box.y) - 12);
+  const bottom = Math.min(height, box.y + box.height + 12);
   await page.screenshot({
     path: `${SHOTS_DIR}${name}.png`,
-    clip: { x: 0, y: top, width, height },
+    clip: { x: 0, y: top, width, height: bottom - top },
   });
 }
 

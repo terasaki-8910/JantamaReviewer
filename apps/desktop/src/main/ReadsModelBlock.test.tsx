@@ -1,5 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, configure, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,6 +14,9 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), save: vi.fn() }));
+
+// ほかの試験と並べて動かして重いときでも、待つ処理（findBy・waitFor）が早く切れないようにする（この試験のファイルの中だけ）
+configure({ asyncUtilTimeout: 5000 });
 
 const MODEL_BYTES = 4_013_332;
 const GROUP = '解析のモデル';
@@ -73,7 +76,8 @@ function setup(handlers: Handlers = {}): TauriMock {
 async function renderBlock(handlers: Handlers = {}) {
   const mock = setup(handlers);
   render(<ReadsModelBlock />);
-  const group = await screen.findByRole('group', { name: GROUP });
+  // 重い試験（ほかの試験と並べて動かすとき）でも、描き終えるのを十分に待つ
+  const group = await screen.findByRole('group', { name: GROUP }, { timeout: 5000 });
   return { mock, group };
 }
 
@@ -283,6 +287,39 @@ describe('設定の「解析のモデル」の欄（F24、U-54）', () => {
     });
   });
 
+  describe('開き直したときの取り消し', () => {
+    it('すでに取っている最中の画面で取り消すと、取り消し終えたあと、次に取るときに「取り消しています…」が残らない', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      let cancelled = false;
+      const download = deferred<ReadsModelStatus>();
+      const { mock, group } = await renderBlock({
+        get_reads_model: () => (cancelled ? NOT_INSTALLED : status({ downloading: true })),
+        cancel_reads_model_download: () => {
+          cancelled = true;
+        },
+        download_reads_model: () => download.promise,
+      });
+      // 取り消しを押す（この画面は、取っている処理の約束を持っていない）
+      await act(async () => {
+        within(group).getByRole('button', { name: '取り消す' }).click();
+      });
+      expect(mock.count('cancel_reads_model_download')).toBe(1);
+      expect(within(group).getByRole('status')).toHaveTextContent('取り消しています…');
+      // 本体が取り消し終えたことを、読み直しで知る
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(within(group).getByRole('status')).toHaveTextContent('入っていません');
+      // 次に取り始めたとき、前の「取り消しています…」は残らず、「取り消す」も押せる
+      await act(async () => {
+        within(group).getByRole('button', { name: 'Hugging Face から取る' }).click();
+      });
+      expect(within(group).getByRole('status')).toHaveTextContent('取っています…');
+      expect(within(group).getByRole('status')).not.toHaveTextContent('取り消しています');
+      expect(within(group).getByRole('button', { name: '取り消す' })).toBeEnabled();
+    });
+  });
+
   describe('ファイルを選ぶ', () => {
     it('.onnx だけを選ぶダイアログを開き、選んだパスで本体に頼む。決まった版なら、入っている状態になる', async () => {
       const user = userEvent.setup();
@@ -429,7 +466,7 @@ describe('設定ページの中の「解析のモデル」', () => {
       handlers: { get_reads_model: () => NOT_INSTALLED },
     });
     render(<SettingsPage />);
-    const group = await screen.findByRole('group', { name: GROUP });
+    const group = await screen.findByRole('group', { name: GROUP }, { timeout: 10_000 });
     const settings = group.closest('.settings');
     expect(settings).not.toBeNull();
     // 「記録の書き出し」「同期」より後ろにある
