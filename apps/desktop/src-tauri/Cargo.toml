@@ -1,6 +1,6 @@
 [package]
 name = "jantama-reviewer"
-version = "0.2.1"
+version = "0.2.2"
 description = "雀魂の半荘を、AIの答えを見る前に自分の考えを確定させて検討するための個人用ツール"
 license = "MIT"
 edition = "2021"

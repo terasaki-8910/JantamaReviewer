@@ -2587,7 +2587,7 @@ dependencies = [
 
 [[package]]
 name = "jantama-reviewer"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "chrono",
  "clipboard-win",
