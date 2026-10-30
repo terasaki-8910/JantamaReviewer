@@ -224,8 +224,12 @@ export function Tip({ children, id, triggerClassName, triggerLabel, triggerConte
         onPointerEnter={onEnter}
         onPointerLeave={onLeave}
         onFocus={(event) => {
-          // キーボードで選んだとき（マウスで押したときの位置合わせではなく）出す
-          if (focusVisible(event.currentTarget)) setMode((current) => (current === 'closed' ? 'peek' : current));
+          // キーボードで選んだとき（マウスで押したときの位置合わせではなく）出す。その前にマウスを離して待っている
+          // 「閉じる」は取り消す（残っていると、キーボードで出した直後に閉じてしまう）
+          if (focusVisible(event.currentTarget)) {
+            clearLeaveTimer();
+            setMode((current) => (current === 'closed' ? 'peek' : current));
+          }
         }}
         onBlur={close}
         onClick={() => {
