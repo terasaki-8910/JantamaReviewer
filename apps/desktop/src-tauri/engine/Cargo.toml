@@ -10,6 +10,11 @@ edition = "2021"
 rust-version = "1.90"
 publish = false
 
+# 部品は lib にして、試験（tests/）からも呼べるようにする。main.rs は引数を読んで lib を呼ぶだけ。
+[lib]
+name = "jantama_engine"
+path = "src/lib.rs"
+
 [[bin]]
 name = "jantama-engine"
 path = "src/main.rs"
@@ -19,8 +24,11 @@ path = "src/main.rs"
 members = ["libriichi"]
 resolver = "2"
 
-# 試験（debug）でも推論が遅くなりすぎないよう、依存は最適化して組む
+# 試験（debug）でも推論が遅くなりすぎないよう、依存は最適化して組む。libriichi は workspace の一員なので、
+# "*" には入らない（観測の組み立てが遅くなる）。別に書く。
 [profile.dev.package."*"]
+opt-level = 2
+[profile.dev.package.libriichi]
 opt-level = 2
 
 [dependencies]
