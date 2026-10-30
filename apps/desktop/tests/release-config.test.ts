@@ -8,6 +8,7 @@
  *   Windows の Actions だけの設定（tauri.release.windows.conf.json）に、Mac の ad-hoc の署名は Mac の Actions だけの設定（tauri.release.macos.conf.json）にあり、
  *   手元の組み立ての設定（tauri.conf.json）には無い（手元の組み立ては、鍵なしで通る）
  * - NSIS は今のユーザー向け（管理者の確認なし）。補助プログラムは、本体と同じフォルダに入る
+ * - 解析エンジン（F24、D-8）は、両方の OS のジョブが先に作り、Actions だけの共通の設定（externalBin）で、本体と並べて入れる
  * - 版の番号（tauri.conf.json・Cargo.toml・package.json）がそろっている
  * - 公開鍵が、Rust の定数（アプリが署名を確かめる）と、Actions の設定（署名の鍵と照らす）で、同じ値
  */
@@ -153,6 +154,23 @@ describe('Actions の組み立て（.github/workflows/release.yml）', () => {
     expect(indexOfStep('uses: dtolnay/rust-toolchain@stable')).toBeLessThan(helper);
   });
 
+  it('解析エンジンを、両方の OS で release で作り、externalBin が探す名前に写してから、tauri-action を動かす（D-8）', () => {
+    const build = indexOfStep('cargo build --release --manifest-path apps/desktop/src-tauri/engine/Cargo.toml');
+    const step = WORKFLOW.slice(WORKFLOW.lastIndexOf('- name:', build));
+    const body = step.slice(0, step.indexOf('\n\n'));
+    // Windows だけ・Mac だけにしない（どちらの .app・インストーラーにも入れる）
+    expect(body).not.toMatch(/^ {8}if:/m);
+    expect(body).toContain('shell: bash');
+    // ターゲットの名前は、そのジョブの rustc から読む（Windows は x86_64-pc-windows-msvc、Mac は aarch64-apple-darwin）
+    expect(body).toContain('rustc -vV');
+    expect(body).toContain(
+      'cp "apps/desktop/src-tauri/engine/target/release/jantama-engine$ext" "apps/desktop/src-tauri/binaries/jantama-engine-$triple$ext"',
+    );
+    expect(body).toMatch(/if \[ "\$RUNNER_OS" = 'Windows' \]; then ext='\.exe'; fi/);
+    expect(indexOfStep('pnpm install --frozen-lockfile')).toBeLessThan(build);
+    expect(build).toBeLessThan(indexOfStep('uses: tauri-apps/tauri-action@'));
+  });
+
   it('公開鍵と、タグと版の食い違いは、組み立ての前に止める', () => {
     const guard = indexOfStep('plugins.updater.pubkey');
     expect(guard).toBeLessThan(indexOfStep('uses: tauri-apps/tauri-action@'));
@@ -201,6 +219,17 @@ describe('手元の組み立ての設定と、Actions だけの設定', () => {
     expect(read('apps', 'desktop', 'src-tauri', 'input', 'src', 'setup.rs')).toContain(
       'pub const HELPER_EXE_NAME: &str = "jantama-helper.exe";',
     );
+  });
+
+  it('解析エンジンは、Actions だけの共通の設定（externalBin）で、両方の OS の本体と並べて入れる。手元の設定には無い（D-8）', () => {
+    // 手元の組み立て（release・debug）は、エンジンを作らずに通る（開発では JANTAMA_ENGINE でエンジンを指す）
+    expect(hasKey(LOCAL_CONFIG, 'externalBin')).toBe(false);
+    expect(dig(RELEASE_CONFIG, 'bundle.externalBin')).toEqual(['binaries/jantama-engine']);
+    expect(hasKey(RELEASE_WINDOWS_CONFIG, 'externalBin')).toBe(false);
+    expect(hasKey(RELEASE_MACOS_CONFIG, 'externalBin')).toBe(false);
+    // 写す前の実行ファイルの名前は、エンジンの Cargo.toml の bin の名前。写す場所は git に入れない
+    expect(read('apps', 'desktop', 'src-tauri', 'engine', 'Cargo.toml')).toMatch(/\[\[bin\]\]\nname = "jantama-engine"/);
+    expect(read('.gitignore')).toMatch(/^apps\/desktop\/src-tauri\/binaries\/$/m);
   });
 
   it('補助プログラムは、同じソースから同じ中身になるよう作る（/Brepro）。そうでないと、配るたびに「新しい補助プログラムがあります」が出る', () => {

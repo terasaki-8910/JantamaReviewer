@@ -22,6 +22,8 @@ docs/sheet/_*
 target/
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
+# Actions の組み立てで、解析エンジンを本体と一緒に入れるために写す場所（release.yml）
+apps/desktop/src-tauri/binaries/
 # フロントエンドのビルド出力
 apps/desktop/dist/
 packages/*/dist/

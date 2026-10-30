@@ -305,6 +305,12 @@ pnpm build:debug      # デバッグビルド（本体と補助プログラム�
 
 このリポジトリのコードは、MIT ライセンスです（[LICENSE](LICENSE)）。
 
+ただし、解析エンジン（`apps/desktop/src-tauri/engine`。他家の読みを計算する別のプログラム `jantama-engine`）は、AGPL-3.0-or-later です（[apps/desktop/src-tauri/engine/LICENSE](apps/desktop/src-tauri/engine/LICENSE)）。Mortal（[Equim-chan/Mortal](https://github.com/Equim-chan/Mortal)、AGPL-3.0-or-later）の libriichi の一部を含むためです。
+
+- インストーラーと .app に入っているエンジンのソースは、その版のタグの `apps/desktop/src-tauri/engine` にあります（変えた所は、そのフォルダの README に書いています）。
+- 本体は、エンジンを別のプロセスとして呼び、ファイルでやり取りするだけで、エンジンのコードを含みません。
+- 読みのモデル（[hhim8826/mortal3-b40c192](https://huggingface.co/hhim8826/mortal3-b40c192) の `tenpai.onnx`。AGPL-3.0）は、アプリに含めません。使う人が、設定の「解析のモデル」で Hugging Face から取ります。
+
 ほかの人の作品は、次のように使っています。
 
 - 文字（アプリに同梱）: `@fontsource` のパッケージ 2 つです。どちらも、パッケージの記載のライセンスは SIL Open Font License 1.1 です。
