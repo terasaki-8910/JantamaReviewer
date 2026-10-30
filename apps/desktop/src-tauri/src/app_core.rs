@@ -3,7 +3,7 @@
 //! Tauri に依存しないので、設定の変更・保存先の移し替え・記録の操作を単体テストで確かめられる。
 //! Tauri のコマンドやフックの担当は、ここを `Mutex` で包んで呼ぶだけの薄い層にする。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -113,6 +113,11 @@ impl Core {
 
     pub fn settings(&self) -> &Settings {
         &self.settings
+    }
+
+    /// 設定のフォルダ（`settings.json` と、読みのモデルを置く `models/`。環境変数 `JANTAMA_CONFIG_DIR` は、起動のときに反映済み）。
+    pub fn config_dir(&self) -> &Path {
+        &self.config_dir
     }
 
     pub fn startup_note(&self) -> Option<&str> {

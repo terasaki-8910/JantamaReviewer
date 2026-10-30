@@ -28,6 +28,9 @@ use crate::widget_window::WindowSpec;
 pub use clipboard::read_string as read_clipboard_string;
 pub use trash::recycler;
 
+/// 子のプロセス（解析エンジン）が、コンソールの窓を出さないようにする。macOS には、そのような窓は無いので、何もしない。
+pub fn hide_console_window(_command: &mut std::process::Command) {}
+
 /// OS の名前。
 pub const OS: Os = Os::Macos;
 

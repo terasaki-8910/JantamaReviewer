@@ -39,8 +39,8 @@ use mac as native;
 use win as native;
 
 pub use native::{
-    harden_webview, on_run_event, read_clipboard_string, recycler, start_input_hook, style_window,
-    with_app_menu, with_webview_options,
+    harden_webview, hide_console_window, on_run_event, read_clipboard_string, recycler,
+    start_input_hook, style_window, with_app_menu, with_webview_options,
 };
 
 /// OS の名前（画面の出し分けに使う）。

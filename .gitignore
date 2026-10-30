@@ -39,3 +39,5 @@ coverage/
 *.msi
 *.exe
 *.nsis
+# 設定の「解析のモデル」の画面写真（見て確かめるための写真。tests/browser/reads-settings.browser.test.ts が作る。git に入れない）
+apps/desktop/tests/browser/zz-reads-settings-shots/
